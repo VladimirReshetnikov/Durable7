@@ -490,3 +490,210 @@ void prefix##_visit(const set_type *set, visitor_type visitor, void *context) { 
 
 DEFINE_SET(tds_int_set, tds_int_set, tds_int_map, tds_int_map, int32_t, tds_int_set_visitor, int_set_adapter, int_set_visit_context)
 DEFINE_SET(tds_long_set, tds_long_set, tds_long_map, tds_long_map, int64_t, tds_long_set_visitor, long_set_adapter, long_set_visit_context)
+
+static const patricia_node *entry_at_node(const patricia_node *node, size_t index) {
+    if (node == NULL || index >= node->count) return NULL;
+    while (node->kind == PATRICIA_BRANCH) {
+        if (index < node->left->count) {
+            node = node->left;
+        } else {
+            index -= node->left->count;
+            node = node->right;
+        }
+    }
+    return node;
+}
+
+static size_t lower_bound_rank(
+    const patricia_node *node, uint64_t path, bool *found) {
+    size_t rank = 0;
+    *found = false;
+    while (node != NULL && node->kind == PATRICIA_BRANCH) {
+        if (prefix_of(path, node->mask) != node->path_or_prefix) {
+            return path < node->path_or_prefix ? rank : rank + node->count;
+        }
+        if ((path & node->mask) == 0) {
+            node = node->left;
+        } else {
+            rank += node->left->count;
+            node = node->right;
+        }
+    }
+    if (node == NULL) return rank;
+    if (node->path_or_prefix == path) {
+        *found = true;
+        return rank;
+    }
+    return rank + (node->path_or_prefix < path ? 1u : 0u);
+}
+
+static tds_hamt_status map_cursor_create(
+    const patricia_map *map, size_t position, tds_patricia_map_cursor *result) {
+    if (map == NULL || result == NULL || position > map->count)
+        return TDS_HAMT_INVALID_ARGUMENT;
+    result->map = map_clone(map);
+    result->position = position;
+    return TDS_HAMT_OK;
+}
+
+static tds_hamt_status map_cursor_clone(
+    const tds_patricia_map_cursor *cursor, tds_patricia_map_cursor *result) {
+    if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT;
+    if (cursor == result) return TDS_HAMT_OK;
+    result->map = map_clone(&cursor->map);
+    result->position = cursor->position;
+    return TDS_HAMT_OK;
+}
+
+static void map_cursor_destroy(tds_patricia_map_cursor *cursor) {
+    if (cursor == NULL) return;
+    map_destroy(&cursor->map);
+    cursor->position = 0;
+}
+
+static tds_hamt_status map_cursor_publish(
+    const tds_patricia_map_cursor *source, patricia_map map,
+    size_t position, tds_patricia_map_cursor *result) {
+    if (source == result) map_destroy(&result->map);
+    result->map = map;
+    result->position = position;
+    return TDS_HAMT_OK;
+}
+
+static tds_hamt_status map_cursor_reposition(
+    const tds_patricia_map_cursor *cursor, size_t position,
+    tds_patricia_map_cursor *result) {
+    if (cursor == NULL || result == NULL || position > cursor->map.count)
+        return TDS_HAMT_INVALID_ARGUMENT;
+    patricia_map map = map_clone(&cursor->map);
+    return map_cursor_publish(cursor, map, position, result);
+}
+
+static bool map_cursor_try_peek(
+    const tds_patricia_map_cursor *cursor, size_t index,
+    int64_t *key, const void **value) {
+    if (cursor == NULL) return false;
+    const patricia_node *leaf = entry_at_node(
+        (const patricia_node *)cursor->map.root, index);
+    if (leaf == NULL) return false;
+    if (key != NULL) *key = leaf->key;
+    if (value != NULL) *value = leaf->value;
+    return true;
+}
+
+static tds_hamt_status map_cursor_insert(
+    const tds_patricia_map_cursor *cursor, int64_t key, uint64_t path,
+    const void *value, tds_patricia_map_cursor *result) {
+    if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT;
+    bool found;
+    const size_t expected = lower_bound_rank(
+        (const patricia_node *)cursor->map.root, path, &found);
+    if (found) return TDS_HAMT_DUPLICATE_KEY;
+    if (expected != cursor->position) return TDS_HAMT_INVALID_ARGUMENT;
+    patricia_map map;
+    tds_hamt_status status = map_set(&cursor->map, key, path, value, &map);
+    if (status != TDS_HAMT_OK) return status;
+    return map_cursor_publish(cursor, map, cursor->position + 1, result);
+}
+
+static tds_hamt_status map_cursor_put(
+    const tds_patricia_map_cursor *cursor, int64_t key, uint64_t path,
+    const void *value, tds_patricia_map_cursor *result) {
+    if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT;
+    bool found;
+    const size_t expected = lower_bound_rank(
+        (const patricia_node *)cursor->map.root, path, &found);
+    if (expected != cursor->position) return TDS_HAMT_INVALID_ARGUMENT;
+    patricia_map map;
+    tds_hamt_status status = map_set(&cursor->map, key, path, value, &map);
+    if (status != TDS_HAMT_OK) return status;
+    return map_cursor_publish(
+        cursor, map, cursor->position + (found ? 0u : 1u), result);
+}
+
+static tds_hamt_status map_cursor_set_next_value(
+    const tds_patricia_map_cursor *cursor, const void *value,
+    tds_patricia_map_cursor *result) {
+    if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT;
+    const patricia_node *leaf = entry_at_node(
+        (const patricia_node *)cursor->map.root, cursor->position);
+    if (leaf == NULL) return TDS_HAMT_INVALID_ARGUMENT;
+    patricia_map map;
+    tds_hamt_status status = map_set(
+        &cursor->map, leaf->key, leaf->path_or_prefix, value, &map);
+    if (status != TDS_HAMT_OK) return status;
+    return map_cursor_publish(cursor, map, cursor->position, result);
+}
+
+static tds_hamt_status map_cursor_delete(
+    const tds_patricia_map_cursor *cursor, bool previous,
+    tds_patricia_map_cursor *result) {
+    if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT;
+    if ((previous && cursor->position == 0)
+        || (!previous && cursor->position == cursor->map.count))
+        return TDS_HAMT_INVALID_ARGUMENT;
+    const size_t index = previous ? cursor->position - 1 : cursor->position;
+    const patricia_node *leaf = entry_at_node(
+        (const patricia_node *)cursor->map.root, index);
+    if (leaf == NULL) return TDS_HAMT_INVALID_ARGUMENT;
+    patricia_map map;
+    tds_hamt_status status = map_remove(
+        &cursor->map, leaf->path_or_prefix, &map);
+    if (status != TDS_HAMT_OK) return status;
+    return map_cursor_publish(
+        cursor, map, previous ? cursor->position - 1 : cursor->position, result);
+}
+
+#define DEFINE_MAP_CURSOR(prefix, map_type, cursor_type, key_type, encode_fn) \
+tds_hamt_status prefix##_cursor_create(const map_type *map, size_t position, cursor_type *result) { return map_cursor_create((const patricia_map *)map, position, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_at_start(const map_type *map, cursor_type *result) { return prefix##_cursor_create(map, 0, result); } \
+tds_hamt_status prefix##_cursor_at_end(const map_type *map, cursor_type *result) { return map == NULL ? TDS_HAMT_INVALID_ARGUMENT : prefix##_cursor_create(map, map->count, result); } \
+tds_hamt_status prefix##_cursor_lower_bound(const map_type *map, key_type key, cursor_type *result) { if (map == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; bool found; const size_t position = lower_bound_rank((const patricia_node *)map->root, encode_fn(key), &found); (void)found; return prefix##_cursor_create(map, position, result); } \
+tds_hamt_status prefix##_cursor_upper_bound(const map_type *map, key_type key, cursor_type *result) { if (map == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; bool found; size_t position = lower_bound_rank((const patricia_node *)map->root, encode_fn(key), &found); position += found ? 1u : 0u; return prefix##_cursor_create(map, position, result); } \
+tds_hamt_status prefix##_cursor_at_key(const map_type *map, key_type key, bool *found, cursor_type *result) { if (map == NULL || found == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; bool hit; const size_t position = lower_bound_rank((const patricia_node *)map->root, encode_fn(key), &hit); tds_hamt_status status = prefix##_cursor_create(map, position, result); if (status == TDS_HAMT_OK) *found = hit; return status; } \
+tds_hamt_status prefix##_cursor_clone(const cursor_type *cursor, cursor_type *result) { return map_cursor_clone((const tds_patricia_map_cursor *)cursor, (tds_patricia_map_cursor *)result); } \
+void prefix##_cursor_destroy(cursor_type *cursor) { map_cursor_destroy((tds_patricia_map_cursor *)cursor); } \
+size_t prefix##_cursor_count(const cursor_type *cursor) { return cursor == NULL ? 0 : cursor->map.count; } \
+size_t prefix##_cursor_position(const cursor_type *cursor) { return cursor == NULL ? 0 : cursor->position; } \
+bool prefix##_cursor_is_at_start(const cursor_type *cursor) { return cursor != NULL && cursor->position == 0; } \
+bool prefix##_cursor_is_at_end(const cursor_type *cursor) { return cursor != NULL && cursor->position == cursor->map.count; } \
+bool prefix##_cursor_try_peek_previous(const cursor_type *cursor, key_type *key, const void **value) { if (cursor == NULL || cursor->position == 0) return false; int64_t found_key; const bool found = map_cursor_try_peek((const tds_patricia_map_cursor *)cursor, cursor->position - 1, &found_key, value); if (found && key != NULL) *key = (key_type)found_key; return found; } \
+bool prefix##_cursor_try_peek_next(const cursor_type *cursor, key_type *key, const void **value) { if (cursor == NULL) return false; int64_t found_key; const bool found = map_cursor_try_peek((const tds_patricia_map_cursor *)cursor, cursor->position, &found_key, value); if (found && key != NULL) *key = (key_type)found_key; return found; } \
+tds_hamt_status prefix##_cursor_move_previous(const cursor_type *cursor, cursor_type *result) { if (cursor == NULL || cursor->position == 0) return TDS_HAMT_INVALID_ARGUMENT; return map_cursor_reposition((const tds_patricia_map_cursor *)cursor, cursor->position - 1, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_move_next(const cursor_type *cursor, cursor_type *result) { if (cursor == NULL || cursor->position == cursor->map.count) return TDS_HAMT_INVALID_ARGUMENT; return map_cursor_reposition((const tds_patricia_map_cursor *)cursor, cursor->position + 1, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_seek(const cursor_type *cursor, size_t position, cursor_type *result) { return map_cursor_reposition((const tds_patricia_map_cursor *)cursor, position, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_insert(const cursor_type *cursor, key_type key, const void *value, cursor_type *result) { return map_cursor_insert((const tds_patricia_map_cursor *)cursor, key, encode_fn(key), value, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_put(const cursor_type *cursor, key_type key, const void *value, cursor_type *result) { return map_cursor_put((const tds_patricia_map_cursor *)cursor, key, encode_fn(key), value, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_set_next_value(const cursor_type *cursor, const void *value, cursor_type *result) { return map_cursor_set_next_value((const tds_patricia_map_cursor *)cursor, value, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_delete_previous(const cursor_type *cursor, cursor_type *result) { return map_cursor_delete((const tds_patricia_map_cursor *)cursor, true, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_delete_next(const cursor_type *cursor, cursor_type *result) { return map_cursor_delete((const tds_patricia_map_cursor *)cursor, false, (tds_patricia_map_cursor *)result); } \
+tds_hamt_status prefix##_cursor_snapshot(const cursor_type *cursor, map_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; if (result == &cursor->map) return TDS_HAMT_OK; *result = prefix##_clone(&cursor->map); return TDS_HAMT_OK; }
+
+DEFINE_MAP_CURSOR(tds_int_map, tds_int_map, tds_int_map_cursor, int32_t, encode32)
+DEFINE_MAP_CURSOR(tds_long_map, tds_long_map, tds_long_map_cursor, int64_t, encode64)
+
+#define DEFINE_SET_CURSOR(prefix, set_type, cursor_type, key_type, map_prefix, encode_fn) \
+tds_hamt_status prefix##_cursor_create(const set_type *set, size_t position, cursor_type *result) { if (set == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_create(&set->map, position, &result->inner); } \
+tds_hamt_status prefix##_cursor_at_start(const set_type *set, cursor_type *result) { return prefix##_cursor_create(set, 0, result); } \
+tds_hamt_status prefix##_cursor_at_end(const set_type *set, cursor_type *result) { return set == NULL ? TDS_HAMT_INVALID_ARGUMENT : prefix##_cursor_create(set, set->map.count, result); } \
+tds_hamt_status prefix##_cursor_lower_bound(const set_type *set, key_type value, cursor_type *result) { if (set == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_lower_bound(&set->map, value, &result->inner); } \
+tds_hamt_status prefix##_cursor_upper_bound(const set_type *set, key_type value, cursor_type *result) { if (set == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_upper_bound(&set->map, value, &result->inner); } \
+tds_hamt_status prefix##_cursor_at_item(const set_type *set, key_type value, bool *found, cursor_type *result) { if (set == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_at_key(&set->map, value, found, &result->inner); } \
+tds_hamt_status prefix##_cursor_clone(const cursor_type *cursor, cursor_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_clone(&cursor->inner, &result->inner); } \
+void prefix##_cursor_destroy(cursor_type *cursor) { if (cursor != NULL) map_prefix##_cursor_destroy(&cursor->inner); } \
+size_t prefix##_cursor_count(const cursor_type *cursor) { return cursor == NULL ? 0 : map_prefix##_cursor_count(&cursor->inner); } \
+size_t prefix##_cursor_position(const cursor_type *cursor) { return cursor == NULL ? 0 : map_prefix##_cursor_position(&cursor->inner); } \
+bool prefix##_cursor_is_at_start(const cursor_type *cursor) { return cursor != NULL && map_prefix##_cursor_is_at_start(&cursor->inner); } \
+bool prefix##_cursor_is_at_end(const cursor_type *cursor) { return cursor != NULL && map_prefix##_cursor_is_at_end(&cursor->inner); } \
+bool prefix##_cursor_try_peek_previous(const cursor_type *cursor, key_type *value) { return cursor != NULL && map_prefix##_cursor_try_peek_previous(&cursor->inner, value, NULL); } \
+bool prefix##_cursor_try_peek_next(const cursor_type *cursor, key_type *value) { return cursor != NULL && map_prefix##_cursor_try_peek_next(&cursor->inner, value, NULL); } \
+tds_hamt_status prefix##_cursor_move_previous(const cursor_type *cursor, cursor_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_move_previous(&cursor->inner, &result->inner); } \
+tds_hamt_status prefix##_cursor_move_next(const cursor_type *cursor, cursor_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_move_next(&cursor->inner, &result->inner); } \
+tds_hamt_status prefix##_cursor_seek(const cursor_type *cursor, size_t position, cursor_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_seek(&cursor->inner, position, &result->inner); } \
+tds_hamt_status prefix##_cursor_insert(const cursor_type *cursor, key_type value, cursor_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; bool found; const size_t expected = lower_bound_rank((const patricia_node *)cursor->inner.map.root, encode_fn(value), &found); if (expected != cursor->inner.position) return TDS_HAMT_INVALID_ARGUMENT; return found ? map_prefix##_cursor_clone(&cursor->inner, &result->inner) : map_prefix##_cursor_insert(&cursor->inner, value, NULL, &result->inner); } \
+tds_hamt_status prefix##_cursor_delete_previous(const cursor_type *cursor, cursor_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_delete_previous(&cursor->inner, &result->inner); } \
+tds_hamt_status prefix##_cursor_delete_next(const cursor_type *cursor, cursor_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_delete_next(&cursor->inner, &result->inner); } \
+tds_hamt_status prefix##_cursor_snapshot(const cursor_type *cursor, set_type *result) { if (cursor == NULL || result == NULL) return TDS_HAMT_INVALID_ARGUMENT; return map_prefix##_cursor_snapshot(&cursor->inner, &result->map); }
+
+DEFINE_SET_CURSOR(tds_int_set, tds_int_set, tds_int_set_cursor, int32_t, tds_int_map, encode32)
+DEFINE_SET_CURSOR(tds_long_set, tds_long_set, tds_long_set_cursor, int64_t, tds_long_map, encode64)

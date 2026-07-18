@@ -24,6 +24,19 @@ typedef tds_patricia_map tds_long_map;
 typedef struct tds_int_set { tds_int_map map; } tds_int_set;
 typedef struct tds_long_set { tds_long_map map; } tds_long_set;
 
+/* Immutable cursors own one exact ref-counted collection version. Their position is an
+ * ordered gap in 0..count. Initialize them only through a cursor factory or clone, and
+ * destroy every initialized cursor. Related versions use the Patricia nodes' non-atomic
+ * reference counts and therefore require the same external synchronization as maps/sets. */
+typedef struct tds_patricia_map_cursor {
+    tds_patricia_map map;
+    size_t position;
+} tds_patricia_map_cursor;
+typedef tds_patricia_map_cursor tds_int_map_cursor;
+typedef tds_patricia_map_cursor tds_long_map_cursor;
+typedef struct tds_int_set_cursor { tds_int_map_cursor inner; } tds_int_set_cursor;
+typedef struct tds_long_set_cursor { tds_long_map_cursor inner; } tds_long_set_cursor;
+
 typedef void (*tds_int_map_visitor)(int32_t key, const void *value, void *context);
 typedef void (*tds_long_map_visitor)(int64_t key, const void *value, void *context);
 typedef const void *(*tds_int_map_combine_fn)(
@@ -54,6 +67,34 @@ tds_patricia_value_policy tds_patricia_value_policy_default(void);
 TDS_DECLARE_PATRICIA_MAP(tds_int_map, tds_int_map, int32_t, tds_int_map_visitor, tds_int_map_combine_fn);
 TDS_DECLARE_PATRICIA_MAP(tds_long_map, tds_long_map, int64_t, tds_long_map_visitor, tds_long_map_combine_fn);
 
+#define TDS_DECLARE_PATRICIA_MAP_CURSOR(prefix, map_type, cursor_type, key_type) \
+    tds_hamt_status prefix##_cursor_create(const map_type *map, size_t position, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_at_start(const map_type *map, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_at_end(const map_type *map, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_lower_bound(const map_type *map, key_type key, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_upper_bound(const map_type *map, key_type key, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_at_key(const map_type *map, key_type key, bool *found, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_clone(const cursor_type *cursor, cursor_type *result); \
+    void prefix##_cursor_destroy(cursor_type *cursor); \
+    size_t prefix##_cursor_count(const cursor_type *cursor); \
+    size_t prefix##_cursor_position(const cursor_type *cursor); \
+    bool prefix##_cursor_is_at_start(const cursor_type *cursor); \
+    bool prefix##_cursor_is_at_end(const cursor_type *cursor); \
+    bool prefix##_cursor_try_peek_previous(const cursor_type *cursor, key_type *key, const void **value); \
+    bool prefix##_cursor_try_peek_next(const cursor_type *cursor, key_type *key, const void **value); \
+    tds_hamt_status prefix##_cursor_move_previous(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_move_next(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_seek(const cursor_type *cursor, size_t position, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_insert(const cursor_type *cursor, key_type key, const void *value, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_put(const cursor_type *cursor, key_type key, const void *value, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_set_next_value(const cursor_type *cursor, const void *value, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_delete_previous(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_delete_next(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_snapshot(const cursor_type *cursor, map_type *result)
+
+TDS_DECLARE_PATRICIA_MAP_CURSOR(tds_int_map, tds_int_map, tds_int_map_cursor, int32_t);
+TDS_DECLARE_PATRICIA_MAP_CURSOR(tds_long_map, tds_long_map, tds_long_map_cursor, int64_t);
+
 #define TDS_DECLARE_PATRICIA_SET(prefix, set_type, key_type, visitor_type) \
     set_type prefix##_create(void); \
     set_type prefix##_clone(const set_type *set); \
@@ -70,8 +111,36 @@ TDS_DECLARE_PATRICIA_MAP(tds_long_map, tds_long_map, int64_t, tds_long_map_visit
 TDS_DECLARE_PATRICIA_SET(tds_int_set, tds_int_set, int32_t, tds_int_set_visitor);
 TDS_DECLARE_PATRICIA_SET(tds_long_set, tds_long_set, int64_t, tds_long_set_visitor);
 
+#define TDS_DECLARE_PATRICIA_SET_CURSOR(prefix, set_type, cursor_type, key_type) \
+    tds_hamt_status prefix##_cursor_create(const set_type *set, size_t position, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_at_start(const set_type *set, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_at_end(const set_type *set, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_lower_bound(const set_type *set, key_type value, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_upper_bound(const set_type *set, key_type value, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_at_item(const set_type *set, key_type value, bool *found, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_clone(const cursor_type *cursor, cursor_type *result); \
+    void prefix##_cursor_destroy(cursor_type *cursor); \
+    size_t prefix##_cursor_count(const cursor_type *cursor); \
+    size_t prefix##_cursor_position(const cursor_type *cursor); \
+    bool prefix##_cursor_is_at_start(const cursor_type *cursor); \
+    bool prefix##_cursor_is_at_end(const cursor_type *cursor); \
+    bool prefix##_cursor_try_peek_previous(const cursor_type *cursor, key_type *value); \
+    bool prefix##_cursor_try_peek_next(const cursor_type *cursor, key_type *value); \
+    tds_hamt_status prefix##_cursor_move_previous(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_move_next(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_seek(const cursor_type *cursor, size_t position, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_insert(const cursor_type *cursor, key_type value, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_delete_previous(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_delete_next(const cursor_type *cursor, cursor_type *result); \
+    tds_hamt_status prefix##_cursor_snapshot(const cursor_type *cursor, set_type *result)
+
+TDS_DECLARE_PATRICIA_SET_CURSOR(tds_int_set, tds_int_set, tds_int_set_cursor, int32_t);
+TDS_DECLARE_PATRICIA_SET_CURSOR(tds_long_set, tds_long_set, tds_long_set_cursor, int64_t);
+
 #undef TDS_DECLARE_PATRICIA_MAP
+#undef TDS_DECLARE_PATRICIA_MAP_CURSOR
 #undef TDS_DECLARE_PATRICIA_SET
+#undef TDS_DECLARE_PATRICIA_SET_CURSOR
 
 #ifdef __cplusplus
 }

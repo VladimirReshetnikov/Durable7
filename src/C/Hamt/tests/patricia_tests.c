@@ -296,6 +296,191 @@ static void test_set_algebra(void)
     tds_long_set_destroy(&longs);
 }
 
+static void test_persistent_cursors(void)
+{
+    static const int minimum_value = 10;
+    static const int negative_value = 20;
+    static const int positive_value = 40;
+    static const int maximum_value = 50;
+    static const int inserted_value = 30;
+    static const int replacement_value = 25;
+    static const int put_value = 26;
+    tds_int_map map = tds_int_map_create(NULL);
+    CHECK_STATUS(tds_int_map_set(&map, INT32_MAX, &maximum_value, &map));
+    CHECK_STATUS(tds_int_map_set(&map, 7, &positive_value, &map));
+    CHECK_STATUS(tds_int_map_set(&map, 0, NULL, &map));
+    CHECK_STATUS(tds_int_map_set(&map, -5, &negative_value, &map));
+    CHECK_STATUS(tds_int_map_set(&map, INT32_MIN, &minimum_value, &map));
+
+    tds_int_map_cursor start;
+    CHECK_STATUS(tds_int_map_cursor_at_start(&map, &start));
+    CHECK(tds_int_map_cursor_count(&start) == 5);
+    CHECK(tds_int_map_cursor_position(&start) == 0);
+    CHECK(tds_int_map_cursor_is_at_start(&start));
+    int32_t key = 0;
+    const void *value = NULL;
+    CHECK(!tds_int_map_cursor_try_peek_previous(&start, &key, &value));
+    CHECK(tds_int_map_cursor_try_peek_next(&start, &key, &value));
+    CHECK(key == INT32_MIN && value == &minimum_value);
+    CHECK(tds_int_map_cursor_move_previous(&start, &start)
+        == TDS_HAMT_INVALID_ARGUMENT);
+    CHECK(tds_int_map_cursor_create(&map, 6, &start)
+        == TDS_HAMT_INVALID_ARGUMENT);
+
+    bool found = false;
+    tds_int_map_cursor exact;
+    CHECK_STATUS(tds_int_map_cursor_at_key(&map, 0, &found, &exact));
+    CHECK(found);
+    CHECK(tds_int_map_cursor_position(&exact) == 2);
+    value = &minimum_value;
+    CHECK(tds_int_map_cursor_try_peek_next(&exact, &key, &value));
+    CHECK(key == 0 && value == NULL);
+    CHECK(tds_int_map_cursor_try_peek_previous(&exact, &key, &value));
+    CHECK(key == -5 && value == &negative_value);
+
+    tds_int_map_cursor miss;
+    CHECK_STATUS(tds_int_map_cursor_at_key(&map, 3, &found, &miss));
+    CHECK(!found);
+    CHECK(tds_int_map_cursor_position(&miss) == 3);
+    CHECK(tds_int_map_cursor_try_peek_next(&miss, &key, &value));
+    CHECK(key == 7);
+
+    tds_int_map_cursor bound;
+    CHECK_STATUS(tds_int_map_cursor_lower_bound(&map, 0, &bound));
+    CHECK(tds_int_map_cursor_position(&bound) == 2);
+    tds_int_map_cursor_destroy(&bound);
+    CHECK_STATUS(tds_int_map_cursor_upper_bound(&map, 0, &bound));
+    CHECK(tds_int_map_cursor_position(&bound) == 3);
+    tds_int_map_cursor_destroy(&bound);
+    CHECK_STATUS(tds_int_map_cursor_lower_bound(&map, INT32_MAX, &bound));
+    CHECK(tds_int_map_cursor_position(&bound) == 4);
+    tds_int_map_cursor_destroy(&bound);
+    CHECK_STATUS(tds_int_map_cursor_upper_bound(&map, INT32_MAX, &bound));
+    CHECK(tds_int_map_cursor_position(&bound) == 5);
+    tds_int_map_cursor_destroy(&bound);
+
+    tds_int_map_cursor inserted;
+    CHECK_STATUS(tds_int_map_cursor_insert(
+        &miss, 3, &inserted_value, &inserted));
+    CHECK(tds_int_map_cursor_position(&inserted) == 4);
+    CHECK(tds_int_map_cursor_try_peek_previous(&inserted, &key, &value));
+    CHECK(key == 3 && value == &inserted_value);
+    CHECK(tds_int_map_cursor_try_peek_next(&inserted, &key, &value));
+    CHECK(key == 7);
+    CHECK(!tds_int_map_try_get(&map, 3, NULL));
+
+    tds_int_map inserted_snapshot;
+    CHECK_STATUS(tds_int_map_cursor_snapshot(&inserted, &inserted_snapshot));
+    CHECK(tds_int_map_try_get(&inserted_snapshot, 3, &value));
+    CHECK(value == &inserted_value);
+    tds_int_map_destroy(&inserted_snapshot);
+    tds_int_map clean_snapshot;
+    CHECK_STATUS(tds_int_map_cursor_snapshot(&start, &clean_snapshot));
+    CHECK(tds_int_map_shares_root(&map, &clean_snapshot));
+    tds_int_map_destroy(&clean_snapshot);
+
+    CHECK(tds_int_map_cursor_insert(&miss, 7, &positive_value, &bound)
+        == TDS_HAMT_DUPLICATE_KEY);
+    CHECK(tds_int_map_cursor_insert(&start, 3, &inserted_value, &start)
+        == TDS_HAMT_INVALID_ARGUMENT);
+    CHECK(tds_int_map_cursor_position(&start) == 0);
+
+    tds_int_map_cursor updated;
+    CHECK_STATUS(tds_int_map_cursor_set_next_value(
+        &exact, &replacement_value, &updated));
+    CHECK(tds_int_map_cursor_position(&updated) == 2);
+    CHECK(tds_int_map_cursor_try_peek_next(&updated, &key, &value));
+    CHECK(key == 0 && value == &replacement_value);
+    value = &minimum_value;
+    CHECK(tds_int_map_cursor_try_peek_next(&exact, &key, &value));
+    CHECK(key == 0 && value == NULL);
+
+    tds_int_map_cursor put;
+    CHECK_STATUS(tds_int_map_cursor_put(&exact, 0, &put_value, &put));
+    CHECK(tds_int_map_cursor_position(&put) == 2);
+    CHECK(tds_int_map_cursor_try_peek_next(&put, &key, &value));
+    CHECK(value == &put_value);
+    tds_int_map_cursor_destroy(&put);
+    CHECK_STATUS(tds_int_map_cursor_put(&miss, 3, &inserted_value, &put));
+    CHECK(tds_int_map_cursor_position(&put) == 4);
+    tds_int_map_cursor_destroy(&put);
+
+    tds_int_map_cursor deleted;
+    CHECK_STATUS(tds_int_map_cursor_delete_next(&exact, &deleted));
+    CHECK(tds_int_map_cursor_position(&deleted) == 2);
+    CHECK(tds_int_map_cursor_try_peek_next(&deleted, &key, &value));
+    CHECK(key == 7);
+    tds_int_map_cursor_destroy(&deleted);
+    CHECK_STATUS(tds_int_map_cursor_delete_previous(&exact, &deleted));
+    CHECK(tds_int_map_cursor_position(&deleted) == 1);
+    CHECK(tds_int_map_cursor_try_peek_previous(&deleted, &key, &value));
+    CHECK(key == INT32_MIN);
+    CHECK(tds_int_map_cursor_try_peek_next(&deleted, &key, &value));
+    CHECK(key == 0);
+    tds_int_map_cursor_destroy(&deleted);
+
+    tds_int_map_cursor end;
+    CHECK_STATUS(tds_int_map_cursor_at_end(&map, &end));
+    CHECK(tds_int_map_cursor_is_at_end(&end));
+    CHECK(tds_int_map_cursor_try_peek_previous(&end, &key, &value));
+    CHECK(key == INT32_MAX);
+    CHECK(!tds_int_map_cursor_try_peek_next(&end, &key, &value));
+    CHECK(tds_int_map_cursor_move_next(&end, &end)
+        == TDS_HAMT_INVALID_ARGUMENT);
+    CHECK(tds_int_map_cursor_delete_next(&end, &end)
+        == TDS_HAMT_INVALID_ARGUMENT);
+
+    for (int32_t probe = -10; probe <= 10; ++probe) {
+        size_t expected = 0;
+        static const int32_t ordered[] = { INT32_MIN, -5, 0, 7, INT32_MAX };
+        while (expected < sizeof(ordered) / sizeof(ordered[0])
+            && ordered[expected] < probe) ++expected;
+        CHECK_STATUS(tds_int_map_cursor_lower_bound(&map, probe, &bound));
+        CHECK(tds_int_map_cursor_position(&bound) == expected);
+        tds_int_map_cursor_destroy(&bound);
+    }
+
+    tds_long_set set = tds_long_set_create();
+    CHECK_STATUS(tds_long_set_add(&set, INT64_MAX, &set));
+    CHECK_STATUS(tds_long_set_add(&set, 0, &set));
+    CHECK_STATUS(tds_long_set_add(&set, INT64_MIN, &set));
+    tds_long_set_cursor set_exact;
+    CHECK_STATUS(tds_long_set_cursor_at_item(&set, 0, &found, &set_exact));
+    CHECK(found && tds_long_set_cursor_position(&set_exact) == 1);
+    int64_t long_value = -1;
+    CHECK(tds_long_set_cursor_try_peek_next(&set_exact, &long_value));
+    CHECK(long_value == 0);
+    tds_long_set_cursor duplicate;
+    CHECK_STATUS(tds_long_set_cursor_insert(&set_exact, 0, &duplicate));
+    tds_long_set duplicate_snapshot;
+    CHECK_STATUS(tds_long_set_cursor_snapshot(&duplicate, &duplicate_snapshot));
+    CHECK(duplicate_snapshot.map.root == set.map.root);
+    tds_long_set_destroy(&duplicate_snapshot);
+    tds_long_set_cursor_destroy(&duplicate);
+    tds_long_set_cursor set_miss;
+    CHECK_STATUS(tds_long_set_cursor_lower_bound(&set, -1, &set_miss));
+    CHECK_STATUS(tds_long_set_cursor_insert(&set_miss, -1, &duplicate));
+    CHECK(tds_long_set_cursor_try_peek_previous(&duplicate, &long_value));
+    CHECK(long_value == -1);
+    CHECK(tds_long_set_cursor_try_peek_next(&duplicate, &long_value));
+    CHECK(long_value == 0);
+    tds_long_set_cursor_destroy(&duplicate);
+    tds_long_set_cursor_destroy(&set_miss);
+    tds_long_set_cursor_destroy(&set_exact);
+    tds_long_set_destroy(&set);
+
+    tds_int_map_cursor_destroy(&end);
+    tds_int_map_cursor_destroy(&updated);
+    tds_int_map_cursor_destroy(&inserted);
+    tds_int_map_cursor_destroy(&miss);
+    tds_int_map_cursor_destroy(&exact);
+    tds_int_map_destroy(&map);
+    CHECK(tds_int_map_cursor_count(&start) == 5);
+    CHECK(tds_int_map_cursor_try_peek_next(&start, &key, &value));
+    CHECK(key == INT32_MIN);
+    tds_int_map_cursor_destroy(&start);
+}
+
 static uint32_t next_random(uint32_t *state)
 {
     *state = *state * UINT32_C(1664525) + UINT32_C(1013904223);
@@ -422,6 +607,7 @@ int main(void)
     test_signed_order_and_persistence();
     test_map_algebra();
     test_set_algebra();
+    test_persistent_cursors();
     test_random_model_and_structural_algebra();
     test_value_lifetime();
     puts("All C Patricia tests passed.");
