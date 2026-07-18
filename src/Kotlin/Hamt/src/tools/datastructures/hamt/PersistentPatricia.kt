@@ -43,6 +43,41 @@ private class PatriciaCore<K, V>(
         return findLeaf(node, encode(key)) != null
     }
 
+    fun entryAt(index: Int): Pair<K, V>? {
+        if (index < 0 || index >= size) return null
+        var remaining = index
+        var node = root ?: return null
+        while (node is PatriciaBranch) {
+            if (remaining < node.left.count) {
+                node = node.left
+            } else {
+                remaining -= node.left.count
+                node = node.right
+            }
+        }
+        node as PatriciaLeaf
+        return node.key to node.value
+    }
+
+    fun lowerBoundRank(key: K): Pair<Int, Boolean> {
+        val path = encode(key)
+        var rank = 0
+        var node = root ?: return 0 to false
+        while (node is PatriciaBranch) {
+            if (prefixOf(path, node.mask) != node.prefix) {
+                return if (path < node.prefix) rank to false else Math.addExact(rank, node.count) to false
+            }
+            if (path and node.mask == 0uL) {
+                node = node.left
+            } else {
+                rank = Math.addExact(rank, node.left.count)
+                node = node.right
+            }
+        }
+        node as PatriciaLeaf
+        return if (node.path < path) Math.addExact(rank, 1) to false else rank to (node.path == path)
+    }
+
     fun put(key: K, value: V): PatriciaCore<K, V> {
         val path = encode(key)
         val change = put(root, path, key, value)
@@ -385,6 +420,12 @@ private fun <K, V> joinPatricia(
     else PatriciaBranch(prefix, mask, right, left)
 }
 
+/** A presence-safe map cursor entry whose [value] may itself be null. */
+public data class PatriciaMapEntry<K, V>(public val key: K, public val value: V)
+
+/** Exact-search result whose [cursor] remains usable on a miss. */
+public data class PatriciaCursorSearch<C>(public val cursor: C, public val found: Boolean)
+
 public class PersistentIntMap<V> private constructor(private val core: PatriciaCore<Int, V>) : Iterable<Pair<Int, V>> {
     public companion object {
         public fun <V> empty(): PersistentIntMap<V> = PersistentIntMap(PatriciaCore(null, 0) { (it xor Int.MIN_VALUE).toUInt().toULong() })
@@ -396,6 +437,20 @@ public class PersistentIntMap<V> private constructor(private val core: PatriciaC
     public val isEmpty: Boolean get() = size == 0
     public operator fun get(key: Int): V? = core.get(key)
     public fun containsKey(key: Int): Boolean = core.containsKey(key)
+    public fun cursor(): PersistentIntMapCursor<V> = PersistentIntMapCursor.create(this, 0)
+    public fun cursorAt(position: Int): PersistentIntMapCursor<V>? =
+        if (position < 0 || position > size) null else PersistentIntMapCursor.create(this, position)
+    public fun cursorAtEnd(): PersistentIntMapCursor<V> = PersistentIntMapCursor.create(this, size)
+    public fun lowerBoundCursor(key: Int): PersistentIntMapCursor<V> =
+        PersistentIntMapCursor.create(this, core.lowerBoundRank(key).first)
+    public fun upperBoundCursor(key: Int): PersistentIntMapCursor<V> {
+        val (position, found) = core.lowerBoundRank(key)
+        return PersistentIntMapCursor.create(this, position + if (found) 1 else 0)
+    }
+    public fun cursorAtKey(key: Int): PatriciaCursorSearch<PersistentIntMapCursor<V>> {
+        val (position, found) = core.lowerBoundRank(key)
+        return PatriciaCursorSearch(PersistentIntMapCursor.create(this, position), found)
+    }
     public fun put(key: Int, value: V): PersistentIntMap<V> { val next = core.put(key, value); return if (next === core) this else PersistentIntMap(next) }
     public fun remove(key: Int): PersistentIntMap<V> { val next = core.remove(key); return if (next === core) this else PersistentIntMap(next) }
     public fun clear(): PersistentIntMap<V> = if (isEmpty) this else empty()
@@ -405,6 +460,9 @@ public class PersistentIntMap<V> private constructor(private val core: PatriciaC
     public fun intersect(other: PersistentIntMap<V>, combine: (Int, V, V) -> V): PersistentIntMap<V> { val next = core.intersect(other.core, combine); return if (next === core) this else PersistentIntMap(next) }
     public fun except(other: PersistentIntMap<*>): PersistentIntMap<V> { val next = core.except(other.core); return if (next === core) this else PersistentIntMap(next) }
     override fun iterator(): Iterator<Pair<Int, V>> = core.iterator()
+    internal fun entryAtForCursor(index: Int): PatriciaMapEntry<Int, V>? =
+        core.entryAt(index)?.let { PatriciaMapEntry(it.first, it.second) }
+    internal fun lowerBoundRankForCursor(key: Int): Pair<Int, Boolean> = core.lowerBoundRank(key)
 }
 
 public class PersistentLongMap<V> private constructor(private val core: PatriciaCore<Long, V>) : Iterable<Pair<Long, V>> {
@@ -416,6 +474,20 @@ public class PersistentLongMap<V> private constructor(private val core: Patricia
     public val isEmpty: Boolean get() = size == 0
     public operator fun get(key: Long): V? = core.get(key)
     public fun containsKey(key: Long): Boolean = core.containsKey(key)
+    public fun cursor(): PersistentLongMapCursor<V> = PersistentLongMapCursor.create(this, 0)
+    public fun cursorAt(position: Int): PersistentLongMapCursor<V>? =
+        if (position < 0 || position > size) null else PersistentLongMapCursor.create(this, position)
+    public fun cursorAtEnd(): PersistentLongMapCursor<V> = PersistentLongMapCursor.create(this, size)
+    public fun lowerBoundCursor(key: Long): PersistentLongMapCursor<V> =
+        PersistentLongMapCursor.create(this, core.lowerBoundRank(key).first)
+    public fun upperBoundCursor(key: Long): PersistentLongMapCursor<V> {
+        val (position, found) = core.lowerBoundRank(key)
+        return PersistentLongMapCursor.create(this, position + if (found) 1 else 0)
+    }
+    public fun cursorAtKey(key: Long): PatriciaCursorSearch<PersistentLongMapCursor<V>> {
+        val (position, found) = core.lowerBoundRank(key)
+        return PatriciaCursorSearch(PersistentLongMapCursor.create(this, position), found)
+    }
     public fun put(key: Long, value: V): PersistentLongMap<V> { val next = core.put(key, value); return if (next === core) this else PersistentLongMap(next) }
     public fun remove(key: Long): PersistentLongMap<V> { val next = core.remove(key); return if (next === core) this else PersistentLongMap(next) }
     public fun clear(): PersistentLongMap<V> = if (isEmpty) this else empty()
@@ -425,18 +497,165 @@ public class PersistentLongMap<V> private constructor(private val core: Patricia
     public fun intersect(other: PersistentLongMap<V>, combine: (Long, V, V) -> V): PersistentLongMap<V> { val next = core.intersect(other.core, combine); return if (next === core) this else PersistentLongMap(next) }
     public fun except(other: PersistentLongMap<*>): PersistentLongMap<V> { val next = core.except(other.core); return if (next === core) this else PersistentLongMap(next) }
     override fun iterator(): Iterator<Pair<Long, V>> = core.iterator()
+    internal fun entryAtForCursor(index: Int): PatriciaMapEntry<Long, V>? =
+        core.entryAt(index)?.let { PatriciaMapEntry(it.first, it.second) }
+    internal fun lowerBoundRankForCursor(key: Long): Pair<Int, Boolean> = core.lowerBoundRank(key)
+}
+
+/** Immutable root-plus-rank gap cursor over a signed 32-bit Patricia map. */
+public class PersistentIntMapCursor<V> private constructor(
+    private val map: PersistentIntMap<V>,
+    public val position: Int,
+) {
+    internal companion object {
+        internal fun <V> create(map: PersistentIntMap<V>, position: Int): PersistentIntMapCursor<V> =
+            PersistentIntMapCursor(map, position)
+    }
+
+    init {
+        require(position >= 0 && position <= map.size) { "Cursor position must be in 0..map.size." }
+    }
+
+    public val size: Int get() = map.size
+    public val isAtStart: Boolean get() = position == 0
+    public val isAtEnd: Boolean get() = position == size
+    public fun peekPrevious(): PatriciaMapEntry<Int, V>? =
+        if (isAtStart) null else map.entryAtForCursor(position - 1)
+    public fun peekNext(): PatriciaMapEntry<Int, V>? = map.entryAtForCursor(position)
+    public fun movePrevious(): PersistentIntMapCursor<V>? =
+        if (isAtStart) null else create(map, position - 1)
+    public fun moveNext(): PersistentIntMapCursor<V>? =
+        if (isAtEnd) null else create(map, position + 1)
+    public fun seek(position: Int): PersistentIntMapCursor<V>? = when {
+        position < 0 || position > size -> null
+        position == this.position -> this
+        else -> create(map, position)
+    }
+    public fun insert(key: Int, value: V): PersistentIntMapCursor<V> {
+        val (expected, found) = map.lowerBoundRankForCursor(key)
+        require(!found) { "The key '$key' is already present." }
+        ensureCurrentGap(expected, key)
+        return create(map.put(key, value), Math.addExact(position, 1))
+    }
+    public fun put(key: Int, value: V): PersistentIntMapCursor<V> {
+        val (expected, found) = map.lowerBoundRankForCursor(key)
+        ensureCurrentGap(expected, key)
+        val edited = map.put(key, value)
+        if (edited === map) return this
+        return create(edited, if (found) position else Math.addExact(position, 1))
+    }
+    public fun setNextValue(value: V): PersistentIntMapCursor<V>? {
+        val next = peekNext() ?: return null
+        val edited = map.put(next.key, value)
+        return if (edited === map) this else create(edited, position)
+    }
+    public fun deletePrevious(): PersistentIntMapCursor<V>? {
+        val previous = peekPrevious() ?: return null
+        return create(map.remove(previous.key), position - 1)
+    }
+    public fun deleteNext(): PersistentIntMapCursor<V>? {
+        val next = peekNext() ?: return null
+        return create(map.remove(next.key), position)
+    }
+    public fun snapshot(): PersistentIntMap<V> = map
+
+    private fun ensureCurrentGap(expected: Int, key: Int) {
+        require(expected == position) {
+            "Key '$key' belongs at gap $expected, not at the current gap $position."
+        }
+    }
+}
+
+/** Immutable root-plus-rank gap cursor over a signed 64-bit Patricia map. */
+public class PersistentLongMapCursor<V> private constructor(
+    private val map: PersistentLongMap<V>,
+    public val position: Int,
+) {
+    internal companion object {
+        internal fun <V> create(map: PersistentLongMap<V>, position: Int): PersistentLongMapCursor<V> =
+            PersistentLongMapCursor(map, position)
+    }
+
+    init {
+        require(position >= 0 && position <= map.size) { "Cursor position must be in 0..map.size." }
+    }
+
+    public val size: Int get() = map.size
+    public val isAtStart: Boolean get() = position == 0
+    public val isAtEnd: Boolean get() = position == size
+    public fun peekPrevious(): PatriciaMapEntry<Long, V>? =
+        if (isAtStart) null else map.entryAtForCursor(position - 1)
+    public fun peekNext(): PatriciaMapEntry<Long, V>? = map.entryAtForCursor(position)
+    public fun movePrevious(): PersistentLongMapCursor<V>? =
+        if (isAtStart) null else create(map, position - 1)
+    public fun moveNext(): PersistentLongMapCursor<V>? =
+        if (isAtEnd) null else create(map, position + 1)
+    public fun seek(position: Int): PersistentLongMapCursor<V>? = when {
+        position < 0 || position > size -> null
+        position == this.position -> this
+        else -> create(map, position)
+    }
+    public fun insert(key: Long, value: V): PersistentLongMapCursor<V> {
+        val (expected, found) = map.lowerBoundRankForCursor(key)
+        require(!found) { "The key '$key' is already present." }
+        ensureCurrentGap(expected, key)
+        return create(map.put(key, value), Math.addExact(position, 1))
+    }
+    public fun put(key: Long, value: V): PersistentLongMapCursor<V> {
+        val (expected, found) = map.lowerBoundRankForCursor(key)
+        ensureCurrentGap(expected, key)
+        val edited = map.put(key, value)
+        if (edited === map) return this
+        return create(edited, if (found) position else Math.addExact(position, 1))
+    }
+    public fun setNextValue(value: V): PersistentLongMapCursor<V>? {
+        val next = peekNext() ?: return null
+        val edited = map.put(next.key, value)
+        return if (edited === map) this else create(edited, position)
+    }
+    public fun deletePrevious(): PersistentLongMapCursor<V>? {
+        val previous = peekPrevious() ?: return null
+        return create(map.remove(previous.key), position - 1)
+    }
+    public fun deleteNext(): PersistentLongMapCursor<V>? {
+        val next = peekNext() ?: return null
+        return create(map.remove(next.key), position)
+    }
+    public fun snapshot(): PersistentLongMap<V> = map
+
+    private fun ensureCurrentGap(expected: Int, key: Long) {
+        require(expected == position) {
+            "Key '$key' belongs at gap $expected, not at the current gap $position."
+        }
+    }
 }
 
 public class PersistentIntSet private constructor(private val map: PersistentIntMap<Unit>) : Iterable<Int> {
     public companion object { public fun empty(): PersistentIntSet = PersistentIntSet(PersistentIntMap.empty()); public fun from(items: Iterable<Int>): PersistentIntSet { var r = empty(); for (v in items) r = r.add(v); return r } }
     public val size: Int get() = map.size
     public fun contains(value: Int): Boolean = map.containsKey(value)
+    public fun cursor(): PersistentIntSetCursor = PersistentIntSetCursor.create(this, 0)
+    public fun cursorAt(position: Int): PersistentIntSetCursor? =
+        if (position < 0 || position > size) null else PersistentIntSetCursor.create(this, position)
+    public fun cursorAtEnd(): PersistentIntSetCursor = PersistentIntSetCursor.create(this, size)
+    public fun lowerBoundCursor(value: Int): PersistentIntSetCursor =
+        PersistentIntSetCursor.create(this, map.lowerBoundRankForCursor(value).first)
+    public fun upperBoundCursor(value: Int): PersistentIntSetCursor {
+        val (position, found) = map.lowerBoundRankForCursor(value)
+        return PersistentIntSetCursor.create(this, position + if (found) 1 else 0)
+    }
+    public fun cursorAtItem(value: Int): PatriciaCursorSearch<PersistentIntSetCursor> {
+        val (position, found) = map.lowerBoundRankForCursor(value)
+        return PatriciaCursorSearch(PersistentIntSetCursor.create(this, position), found)
+    }
     public fun add(value: Int): PersistentIntSet = withMap(map.put(value, Unit))
     public fun remove(value: Int): PersistentIntSet = withMap(map.remove(value))
     public fun union(other: PersistentIntSet): PersistentIntSet = withMap(map.union(other.map))
     public fun intersect(other: PersistentIntSet): PersistentIntSet = withMap(map.intersect(other.map))
     public fun except(other: PersistentIntSet): PersistentIntSet = withMap(map.except(other.map))
     override fun iterator(): Iterator<Int> = map.map { it.first }.iterator()
+    internal fun itemAtForCursor(index: Int): Int? = map.entryAtForCursor(index)?.key
+    internal fun lowerBoundRankForCursor(value: Int): Pair<Int, Boolean> = map.lowerBoundRankForCursor(value)
     private fun withMap(next: PersistentIntMap<Unit>): PersistentIntSet = if (next === map) this else PersistentIntSet(next)
 }
 
@@ -444,11 +663,123 @@ public class PersistentLongSet private constructor(private val map: PersistentLo
     public companion object { public fun empty(): PersistentLongSet = PersistentLongSet(PersistentLongMap.empty()); public fun from(items: Iterable<Long>): PersistentLongSet { var r = empty(); for (v in items) r = r.add(v); return r } }
     public val size: Int get() = map.size
     public fun contains(value: Long): Boolean = map.containsKey(value)
+    public fun cursor(): PersistentLongSetCursor = PersistentLongSetCursor.create(this, 0)
+    public fun cursorAt(position: Int): PersistentLongSetCursor? =
+        if (position < 0 || position > size) null else PersistentLongSetCursor.create(this, position)
+    public fun cursorAtEnd(): PersistentLongSetCursor = PersistentLongSetCursor.create(this, size)
+    public fun lowerBoundCursor(value: Long): PersistentLongSetCursor =
+        PersistentLongSetCursor.create(this, map.lowerBoundRankForCursor(value).first)
+    public fun upperBoundCursor(value: Long): PersistentLongSetCursor {
+        val (position, found) = map.lowerBoundRankForCursor(value)
+        return PersistentLongSetCursor.create(this, position + if (found) 1 else 0)
+    }
+    public fun cursorAtItem(value: Long): PatriciaCursorSearch<PersistentLongSetCursor> {
+        val (position, found) = map.lowerBoundRankForCursor(value)
+        return PatriciaCursorSearch(PersistentLongSetCursor.create(this, position), found)
+    }
     public fun add(value: Long): PersistentLongSet = withMap(map.put(value, Unit))
     public fun remove(value: Long): PersistentLongSet = withMap(map.remove(value))
     public fun union(other: PersistentLongSet): PersistentLongSet = withMap(map.union(other.map))
     public fun intersect(other: PersistentLongSet): PersistentLongSet = withMap(map.intersect(other.map))
     public fun except(other: PersistentLongSet): PersistentLongSet = withMap(map.except(other.map))
     override fun iterator(): Iterator<Long> = map.map { it.first }.iterator()
+    internal fun itemAtForCursor(index: Int): Long? = map.entryAtForCursor(index)?.key
+    internal fun lowerBoundRankForCursor(value: Long): Pair<Int, Boolean> = map.lowerBoundRankForCursor(value)
     private fun withMap(next: PersistentLongMap<Unit>): PersistentLongSet = if (next === map) this else PersistentLongSet(next)
+}
+
+/** Immutable root-plus-rank gap cursor over a signed 32-bit Patricia set. */
+public class PersistentIntSetCursor private constructor(
+    private val set: PersistentIntSet,
+    public val position: Int,
+) {
+    internal companion object {
+        internal fun create(set: PersistentIntSet, position: Int): PersistentIntSetCursor =
+            PersistentIntSetCursor(set, position)
+    }
+
+    init {
+        require(position >= 0 && position <= set.size) { "Cursor position must be in 0..set.size." }
+    }
+
+    public val size: Int get() = set.size
+    public val isAtStart: Boolean get() = position == 0
+    public val isAtEnd: Boolean get() = position == size
+    public fun peekPrevious(): Int? = if (isAtStart) null else set.itemAtForCursor(position - 1)
+    public fun peekNext(): Int? = set.itemAtForCursor(position)
+    public fun movePrevious(): PersistentIntSetCursor? = if (isAtStart) null else create(set, position - 1)
+    public fun moveNext(): PersistentIntSetCursor? = if (isAtEnd) null else create(set, position + 1)
+    public fun seek(position: Int): PersistentIntSetCursor? = when {
+        position < 0 || position > size -> null
+        position == this.position -> this
+        else -> create(set, position)
+    }
+    public fun add(value: Int): PersistentIntSetCursor {
+        val (expected, found) = set.lowerBoundRankForCursor(value)
+        ensureCurrentGap(expected, value)
+        return if (found) this else create(set.add(value), Math.addExact(position, 1))
+    }
+    public fun deletePrevious(): PersistentIntSetCursor? {
+        val previous = peekPrevious() ?: return null
+        return create(set.remove(previous), position - 1)
+    }
+    public fun deleteNext(): PersistentIntSetCursor? {
+        val next = peekNext() ?: return null
+        return create(set.remove(next), position)
+    }
+    public fun snapshot(): PersistentIntSet = set
+
+    private fun ensureCurrentGap(expected: Int, value: Int) {
+        require(expected == position) {
+            "Item '$value' belongs at gap $expected, not at the current gap $position."
+        }
+    }
+}
+
+/** Immutable root-plus-rank gap cursor over a signed 64-bit Patricia set. */
+public class PersistentLongSetCursor private constructor(
+    private val set: PersistentLongSet,
+    public val position: Int,
+) {
+    internal companion object {
+        internal fun create(set: PersistentLongSet, position: Int): PersistentLongSetCursor =
+            PersistentLongSetCursor(set, position)
+    }
+
+    init {
+        require(position >= 0 && position <= set.size) { "Cursor position must be in 0..set.size." }
+    }
+
+    public val size: Int get() = set.size
+    public val isAtStart: Boolean get() = position == 0
+    public val isAtEnd: Boolean get() = position == size
+    public fun peekPrevious(): Long? = if (isAtStart) null else set.itemAtForCursor(position - 1)
+    public fun peekNext(): Long? = set.itemAtForCursor(position)
+    public fun movePrevious(): PersistentLongSetCursor? = if (isAtStart) null else create(set, position - 1)
+    public fun moveNext(): PersistentLongSetCursor? = if (isAtEnd) null else create(set, position + 1)
+    public fun seek(position: Int): PersistentLongSetCursor? = when {
+        position < 0 || position > size -> null
+        position == this.position -> this
+        else -> create(set, position)
+    }
+    public fun add(value: Long): PersistentLongSetCursor {
+        val (expected, found) = set.lowerBoundRankForCursor(value)
+        ensureCurrentGap(expected, value)
+        return if (found) this else create(set.add(value), Math.addExact(position, 1))
+    }
+    public fun deletePrevious(): PersistentLongSetCursor? {
+        val previous = peekPrevious() ?: return null
+        return create(set.remove(previous), position - 1)
+    }
+    public fun deleteNext(): PersistentLongSetCursor? {
+        val next = peekNext() ?: return null
+        return create(set.remove(next), position)
+    }
+    public fun snapshot(): PersistentLongSet = set
+
+    private fun ensureCurrentGap(expected: Int, value: Long) {
+        require(expected == position) {
+            "Item '$value' belongs at gap $expected, not at the current gap $position."
+        }
+    }
 }

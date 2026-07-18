@@ -1915,6 +1915,102 @@ private fun patriciaCombiningCountsAndNoOps() {
     }
 }
 
+private fun patriciaCursorsPreserveOrderedGapSemantics() {
+    val keys = listOf(Int.MIN_VALUE, -1, 0, 17, Int.MAX_VALUE)
+    val map = PersistentIntMap.from<String?>(keys.map { it to if (it == 0) null else it.toString() })
+    for (position in 0..keys.size) {
+        val cursor = map.cursorAt(position) ?: throw AssertionError("rank gap $position must exist")
+        checkEquals(position, cursor.position, "Patricia cursor position")
+        checkEquals(keys.size, cursor.size, "Patricia cursor size")
+        checkEquals(position == 0, cursor.isAtStart, "Patricia cursor start")
+        checkEquals(position == keys.size, cursor.isAtEnd, "Patricia cursor end")
+        check(cursor.snapshot() === map, "clean Patricia snapshot should retain identity")
+        checkEquals(keys.getOrNull(position - 1), cursor.peekPrevious()?.key, "Patricia previous key")
+        checkEquals(keys.getOrNull(position), cursor.peekNext()?.key, "Patricia next key")
+    }
+
+    checkEquals(1, map.lowerBoundCursor(-2).position, "Patricia lower bound")
+    checkEquals(2, map.upperBoundCursor(-1).position, "Patricia upper bound")
+    checkEquals(4, map.lowerBoundCursor(18).position, "Patricia missing lower bound")
+    checkEquals(keys.size, map.upperBoundCursor(Int.MAX_VALUE).position, "Patricia maximum upper bound")
+    val exact = map.cursorAtKey(0)
+    check(exact.found, "Patricia exact cursor should report a hit")
+    val nullableEntry = exact.cursor.peekNext() ?: throw AssertionError("zero entry should exist")
+    checkEquals(0, nullableEntry.key, "Patricia exact cursor key")
+    checkEquals(null, nullableEntry.value, "Patricia cursor should preserve a stored null")
+    val miss = map.cursorAtKey(1)
+    check(!miss.found, "Patricia exact cursor should report a miss")
+    checkEquals(3, miss.cursor.position, "Patricia miss should retain lower-bound gap")
+    checkEquals(17, miss.cursor.peekNext()?.key, "Patricia miss next candidate")
+    check(map.cursorAt(-1) == null && map.cursorAt(map.size + 1) == null, "invalid Patricia ranks")
+    check(map.cursor().movePrevious() == null, "start cursor should not move previous")
+    check(map.cursorAtEnd().moveNext() == null, "end cursor should not move next")
+
+    val source = PersistentIntMap.from(listOf(-10 to "a", 0 to null, 10 to "c"))
+    val atZero = source.cursorAtKey(0).cursor
+    check(atZero.setNextValue(null)?.snapshot() === source, "equal cursor update should retain identity")
+    val updated = atZero.setNextValue("b") ?: throw AssertionError("zero should be replaceable")
+    checkEquals(1, updated.position, "Patricia value update gap")
+    checkEquals("b", updated.snapshot()[0], "Patricia cursor value update")
+    checkEquals(null, source[0], "Patricia source retained after update")
+    checkEquals(listOf(-10, 10), atZero.deleteNext()?.snapshot()?.map { it.first }, "delete next")
+    checkEquals(listOf(0, 10), atZero.deletePrevious()?.snapshot()?.map { it.first }, "delete previous")
+
+    val inserted = source.cursorAtKey(5).cursor.insert(5, "five")
+    checkEquals(3, inserted.position, "Patricia insertion gap")
+    checkEquals(listOf(-10, 0, 5, 10), inserted.snapshot().map { it.first }, "Patricia insertion")
+    checkEquals(listOf(-10, 0, 10), source.map { it.first }, "Patricia insertion retained source")
+    checkEquals(2, source.lowerBoundCursor(-5).put(-5, "minus five").position, "Patricia put miss")
+    checkEquals(1, atZero.put(0, "zero").position, "Patricia put hit")
+    checkThrows<IllegalArgumentException>("strict Patricia cursor insertion should reject a duplicate") {
+        atZero.insert(0, "duplicate")
+    }
+    checkThrows<IllegalArgumentException>("Patricia cursor insertion should reject the wrong gap") {
+        source.cursor().insert(5, "wrong gap")
+    }
+    check(source.cursorAtEnd().setNextValue("none") == null, "end cursor value update")
+    check(source.cursor().deletePrevious() == null, "start cursor delete previous")
+    check(source.cursorAtEnd().deleteNext() == null, "end cursor delete next")
+
+    val minimum = Long.MIN_VALUE
+    val maximum = Long.MAX_VALUE
+    val longMap = PersistentLongMap.from(listOf(minimum to minimum, -1L to -1L, 0L to 0L, (1L shl 40) to 1L, maximum to maximum))
+    checkEquals(0, longMap.lowerBoundCursor(minimum).position, "long lower boundary")
+    checkEquals(1, longMap.upperBoundCursor(minimum).position, "long upper boundary")
+    checkEquals(3, longMap.lowerBoundCursor(1).position, "long missing lower bound")
+    checkEquals(5, longMap.upperBoundCursor(maximum).position, "long maximum upper bound")
+    checkEquals(42L, longMap.cursorAtKey(1L shl 40).cursor.setNextValue(42L)?.snapshot()?.get(1L shl 40), "long cursor update")
+
+    val intSet = PersistentIntSet.from(listOf(Int.MIN_VALUE, -1, 0, Int.MAX_VALUE))
+    val setMiss = intSet.cursorAtItem(-2)
+    check(!setMiss.found, "set cursor miss")
+    val setAdded = setMiss.cursor.add(-2)
+    checkEquals(2, setAdded.position, "set insertion gap")
+    checkEquals(listOf(Int.MIN_VALUE, -2, -1, 0, Int.MAX_VALUE), setAdded.snapshot().toList(), "set cursor insertion")
+    check(intSet.cursorAtItem(0).cursor.add(0).snapshot() === intSet, "duplicate set cursor add")
+    checkEquals(listOf(Int.MIN_VALUE, -1, Int.MAX_VALUE), intSet.cursorAtItem(0).cursor.deleteNext()?.snapshot()?.toList(), "set delete next")
+
+    var state = 0x6D2B79F5
+    repeat(128) {
+        val generated = mutableSetOf<Int>()
+        repeat(64) {
+            state = state * 1_664_525 + 1_013_904_223
+            generated += (state ushr 8).mod(1_001) - 500
+        }
+        val sorted = generated.sorted()
+        val randomMap = PersistentIntMap.from(sorted.map { it to it })
+        for (probe in -550..550 step 22) {
+            val lower = sorted.indexOfFirst { it >= probe }.let { if (it < 0) sorted.size else it }
+            val upper = sorted.indexOfFirst { it > probe }.let { if (it < 0) sorted.size else it }
+            checkEquals(lower, randomMap.lowerBoundCursor(probe).position, "random Patricia lower rank")
+            checkEquals(upper, randomMap.upperBoundCursor(probe).position, "random Patricia upper rank")
+            val searched = randomMap.cursorAtKey(probe)
+            checkEquals(lower, searched.cursor.position, "random Patricia exact rank")
+            checkEquals(probe in generated, searched.found, "random Patricia exact discriminator")
+        }
+    }
+}
+
 private fun exceptAndSymmetricExceptPreserveUntouchedRoots() {
     val set = PersistentHashSet.from((0..63).toList())
 
@@ -2076,6 +2172,7 @@ public fun main() {
         "ctrieMixedShortHistoriesAreLinearizable" to ::ctrieMixedShortHistoriesAreLinearizable,
         "patriciaMapsAndSetsPreserveSignedOrder" to ::patriciaMapsAndSetsPreserveSignedOrder,
         "patriciaCombiningCountsAndNoOps" to ::patriciaCombiningCountsAndNoOps,
+        "patriciaCursorsPreserveOrderedGapSemantics" to ::patriciaCursorsPreserveOrderedGapSemantics,
         "merkleSearchTreeCoreAndWire" to ::runMerkleSearchTreeTests,
         "merklePersistenceProofSyncAndMerge" to ::runMerklePersistenceTests,
     )
