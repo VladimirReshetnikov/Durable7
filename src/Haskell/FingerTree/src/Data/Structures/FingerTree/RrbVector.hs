@@ -3,6 +3,7 @@
 
 module Data.Structures.FingerTree.RrbVector
   ( RrbVector
+  , Cursor
   , RrbStatistics(..)
   , empty
   , singleton
@@ -22,6 +23,24 @@ module Data.Structures.FingerTree.RrbVector
   , unsnoc
   , validateStructure
   , sharesRootWith
+  , cursor
+  , cursorAt
+  , cursorPosition
+  , cursorCount
+  , cursorIsAtStart
+  , cursorIsAtEnd
+  , cursorPeekPrevious
+  , cursorPeekNext
+  , cursorMovePrevious
+  , cursorMoveNext
+  , cursorSeek
+  , cursorInsert
+  , cursorInsertList
+  , cursorInsertVector
+  , cursorDeletePrevious
+  , cursorDeleteNext
+  , cursorReplaceNext
+  , cursorSnapshot
   ) where
 
 import Prelude hiding (null, splitAt)
@@ -49,6 +68,10 @@ maximumHeight :: Int
 maximumHeight = (finiteBitSize (0 :: Int) - 1) `div` radixBits + 1
 
 data RrbVector a = RrbVector !(Maybe (Node a))
+
+-- | Immutable root-plus-position gap cursor over an RRB vector.
+data Cursor a = Cursor !(RrbVector a) !Int
+  deriving (Show)
 
 data Node a
   = Leaf !(Array Int a)
@@ -192,6 +215,80 @@ sharesRootWith (RrbVector (Just left)) (RrbVector (Just right)) = do
   rightName <- makeStableName evaluatedRight
   pure (leftName `eqStableName` rightName)
 sharesRootWith _ _ = pure False
+
+cursor :: RrbVector a -> Cursor a
+cursor vector = Cursor vector 0
+
+cursorAt :: Int -> RrbVector a -> Maybe (Cursor a)
+cursorAt position vector
+  | position < 0 || position > count vector = Nothing
+  | otherwise = Just (Cursor vector position)
+
+cursorPosition :: Cursor a -> Int
+cursorPosition (Cursor _ position) = position
+
+cursorCount :: Cursor a -> Int
+cursorCount (Cursor vector _) = count vector
+
+cursorIsAtStart :: Cursor a -> Bool
+cursorIsAtStart value = cursorPosition value == 0
+
+cursorIsAtEnd :: Cursor a -> Bool
+cursorIsAtEnd value = cursorPosition value == cursorCount value
+
+cursorPeekPrevious :: Cursor a -> Maybe a
+cursorPeekPrevious (Cursor vector position) = index (position - 1) vector
+
+cursorPeekNext :: Cursor a -> Maybe a
+cursorPeekNext (Cursor vector position) = index position vector
+
+cursorMovePrevious :: Cursor a -> Maybe (Cursor a)
+cursorMovePrevious (Cursor vector position) = cursorAt (position - 1) vector
+
+cursorMoveNext :: Cursor a -> Maybe (Cursor a)
+cursorMoveNext (Cursor vector position)
+  | position == count vector = Nothing
+  | otherwise = cursorAt (position + 1) vector
+
+cursorSeek :: Int -> Cursor a -> Maybe (Cursor a)
+cursorSeek position (Cursor vector _) = cursorAt position vector
+
+cursorInsert :: a -> Cursor a -> Cursor a
+cursorInsert value = cursorInsertList [value]
+
+cursorInsertList :: [a] -> Cursor a -> Cursor a
+cursorInsertList [] value = value
+cursorInsertList values (Cursor vector position) =
+  Cursor (expectCursorEdit "insert" (insertListAt position values vector)) (checkedAdd position (length values))
+
+cursorInsertVector :: RrbVector a -> Cursor a -> Cursor a
+cursorInsertVector inserted value | null inserted = value
+cursorInsertVector inserted (Cursor vector position) =
+  case splitAt position vector of
+    Just (left, right) -> Cursor (append (append left inserted) right) (checkedAdd position (count inserted))
+    Nothing -> error "Data.Structures.FingerTree.RrbVector.cursorInsertVector: invalid cursor"
+
+cursorDeletePrevious :: Cursor a -> Maybe (Cursor a)
+cursorDeletePrevious (Cursor vector position)
+  | position == 0 = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "delete previous" (removeRange (position - 1) 1 vector)) (position - 1))
+
+cursorDeleteNext :: Cursor a -> Maybe (Cursor a)
+cursorDeleteNext (Cursor vector position)
+  | position == count vector = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "delete next" (removeRange position 1 vector)) position)
+
+cursorReplaceNext :: Eq a => a -> Cursor a -> Maybe (Cursor a)
+cursorReplaceNext value (Cursor vector position)
+  | position == count vector = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "replace next" (setAt position value vector)) position)
+
+cursorSnapshot :: Cursor a -> RrbVector a
+cursorSnapshot (Cursor vector _) = vector
+
+expectCursorEdit :: String -> Maybe a -> a
+expectCursorEdit _ (Just value) = value
+expectCursorEdit operation Nothing = error ("Data.Structures.FingerTree.RrbVector cursor " ++ operation ++ " failed")
 
 indexNode :: Int -> Node a -> a
 indexNode position (Leaf values) = values ! position

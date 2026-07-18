@@ -1,5 +1,6 @@
 module Data.Structures.FingerTree.ReversibleDeque
   ( ReversibleDeque
+  , Cursor
   , empty
   , singleton
   , fromList
@@ -15,6 +16,24 @@ module Data.Structures.FingerTree.ReversibleDeque
   , first
   , last
   , index
+  , cursor
+  , cursorAt
+  , cursorPosition
+  , cursorCount
+  , cursorIsAtStart
+  , cursorIsAtEnd
+  , cursorPeekPrevious
+  , cursorPeekNext
+  , cursorMovePrevious
+  , cursorMoveNext
+  , cursorSeek
+  , cursorInsert
+  , cursorInsertList
+  , cursorDeletePrevious
+  , cursorDeleteNext
+  , cursorReplaceNext
+  , cursorReverse
+  , cursorSnapshot
   ) where
 
 import Prelude hiding (last, null, reverse)
@@ -22,6 +41,10 @@ import Prelude hiding (last, null, reverse)
 import qualified Data.List as List
 
 newtype ReversibleDeque a = ReversibleDeque (Tree a)
+  deriving (Show)
+
+-- | Immutable logical-order gap cursor over a reversible deque snapshot.
+data Cursor a = Cursor !(ReversibleDeque a) !Int
   deriving (Show)
 
 -- Extensional equality: orientation flags and tree shape are implementation
@@ -103,6 +126,79 @@ index :: Int -> ReversibleDeque a -> Maybe a
 index position (ReversibleDeque tree)
   | position < 0 || position >= treeSize tree = Nothing
   | otherwise = Just (treeGetLeaf tree position)
+
+cursor :: ReversibleDeque a -> Cursor a
+cursor deque = Cursor deque 0
+
+cursorAt :: Int -> ReversibleDeque a -> Maybe (Cursor a)
+cursorAt position deque
+  | position < 0 || position > count deque = Nothing
+  | otherwise = Just (Cursor deque position)
+
+cursorPosition :: Cursor a -> Int
+cursorPosition (Cursor _ position) = position
+
+cursorCount :: Cursor a -> Int
+cursorCount (Cursor deque _) = count deque
+
+cursorIsAtStart :: Cursor a -> Bool
+cursorIsAtStart value = cursorPosition value == 0
+
+cursorIsAtEnd :: Cursor a -> Bool
+cursorIsAtEnd value = cursorPosition value == cursorCount value
+
+cursorPeekPrevious :: Cursor a -> Maybe a
+cursorPeekPrevious (Cursor deque position) = index (position - 1) deque
+
+cursorPeekNext :: Cursor a -> Maybe a
+cursorPeekNext (Cursor deque position) = index position deque
+
+cursorMovePrevious :: Cursor a -> Maybe (Cursor a)
+cursorMovePrevious (Cursor deque position) = cursorAt (position - 1) deque
+
+cursorMoveNext :: Cursor a -> Maybe (Cursor a)
+cursorMoveNext (Cursor deque position)
+  | position == count deque = Nothing
+  | otherwise = cursorAt (position + 1) deque
+
+cursorSeek :: Int -> Cursor a -> Maybe (Cursor a)
+cursorSeek position (Cursor deque _) = cursorAt position deque
+
+cursorInsert :: a -> Cursor a -> Cursor a
+cursorInsert value = cursorInsertList [value]
+
+cursorInsertList :: [a] -> Cursor a -> Cursor a
+cursorInsertList [] value = value
+cursorInsertList values (Cursor deque position) =
+  let (left, right) = List.splitAt position (toList deque)
+  in Cursor (fromList (left ++ values ++ right)) (position + length values)
+
+cursorDeletePrevious :: Cursor a -> Maybe (Cursor a)
+cursorDeletePrevious (Cursor deque position)
+  | position == 0 = Nothing
+  | otherwise =
+      let values = toList deque
+      in Just (Cursor (fromList (take (position - 1) values ++ drop position values)) (position - 1))
+
+cursorDeleteNext :: Cursor a -> Maybe (Cursor a)
+cursorDeleteNext (Cursor deque position)
+  | position == count deque = Nothing
+  | otherwise =
+      let values = toList deque
+      in Just (Cursor (fromList (take position values ++ drop (position + 1) values)) position)
+
+cursorReplaceNext :: a -> Cursor a -> Maybe (Cursor a)
+cursorReplaceNext value (Cursor deque position)
+  | position == count deque = Nothing
+  | otherwise =
+      let values = toList deque
+      in Just (Cursor (fromList (take position values ++ value : drop (position + 1) values)) position)
+
+cursorReverse :: Cursor a -> Cursor a
+cursorReverse (Cursor deque position) = Cursor (reverse deque) (count deque - position)
+
+cursorSnapshot :: Cursor a -> ReversibleDeque a
+cursorSnapshot (Cursor deque _) = deque
 
 treeSize :: Tree a -> Int
 treeSize Empty = 0

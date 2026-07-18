@@ -10,6 +10,7 @@
 module Data.Structures.FingerTree.RangeUpdateSequence
   ( RangeUpdateAlgebra(..)
   , RangeUpdateSequence
+  , Cursor
   , ValidationStatistics(..)
   , emptyWith
   , singletonWith
@@ -31,6 +32,28 @@ module Data.Structures.FingerTree.RangeUpdateSequence
   , measureRange
   , validateStructure
   , sharesRootWith
+  , cursor
+  , cursorAt
+  , cursorPosition
+  , cursorCount
+  , cursorIsAtStart
+  , cursorIsAtEnd
+  , cursorMeasureBefore
+  , cursorMeasureAfter
+  , cursorPeekPrevious
+  , cursorPeekNext
+  , cursorMovePrevious
+  , cursorMoveNext
+  , cursorSeek
+  , cursorInsert
+  , cursorDeletePrevious
+  , cursorDeleteNext
+  , cursorReplaceNext
+  , cursorMeasurePrevious
+  , cursorMeasureNext
+  , cursorApplyPrevious
+  , cursorApplyNext
+  , cursorSnapshot
   ) where
 
 import Prelude hiding (null, sequence, splitAt)
@@ -65,6 +88,11 @@ data RangeUpdateSequence element measureValue tag =
   RangeUpdateSequence
     !(RangeUpdateAlgebra element measureValue tag)
     !(Maybe (Node element measureValue tag))
+
+-- | Immutable root-plus-position cursor over a lazy range-update snapshot.
+data Cursor element measureValue tag = Cursor
+  !(RangeUpdateSequence element measureValue tag)
+  !Int
 
 data Node element measureValue tag = Node
   { nodeValue :: element
@@ -290,6 +318,118 @@ sharesRootWith (RangeUpdateSequence _ (Just left)) (RangeUpdateSequence _ (Just 
   rightName <- makeStableName rightValue
   pure (leftName `eqStableName` rightName)
 sharesRootWith _ _ = pure False
+
+cursor :: RangeUpdateSequence element measureValue tag -> Cursor element measureValue tag
+cursor sequence = Cursor sequence 0
+
+cursorAt :: Int
+         -> RangeUpdateSequence element measureValue tag
+         -> Maybe (Cursor element measureValue tag)
+cursorAt position sequence
+  | position < 0 || position > count sequence = Nothing
+  | otherwise = Just (Cursor sequence position)
+
+cursorPosition :: Cursor element measureValue tag -> Int
+cursorPosition (Cursor _ position) = position
+
+cursorCount :: Cursor element measureValue tag -> Int
+cursorCount (Cursor sequence _) = count sequence
+
+cursorIsAtStart :: Cursor element measureValue tag -> Bool
+cursorIsAtStart value = cursorPosition value == 0
+
+cursorIsAtEnd :: Cursor element measureValue tag -> Bool
+cursorIsAtEnd value = cursorPosition value == cursorCount value
+
+cursorMeasureBefore :: Cursor element measureValue tag -> measureValue
+cursorMeasureBefore (Cursor sequence position) =
+  expectCursorEdit "measure before" (measureRange 0 position sequence)
+
+cursorMeasureAfter :: Cursor element measureValue tag -> measureValue
+cursorMeasureAfter (Cursor sequence position) =
+  expectCursorEdit "measure after" (measureRange position (count sequence - position) sequence)
+
+cursorPeekPrevious :: Cursor element measureValue tag -> Maybe element
+cursorPeekPrevious (Cursor sequence position) = index (position - 1) sequence
+
+cursorPeekNext :: Cursor element measureValue tag -> Maybe element
+cursorPeekNext (Cursor sequence position) = index position sequence
+
+cursorMovePrevious :: Cursor element measureValue tag -> Maybe (Cursor element measureValue tag)
+cursorMovePrevious (Cursor sequence position) = cursorAt (position - 1) sequence
+
+cursorMoveNext :: Cursor element measureValue tag -> Maybe (Cursor element measureValue tag)
+cursorMoveNext (Cursor sequence position)
+  | position == count sequence = Nothing
+  | otherwise = cursorAt (position + 1) sequence
+
+cursorSeek :: Int
+           -> Cursor element measureValue tag
+           -> Maybe (Cursor element measureValue tag)
+cursorSeek position (Cursor sequence _) = cursorAt position sequence
+
+cursorInsert :: element
+             -> Cursor element measureValue tag
+             -> Cursor element measureValue tag
+cursorInsert value (Cursor sequence position) =
+  Cursor (expectCursorEdit "insert" (insertAt position value sequence)) (checkedAdd position 1)
+
+cursorDeletePrevious :: Cursor element measureValue tag
+                     -> Maybe (Cursor element measureValue tag)
+cursorDeletePrevious (Cursor sequence position)
+  | position == 0 = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "delete previous" (deleteAt (position - 1) sequence)) (position - 1))
+
+cursorDeleteNext :: Cursor element measureValue tag
+                 -> Maybe (Cursor element measureValue tag)
+cursorDeleteNext (Cursor sequence position)
+  | position == count sequence = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "delete next" (deleteAt position sequence)) position)
+
+cursorReplaceNext :: element
+                  -> Cursor element measureValue tag
+                  -> Maybe (Cursor element measureValue tag)
+cursorReplaceNext value (Cursor sequence position)
+  | position == count sequence = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "replace next" (setAt position value sequence)) position)
+
+cursorMeasurePrevious :: Int
+                      -> Cursor element measureValue tag
+                      -> Maybe measureValue
+cursorMeasurePrevious amount (Cursor sequence position)
+  | amount < 0 || amount > position = Nothing
+  | otherwise = measureRange (position - amount) amount sequence
+
+cursorMeasureNext :: Int
+                  -> Cursor element measureValue tag
+                  -> Maybe measureValue
+cursorMeasureNext amount (Cursor sequence position)
+  | amount < 0 || amount > count sequence - position = Nothing
+  | otherwise = measureRange position amount sequence
+
+cursorApplyPrevious :: Int
+                    -> tag
+                    -> Cursor element measureValue tag
+                    -> Maybe (Cursor element measureValue tag)
+cursorApplyPrevious amount tag (Cursor sequence position)
+  | amount < 0 || amount > position = Nothing
+  | otherwise = Cursor <$> applyRange (position - amount) amount tag sequence <*> pure position
+
+cursorApplyNext :: Int
+                -> tag
+                -> Cursor element measureValue tag
+                -> Maybe (Cursor element measureValue tag)
+cursorApplyNext amount tag (Cursor sequence position)
+  | amount < 0 || amount > count sequence - position = Nothing
+  | otherwise = Cursor <$> applyRange position amount tag sequence <*> pure position
+
+cursorSnapshot :: Cursor element measureValue tag
+               -> RangeUpdateSequence element measureValue tag
+cursorSnapshot (Cursor sequence _) = sequence
+
+expectCursorEdit :: String -> Maybe a -> a
+expectCursorEdit _ (Just value) = value
+expectCursorEdit operation Nothing = error ("Data.Structures.FingerTree.RangeUpdateSequence cursor " ++ operation ++ " failed")
 
 buildBalanced :: RangeUpdateAlgebra element measureValue tag
               -> Int

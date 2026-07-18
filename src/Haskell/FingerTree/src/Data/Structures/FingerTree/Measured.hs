@@ -10,6 +10,8 @@ module Data.Structures.FingerTree.Measured
   , Node
   , ViewL(..)
   , ViewR(..)
+  , Cursor
+  , CursorSearch(..)
   , empty
   , singleton
   , null
@@ -25,6 +27,23 @@ module Data.Structures.FingerTree.Measured
   , measureTree
   , split
   , locate
+  , cursorAtStart
+  , cursorAtEnd
+  , cursorByMeasure
+  , cursorIsAtStart
+  , cursorIsAtEnd
+  , cursorMeasureBefore
+  , cursorMeasureAfter
+  , cursorPeekPrevious
+  , cursorPeekNext
+  , cursorMovePrevious
+  , cursorMoveNext
+  , cursorSeekByMeasure
+  , cursorInsert
+  , cursorDeletePrevious
+  , cursorDeleteNext
+  , cursorReplaceNext
+  , cursorSnapshot
   ) where
 
 import Prelude hiding (head, last, null)
@@ -69,6 +88,22 @@ data ViewR v a
   deriving (Eq, Ord, Read, Show)
 
 infixl 5 :>
+
+-- | Immutable split cursor over one exact general measured-tree snapshot.
+-- The interface is measure- and neighbor-oriented and does not invent a
+-- positional count for an arbitrary monoid.
+data Cursor v a = Cursor
+  !(FingerTree v a)
+  !(FingerTree v a)
+  !(FingerTree v a)
+  deriving (Eq, Ord, Read, Show)
+
+-- | Result of an inclusive-prefix cursor search.  A miss carries an end cursor.
+data CursorSearch v a = CursorSearch
+  { cursorSearchCursor :: !(Cursor v a)
+  , cursorSearchFound :: !Bool
+  }
+  deriving (Eq, Ord, Read, Show)
 
 instance Measured v a => Measured v (Node v a) where
   measure (Node2 value _ _) = value
@@ -167,6 +202,79 @@ locate predicate tree =
   case split predicate tree of
     Just (left, value, _) -> Just (measureTree left, value)
     Nothing -> Nothing
+
+cursorAtStart :: FingerTree v a -> Cursor v a
+cursorAtStart snapshot = Cursor snapshot Empty snapshot
+
+cursorAtEnd :: FingerTree v a -> Cursor v a
+cursorAtEnd snapshot = Cursor snapshot snapshot Empty
+
+cursorByMeasure :: Measured v a => (v -> Bool) -> FingerTree v a -> CursorSearch v a
+cursorByMeasure predicate snapshot =
+  case split predicate snapshot of
+    Just (left, value, right) -> CursorSearch (Cursor snapshot left (cons value right)) True
+    Nothing -> CursorSearch (cursorAtEnd snapshot) False
+
+cursorIsAtStart :: Cursor v a -> Bool
+cursorIsAtStart (Cursor _ left _) = null left
+
+cursorIsAtEnd :: Cursor v a -> Bool
+cursorIsAtEnd (Cursor _ _ right) = null right
+
+cursorMeasureBefore :: Measured v a => Cursor v a -> v
+cursorMeasureBefore (Cursor _ left _) = measureTree left
+
+cursorMeasureAfter :: Measured v a => Cursor v a -> v
+cursorMeasureAfter (Cursor _ _ right) = measureTree right
+
+cursorPeekPrevious :: Measured v a => Cursor v a -> Maybe a
+cursorPeekPrevious (Cursor _ left _) = last left
+
+cursorPeekNext :: Measured v a => Cursor v a -> Maybe a
+cursorPeekNext (Cursor _ _ right) = head right
+
+cursorMovePrevious :: Measured v a => Cursor v a -> Maybe (Cursor v a)
+cursorMovePrevious (Cursor snapshot left right) =
+  case viewR left of
+    EmptyR -> Nothing
+    remaining :> value -> Just (Cursor snapshot remaining (cons value right))
+
+cursorMoveNext :: Measured v a => Cursor v a -> Maybe (Cursor v a)
+cursorMoveNext (Cursor snapshot left right) =
+  case viewL right of
+    EmptyL -> Nothing
+    value :< remaining -> Just (Cursor snapshot (snoc left value) remaining)
+
+cursorSeekByMeasure :: Measured v a => (v -> Bool) -> Cursor v a -> CursorSearch v a
+cursorSeekByMeasure predicate (Cursor snapshot _ _) = cursorByMeasure predicate snapshot
+
+cursorInsert :: Measured v a => a -> Cursor v a -> Cursor v a
+cursorInsert value (Cursor _ left right) =
+  let left' = snoc left value
+  in Cursor (append left' right) left' right
+
+cursorDeletePrevious :: Measured v a => Cursor v a -> Maybe (Cursor v a)
+cursorDeletePrevious (Cursor _ left right) =
+  case viewR left of
+    EmptyR -> Nothing
+    remaining :> _ -> Just (Cursor (append remaining right) remaining right)
+
+cursorDeleteNext :: Measured v a => Cursor v a -> Maybe (Cursor v a)
+cursorDeleteNext (Cursor _ left right) =
+  case viewL right of
+    EmptyL -> Nothing
+    _ :< remaining -> Just (Cursor (append left remaining) left remaining)
+
+cursorReplaceNext :: Measured v a => a -> Cursor v a -> Maybe (Cursor v a)
+cursorReplaceNext value (Cursor _ left right) =
+  case viewL right of
+    EmptyL -> Nothing
+    _ :< remaining ->
+      let right' = cons value remaining
+      in Just (Cursor (append left right') left right')
+
+cursorSnapshot :: Cursor v a -> FingerTree v a
+cursorSnapshot (Cursor snapshot _ _) = snapshot
 
 deep :: Measured v a => Digit a -> FingerTree v (Node v a) -> Digit a -> FingerTree v a
 deep prefix middle suffix = Deep (measureDigit prefix <> measureTree middle <> measureDigit suffix) prefix middle suffix

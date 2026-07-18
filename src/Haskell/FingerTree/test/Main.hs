@@ -32,6 +32,7 @@ import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
 import qualified Data.Structures.FingerTree.Rope as Rope
 import qualified Data.Structures.FingerTree.Rope.Text as RopeText
 import qualified Data.Structures.FingerTree.RrbVector as RrbVector
+import qualified Data.Structures.FingerTree.RangeUpdateSequence as RangeUpdate
 import qualified Data.Structures.FingerTree.SortedBag as SortedBag
 import qualified Data.Structures.FingerTree.SortedMap as SortedMap
 import qualified Data.Structures.FingerTree.SortedSet as SortedSet
@@ -57,12 +58,80 @@ main = do
   testIntervalTree
   testIntervalMap
   testRrbVector
+  testSequenceCursors
   testRopes
   testRopeCursor
   testMeasuredRopeCursor
   testTextRope
   testConcurrentReads
   putStrLn "tools-data-structures-fingertree tests passed"
+
+testSequenceCursors :: IO ()
+testSequenceCursors = do
+  let dequeSource = Deque.fromList [Just (1 :: Int), Nothing, Just 3]
+  deque0 <- expectJust "deque cursor" (Deque.cursorAt 2 dequeSource)
+  assertEqual "deque cursor stored Nothing" (Just Nothing) (Deque.cursorPeekPrevious deque0)
+  assertEqual "deque cursor next" (Just (Just 3)) (Deque.cursorPeekNext deque0)
+  deque1 <- expectJust "deque cursor delete" (Deque.cursorDeletePrevious (Deque.cursorInsertList [Just 7, Just 8] deque0))
+  deque2 <- expectJust "deque cursor replace" (Deque.cursorReplaceNext (Just 9) deque1)
+  assertEqual "deque cursor position" 3 (Deque.cursorPosition deque2)
+  assertEqual "deque cursor edited" [Just 1, Nothing, Just 7, Just 9] (Deque.toList (Deque.cursorSnapshot deque2))
+  assertEqual "deque cursor retained" [Just 1, Nothing, Just 3] (Deque.toList dequeSource)
+
+  let reversibleSource = ReversibleDeque.reverse (ReversibleDeque.fromList [1 :: Int, 2, 3, 4])
+  reversible0 <- expectJust "reversible cursor" (ReversibleDeque.cursorAt 1 reversibleSource)
+  assertEqual "reversible cursor previous" (Just 4) (ReversibleDeque.cursorPeekPrevious reversible0)
+  reversible1 <- expectJust "reversible cursor delete" (ReversibleDeque.cursorDeleteNext (ReversibleDeque.cursorInsert 9 reversible0))
+  let reversible2 = ReversibleDeque.cursorReverse reversible1
+  assertEqual "reversible cursor edit" [4, 9, 2, 1] (ReversibleDeque.toList (ReversibleDeque.cursorSnapshot reversible1))
+  assertEqual "reversible cursor mapped position" 2 (ReversibleDeque.cursorPosition reversible2)
+  assertEqual "reversible cursor reverse" [1, 2, 9, 4] (ReversibleDeque.toList (ReversibleDeque.cursorSnapshot reversible2))
+
+  let measuredSource :: FT.FingerTree Size (Elem Int)
+      measuredSource = FT.fromList (map Elem [2, 3, 5, 7])
+      measured0 = FT.cursorSearchCursor (FT.cursorByMeasure (\(Size total) -> total > 2) measuredSource)
+      measured1 = FT.cursorInsert (Elem 11) measured0
+  measured2 <- expectJust "measured cursor delete" (FT.cursorDeleteNext measured1)
+  measured3 <- expectJust "measured cursor replace" (FT.cursorReplaceNext (Elem 13) measured2)
+  assertEqual "measured cursor before" (Size 2) (FT.cursorMeasureBefore measured0)
+  assertEqual "measured cursor after" (Size 2) (FT.cursorMeasureAfter measured0)
+  assertEqual "measured cursor edited" [2, 3, 11, 13] (map getElem (FT.toList (FT.cursorSnapshot measured3)))
+  assertEqual "measured cursor retained" [2, 3, 5, 7] (map getElem (FT.toList measuredSource))
+
+  let vectorSource = RrbVector.fromList [0 :: Int .. 95]
+      vector0 = RrbVector.cursorInsertVector (RrbVector.fromList [500, 501, 502])
+        (expectPure "RRB cursor" (RrbVector.cursorAt 32 vectorSource))
+  assertEqual "RRB cursor position" 35 (RrbVector.cursorPosition vector0)
+  assertEqual "RRB cursor splice" [30, 31, 500, 501, 502, 32, 33]
+    (take 7 (drop 30 (RrbVector.toList (RrbVector.cursorSnapshot vector0))))
+  assertEqual "RRB cursor retained" [0 .. 95] (RrbVector.toList vectorSource)
+
+  let rangeSource = RangeUpdate.fromListWith cursorRangeAlgebra [1 :: Int, 2, 3, 4]
+  range0 <- expectJust "Range cursor" (RangeUpdate.cursorAt 2 rangeSource)
+  assertEqual "Range cursor measure before" 3 (RangeUpdate.cursorMeasureBefore range0)
+  assertEqual "Range cursor measure after" 7 (RangeUpdate.cursorMeasureAfter range0)
+  range1 <- expectJust "Range apply previous" (RangeUpdate.cursorApplyPrevious 1 10 range0)
+  range2 <- expectJust "Range apply next" (RangeUpdate.cursorApplyNext 2 20 range1)
+  range3 <- expectJust "Range replace next" (RangeUpdate.cursorReplaceNext 99 range2)
+  assertEqual "Range cursor edited" [1, 12, 99, 24] (RangeUpdate.toList (RangeUpdate.cursorSnapshot range3))
+  assertEqual "Range cursor retained" [1, 2, 3, 4] (RangeUpdate.toList rangeSource)
+
+cursorRangeAlgebra :: RangeUpdate.RangeUpdateAlgebra Int Int Int
+cursorRangeAlgebra =
+  RangeUpdate.RangeUpdateAlgebra
+    { RangeUpdate.algebraEmptyMeasure = 0
+    , RangeUpdate.algebraCombine = (+)
+    , RangeUpdate.algebraMeasureElement = id
+    , RangeUpdate.algebraIdentityTag = 0
+    , RangeUpdate.algebraIsIdentity = (== 0)
+    , RangeUpdate.algebraCompose = (+)
+    , RangeUpdate.algebraApplyElement = (+)
+    , RangeUpdate.algebraApplyMeasure = \tag total amount -> total + tag * amount
+    }
+
+expectPure :: String -> Maybe a -> a
+expectPure _ (Just value) = value
+expectPure label Nothing = error (label ++ ": expected Just")
 
 testPersistentChunkedBitSet :: IO ()
 testPersistentChunkedBitSet = do

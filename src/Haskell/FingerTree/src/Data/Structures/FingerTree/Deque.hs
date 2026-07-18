@@ -3,6 +3,7 @@
 
 module Data.Structures.FingerTree.Deque
   ( Deque
+  , Cursor
   , SearchResult(..)
   , empty
   , singleton
@@ -25,6 +26,23 @@ module Data.Structures.FingerTree.Deque
   , splitAt
   , slice
   , removeRange
+  , cursor
+  , cursorAt
+  , cursorPosition
+  , cursorCount
+  , cursorIsAtStart
+  , cursorIsAtEnd
+  , cursorPeekPrevious
+  , cursorPeekNext
+  , cursorMovePrevious
+  , cursorMoveNext
+  , cursorSeek
+  , cursorInsert
+  , cursorInsertList
+  , cursorDeletePrevious
+  , cursorDeleteNext
+  , cursorReplaceNext
+  , cursorSnapshot
   , sortedLowerBound
   , sortedLowerBoundBy
   , sortedUpperBound
@@ -57,6 +75,10 @@ instance Measured (DequeMeasure a) (Elem a) where
   measure (Elem value) = DequeMeasure 1 (Just value)
 
 newtype Deque a = Deque (FT.FingerTree (DequeMeasure a) (Elem a))
+  deriving (Show)
+
+-- | Immutable root-plus-position gap cursor over a persistent deque.
+data Cursor a = Cursor !(Deque a) !Int
   deriving (Show)
 
 -- Extensional equality: two deques are equal exactly when they contain the
@@ -183,6 +205,76 @@ removeRange position lengthValue deque
             Just (_, tailValue) -> Just (append prefix tailValue)
             Nothing -> Nothing
         Nothing -> Nothing
+
+cursor :: Deque a -> Cursor a
+cursor deque = Cursor deque 0
+
+cursorAt :: Int -> Deque a -> Maybe (Cursor a)
+cursorAt position deque
+  | position < 0 || position > count deque = Nothing
+  | otherwise = Just (Cursor deque position)
+
+cursorPosition :: Cursor a -> Int
+cursorPosition (Cursor _ position) = position
+
+cursorCount :: Cursor a -> Int
+cursorCount (Cursor deque _) = count deque
+
+cursorIsAtStart :: Cursor a -> Bool
+cursorIsAtStart value = cursorPosition value == 0
+
+cursorIsAtEnd :: Cursor a -> Bool
+cursorIsAtEnd value = cursorPosition value == cursorCount value
+
+cursorPeekPrevious :: Cursor a -> Maybe a
+cursorPeekPrevious (Cursor deque position) = index (position - 1) deque
+
+cursorPeekNext :: Cursor a -> Maybe a
+cursorPeekNext (Cursor deque position) = index position deque
+
+cursorMovePrevious :: Cursor a -> Maybe (Cursor a)
+cursorMovePrevious (Cursor deque position) = cursorAt (position - 1) deque
+
+cursorMoveNext :: Cursor a -> Maybe (Cursor a)
+cursorMoveNext (Cursor deque position)
+  | position == count deque = Nothing
+  | otherwise = cursorAt (position + 1) deque
+
+cursorSeek :: Int -> Cursor a -> Maybe (Cursor a)
+cursorSeek position (Cursor deque _) = cursorAt position deque
+
+cursorInsert :: a -> Cursor a -> Cursor a
+cursorInsert value (Cursor deque position) =
+  Cursor (expectCursorEdit "insert" (insertAt position value deque)) (position + 1)
+
+cursorInsertList :: [a] -> Cursor a -> Cursor a
+cursorInsertList [] value = value
+cursorInsertList values (Cursor deque position) =
+  case splitAt position deque of
+    Just (left, right) -> Cursor (append (append left (fromList values)) right) (position + length values)
+    Nothing -> error "Data.Structures.FingerTree.Deque.cursorInsertList: invalid cursor"
+
+cursorDeletePrevious :: Cursor a -> Maybe (Cursor a)
+cursorDeletePrevious (Cursor deque position)
+  | position == 0 = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "delete previous" (deleteAt (position - 1) deque)) (position - 1))
+
+cursorDeleteNext :: Cursor a -> Maybe (Cursor a)
+cursorDeleteNext (Cursor deque position)
+  | position == count deque = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "delete next" (deleteAt position deque)) position)
+
+cursorReplaceNext :: a -> Cursor a -> Maybe (Cursor a)
+cursorReplaceNext value (Cursor deque position)
+  | position == count deque = Nothing
+  | otherwise = Just (Cursor (expectCursorEdit "replace next" (setAt position value deque)) position)
+
+cursorSnapshot :: Cursor a -> Deque a
+cursorSnapshot (Cursor deque _) = deque
+
+expectCursorEdit :: String -> Maybe a -> a
+expectCursorEdit _ (Just value) = value
+expectCursorEdit operation Nothing = error ("Data.Structures.FingerTree.Deque cursor " ++ operation ++ " failed")
 
 sortedLowerBound :: Ord a => a -> Deque a -> Int
 sortedLowerBound = sortedLowerBoundBy compare
