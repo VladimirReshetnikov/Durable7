@@ -61,6 +61,11 @@ export type OrderedSetLookup<T> =
     | { readonly found: true; readonly value: T }
     | { readonly found: false; readonly value: T };
 
+/** Presence-discriminated cursor peek that remains unambiguous for stored undefined values. */
+export type OrderedSetCursorPeek<T> =
+    | { readonly found: true; readonly value: T }
+    | { readonly found: false };
+
 /** Result of a removal attempt; misses retain the exact receiver. */
 export interface OrderedSetRemoveResult<T> {
     readonly removed: boolean;
@@ -188,6 +193,23 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
     public indexOf(equalValue: T): number {
         const entry = this.#stamps.getEntry(equalValue);
         return entry === undefined ? -1 : this.indexOfStamp(entry.value);
+    }
+
+    /** Creates an immutable explicit-order gap cursor at a position from zero through size. */
+    public getCursor(position = 0): PersistentOrderedSetCursor<T> {
+        return new PersistentOrderedSetCursor(this, position);
+    }
+
+    /** Locates an equivalence class; a miss returns the append-position cursor. */
+    public getCursorAtItem(equalValue: T): {
+        readonly found: boolean;
+        readonly cursor: PersistentOrderedSetCursor<T>;
+    } {
+        const position = this.indexOf(equalValue);
+        return {
+            found: position >= 0,
+            cursor: new PersistentOrderedSetCursor(this, position < 0 ? this.size : position),
+        };
     }
 
     /** Appends an absent class; a duplicate is an exact identity no-op and never moves. */
@@ -572,5 +594,74 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return order.isEmpty
             ? PersistentOrderedSet.empty(stamps.policy)
             : new PersistentOrderedSet(order, stamps);
+    }
+}
+
+/** Immutable root-plus-position gap cursor over a persistent ordered set. */
+export class PersistentOrderedSetCursor<T> {
+    public constructor(
+        public readonly snapshot: PersistentOrderedSet<T>,
+        public readonly position: number,
+    ) {
+        requireInsertionIndex(position, snapshot.size);
+    }
+
+    public get size(): number { return this.snapshot.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+
+    public tryPeekPrevious(): OrderedSetCursorPeek<T> {
+        return this.isAtStart
+            ? { found: false }
+            : { found: true, value: this.snapshot.getAt(this.position - 1) };
+    }
+
+    public tryPeekNext(): OrderedSetCursorPeek<T> {
+        return this.isAtEnd
+            ? { found: false }
+            : { found: true, value: this.snapshot.getAt(this.position) };
+    }
+
+    public movePrevious(): PersistentOrderedSetCursor<T> {
+        if (this.isAtStart) throw new RangeError("The ordered-set cursor is already at the start.");
+        return new PersistentOrderedSetCursor(this.snapshot, this.position - 1);
+    }
+
+    public moveNext(): PersistentOrderedSetCursor<T> {
+        if (this.isAtEnd) throw new RangeError("The ordered-set cursor is already at the end.");
+        return new PersistentOrderedSetCursor(this.snapshot, this.position + 1);
+    }
+
+    public seek(position: number): PersistentOrderedSetCursor<T> {
+        return position === this.position ? this : new PersistentOrderedSetCursor(this.snapshot, position);
+    }
+
+    /** Inserts at the gap; an equivalent representative preserves this cursor. */
+    public insert(item: T): PersistentOrderedSetCursor<T> {
+        const snapshot = this.snapshot.insert(this.position, item);
+        return snapshot === this.snapshot
+            ? this
+            : new PersistentOrderedSetCursor(snapshot, this.position + 1);
+    }
+
+    public tryInsert(item: T): {
+        readonly inserted: boolean;
+        readonly cursor: PersistentOrderedSetCursor<T>;
+    } {
+        const cursor = this.insert(item);
+        return { inserted: cursor !== this, cursor };
+    }
+
+    public deletePrevious(): PersistentOrderedSetCursor<T> {
+        if (this.isAtStart) throw new RangeError("The ordered-set cursor has no previous representative.");
+        return new PersistentOrderedSetCursor(
+            this.snapshot.removeAt(this.position - 1),
+            this.position - 1,
+        );
+    }
+
+    public deleteNext(): PersistentOrderedSetCursor<T> {
+        if (this.isAtEnd) throw new RangeError("The ordered-set cursor has no next representative.");
+        return new PersistentOrderedSetCursor(this.snapshot.removeAt(this.position), this.position);
     }
 }

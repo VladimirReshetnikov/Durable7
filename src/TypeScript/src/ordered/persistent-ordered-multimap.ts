@@ -100,6 +100,53 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         return group.found ? group.entry.value.tryGetValue(value) : { found: false, value };
     }
 
+    /** Creates an immutable flattened key-grouped pair gap cursor. */
+    public getCursor(position = 0): PersistentOrderedMultimapCursor<K, V> {
+        return new PersistentOrderedMultimapCursor(this, position);
+    }
+
+    /** Locates a pair; a miss returns the pair-end cursor. */
+    public getCursorAtPair(key: K, value: V): {
+        readonly found: boolean;
+        readonly cursor: PersistentOrderedMultimapCursor<K, V>;
+    } {
+        const position = this.cursorIndexOf(key, value);
+        return {
+            found: position >= 0,
+            cursor: new PersistentOrderedMultimapCursor(
+                this,
+                position < 0 ? this.#pairCount : position,
+            ),
+        };
+    }
+
+    /** Locates the first pair in a key group; a miss returns the pair-end cursor. */
+    public getCursorAtGroup(key: K): {
+        readonly found: boolean;
+        readonly cursor: PersistentOrderedMultimapCursor<K, V>;
+    } {
+        let position = 0;
+        for (const pair of this) {
+            if (this.keyPolicy.equivalent(pair.key, key)) {
+                return { found: true, cursor: new PersistentOrderedMultimapCursor(this, position) };
+            }
+            position += 1;
+        }
+        return { found: false, cursor: new PersistentOrderedMultimapCursor(this, this.#pairCount) };
+    }
+
+    public cursorEntryAt(rank: number): OrderedMultimapEntry<K, V> {
+        if (!Number.isSafeInteger(rank) || rank < 0 || rank >= this.#pairCount) {
+            throw new RangeError("rank must identify a key-grouped pair.");
+        }
+        let position = 0;
+        for (const pair of this) {
+            if (position === rank) return pair;
+            position += 1;
+        }
+        throw new Error("The ordered multimap pair count disagrees with its groups.");
+    }
+
     public add(key: K, value: V): PersistentOrderedMultimap<K, V> {
         const group = this.#groups.tryGetEntry(key);
         if (group.found) {
@@ -187,5 +234,92 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
             throw new RangeError("The operation would exceed the exact ordered-multimap pair-count limit.");
         }
         return this.#pairCount + 1;
+    }
+
+    private cursorIndexOf(key: K, value: V): number {
+        let position = 0;
+        for (const pair of this) {
+            if (this.keyPolicy.equivalent(pair.key, key)
+                && this.#valuePolicy.equivalent(pair.value, value)) {
+                return position;
+            }
+            position += 1;
+        }
+        return -1;
+    }
+}
+
+/** Immutable root-plus-pair-rank gap cursor over grouped ordered-multimap enumeration. */
+export class PersistentOrderedMultimapCursor<K, V> {
+    public constructor(
+        public readonly snapshot: PersistentOrderedMultimap<K, V>,
+        public readonly position: number,
+    ) {
+        if (!Number.isSafeInteger(position) || position < 0 || position > snapshot.pairCount) {
+            throw new RangeError("position must be an exact integer from zero through pairCount.");
+        }
+    }
+
+    public get pairCount(): number { return this.snapshot.pairCount; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.pairCount; }
+
+    public tryPeekPrevious(): OrderedMultimapEntry<K, V> | undefined {
+        return this.isAtStart ? undefined : this.snapshot.cursorEntryAt(this.position - 1);
+    }
+
+    public tryPeekNext(): OrderedMultimapEntry<K, V> | undefined {
+        return this.isAtEnd ? undefined : this.snapshot.cursorEntryAt(this.position);
+    }
+
+    public movePrevious(): PersistentOrderedMultimapCursor<K, V> {
+        if (this.isAtStart) throw new RangeError("The ordered-multimap cursor is already at the start.");
+        return new PersistentOrderedMultimapCursor(this.snapshot, this.position - 1);
+    }
+
+    public moveNext(): PersistentOrderedMultimapCursor<K, V> {
+        if (this.isAtEnd) throw new RangeError("The ordered-multimap cursor is already at the end.");
+        return new PersistentOrderedMultimapCursor(this.snapshot, this.position + 1);
+    }
+
+    public seek(position: number): PersistentOrderedMultimapCursor<K, V> {
+        return position === this.position
+            ? this
+            : new PersistentOrderedMultimapCursor(this.snapshot, position);
+    }
+
+    /** Adds under grouped semantics and returns the inserted pair's following gap. */
+    public add(key: K, value: V): PersistentOrderedMultimapCursor<K, V> {
+        const snapshot = this.snapshot.add(key, value);
+        if (snapshot === this.snapshot) return this;
+        const location = snapshot.getCursorAtPair(key, value);
+        if (!location.found) throw new Error("The inserted pair is missing from the ordered multimap.");
+        return new PersistentOrderedMultimapCursor(snapshot, location.cursor.position + 1);
+    }
+
+    public tryAdd(key: K, value: V): {
+        readonly added: boolean;
+        readonly cursor: PersistentOrderedMultimapCursor<K, V>;
+    } {
+        const cursor = this.add(key, value);
+        return { added: cursor !== this, cursor };
+    }
+
+    public deletePrevious(): PersistentOrderedMultimapCursor<K, V> {
+        const pair = this.tryPeekPrevious();
+        if (pair === undefined) throw new RangeError("The ordered-multimap cursor has no previous pair.");
+        return new PersistentOrderedMultimapCursor(
+            this.snapshot.remove(pair.key, pair.value),
+            this.position - 1,
+        );
+    }
+
+    public deleteNext(): PersistentOrderedMultimapCursor<K, V> {
+        const pair = this.tryPeekNext();
+        if (pair === undefined) throw new RangeError("The ordered-multimap cursor has no next pair.");
+        return new PersistentOrderedMultimapCursor(
+            this.snapshot.remove(pair.key, pair.value),
+            this.position,
+        );
     }
 }

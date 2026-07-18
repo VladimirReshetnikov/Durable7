@@ -159,6 +159,23 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         return indexed === undefined ? -1 : this.indexOfStamp(indexed.value);
     }
 
+    /** Creates an immutable explicit-order gap cursor at a position from zero through size. */
+    public getCursor(position = 0): PersistentOrderedMapCursor<K, V> {
+        return new PersistentOrderedMapCursor(this, position);
+    }
+
+    /** Locates a key equivalence class; a miss returns the append-position cursor. */
+    public getCursorAtKey(key: K): {
+        readonly found: boolean;
+        readonly cursor: PersistentOrderedMapCursor<K, V>;
+    } {
+        const position = this.indexOfKey(key);
+        return {
+            found: position >= 0,
+            cursor: new PersistentOrderedMapCursor(this, position < 0 ? this.size : position),
+        };
+    }
+
     public add(key: K, value: V): PersistentOrderedMap<K, V> {
         const result = this.tryAdd(key, value);
         if (!result.added) throw new DuplicateKeyError();
@@ -456,5 +473,77 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         return order.isEmpty
             ? PersistentOrderedMap.empty(stamps.policy, valueEquals)
             : new PersistentOrderedMap(order, stamps, valueEquals);
+    }
+}
+
+/** Immutable root-plus-position gap cursor over a persistent ordered map. */
+export class PersistentOrderedMapCursor<K, V> {
+    public constructor(
+        public readonly snapshot: PersistentOrderedMap<K, V>,
+        public readonly position: number,
+    ) {
+        requireInsertionIndex(position, snapshot.size);
+    }
+
+    public get size(): number { return this.snapshot.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+
+    public tryPeekPrevious(): OrderedMapEntry<K, V> | undefined {
+        return this.isAtStart ? undefined : this.snapshot.entryAt(this.position - 1);
+    }
+
+    public tryPeekNext(): OrderedMapEntry<K, V> | undefined {
+        return this.isAtEnd ? undefined : this.snapshot.entryAt(this.position);
+    }
+
+    public movePrevious(): PersistentOrderedMapCursor<K, V> {
+        if (this.isAtStart) throw new RangeError("The ordered-map cursor is already at the start.");
+        return new PersistentOrderedMapCursor(this.snapshot, this.position - 1);
+    }
+
+    public moveNext(): PersistentOrderedMapCursor<K, V> {
+        if (this.isAtEnd) throw new RangeError("The ordered-map cursor is already at the end.");
+        return new PersistentOrderedMapCursor(this.snapshot, this.position + 1);
+    }
+
+    public seek(position: number): PersistentOrderedMapCursor<K, V> {
+        return position === this.position ? this : new PersistentOrderedMapCursor(this.snapshot, position);
+    }
+
+    public insert(key: K, value: V): PersistentOrderedMapCursor<K, V> {
+        return new PersistentOrderedMapCursor(
+            this.snapshot.insert(this.position, key, value),
+            this.position + 1,
+        );
+    }
+
+    public tryInsert(key: K, value: V): {
+        readonly inserted: boolean;
+        readonly cursor: PersistentOrderedMapCursor<K, V>;
+    } {
+        const existing = this.snapshot.indexOfKey(key);
+        return existing >= 0
+            ? { inserted: false, cursor: new PersistentOrderedMapCursor(this.snapshot, existing) }
+            : { inserted: true, cursor: this.insert(key, value) };
+    }
+
+    public setNextValue(value: V): PersistentOrderedMapCursor<K, V> {
+        const entry = this.tryPeekNext();
+        if (entry === undefined) throw new RangeError("The ordered-map cursor has no next entry.");
+        return new PersistentOrderedMapCursor(this.snapshot.set(entry.key, value), this.position);
+    }
+
+    public deletePrevious(): PersistentOrderedMapCursor<K, V> {
+        if (this.isAtStart) throw new RangeError("The ordered-map cursor has no previous entry.");
+        return new PersistentOrderedMapCursor(
+            this.snapshot.removeAt(this.position - 1),
+            this.position - 1,
+        );
+    }
+
+    public deleteNext(): PersistentOrderedMapCursor<K, V> {
+        if (this.isAtEnd) throw new RangeError("The ordered-map cursor has no next entry.");
+        return new PersistentOrderedMapCursor(this.snapshot.removeAt(this.position), this.position);
     }
 }
