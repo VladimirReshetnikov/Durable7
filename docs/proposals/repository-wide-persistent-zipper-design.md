@@ -171,7 +171,7 @@ The disposition terms are:
 | Measured priority queue | specialized/read-only cursor only | Its sequence order is observable but arbitrary element editing is not queue semantics. Reuse an internal measured-tree zipper; expose a public locator only if occurrence identity is first designed. |
 | Brodal–Okasaki heap | not applicable publicly | The forest topology is private and unstable under meld/delete-min; minimum access is already the semantic focus. |
 | Priority-search queue | public key-order cursor | Keys define a stable sorted axis; edits may replace priority/value while winner caches are rebuilt. Priority order is a query, not a second cursor order. |
-| Interval tree | public cursor | Lexicographic interval order with duplicate-occurrence positions; overlap summaries rebuild through context. |
+| Interval tree | public cursor | Nondecreasing low-endpoint order with duplicate-occurrence positions; overlap summaries rebuild through context. |
 | Persistent interval map | public cursor | Unique complete interval key in deterministic interval order; exact and augmented indexes publish together. |
 | Persistent chunked bit set | public cursor | Focus an existing set bit with before-first/after-last sentinels; seek by bit index, rank, or select. Chunk boundaries stay private. |
 | Persistent ordered set and map | public cursor | Insertion/explicit-position gap; edits update sequence and hash index atomically without exposing sparse labels. |
@@ -476,3 +476,316 @@ publish the effect of balancing, relabeling, lazy-tag pushes, collision scans, c
 allocation/copying, callbacks, and version-DAG fan-out. Work deferred in one branch cannot be paid
 for by a sibling branch.
 
+## Sequence-Family Designs
+
+### General Measured Finger Tree
+
+Applicable types are C# `FingerTree<TElement, TMeasure, TMeasureOps>` and the language-local raw or
+facade equivalents identified in the [catalog](../reference/data-structure-catalog.md#finger-tree-core-and-deque).
+The raw general tree does not necessarily cache an element count: a maximum, interval, or arbitrary
+application monoid cannot be interpreted as an index. Its cursor therefore uses **measure and
+neighbor semantics**, not a fabricated `Count` or integer `Position`.
+
+Conceptual C# surface:
+
+```csharp
+public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
+{
+    public FingerTreeCursor<TElement, TMeasure, TMeasureOps> GetCursorAtStart();
+    public FingerTreeCursor<TElement, TMeasure, TMeasureOps> GetCursorAtEnd();
+    public bool TryGetCursor(
+        IMeasurePredicate<TMeasure> predicate,
+        out FingerTreeCursor<TElement, TMeasure, TMeasureOps> cursor);
+}
+
+public readonly struct FingerTreeCursor<TElement, TMeasure, TMeasureOps>
+{
+    public bool IsAtStart { get; }
+    public bool IsAtEnd { get; }
+    public TMeasure MeasureBefore { get; }
+    public TMeasure MeasureAfter { get; }
+    public bool TryPeekPrevious(out TElement value);
+    public bool TryPeekNext(out TElement value);
+    public FingerTreeCursor<...> MovePrevious();
+    public FingerTreeCursor<...> MoveNext();
+    public FingerTreeCursor<...> SeekByMeasure(IMeasurePredicate<TMeasure> predicate);
+    public FingerTreeCursor<...> Insert(TElement value);
+    public FingerTreeCursor<...> DeletePrevious();
+    public FingerTreeCursor<...> DeleteNext();
+    public FingerTreeCursor<...> ReplaceNext(TElement value);
+    public FingerTree<TElement, TMeasure, TMeasureOps> Snapshot();
+}
+```
+
+The predicate has the existing monotone-prefix precondition. A successful seek returns the gap
+immediately before the first element whose inclusive prefix satisfies it. A miss returns `false`
+with a usable end cursor; a predicate true for the identity selects the start on a nonempty tree.
+Size-measured aliases may add `Count`, `Position`, and positional `Seek` without putting those members
+on the arbitrary-monoid cursor.
+
+#### Structural representation
+
+The private derivative follows the finger-tree constructors rather than flattening the sequence:
+
+- `Single` has a focus and top context;
+- `Deep(prefix, middle, suffix)` contributes a frame recording which digit contains the focus, the
+  opposite digit, the complete portions before and after the focus, and the middle tree;
+- descent through the recursively measured middle tree adds a `Node2` or `Node3` frame containing
+  the focused child slot and its one or two siblings; and
+- lazy middle suspensions remain shared. Navigation may force them using the same thread-safe
+  memoization contract as the owning tree, but it never publishes a second logical result.
+
+The logical context caches `MeasureBefore` and `MeasureAfter` in source order. Closing a frame calls
+the ordinary smart constructors so digit bounds, 2/3-node arity, measures, and laziness remain
+valid. The cursor must not expose whether one port uses a Hinze–Paterson finger tree, a measured AVL
+checkpoint, or another representation.
+
+An initial Profile R implementation can retain `(tree, boundary descriptor)` and use `Split`,
+`TryViewLeft`, `TryViewRight`, and `Concat`. A later focused zipper must show that it improves a named
+localized history without weakening the raw tree's current fully persistent amortization claims.
+It must not infer the C# rope's bounded-focus proof: the raw tree has elements rather than rope
+chunks and a different lazy-spine potential.
+
+#### Measure and callback rules
+
+- Combining before and after measures in that order equals the snapshot measure.
+- Inserting or replacing measures the new element exactly as the ordinary operation does. A generic
+  cursor has no element-equality shortcut.
+- Moving across an already measured immutable node reuses its cached measure. A navigation-only
+  operation does not remeasure elements.
+- A callback failure leaves the cursor at its old location with its old materialized snapshot.
+- A dirty snapshot closes frames bottom-up and may force or publish ordinary tree suspensions; no
+  zipper-specific cache is visible to callers.
+
+Creation at an endpoint is targeted at O(1). Monotone seek retains the tree's existing split bound.
+One neighbor step is O(1) amortized and O(log n) worst under the family-local persistent finger-tree
+analysis; a complete traversal after one seek is O(n). Point editing may be focus-local but must be
+documented as O(log n) worst until its digit/node repair proof is complete. Closing a dirty arbitrary
+depth context is O(log n) worst; a memoized repeat may be O(1).
+
+### Finger-Tree Deque
+
+`FingerTreeDeque<T>` and each language-local persistent-deque sibling receive a positional
+`FingerTreeDequeCursor<T>` using Profile S. The public surface mirrors `RopeCursor<T>` where the deque
+already supports the operation:
+
+```text
+GetCursor(position = 0)
+Count, Position, IsAtStart, IsAtEnd
+TryPeekPrevious / TryPeekNext
+MovePrevious / MoveNext / Seek
+Insert / InsertRange
+DeletePrevious / DeleteNext / ReplaceNext
+Snapshot
+```
+
+The cursor is over the deque's ordinary element order. `InsertRange` captures its input once before
+publishing a cursor version, checks `int`/native count growth before construction where the local API
+can know it, and returns the unchanged cursor for an empty range. Replacement is unconditional
+because the deque has no equality policy. `Snapshot()` produces an ordinary deque, not a cursor-only
+root variant visible through `FingerTreeDeque<T>`.
+
+The focused representation reuses the deque's leaf-count/signpost tree. A path frame records digit
+or node siblings and cached size data; it does not expose sorted-search signposts. Pulling across a
+focus boundary must use ordinary smart constructors so the strict-language suspended middle spine
+retains its concurrency and fully persistent memoization behavior.
+
+The baseline Profile R checkpoint may implement an edit with `InsertAt`, `RemoveAt`, `SetItem`, and
+`SplitAt`. The focused target is O(1)-amortized unit traversal and local edit on the precisely proved
+history class, O(log n) worst for a forced repair, and O(log n) dirty closure. Endpoint creation may
+be O(1), arbitrary seek retains the current near-end logarithmic split bound, and no rope focus or
+flush constant is imported.
+
+The deque's optional `SortedLowerBound` helpers do not turn this into a sorted cursor. Callers that
+maintain a deque in sorted order can seek by the same comparer through an explicit convenience, but
+every cursor edit remains positional and can invalidate that caller-maintained precondition. The
+sorted collection facades below own invariant-preserving ordered cursors.
+
+### Reversible Deque Adapter
+
+`ReversibleDeque<T>` does not need a second structural engine. Its cursor stores the logical
+orientation plus a cursor over the underlying deque. If logical position is `p` and count is `n`:
+
+```text
+forward orientation: underlying position = p
+reversed orientation: underlying position = n - p
+```
+
+In reversed orientation:
+
+- logical previous/next map to underlying next/previous;
+- previous/next peeks swap;
+- backspace/forward-delete swap;
+- inserting one value uses the mapped physical gap;
+- inserting logical range `[x0, ..., xm-1]` inserts the reversed range physically; and
+- `Reverse()` keeps the same logical version and maps the gap to `n - p` while toggling orientation.
+
+`Snapshot()` returns a `ReversibleDeque<T>` retaining the cursor's logical orientation. A separate
+`SnapshotUnderlying()` is unnecessary and would couple consumers to representation. Cursor
+navigation has the underlying cursor's bounds; toggling orientation is O(1). Tests must cover the
+involution at every gap, especially empty/start/end states and non-palindromic range insertion.
+
+### Relaxed Radix-Balanced Vector
+
+`RrbVector<T>` and sibling RRB vectors receive `RrbVectorCursor<T>`, a positional gap cursor. RRB is
+a particularly good zipper target because one open radix path can serve several nearby indexed
+reads or edits without repeating root descent.
+
+#### Representation
+
+The focused state is:
+
+```text
+left context + active leaf[0 .. gap) | active leaf[gap ..] + right context
+```
+
+Each radix frame records:
+
+- node height and focused child index;
+- immutable children before and after that index;
+- whether the source branch was packed or relaxed; and
+- cumulative sizes, or enough child counts to reconstruct them without rescanning descendants.
+
+The active leaf holds at most the substrate's branch factor (currently 32 in the C# reference). A
+move within it changes only the local offset. Crossing its edge climbs to the nearest frame with a
+sibling and descends the opposite boundary. `Seek` uses cumulative sizes for a relaxed node and
+radix arithmetic for a packed node.
+
+Closing a frame enforces equal child height, maximum arity, exact counts, and strictly increasing
+cumulative sizes. It omits the size table when the reconstructed branch again satisfies the packed
+radix rule. It preserves the repository's actual RRB invariant—boundary rebalancing without an
+invented global minimum occupancy rule—and collapses a unary root exactly as the current vector
+does.
+
+#### Edits
+
+- `ReplaceNext` applies the vector's existing element-equality no-op rule; otherwise it path-copies
+  the active leaf and dirty ancestors and keeps the gap fixed.
+- `Insert` and `InsertRange` split an overfull leaf, propagate at most one boundary run through the
+  open spine, and use the existing concat/rebalance algorithm when a range is already an RRB vector.
+- deletion removes from the active leaf, borrows or merges only according to current RRB seam rules,
+  and removes/collapses empty branches;
+- `DeletePrevious` moves the logical gap left; `DeleteNext` does not; and
+- clean snapshot returns the exact source vector, while dirty snapshot rebuilds the open path and
+  may memoize the winner.
+
+The reference surface should also offer `InsertRange(RrbVector<T>)` so an existing vector can be
+spliced with structural sharing, plus ordinary enumerable/span capture overloads where idiomatic.
+The cursor is independent of `RrbVector.Builder`: the builder is append-oriented mutable staging,
+whereas the cursor is branchable local editing over an adopted persistent version.
+
+Seek is O(log32 n). In-leaf movement and replacement copy at most one bounded leaf plus changed
+cursor state; boundary crossing and rebalancing are O(log32 n) worst. A linear scan after one seek
+targets O(k + log32 n). Insert-range work is at least Omega(m) for uncaptured input and otherwise
+follows the vector's concat/rebalance bound. The design does not claim a dedicated tail, transient
+RRB nodes, or constant-amortized arbitrary version-DAG editing.
+
+### Range-Update Sequence
+
+`RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` and its sibling ports receive a positional and
+measured `RangeUpdateSequenceCursor`. It uses an implicit-AVL path zipper, but pending lazy tags make
+the context more than an ordinary binary-tree derivative.
+
+#### Logical state and tag invariant
+
+Each context frame records:
+
+```text
+direction
+parent logical element
+complete sibling subtree
+parent height/count/measure
+optional parent pending tag
+optional inherited tag from ancestors
+```
+
+The existing invariant remains authoritative: a node's own logical element and cached measure
+already include its pending tag; its children do not. A read-only cursor descent therefore **carries**
+the correctly composed inherited tag without mutating or path-copying nodes. It returns a logical
+peek by applying that carried action. Merely navigating away and back must keep the clean source
+snapshot reference-identical.
+
+The first edit through a tagged path prepares an immutable normalized edit spine:
+
+1. compose inherited and node tags in the algebra's documented newer/older order;
+2. push the effective action to the old logical children before structural rearrangement;
+3. apply inherited tags to an old focused value before exposing it as an edit operand;
+4. do **not** apply old tags to a newly inserted or replacement element; and
+5. rebuild AVL height, count, logical measure, and optional pending-tag state after rotations.
+
+The zipper never uses `default(TTag)` as an absence marker. It preserves the separate presence bit
+and clears a composed tag only through `IsIdentity` under the existing law-gated contract.
+
+#### Surface
+
+In addition to the ordinary positional operations, expose:
+
+```text
+MeasureBefore, MeasureAfter
+MeasurePrevious(count), MeasureNext(count)
+ApplyPrevious(count, tag), ApplyNext(count, tag)
+Seek(position)
+Snapshot()
+```
+
+`ApplyPrevious(k, tag)` targets `[Position - k, Position)` and keeps the gap fixed;
+`ApplyNext(k, tag)` targets `[Position, Position + k)` and keeps it fixed. Both validate the complete
+range before `IsIdentity` or any tag/measure action, matching `ApplyRange`. Zero length returns the
+same cursor without callbacks. A whole-version tag may remain an O(1) tagged root even when invoked
+through a cursor; the implementation must not open every path simply to preserve focus. Absolute
+range operations remain available on `Snapshot()` or through cursor methods taking an absolute
+index if consumer evidence justifies them.
+
+`MeasureBefore` and `MeasureAfter` must reflect all carried tags and combine in logical order to the
+whole measure. They may use cached annotated sibling subtrees plus O(log n) composed-frame work; no
+O(1) promise is made until a chosen representation stores failure-atomically prepared aggregates.
+
+Seek, point edit, proper range update, and dirty close are O(log n) worst under the existing implicit-
+AVL contract. Whole-sequence nonidentity tagging remains O(1). Unit navigation may be O(1)
+amortized over a linear traversal but O(log n) worst at a spine crossing. A focused implementation
+must count tag composition/application and measure callbacks separately from node allocations; no
+rope callback ceiling or finger-tree amortization applies.
+
+### Rope, Measured Rope, And Text
+
+No new rope API is proposed. The shipped cursor contract already embodies Profile S and is the
+observable template for positional semantics:
+
+- `RopeCursor` is a gap cursor with previous/next peeks, movement, seek, insertion, deletion,
+  replacement, branching versions, and snapshot;
+- measured cursors add ordered before/after measures and absolute monotone-prefix seek; and
+- text cursors preserve each language's existing text-unit and line/column rules rather than
+  pretending that UTF-16 code units, bytes, Haskell `Char`, Unicode scalars/code points, and grapheme
+  clusters are interchangeable.
+
+C# keeps its selected 16-element focus, 256-element carry flush, prepared-measure fragments, and
+winner-returning snapshot memo. Sibling ports remain correct root-plus-gap checkpoints unless their
+own design, proof, measurements, and documentation select a focused representation. This proposal
+does not rename current methods, change default-state behavior, add bookmarks/rebase, or widen the
+proven linear-lineage complexity scope.
+
+### Sequence-Like Non-Candidates
+
+#### Measured priority queue
+
+The queue's underlying measured tree has an insertion/meld sequence, but its stable semantic focus
+is the minimum-priority entry. An arbitrary occurrence has no key or handle by which a cursor could
+survive domain operations, and exposing `ReplaceNext` would turn the queue into a list editor with a
+priority cache. Keep a measured-tree structural zipper private for `TryDequeue` or traversal
+experiments. A future read-only occurrence cursor requires a separate occurrence-identity design and
+consumer evidence; it is not part of the first public tranche.
+
+#### Brodal–Okasaki heap
+
+The heap's bootstrapped forest, violations, and scheduling structure are private and may change
+drastically after `Meld` or `DeleteMinimum`. There is no comparer-ordered neighbor traversal, and an
+arbitrary focused node cannot be replaced without restoring global heap invariants. `Minimum`,
+`Insert`, `Meld`, and `DeleteMinimum` already express its semantic locations. Do not add a public
+zipper.
+
+#### DABA Lite and builders
+
+`DabaLite` is a mutable FIFO aggregate with deterministic reclamation; RRB/rope/sorted builders are
+mutable staging lifecycles. A persistent zipper would neither describe their ownership nor improve
+their intended operations. They remain out of scope. Immutable snapshots produced by a builder may
+create an ordinary family cursor after publication.
