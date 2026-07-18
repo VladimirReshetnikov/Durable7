@@ -16,7 +16,7 @@ namespace Tools.DataStructures.Ordered;
 /// not preserve one global interleaved pair-arrival order. Empty value groups are never stored.
 /// </remarks>
 [DebuggerDisplay("KeyCount = {KeyCount}, PairCount = {PairCount}")]
-public sealed class PersistentOrderedMultimap<TKey, TValue> :
+public sealed partial class PersistentOrderedMultimap<TKey, TValue> :
     IEnumerable<KeyValuePair<TKey, TValue>>
 {
     private static readonly PersistentOrderedMultimap<TKey, TValue> EmptyInstance = new(

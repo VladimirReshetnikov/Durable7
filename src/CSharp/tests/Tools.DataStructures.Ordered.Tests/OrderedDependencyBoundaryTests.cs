@@ -109,8 +109,11 @@ public sealed class OrderedDependencyBoundaryTests
             new[]
             {
                 typeof(PersistentOrderedMap<,>).FullName,
+                typeof(PersistentOrderedMapCursor<,>).FullName,
                 typeof(PersistentOrderedMultimap<,>).FullName,
+                typeof(PersistentOrderedMultimapCursor<,>).FullName,
                 typeof(PersistentOrderedSet<>).FullName,
+                typeof(PersistentOrderedSetCursor<>).FullName,
                 typeof(PersistentOrderedSet<>.Enumerator).FullName,
             }.OrderBy(name => name),
             assembly.GetExportedTypes().Select(type => type.FullName).OrderBy(name => name));

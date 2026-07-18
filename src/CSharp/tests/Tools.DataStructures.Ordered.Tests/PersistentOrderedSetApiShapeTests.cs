@@ -60,12 +60,12 @@ public sealed class PersistentOrderedSetApiShapeTests
         var expected = new[]
         {
             "Add", "AddFirst", "Clear", "Contains", "Create", "CreateRange", "Drop",
-            "Except", "Except", "GetAt", "GetEnumerator", "GetRange", "IndexOf", "Insert",
+            "Except", "Except", "GetAt", "GetCursor", "GetEnumerator", "GetRange", "IndexOf", "Insert",
             "Intersect", "Intersect", "IsProperSubsetOf", "IsProperSupersetOf", "IsSubsetOf",
             "IsSupersetOf", "MoveTo", "MoveToFirst", "MoveToLast", "Overlaps", "Remove",
             "RemoveAt", "RemoveFirst", "RemoveLast", "Reverse", "SetEquals", "Sort",
             "SymmetricExcept", "SymmetricExcept", "Take", "ToArray", "TryGetValue", "TryRemove",
-            "Union", "Union",
+            "TryGetCursor", "Union", "Union",
             "get_Comparer", "get_Count", "get_Empty", "get_First", "get_IsEmpty", "get_Item", "get_Last",
         }.OrderBy(name => name).ToArray();
 

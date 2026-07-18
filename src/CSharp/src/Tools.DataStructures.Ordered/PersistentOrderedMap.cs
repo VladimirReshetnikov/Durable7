@@ -18,7 +18,7 @@ namespace Tools.DataStructures.Ordered;
 /// representative and position; only the explicit movement operations change order.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}")]
-public sealed class PersistentOrderedMap<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
+public sealed partial class PersistentOrderedMap<TKey, TValue> : IReadOnlyDictionary<TKey, TValue>
 {
     private const long StampStride = 1L << 20;
 
