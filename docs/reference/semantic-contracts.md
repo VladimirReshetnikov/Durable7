@@ -653,7 +653,8 @@ Shared obligations:
   previously produced immutable ropes.
 
 C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python ship positional and measured/text cursors. No deque, RRB,
-raw-finger-tree, reversible-deque, or Tungsten cursor is implied by those surfaces. Every shipped
+raw-finger-tree or reversible-deque cursor is implied by those surfaces. Tungsten cursor work is
+explicitly excluded. Every shipped
 cursor shares these observable obligations:
 
 - A cursor position is a gap in `0 .. Count`: previous operations address `p - 1`, next operations
@@ -670,7 +671,7 @@ cursor shares these observable obligations:
 - Initialized cursor values do not mutate shared persistent storage during reads. Each language must
   document its default-construction, invalid-operation, borrowed-value, and thread-safety conventions.
 
-The C# positional zipper additionally requires a shared navigation context and snapshot cache. A
+The C# positional cursor's focused representation additionally requires a shared navigation context and snapshot cache. A
 dirty first `Snapshot()` publishes one canonical rope through a thread-safe winner-returning memo
 cell; repeated clean snapshots from any navigation context over the version are O(1) and return the
 same rope reference. Failed construction publishes nothing, initialized cursors support racing first
@@ -685,8 +686,8 @@ retained cursors
 The C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python positional checkpoints store an
 already-canonical retained rope plus its gap. Their language-local checkpoints have the
 complexity boundaries documented in their local API notes; TypeScript, Python, and OCaml likewise inherit
-their package-local persistent checkpoint costs rather than the C# zipper bounds. None has a
-default-constructed cursor or makes a zipper, memo-cell, or
+their package-local persistent checkpoint costs rather than the C# focused cursor bounds. None has a
+default-constructed cursor or claims a focused cursor representation, memo-cell, or
 O(1)-amortized local-edit claim. Haskell uses outer `Maybe` for the boundary, so a stored `Nothing`
 at element type `Maybe a` is `Just Nothing`; invalid movement/edit operations also return `Nothing`.
 Its pure growth failures raise a length-overflow exception before publishing a result, leaving all
@@ -701,7 +702,7 @@ destination only on success. Copy, movement, seek, and snapshot perform O(1) str
 one self-owned policy context and therefore return `ft_status`; failure leaves retained inputs and an existing
 output unchanged. Peeks copy through the rope's value policy rather than returning borrowed storage. Peeks and
 point edits are O(log n) plus bounded chunk work, while array insertion adds O(m) capture work. It makes no
-zipper, memo-cell, allocation-ceiling, or O(1)-amortized locality claim.
+focused cursor representation, memo-cell, allocation-ceiling, or O(1)-amortized locality claim.
 
 The C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python measured cursors additionally share these result semantics:
 
@@ -717,7 +718,7 @@ The C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python measured cu
   positions are Unicode code points. None denotes a grapheme-cluster index.
   Navigation and edits preserve access to the existing text helpers.
 
-The C# measured zipper additionally prepares element measures in the immutable cursor lineage,
+The C# measured cursor's focused representation additionally prepares element measures in the immutable cursor lineage,
 shares them with descendants, and publishes prefix/suffix tables failure-atomically. Failed or racing
 callbacks cannot expose partially initialized state, and a dirty snapshot does not remeasure already
 prepared elements. Its measure properties are O(1) cached reads and its newline specialization adds
@@ -736,7 +737,7 @@ C++ `measured_rope_cursor<T, MeasurePolicy>` is the analogous root-plus-gap chec
 chunked measured rope. Its search result carries a usable end cursor on a miss; borrowed peeks are
 lvalue-only, and move operations copy the shared root so the source remains valid. The
 `text_rope_cursor` alias preserves the existing byte-oriented text facade. Known-count growth uses
-checked `size_t` preflights before new element-measure callbacks. It claims no focused zipper,
+checked `size_t` preflights before new element-measure callbacks. It claims no focused cursor representation,
 snapshot memo, allocation ceiling, callback-count ceiling, or amortized locality.
 
 C `ft_measured_rope_cursor` extends the explicit owned-handle checkpoint with ordered before/after partitions,
@@ -746,7 +747,7 @@ and search are O(log n) plus bounded chunk work, and range insertion is O(m + lo
 `ft_text_rope_cursor` preserves `ft_text_rope` snapshots and its byte-oriented LF-only line/column helpers.
 Known-count measured concat/insertion and derived text line count reject `size_t` overflow before publication.
 Callbacks are infallible under the existing C boundary, so no callback-retry guarantee is claimed. Neither C
-cursor claims a focused zipper, snapshot memo, callback/allocation ceiling, amortized locality, or benchmark
+cursor claims a focused cursor representation, snapshot memo, callback/allocation ceiling, amortized locality, or benchmark
 evidence.
 
 Haskell's opaque `MeasuredRopeCursor v a` is the analogous snapshot-plus-gap checkpoint over the
@@ -760,7 +761,7 @@ type alias, callers must construct it through `fromString`/`fromText` or preserv
 measure extensionally; nominal enforcement is not claimed. Checked measured growth rejects `Int`
 overflow before attempted-growth element/monoid callbacks once operand counts and the necessary
 range spine are available. Pure evaluation may still force an unevaluated operand or list spine
-first. The derived text line count is separately checked. No zipper, memo, allocation ceiling,
+first. The derived text line count is separately checked. No focused cursor representation, memo, allocation ceiling,
 callback-count ceiling, or amortized-locality claim is made.
 
 Rust's opaque `MeasuredRopeCursor<T, P>` retains the exact chunked measured-rope root plus a
@@ -771,7 +772,7 @@ insertion is O(m + log n). `MeasuredRopeCursorSearch<T, P>` carries a usable end
 The nominal `TextRopeCursor` wraps the newline policy without losing the `TextRope` facade and
 reports line/column positions in Unicode scalar values under the existing LF-only measure. Checked
 count preflights reject unrepresentable `usize` growth before attempted element-measure callbacks.
-No focused zipper, snapshot memo, allocation ceiling, callback-count ceiling, or amortized-locality
+No focused cursor representation, snapshot memo, allocation ceiling, callback-count ceiling, or amortized-locality
 claim is made.
 
 TypeScript, Python, and OCaml retain their immutable measured-rope checkpoints plus validated gaps. Ordered
@@ -782,7 +783,7 @@ counts Unicode code points; OCaml validates UTF-8 and indexes `Uchar.t` scalar v
 measured cursors expose presence-safe results where the element domain requires them, so a stored
 `undefined`/`None` remains distinct from a missing neighbor. Measured replacement invokes the
 replacement's measure callbacks even when the object is identical. None of these packages claims
-the C# focus/carry zipper, snapshot-memo, allocation, callback-count, or amortized-locality bounds.
+the C# focus/carry cursor representation, snapshot-memo, allocation, callback-count, or amortized-locality bounds.
 
 The normative C# details and evidence are in the
 [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md),

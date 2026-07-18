@@ -47,12 +47,12 @@ Tungsten ports.
 [2026-07-09 proposal](../proposals/new-data-structures-2026-07-09.md).** That proposal selects a
 committed, prioritized slate from the derived catalog plus review-observed gaps; this catalog maps
 the *frontier* candidate space beyond it. Three items originally overlapped: the Patricia trie
-family (proposal Tier C1), the cursor/zipper (proposal A3), and the RRB vector (then deferred on
+family (proposal Tier C1), the cursor (proposal A3), and the RRB vector (then deferred on
 benchmark-first grounds). Patricia and RRB have since shipped across the language workspaces, and
 the positional cursor, measured/text cursor, sample integration, and CHAMP owner-token transients
 have shipped as C# Axis 2 C1, C2, C3, and T2. The one-way lifecycle has since gained semantic
 path-copying ports in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml, and every sibling language now has positional,
-measured, and text snapshot-plus-gap cursor checkpoints without zipper or performance parity. The frozen tier and
+measured, and text snapshot-plus-gap cursor checkpoints without focused cursor representation or performance parity. The frozen tier and
 later cursor families remain planned. The cursor and the temporal-lifecycle work have a dedicated
 [Axis 2 final plan](../proposals/axis2-lifecycle-and-sequence-cursors.md), which is authoritative where
 its API, complexity, or sequencing detail differs from the older proposal. The entries below are
@@ -94,7 +94,7 @@ documented amortized bounds, persistence-robust via memoized suspensions.
 | Hollow heap / strict Fibonacci heap | 1 | Reject | - | Decrease-key via mutation fights persistence; PSQ covers the niche |
 | Size-tiered small representations | 2 | Strong, explicitly postponed | Re-entry benchmark after the Axis 2 fixed-layout evidence decision | Internal tier per selected facade + representation-forcing tests |
 | Transient -> persistent -> frozen lifecycle | 2 | C# CHAMP T2 owner-token transient and semantic path-copying sibling sessions implemented; frozen map/set tier remains unshipped and evidence-gated | T0/T1/T2 complete for the optimized transient; sibling lifecycle ports complete; postponed F0 then F1 evidence must precede F2 | Shipped map/set sessions across nine languages + planned frozen map/set types |
-| Version-bound cursor / zipper | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct zipper-as-version; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python/OCaml semantic facades |
+| Version-bound cursor | 2, 3 | C1 positional cursor, C2 measured/text cursor, and C3 samples implemented in C#; positional/measured/text semantic checkpoints shipped in every sibling language; C4 consumer-gated | C0 selected the C# readonly-struct cursor-as-version representation with a bounded focus/carry layout; sibling checkpoints reuse persistent rope path copying without its complexity claim | C# positional/measured cursors and Tour/Editor integration plus C/C++/Haskell/Kotlin/Rust/TypeScript/Python/OCaml semantic facades |
 | Key-type-specialized map factories | 2 | Plausible, explicitly postponed | Named consumer after explicit Patricia consideration | Factory layer; ART only if independently justified |
 | Self-adjusting (splay-style) structures | 2 | Reject | - | Reads allocate under path copying; cursors + freeze substitute |
 | Range-update sequence (lazy propagation) | 3 | Strong (C# implicit-AVL reference, seven specialized sibling ports, and the OCaml semantic checkpoint ship) | Lawful range-update tag action | Nine language-local surfaces + algebra/property/model/invariant tests; OCaml makes no lazy-update bound claim |
@@ -1019,15 +1019,16 @@ and break-even gates. Evaluate RRB transients, Ctrie snapshot-to-frozen conversi
 families only after the corresponding C# reference contract settles. Sibling lifecycle parity does
 not authorize sibling frozen types or a claim of owner-token edit performance.
 
-### Cursor / zipper over the sequence family
+### Cursor over the sequence family
 
 **Status (updated 2026-07-17): C# C1, C2, and C3 are shipped; C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml have
 positional and measured/text semantic checkpoints.**
-The [repository-wide persistent zipper design](../proposals/repository-wide-persistent-zipper-design.md)
+The [repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md)
 now audits every persistent family and specifies candidate deque, raw-measured, RRB, Range, sorted,
-ordered, Patricia, Merkle, and Tungsten cursors plus explicit exclusions. It is a forward-looking
+ordered, Patricia, and Merkle cursors plus explicit exclusions. Tungsten cursor work is explicitly
+excluded. The proposal is a forward-looking
 applicability and contract document: it does not change this catalog's shipped status, clear C4's
-consumer/evidence gates, or turn sibling semantic checkpoints into focused-zipper implementations.
+consumer/evidence gates, or turn sibling semantic checkpoints into focused cursor implementations.
 `Rope<T>.GetCursor(position)` and the public
 readonly `RopeCursor<T>` implement the positional version-bound gap cursor.
 `MeasuredRope<T, TMeasure, TMeasureOps>.GetCursor(position)` and
@@ -1042,15 +1043,15 @@ Haskell `MeasuredRopeCursor v a`, Kotlin `MeasuredRopeCursor<T, M>`, Rust
 `MeasuredRopeCursor<T, P>`, and the TypeScript, Python, and OCaml measured checkpoints add ordered before/after measures
 and absolute prefix search over their existing measured checkpoint cores. Their `TextRopeCursor`
 surfaces retain the existing text helpers with byte-oriented C/C++, `Char`-element Haskell, UTF-16
-Kotlin and TypeScript, Unicode-scalar Rust and OCaml, and Python Unicode-code-point positions. They deliberately do not claim the C# zipper
+Kotlin and TypeScript, Unicode-scalar Rust and OCaml, and Python Unicode-code-point positions. They deliberately do not claim the C# focused cursor
 representation or its focus-local complexity. The
 [Axis 2 final cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) remains normative for
 the unshipped phases, while the [C0 decision record](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md)
 records the selected representation and proof boundary for C1.
 
-**Selected representation.** C0 selected the zipper-as-version representation as a readonly struct
+**Selected representation.** C0 selected the cursor-as-version representation as a readonly struct
 over immutable version and navigation-context references; it did not select the focused-root
-alternative. The shipped zipper has a bounded 16-element active focus and at most one partial carry
+alternative. The shipped cursor has a bounded 16-element active focus and at most one partial carry
 smaller than 256 elements on each side. Movement and edits return cursor values. Navigation shares
 the logical sequence version and snapshot memo; an edit creates a new version state. The public
 [source](../../src/CSharp/src/Tools.DataStructures.FingerTree/Rope.Cursor.cs),
@@ -1076,7 +1077,7 @@ publish results only on success and support exact source/result aliasing. Copy, 
 and snapshot perform O(1) structural work plus one self-owned policy-context allocation; peeks and
 point edits are O(log n) plus bounded chunk work. Empty/start/end and 2,048-element chunk seams,
 retained branches, failure-output preservation, a 750-command model, and concurrent distinct-handle
-readers are correctness gates. The C checkpoint claims no focused zipper, snapshot memo,
+readers are correctness gates. The C checkpoint claims no focused cursor representation, snapshot memo,
 allocation ceiling, callback ceiling, amortized locality, or
 benchmark evidence. The [C API notes](../../src/C/FingerTree/docs/api-notes.md) own its lifetime and
 failure contract.
@@ -1090,7 +1091,7 @@ bounded chunk work, and range insertion is O(m + log n). The nominal `ft_text_ro
 LF-only text helpers and `ft_text_rope` snapshots. Noncommutative measures, chunk seams, empty/hit/miss search,
 retained edits, a 750-command model, text interoperation, failure-output preservation, and concurrent readers
 are correctness gates. Checked `size_t` growth and line-count overflow publish no result. The C callbacks remain
-infallible by contract, and this checkpoint supplies no zipper, memo, allocation/callback ceiling, locality, or
+infallible by contract, and this checkpoint supplies no focused cursor representation, memo, allocation/callback ceiling, locality, or
 benchmark evidence.
 
 **C++ measured/text checkpoint.** C++ retains `measured_rope<T, MeasurePolicy>` plus a private
@@ -1101,11 +1102,11 @@ bounded chunk work, and range insertion is O(m + log n). The `text_rope_cursor` 
 existing text helpers and their byte-oriented `std::string` positions. Copy-on-move validity,
 lvalue-only borrowed peeks, noncommutative partitions, callback retry, chunk boundaries, a 750-
 command model, tearable concurrent readers, and exact-maximum shared-DAG overflow before new
-element-measure callbacks are correctness gates. They provide no zipper, allocation, locality, or
+element-measure callbacks are correctness gates. They provide no focused cursor representation, allocation, locality, or
 benchmark evidence. The [C++ API notes](../../src/Cpp/FingerTree/docs/api-notes.md) own the contract.
 
 **Kotlin measured/text checkpoint.** Kotlin retains an already-canonical `MeasuredRope<T, M>` plus
-its gap rather than porting the focus/carry zipper. Creation, navigation, positional seek, and
+its gap rather than porting the focus/carry cursor representation. Creation, navigation, positional seek, and
 snapshot are O(1); ordered measure reads, peeks, point edits, and absolute measure search are
 O(log n), and range insertion is O(m + log n). `MeasuredRopeCursorSearch<T, M>` keeps a usable end
 cursor on a miss. The thin `TextRopeCursor` preserves exact text-facade identity across navigation
@@ -1127,7 +1128,7 @@ assumes the aliased text rope came from `fromString`/`fromText` or the extension
 measure; the alias does not nominally enforce that policy. Checked `Int` counts, bounded lazy-list
 preflight, noncommutative measures/search, element and monoid callback failure retry, exact-maximum
 shared DAGs, checked derived line count, text edits, retained versions, deterministic models, and
-concurrent readers are correctness gates. They provide no zipper, memo, allocation, callback-count,
+concurrent readers are correctness gates. They provide no focused cursor representation, memo, allocation, callback-count,
 locality, or benchmark evidence. The [Haskell workspace README](../../src/Haskell/FingerTree/README.md)
 owns this checkpoint's pure-evaluation and complexity boundary.
 
@@ -1142,20 +1143,20 @@ nominal `TextRopeCursor` preserves the exact text facade and reports line/column
 scalar values under the existing LF-only newline measure. Noncommutative partitions, predicate-
 panic retry, retained branches, nullable and non-`Clone` values, a 750-command gap model, cross-
 chunk search, Unicode/CRLF text behavior, `Send + Sync`, and exact-`usize::MAX` shared-DAG overflow
-before element-measure callbacks are correctness gates. They provide no focused-zipper, allocation,
+before element-measure callbacks are correctness gates. They provide no focused cursor representation, allocation,
 locality, or benchmark evidence. The [Rust API notes](../../src/Rust/FingerTree/docs/api-notes.md)
 own this checkpoint's contract and complexity boundary.
 
 **TypeScript and Python measured/text checkpoints.** Both packages retain an immutable rope snapshot
 plus a validated gap and create a new snapshot on edit. Their positional, measured, and text cursors
 preserve before/after measures, absolute prefix search, retained branches, unconditional replacement,
-and usable snapshots without claiming the C# focus/carry zipper or its locality and allocation
+and usable snapshots without claiming the C# focus/carry cursor representation or its locality and allocation
 bounds. Entry-shaped previous/next peeks distinguish a missing neighbor from a stored
 `undefined`/`None` value. `ReplaceNext` never takes an element-equality shortcut: it creates an edit
 version, and measured replacement invokes the element-measure callback for the supplied replacement
 before publication. TypeScript retains its UTF-16 text indexing contract. Python builds on the package's
 immutable measured-AVL checkpoint and counts positions, lines, and columns in Unicode code points;
-its API and executable models, not the C# zipper analysis below, define the complexity boundary.
+its API and executable models, not the C# focused cursor analysis below, define the complexity boundary.
 
 **Gap and version semantics.** A cursor denotes a boundary `0 .. Count`, not an element. Previous
 peek/movement/backspace address `p - 1`; next peek/movement/delete/replace address `p`. Insertion
@@ -1187,14 +1188,14 @@ plus bounded focus/carry copying per branch. Potential consumed by one child can
 sibling.
 
 **Remaining phases.** C4 separately evaluates `FingerTreeDeque<T>` and leaves editable RRB,
-`ReversibleDeque`, raw `FingerTree`, Tungsten, bookmark/rebase, and range-update cursors deferred
-until a consumer and benchmark justify them.
+`ReversibleDeque`, raw `FingerTree`, bookmark/rebase, and range-update cursors deferred until a
+consumer and benchmark justify them. Tungsten cursor work is excluded rather than deferred.
 
 **Verdict: C1, C2, and C3 implemented; C4 remains consumer-gated.** The
 positional and measured cursors separately cleared their named local-edit, query, allocation,
 callback, and validation gates; the samples lock retained-history, branch, coordinate, and
 cadence-sixteen transcripts. The C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml positional/measured/text
-checkpoints add semantic behavior parity without asserting zipper or
+checkpoints add semantic behavior parity without asserting a focused cursor representation or
 benchmark parity. Those results do not
 pre-approve later sequence adapters or a broader branched-history complexity claim.
 
@@ -1445,7 +1446,7 @@ records, not candidates awaiting a consumer.
 Future work on the already cross-language Axis 1 cores is ordinary hardening and isolated
 measurement. The benchmark-independent parity bill is complete: single-pass HAMT updates, hash
 bags, strict bimaps, neutral ordered sets, and Range now ship across all nine languages. The
-C/C++/Haskell/Kotlin/Rust/TypeScript/Python/OCaml checkpoints make no zipper or focus-local complexity claim; measured/text
+C/C++/Haskell/Kotlin/Rust/TypeScript/Python/OCaml checkpoints claim no focused cursor representation or focus-local complexity; measured/text
 cursor parity now spans all nine languages. The cursor's C4
 extensions retain the separate status recorded in its entry above.
 
@@ -1459,7 +1460,7 @@ slot unless a later dedicated plan says otherwise. The
 The cursor's P0/C0/C1/C2/C3 tranche and the transient's P0/T0/T1/T2 tranche are complete;
 remaining work is sequenced as follows:
 
-1. **C1 is shipped:** C0 selected the readonly-struct zipper-as-version with focus 16 and flush 256,
+1. **C1 is shipped:** C0 selected the readonly-struct cursor-as-version representation with focus 16 and flush 256,
    closed focused-root escalation, and published the linear-lineage/O(b log n) branch scope.
 2. **T2's optimized kernel is shipped in C#, and semantic sessions are shipped across the sibling
    languages:** T0 qualified the clustered many-edit regime, T1 selected the direct separate-node
@@ -1471,9 +1472,9 @@ remaining work is sequenced as follows:
 4. **C3 is shipped:** Editor and Tour retain measured cursors, use the measured cadence of sixteen,
    and smoke-lock their undo, branch, Unicode, and line/column transcripts.
 5. Evaluate **C4 later sequence cursors** separately and only for a named consumer, using the
-   [repository-wide zipper design](../proposals/repository-wide-persistent-zipper-design.md) for
+   [repository-wide cursor design](../proposals/repository-wide-persistent-cursor-design.md) for
    applicability and contract details; do not infer a deque, RRB, reversible-deque, raw-FingerTree,
-   Range, Ordered, or Tungsten shipment from C1 or from the proposal.
+   Range or Ordered shipment from C1 or from the proposal. Tungsten cursor work is not planned.
 6. Complete the postponed **F0 packed-index signal gate** in isolation, then run F1 only if F0
    records an evidence-backed advance. Complete the dependent **F1 fixed-layout evidence collection**
    before any F2 public implementation.
@@ -1554,7 +1555,7 @@ catalog's summary alone.
   CHAMP's equality/diff entry here is the core-level realization of that catalog's top-ranked gap.
 - [Next data structures proposal (2026-07-09)](../proposals/new-data-structures-2026-07-09.md) -
   the original committed slate this catalog complements. Patricia and RRB are now implemented;
-  its cursor/zipper item is historical and refined by the Axis 2 final plan.
+  its cursor item is historical and refined by the Axis 2 final plan.
 - [Axis 2 final lifecycle and sequence-cursor plan](../proposals/axis2-lifecycle-and-sequence-cursors.md) -
   the normative C#-first state machine, API sketches, complexity corrections, benchmark gates,
   deferrals, and rollout for the active lifecycle/cursor work.

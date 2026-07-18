@@ -1,37 +1,38 @@
-# Repository-Wide Persistent Zipper Design
+# Repository-Wide Persistent Cursor Design
 
 - Created (UTC): 2026-07-18T00:59:25Z
 - Repository HEAD: 5a51fc35ce9f5f7a4333d7fc29857af25fd188d3
 - Status: Design proposal; only the rope cursor surfaces identified below are currently shipped
 - Audience: Maintainers and port authors designing persistent navigation and localized editing
 - Scope: Applicability, semantics, representations, APIs, complexity, validation, and porting of
-  zippers across every repository-owned persistent data-structure family
+  cursors across every repository-owned persistent data-structure family
 
 ## Decision
 
-Adopt one repository-wide zipper vocabulary, but do **not** add one undifferentiated generic zipper
-to every immutable type.
+Adopt one repository-wide **cursor** vocabulary, but do **not** add one undifferentiated generic
+cursor to every immutable type.
 
-1. Public zippers are immutable, version-bound **cursors** over a stable semantic navigation axis.
+1. Public cursors are immutable and version-bound over a stable semantic navigation axis.
    Positional and insertion-ordered collections use a gap in `0 .. Count`; key- or value-sorted
    collections use an ordered search location with before-first and after-last sentinels; nested
    ordered collections expose both applicable axes.
-2. Recursive implementation trees may use private structural zippers whose breadcrumbs retain the
-   information needed to rebuild valid ancestors. A private edit path is not automatically a new
-   public collection feature.
+2. Recursive implementation trees may use private focused edit paths whose breadcrumbs retain the
+   information needed to rebuild valid ancestors. A private path is not automatically a new public
+   collection feature.
 3. A hash-trie or heap topology is not a public navigation order. CHAMP, dual-hash-index facades,
-   concurrent tries, and meldable heaps therefore do not expose public zippers merely because their
+   concurrent tries, and meldable heaps therefore do not expose public cursors merely because their
    implementations are recursive.
 4. Every cursor is itself a persistent working version. Navigation and edits return new cursor
    values, retained ancestors remain usable, and materializing the collection never consumes the
    cursor.
-5. Public APIs use `Cursor`; documentation and implementation notes use *zipper* for the focused
-   representation. This follows the terminology already selected for the shipped rope cursors.
-6. The existing C# focused rope zipper and the eight sibling snapshot-plus-gap cursor checkpoints
+5. `Cursor` is the sole normative API and documentation term. The background below mentions Huet's
+   historical name once to explain the concept's origin; subsequent sections use *focused cursor*
+   or *edit path* for representations.
+6. The existing C# focused rope cursor and the eight sibling snapshot-plus-gap cursor checkpoints
    remain the normative shipped surfaces. This proposal generalizes their observable contract but
    does not retroactively claim their representations or performance for another family or port.
-7. Tungsten cursors, if implemented, remain application-leaf APIs. General-purpose code must never
-   depend on them or adopt their behavior as its semantic baseline.
+7. Tungsten collections do not need cursors. They remain application-leaf consumers of ordinary
+   repository-general collections and are explicitly excluded from the proposed cursor surface.
 
 This proposal is intentionally a design, not a shipment claim. A row marked **public cursor** below
 means that the abstraction is applicable and specified here; it does not mean that the named type
@@ -40,14 +41,15 @@ where performance is claimed, and repository catalog update.
 
 ## Background And Repository Context
 
-Huet's original zipper represents a focused subtree together with a reversed path containing the
-siblings and constructor information needed to rebuild the root. Moving the focus changes that
-decomposition; replacing the focus is local; closing the zipper reconstructs the complete tree.
-The same idea gives a sequence location as `left context + focus or gap + right context`.
+Huet called the underlying focused-path technique a *zipper*: a focused subtree is paired with a
+reversed path containing the siblings and constructor information needed to rebuild the root.
+Moving the focus changes that decomposition; replacing it is local; closing the cursor reconstructs
+the complete tree. The same idea gives a sequence location as
+`left context + focus or gap + right context`. This document uses **cursor** from this point onward.
 
-The user-provided [zipper overview](https://en.wikipedia.org/wiki/Zipper_(data_structure)) is a useful
-orientation. The primary source is Gérard Huet's 1997 paper,
-[The Zipper](https://www.st.cs.uni-saarland.de/edu/seminare/2005/advanced-fp/docs/huet-zipper.pdf)
+The user-provided [historical overview](https://en.wikipedia.org/wiki/Zipper_(data_structure)) is a
+useful orientation. The primary source is
+[Gérard Huet's 1997 paper](https://www.st.cs.uni-saarland.de/edu/seminare/2005/advanced-fp/docs/huet-zipper.pdf)
 ([DOI](https://doi.org/10.1017/S0956796897002864)). Repository designs add constraints that the
 minimal tree example does not have: cached monoidal measures, balancing, canonical ranks, lazy tags,
 content digests, comparer and ownership policies, multiple indexes that must publish atomically,
@@ -56,22 +58,23 @@ and cross-language failure models.
 The repository already ships a production instance of the idea:
 
 - C# `RopeCursor<T>` and `MeasuredRopeCursor<T, TMeasure, TMeasureOps>` use a persistent
-  zipper-as-version with a bounded 16-element focus, bounded carries, and a memoized canonical
-  snapshot. Their exact representation, proof boundary, and performance evidence remain owned by
+  focused-cursor-as-version representation with a bounded 16-element focus, bounded carries, and a
+  memoized canonical snapshot. Their exact representation, proof boundary, and performance evidence
+  remain owned by
   the [positional decision](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md),
   [measured decision](../../src/CSharp/docs/FingerTree/measured-rope-cursor-c2-decision.md), and
   [FingerTree API specification](../../src/CSharp/docs/FingerTree/api-specification.md#positional-edit-cursor).
 - C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python expose equivalent version-bound rope
-  cursor semantics through snapshot-plus-gap checkpoints. They deliberately make no C# focused-
-  zipper, memoization, allocation, callback-count, or amortized-locality claim. The shared current
-  contract is in [semantic contracts](../reference/semantic-contracts.md#ropes-and-text).
+  cursor semantics through snapshot-plus-gap checkpoints. They deliberately make no C# focused
+  representation, memoization, allocation, callback-count, or amortized-locality claim. The shared
+  current contract is in [semantic contracts](../reference/semantic-contracts.md#ropes-and-text).
 
 This design preserves that distinction. Observable parity does not imply representation or
 complexity parity.
 
 ## Goals
 
-- Decide, explicitly and exhaustively, which persistent families have a meaningful zipper.
+- Decide, explicitly and exhaustively, which persistent families have a meaningful cursor.
 - Give applicable families a coherent focus model, navigation vocabulary, editing rules,
   reconstruction invariant, and honest complexity target.
 - Preserve every collection's equality, ordering, measure, representative, ownership, balancing,
@@ -80,13 +83,12 @@ complexity parity.
 - Provide a C#-shaped reference API while allowing idiomatic C, C++, Haskell, Kotlin, OCaml, Rust,
   TypeScript, and Python spellings.
 - Separate semantic baseline requirements from optional focused-representation optimizations.
-- Reuse repository-general sequence and ordered-cursor mechanisms inside Tungsten without reversing
-  the repository's one-way dependency boundary.
+- Record explicitly that Tungsten collections need no cursor surface.
 
 ## Non-Goals
 
 - No implementation is authorized merely by this document.
-- No universal reflection- or continuation-based generic zipper is proposed.
+- No universal reflection- or continuation-based generic cursor is proposed.
 - No raw private node, digit, sparse label, owner token, hash fragment, lazy suspension, or block
   layout becomes public API.
 - No cursor silently rebases onto an unrelated collection version.
@@ -110,13 +112,13 @@ complexity parity.
 | **navigation version** | Several cursor positions over the same logical collection version. They may share one materialized-root memo. |
 | **edit version** | A new logical collection version created by a cursor edit. It owns independent context and snapshot state. |
 | **semantic cursor** | Public focus over a promised position, order, key, interval, bit rank, or measure axis. |
-| **structural zipper** | Private focus over implementation nodes. Its shape may change without a public API change. |
+| **structural cursor / edit path** | Private focus over implementation nodes. Its shape may change without a public API change. |
 | **snapshot-plus-position checkpoint** | A correct cursor retaining a canonical root plus position and implementing edits through ordinary persistent operations; it does not claim focused locality. |
-| **focused zipper** | A representation retaining decomposed context so nearby navigation or editing can reuse the open path. |
+| **focused cursor** | A representation retaining decomposed context so nearby navigation or editing can reuse the open path. |
 
 ## Applicability Test
 
-A public zipper is applicable only when all of the following are true:
+A public cursor is applicable only when all of the following are true:
 
 1. **Stable semantic axis.** Consumers can name an order, position, measure boundary, ordered key
    location, or recursive child relation without observing private topology.
@@ -132,7 +134,7 @@ A public zipper is applicable only when all of the following are true:
    ordered one, a priority queue into an arbitrary list editor, or a content-addressed tree into an
    unverified mutable block graph.
 
-When only conditions 3–5 hold for private nodes, an internal structural zipper may be useful but no
+When only conditions 3–5 hold for private nodes, an internal focused path may be useful but no
 public cursor is proposed. When a retained root plus a key or index already provides the complete
 operation with no useful navigation context, the design prefers that simpler value.
 
@@ -144,20 +146,20 @@ The disposition terms are:
 - **public cursor** — applicable and recommended for a future public surface;
 - **specialized cursor** — applicable only on the named semantic axis or behind an evidence/API
   gate; do not expose raw structure;
-- **internal zipper** — useful as a private algorithmic path, not a public abstraction; and
-- **not applicable** — no zipper should be added under the current public contract.
+- **internal edit path** — useful as a private algorithmic path, not a public abstraction; and
+- **not applicable** — no cursor should be added under the current public contract.
 
 | Family | Disposition | Semantic focus or reason |
 | --- | --- | --- |
 | `UInt256`/`Int256`, 512/1024-bit siblings | not applicable | Fixed-size numeric values have bit/limb operations, not a persistent recursive navigation axis; a bit cursor would add state without structural sharing. |
 | `SparseInteger` | not applicable | Its public identity is a number. Internal sparse storage is representation, not a stable child topology. |
-| CHAMP persistent hash map and set | internal zipper | A search/edit breadcrumb stack can retain bitmap nodes and collision context, but hash-trie traversal order and node shape are not public semantics. |
-| Persistent hash bag | internal zipper | Its private adapter uses the CHAMP path, but the public unit is an equality class plus multiplicity; expanded enumeration is not a navigable identity. |
-| Persistent bimap | internal zipper | Paired private paths can publish both indexes, but neither hash enumeration order is semantic; use direct key/value lookup publicly. |
-| Set-valued hash multimap and relation | internal zipper | Nested/paired private paths can publish atomic results, but both public axes are hashed and unordered and have no semantic neighbor. |
-| Persistent map patch | internal zipper | A private CHAMP path can maintain one change, but patch enumeration is otherwise unspecified; lookup/composition remain the public operations. |
-| Persistent directed graph | not applicable | Cycles and multiple parents prevent one unique reconstructing path. A future traversal state is a graph navigator with visited/frontier state, not this zipper contract. |
-| Persistent indexed map | internal zipper | Paired private paths can publish primary and derived indexes, but there is no single canonical public neighbor axis. |
+| CHAMP persistent hash map and set | internal edit path | A search/edit breadcrumb stack can retain bitmap nodes and collision context, but hash-trie traversal order and node shape are not public semantics. |
+| Persistent hash bag | internal edit path | Its private adapter uses the CHAMP path, but the public unit is an equality class plus multiplicity; expanded enumeration is not a navigable identity. |
+| Persistent bimap | internal edit path | Paired private paths can publish both indexes, but neither hash enumeration order is semantic; use direct key/value lookup publicly. |
+| Set-valued hash multimap and relation | internal edit path | Nested/paired private paths can publish atomic results, but both public axes are hashed and unordered and have no semantic neighbor. |
+| Persistent map patch | internal edit path | A private CHAMP path can maintain one change, but patch enumeration is otherwise unspecified; lookup/composition remain the public operations. |
+| Persistent directed graph | not applicable | Cycles and multiple parents prevent one unique reconstructing path. A future traversal state is a graph navigator with visited/frontier state, not this cursor contract. |
+| Persistent indexed map | internal edit path | Paired private paths can publish primary and derived indexes, but there is no single canonical public neighbor axis. |
 | Concurrent hash trie and immutable snapshot view | not applicable | The live structure is mutable/concurrent; its snapshot reduces to the unordered CHAMP decision. A cursor must never imply editable access to a captured generation. |
 | Persistent integer Patricia maps and sets | public cursor | Ascending signed-key order is public and the compressed binary path provides compact reconstructing breadcrumbs. |
 | Merkle search tree | specialized cursor | Ordered key navigation and block-path editing are meaningful, but digest recomputation, canonical codecs, trust boundaries, and block persistence require a dedicated design. |
@@ -169,7 +171,7 @@ The disposition terms are:
 | Rope, measured rope, text rope | shipped cursor | Preserve existing positional, measured, text-unit, branching, snapshot, and port-specific complexity contracts. |
 | Sorted bag, set, and map | public cursor | Comparator-order search location with lower/upper-bound seek, predecessor/successor navigation, and invariant-checked edits. |
 | Canonical zip-zip sorted set | public cursor | Same logical ordered-set cursor; private breadcrumbs additionally maintain deterministic ranks and rotations. |
-| Measured priority queue | internal zipper | Its stored sequence is not a portable public order and arbitrary element editing is not queue semantics. A measured-tree path may remain private; no public cursor ships without a separate occurrence-identity design. |
+| Measured priority queue | internal edit path | Its stored sequence is not a portable public order and arbitrary element editing is not queue semantics. A measured-tree path may remain private; no public cursor ships without a separate occurrence-identity design. |
 | Brodal–Okasaki heap | not applicable | The forest topology is private and unstable under meld/delete-min; minimum access is already the semantic focus. |
 | Priority-search queue | public cursor | Keys define a stable sorted axis; edits may replace priority/value while winner caches are rebuilt. Priority order is a query, not a second cursor order. |
 | Interval tree | public cursor | Nondecreasing low-endpoint order with duplicate-occurrence positions; overlap summaries rebuild through context. |
@@ -177,9 +179,8 @@ The disposition terms are:
 | Persistent chunked bit set | public cursor | Population-rank gap whose next entry is an existing set bit; seek by bit index, rank, or select. Chunk boundaries stay private. |
 | Persistent ordered set and map | public cursor | Insertion/explicit-position gap; edits update sequence and hash index atomically without exposing sparse labels. |
 | Persistent ordered multimap | public cursor | Nested outer key-group and inner value-order gaps; flattened pair movement is derived, not the sole representation. |
-| Tungsten `PersistentList` | public cursor | Application-leaf positional gap over the List vocabulary; may consume a general sequence cursor. |
-| Tungsten `PersistentAssociation` | public cursor | Application-leaf Association-order gap plus keyed search, preserving kernel-driven update/move rules inside Tungsten only. |
-| Builders, one-way edit sessions, block stores, proofs, packs, and DABA Lite | not applicable | These are mutable lifecycles, persistence support values, authenticated artifacts, or a mutable window—not persistent aggregate values needing zippers. |
+| Tungsten `PersistentList` and `PersistentAssociation` | not applicable | These application-leaf collections have no cursor requirement; their existing persistent operations remain the complete surface. |
+| Builders, one-way edit sessions, block stores, proofs, packs, and DABA Lite | not applicable | These are mutable lifecycles, persistence support values, authenticated artifacts, or a mutable window—not persistent aggregate values needing cursors. |
 
 ## Shared Public Cursor Contract
 
@@ -199,7 +200,7 @@ to another root.
 - Automatic rebasing is absent. A later change-record API may rebase only when it explicitly proves
   source-version compatibility and defines insertion affinity.
 
-This is the same *zipper-as-version* semantic choice already made by the rope cursor. It prevents the
+This is the same *cursor-as-version* semantic choice already made by the rope cursor. It prevents the
 most dangerous cursor error: applying a path captured from version A to version B, where balancing,
 hash policy, ordering, counts, tags, or digests differ.
 
@@ -219,8 +220,8 @@ gap after inserted values. Backspace deletes `p - 1` and returns `p - 1`. Forwar
 replacement address `p` and keep the gap fixed. Empty, start, and end gaps are ordinary valid
 states.
 
-This model applies to deques, measured sequences, RRB vectors, range-update sequences, ropes,
-ordered insertion-position collections, and Tungsten lists/associations.
+This model applies to deques, measured sequences, RRB vectors, range-update sequences, ropes, and
+ordered insertion-position collections.
 
 #### Ordered search location
 
@@ -244,7 +245,7 @@ sparse-bit-set families.
 
 #### Internal subtree focus
 
-A structural zipper is:
+A structural cursor is:
 
 ```text
 Location<Node> = FocusedSubtree<Node> + Stack<Frame<Node>>
@@ -372,8 +373,8 @@ uninitialized and safe to dispose.
 Initialized immutable cursors are safe for concurrent read-only use to the same extent as their
 source collections and reachable policy/callback objects. Editing returns new values and ordinarily
 needs no cross-thread coordination, subject to the owning collection's lifetime rules. In
-particular, related C HAMT/Patricia and Tungsten Association versions with non-atomic intrusive
-reference counts must be derived, copied, and destroyed serially or under an external lock. The
+particular, related C HAMT/Patricia versions with non-atomic intrusive reference counts must be
+derived, copied, and destroyed serially or under an external lock. The
 only permitted internal mutation is publication of a semantically invisible cache such as a
 canonical snapshot or prepared measure table; it must be thread-safe, winner-returning, and
 failure-atomic.
@@ -395,7 +396,7 @@ cursor whose next move can observe a different generation.
 
 ## Representation Profiles
 
-### Profile S: Sequence Gap Zipper
+### Profile S: Focused Sequence Gap Cursor
 
 The logical invariant is:
 
@@ -411,7 +412,7 @@ is `(canonicalRoot, position)`. A true focused implementation may specialize the
 digit, chunk, or small bounded buffer and retain left/right contexts. It must state its own packing,
 underflow, overflow, and branch-amortization proof.
 
-### Profile T: Ordered Tree Search Zipper
+### Profile T: Focused Ordered Tree Search Cursor
 
 For a binary search-like tree, each frame is conceptually:
 
@@ -442,7 +443,7 @@ A facade with multiple indexes exposes the semantic axis but keeps all index roo
 cursor version:
 
 ```text
-CompositeVersion = (orderedZipper, membershipRoot, secondaryRoots..., policies, counts)
+CompositeVersion = (orderedCursor, membershipRoot, secondaryRoots..., policies, counts)
 ```
 
 An edit first prepares the ordered successor and every lookup/index successor, validates their
@@ -554,7 +555,7 @@ valid. The cursor must not expose whether one port uses a Hinze–Paterson finge
 checkpoint, or another representation.
 
 An initial Profile R implementation can retain `(tree, boundary descriptor)` and use `Split`,
-`TryViewLeft`, `TryViewRight`, and `Concat`. A later focused zipper must show that it improves a named
+`TryViewLeft`, `TryViewRight`, and `Concat`. A later focused cursor must show that it improves a named
 localized history without weakening the raw tree's current fully persistent amortization claims.
 It must not infer the C# rope's bounded-focus proof: the raw tree has elements rather than rope
 chunks and a different lazy-spine potential.
@@ -568,7 +569,7 @@ chunks and a different lazy-spine potential.
   operation does not remeasure elements.
 - A callback failure leaves the cursor at its old location with its old materialized snapshot.
 - A dirty snapshot closes frames bottom-up and may force or publish ordinary tree suspensions; no
-  zipper-specific cache is visible to callers.
+  cursor-specific cache is visible to callers.
 
 Creation at an endpoint is targeted at O(1). Monotone seek retains the tree's existing split bound.
 One neighbor step may target O(1) amortized and O(log n) worst, and a complete post-seek traversal
@@ -657,12 +658,12 @@ states and non-palindromic range insertion.
 ### Relaxed Radix-Balanced Vector
 
 `RrbVector<T>` and sibling RRB vectors receive `RrbVectorCursor<T>`, a positional gap cursor. RRB is
-a particularly good zipper target because one open radix path can serve several nearby indexed
+a particularly good focused-cursor target because one open radix path can serve several nearby indexed
 reads or edits without repeating root descent.
 
 The radix representation below applies only to ports that actually ship packed/relaxed RRB nodes.
 OCaml's current `Rrb_vector` reuses a balanced persistent sequence and expressly makes no relaxed-
-radix topology claim; it uses Profile R or a zipper over its own tree with that implementation's
+radix topology claim; it uses Profile R or a focused cursor over its own tree with that implementation's
 bounds and invariants.
 
 #### Representation
@@ -720,7 +721,7 @@ constant-amortized arbitrary version-DAG editing.
 `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` and its sibling ports receive a positional and
 measured `RangeUpdateSequenceCursor`. Ports whose collection is the path-copied implicit AVL can use
 the focused design below; pending lazy tags make its context more than an ordinary binary-tree
-derivative. A port with another representation uses Profile R or a topology-local zipper and keeps
+derivative. A port with another representation uses Profile R or a topology-local cursor and keeps
 its documented bounds. In particular, OCaml's immutable-array checkpoint claims neither the AVL
 frames nor logarithmic edit/measure bounds described for the reference core.
 
@@ -752,7 +753,7 @@ The first edit through a tagged path prepares an immutable normalized edit spine
 4. do **not** apply old tags to a newly inserted or replacement element; and
 5. rebuild AVL height, count, logical measure, and optional pending-tag state after rotations.
 
-The zipper never uses `default(TTag)` as an absence marker. It preserves the separate presence bit
+The cursor never uses `default(TTag)` as an absence marker. It preserves the separate presence bit
 and clears a composed tag only through `IsIdentity` under the existing law-gated contract.
 
 #### Surface
@@ -776,7 +777,7 @@ nonempty result combines elements in snapshot order. Their bounds are the owning
 `MeasureRange` bound plus any cursor-close/open work, never an assumed constant-time inverse.
 
 A whole-version tag through a clean root-plus-gap checkpoint can retain the owning substrate's O(1)
-root update when that substrate promises it. A dirty focused zipper cannot inherit that result
+root update when that substrate promises it. A dirty focused cursor cannot inherit that result
 automatically: it must first close, retain a separately specified global overlay tag across both
 sides, or use another proved representation. The implementation must document which path it takes
 and its cache/failure behavior. Absolute range operations remain available on `Snapshot()` or
@@ -819,7 +820,7 @@ proven linear-lineage complexity scope.
 The queue's underlying measured tree has an insertion/meld sequence, but its stable semantic focus
 is the minimum-priority entry. An arbitrary occurrence has no key or handle by which a cursor could
 survive domain operations, and exposing `ReplaceNext` would turn the queue into a list editor with a
-priority cache. Keep a measured-tree structural zipper private for `TryDequeue` or traversal
+priority cache. Keep a measured-tree structural cursor private for `TryDequeue` or traversal
 experiments. A future read-only occurrence cursor requires a separate occurrence-identity design and
 consumer evidence; it is not part of the first public tranche.
 
@@ -829,14 +830,14 @@ The shipped heap's bootstrapped skew-binomial structure, fused primitive child/e
 skew-rank invariants are private and may change drastically after `Meld` or `DeleteMinimum`. There
 is no comparer-ordered neighbor traversal, and an arbitrary focused node cannot be replaced without
 restoring global heap invariants. `Minimum`, `Insert`, `Meld`, and `DeleteMinimum` already express
-its semantic locations. Do not add a public zipper.
+its semantic locations. Do not add a public cursor.
 
 #### DABA Lite and builders
 
 `DabaLite` is a mutable FIFO aggregate that overwrites/detaches raw-value storage and does not expose
 persistent snapshots; native ports destroy detached values promptly, while tracing-GC ports leave
 reclamation to their runtimes. RRB/rope/sorted builders are mutable staging lifecycles. A persistent
-zipper would neither describe their ownership nor improve their intended operations. They remain
+cursor would neither describe their ownership nor improve their intended operations. They remain
 out of scope. Immutable snapshots produced by a builder may create an ordinary family cursor after
 publication.
 
@@ -873,7 +874,7 @@ navigation are in the collection's documented logical order. A factory preserves
 or policy even on an empty result. Comparing a key may throw; the source cursor remains usable.
 
 The portable checkpoint stores `(canonical root, rank or search key, policy)`. A focused ordered-tree
-zipper uses Profile T. Finger-tree-backed ordered facades may use Profile S with order-statistic
+cursor uses Profile T. Finger-tree-backed ordered facades may use Profile S with order-statistic
 measures. The public contract does not reveal which one a port selected.
 
 ### Sorted Bag
@@ -891,7 +892,7 @@ measures. The public contract does not reveal which one a port selected.
 - Do not expose arbitrary replacement. Changing an occurrence can change its sort position; the
   unambiguous operation is delete followed by `Add`, which returns the new upper-bound location.
 
-An element-per-leaf finger-tree port can use an ordered measured-gap zipper. A bucketed port, such
+An element-per-leaf finger-tree port can use an ordered measured-gap cursor. A bucketed port, such
 as one storing a distinct key with a persistent duplicate sequence, uses a nested `(key path,
 occurrence offset)` focus or the root-plus-rank checkpoint. It must preserve the same observable
 stable order without claiming the other representation.
@@ -934,12 +935,12 @@ cursor.
 Closing a finger-tree implementation recomputes count and last-key order-statistic measures in
 source order. An AVL/B-tree implementation instead repairs balance and key bounds. A configured
 value-equivalent update preserves the current cursor version only where the ordinary map promises
-that no-op; the zipper does not invent a cross-port equality policy.
+that no-op; the cursor does not invent a cross-port equality policy.
 
 ### Canonical Zip-Zip Sorted Set
 
 `CanonicalSortedSet<T>` uses the sorted-set public cursor, backed in full implementations by a
-Cartesian-tree zipper. A frame is:
+Cartesian-tree cursor. A frame is:
 
 ```text
 WentLeft  (ancestorItem, ancestorRank, untouchedRight)
@@ -1021,7 +1022,7 @@ intervals. Replacing endpoints is not a local edit because it can move the inter
 remove-plus-insert and return the newly located cursor. `Coalesce` remains a collection-wide
 operation producing a new cursor only after materializing its result.
 
-Interval validity is delegated to the owning API. A zipper must not silently normalize or reject an
+Interval validity is delegated to the owning API. A cursor must not silently normalize or reject an
 interval differently from the collection on which it is built. Seek and augmented queries retain
 the local logarithmic/output-sensitive bounds; repeated overlap continuation and duplicate-low
 scans must state any additional run cost honestly.
@@ -1042,7 +1043,7 @@ key `(Low, High)` under the endpoint policy.
 Context measures preserve count, rightmost complete interval key, and max-high. Whether a port uses
 one augmented tree for exact and overlap queries or composes multiple physical indexes is private;
 every cursor edit publishes the exact-key and augmented-search state together or publishes nothing.
-No endpoint replacement or zipper-level `Coalesce` is proposed because both require application-
+No endpoint replacement or cursor-level `Coalesce` is proposed because both require application-
 specific payload decisions.
 
 ### Persistent Chunked Bit Set
@@ -1082,7 +1083,7 @@ Enumeration, rank, select, count width, and overflow remain language-local.
 
 ## Neutral Ordered Composite Designs
 
-The independently owned Ordered family is a particularly strong public-zipper fit because insertion
+The independently owned Ordered family is a particularly strong public-cursor fit because insertion
 and explicit-position order are semantic. Under this proposal it would receive cursors over that
 order while retaining the hashed membership/key index as an atomic auxiliary root. It never exposes
 sparse stamps or depends on Tungsten.
@@ -1217,62 +1218,19 @@ O(log v + log k) sequence closure; inner relabeling costs O(v (w_v + c_v)) and o
 O(k (w_k + c_k)) per produced version. A flattened seek without an outer pair-count measure is
 honestly O(k + log v).
 
-## Tungsten Application-Leaf Designs
+## Tungsten Exclusion
 
-These designs live inside Tungsten packages and follow the normative
-[application-leaf boundary](../reference/tungsten-application-leaf-boundary.md). A Tungsten type may
-consume a repository-general deque or ordered cursor. A general library may not reference, wrap,
-subclass, or adopt the Tungsten cursor or its kernel-driven behavior.
-
-### Tungsten Persistent List
-
-`PersistentList<T>` would receive the leaf-local equivalent of the deque positional cursor. Prefer
-an adapter over a general deque cursor when that dependency exists in the allowed direction.
-
-Peeks, move, seek, insertion/range insertion, previous/next deletion, and snapshot follow the shared
-gap contract. `ReplaceNext` follows Tungsten List `SetItem`: it creates a new logical version even
-for an equal or identical value and invokes no equality callback. Empty insertion is the exact
-no-op. An optional `UpdateNext` invokes its updater exactly once after boundary validation and
-publishes nothing on failure.
-
-The focused target is the consuming deque's local bound. A sibling root-plus-gap implementation may
-ship with ordinary O(log n) edits but must not claim the C# rope or a future tuned-deque locality
-profile.
-
-### Tungsten Persistent Association
-
-`PersistentAssociation<TKey, TValue>` would receive an Association-order gap cursor plus complete
-key index and retained policy. Its update and movement behavior is explicitly application-specific.
-
-- `TrySeekKey` places the gap before the stored entry; an instance-method miss returns `false` with
-  the receiver location unchanged, while a collection factory may document an end cursor.
-- `SetNextValue` preserves the focused stored key, position, and stamp and applies Association's
-  existing value no-op rule.
-- `DeletePrevious`/`DeleteNext` removes both keyed and ordered state atomically.
-- `InsertHere(key, value)` mirrors Association's current positional insertion rule. The position is
-  interpreted against the pre-removal association. If an equivalent key at rank `r` precedes target
-  `p`, remove it and insert at `p - 1`; otherwise insert at `p`. The returned gap is after the
-  installed entry.
-- Existing-key insertion adopts the incoming key representative and creates a new logical version/
-  stamp even when the resulting key/value pair compares equal, exactly where the Tungsten contract
-  requires it. It is not neutral Ordered-map behavior.
-
-`Append`, `Prepend`, keyed/positional take, join, and stable sorts remain collection-wide operations;
-they may return a cursor over their completed result but are not disguised as focus-local edits.
-Private stamp exhaustion retains the application leaf's unpublished relabel behavior.
-
-C's cursor uses explicit copy/move/dispose and the Tungsten package's established source/result
-alias rules. Its non-atomic shared-state reference counts require related-version construction to be
-serialized before completed snapshots are handed to concurrent readers. Managed and value-semantic
-ports use their own lifetime/result conventions. Sibling Tungsten ports may use C# as semantic
-authority; neutral Ordered validation must never use Tungsten as an oracle.
+Neither Tungsten `PersistentList` nor `PersistentAssociation` receives a cursor. Their existing
+application-leaf operations remain the complete surface. This exclusion does not constrain cursor
+designs in repository-general HAMT, FingerTree, or Ordered substrates and does not change the
+normative [application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md).
 
 ## Numeric Exclusions
 
 ### Fixed-Width Integers
 
 `UInt256`/`Int256`, 512-bit, and 1024-bit values are numeric scalars. Their fixed-width half/limb
-representations are implementation details, not public recursive constructors. A limb zipper would
+representations are implementation details, not public recursive constructors. A limb cursor would
 expose layout and endianness, add more state than copying a fixed 32/64/128-byte value, and provide
 no asymptotic structural-sharing benefit. A bit-gap editor would actually be a shift/mask/bit-string
 API; insertion and deletion do not naturally preserve fixed width. No cursor is designed.
@@ -1280,21 +1238,21 @@ API; insertion and deletion do not naturally preserve fixed width. No cursor is 
 ### Sparse Integer
 
 `SparseInteger` is also a scalar. C# uses recursive sparse-position storage internally, while
-TypeScript, Python, and OCaml use their arbitrary-precision integer substrates. Publicly freezing a tree path
-would make one representation a cross-language semantic authority. Moving a set-bit exponent can
-also trigger numeric carries, ordering/uniqueness repair, and a canonical small/large representation
-transition rather than one local subtree replacement.
+TypeScript, Python, and OCaml use their arbitrary-precision integer substrates. Publicly freezing a
+tree path would make one representation a cross-language semantic authority. Moving a set-bit
+exponent can also trigger numeric carries, ordering/uniqueness repair, and a canonical small/large
+representation transition rather than one local subtree replacement.
 
 Consumers needing navigable sparse set bits should use `PersistentChunkedBitSet`; wide-integer
 consumers use existing arithmetic/bit operations, while sparse-integer consumers use its arithmetic
 operations. `BitConverterEx`, codecs, policies, measures, predicates, result records, and split
-carriers are stateless or auxiliary values rather than persistent aggregates and receive no zipper.
+carriers are stateless or auxiliary values rather than persistent aggregates and receive no cursor.
 
 ## HAMT And Hash-Composition Designs
 
 ### Why CHAMP Has No Public Cursor
 
-CHAMP map/set nodes are recursive, so a private Huet zipper is well defined. The public collection
+CHAMP map/set nodes are recursive, so a private focused edit path is well defined. The public collection
 does not have a meaningful focus axis:
 
 - equality and the 32-bit hash determine every child choice; callers cannot semantically choose a
@@ -1312,7 +1270,7 @@ No `PersistentHashMapCursor`, `PersistentHashSetCursor`, or editable CHAMP snaps
 proposed. Existing enumerators remain the representation-order traversal surface. The reusable
 private edit path below may improve implementation factoring without changing public semantics.
 
-### Private CHAMP Edit-Path Zipper
+### Private CHAMP Edit Path
 
 The private engine is shared by ordinary map/set point operations and the composite preparation
 protocols below.
@@ -1382,7 +1340,7 @@ ports follow their clone/move/GC rules. Failure leaves the old path reusable.
 
 ### Persistent Hash Bag Adapter
 
-The bag has no public occurrence zipper. Its expanded equal occurrences are multiplicity, not
+The bag has no public occurrence cursor. Its expanded equal occurrences are multiplicity, not
 separately stored positions. A private adapter focuses one distinct equality class:
 
 ```text
@@ -1459,7 +1417,7 @@ edit. `Inverse` stays the public O(1) dual view.
 
 ### Persistent Map Patch Adapter
 
-Patch enumeration is unordered, so a public zipper would not improve the semantic workflows
+Patch enumeration is unordered, so a public cursor would not improve the semantic workflows
 `Between`, preflight `Apply`, `Invert`, and `Compose`. A private path focus stores one patch key and
 its explicit present/absent before/after values.
 
@@ -1489,11 +1447,11 @@ For an update:
 Removal uses the stored selected key and never invokes the selector. The cost is a bounded number of
 CHAMP paths plus at most one selector call.
 
-### Persistent Directed Graph: Traversal, Not Zipper
+### Persistent Directed Graph: Traversal, Not A Cursor
 
 A graph's cycles, self-loops, and multiple incoming paths prevent one unique reconstructing ancestor
 context. Choosing a spanning-tree parent records traversal history, not collection structure. No
-Huet zipper is designed.
+cursor is designed.
 
 If current enumeration proves insufficient for a named consumer, add a separately named immutable
 `GraphTraversal` bound to one graph snapshot, with:
@@ -1625,11 +1583,11 @@ and merge operate on the closed snapshot.
 - Create a cursor only from an in-memory tree constructed normally or obtained through completely
   verified `Load`/`Import`.
 - Cursor operations do not weaken codec canonical-round-trip checks or verification budgets.
-- `MerkleProof` is authenticated partial evidence, not a zipper: opaque child digests cannot
+- `MerkleProof` is authenticated partial evidence, not a cursor: opaque child digests cannot
   reconstruct omitted subtrees.
 - `MerkleSyncPlan` is a transfer frontier, not a location.
 - Neither `MerkleBlock` nor store content becomes editable through the cursor.
-- Root trust, authentication, confidentiality, replay, and peer identity remain outside the zipper
+- Root trust, authentication, confidentiality, replay, and peer identity remain outside the cursor
   exactly as they are outside the tree.
 
 Let `h` be block height, `e_i` the occupancy of visited block `i`, and `S` changed encoded bytes. Key
@@ -1651,13 +1609,13 @@ retained branches, and codec failures.
 
 ### Concurrent Hash Tries
 
-Reject a live editable zipper for C#/Kotlin lock-free Ctries and the TypeScript, Python, and OCaml
+Reject a live editable cursor for C#/Kotlin lock-free Ctries and the TypeScript, Python, and OCaml
 snapshot facades. A focus cannot remain attached to one structural generation while concurrent
 writes renew paths, and write-back would require a new compare/exchange, conflict, factory-retry,
 and linearization contract that the ports do not share.
 
 An optional read-only `SnapshotTraversal` may capture one immutable generation and traverse its
-documented snapshot order. It is explicitly outside the reconstructing-zipper contract. Editing
+documented snapshot order. It is explicitly outside the reconstructing-cursor contract. Editing
 follows:
 
 1. capture a snapshot;
@@ -1675,13 +1633,13 @@ them.
 
 Builders contain unpublished mutable nodes or staging state and may freeze repeatedly into detached
 snapshots. Retaining a branchable persistent breadcrumb path across later builder mutation would
-either alias mutable storage or force eager detachment and defeat the builder. No builder zipper is
+either alias mutable storage or force eager detachment and defeat the builder. No builder cursor is
 designed. A frozen persistent snapshot can create its ordinary family cursor.
 
 ### One-Way Editing Sessions
 
-Transients are single-owner and publication consumes the logical session; persistent zippers branch
-freely and materialization does not consume them. A “transient zipper” would conflict with owner-
+Transients are single-owner and publication consumes the logical session; persistent cursors branch
+freely and materialization does not consume them. A “transient cursor” would conflict with owner-
 token uniqueness, version invalidation, alias consumption, and language ownership rules. Do not add
 one under this name.
 
@@ -1715,8 +1673,8 @@ Current source types and language-local entry points are indexed by the catalog'
 [fixed-width numerics](../reference/data-structure-catalog.md#fixed-width-integer-numerics),
 [derived/Ordered](../reference/data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets),
 [insertion-ordered set](../reference/data-structure-catalog.md#insertion-ordered-persistent-set), and
-[Tungsten](../reference/data-structure-catalog.md#tungsten-application-collections) tables. Ordered
-and Tungsten span all nine language roots, whereas numerics span C#, OCaml, TypeScript, and Python.
+family-specific tables. Ordered cursor targets span all nine language roots, whereas numerics span
+C#, OCaml, TypeScript, and Python and are excluded above.
 
 `Snapshot` is the conceptual verb because the shipped rope uses it. A language whose collection
 already standardizes on `to_persistent`, `close`, or another unambiguous term may retain that term,
@@ -1742,10 +1700,9 @@ Recommended naming pattern:
 | neutral Ordered | `PersistentOrderedSetCursor<T>`, map and multimap counterparts |
 | Patricia | `PersistentIntMapCursor<TValue>` and width/set counterparts |
 | Merkle | `MerkleSearchTreeCursor<TKey, TValue>` |
-| Tungsten | leaf-local owning type name plus `Cursor` |
 
-The C, C++, Rust, OCaml, and scripting-language ports adapt casing and module conventions. Zipper
-tokens are never serialized and are never portable between language ports or policy instances.
+The C, C++, Rust, OCaml, and scripting-language ports adapt casing and module conventions. Cursor
+state is never serialized and is never portable between language ports or policy instances.
 
 ## Internal Architecture Guidance
 
@@ -1763,9 +1720,7 @@ node type.
 4. **Private CHAMP path kernel** remains in the HAMT package and provides preparation to hash-derived
    composites. It does not leak into public cursor contracts.
 5. **Composite version coordinator** stages ordered and auxiliary-index results and publishes one
-   facade. It is parameterized by validation/commit callbacks rather than by Tungsten behavior.
-6. **Application-leaf adapters** live in Tungsten and may consume public or internal-general APIs
-   only through allowed package dependencies.
+   facade. It is parameterized by collection-owned validation and commit callbacks.
 
 Avoid sharing a `CursorVersionState` across unrelated collections merely because both can memoize a
 snapshot. Version state is family-specific: a Merkle state owns policy domain and dirty encoded
@@ -1841,7 +1796,6 @@ Core laws:
 | Chunked bit set | Negative and `int.MaxValue` boundaries, 63/64 seams, set-bit ranks/select, zero-word contraction, wide count, retained algebra results. |
 | Ordered set/map | Sequence/index count equality, exact entry identity where required, private stamps, duplicate no-op, relabel at the focus, first representatives. |
 | Ordered multimap | Nested key/value order, no empty group, final-value reanchor, checked pair count, independent policies, inner/outer relabel. |
-| Tungsten | List unconditional replace; Association pre-removal positional rule, incoming key adoption, update no-op, relabel; automated dependency scan proving the leaf direction. |
 | CHAMP map/set private path | Bitmap/array popcounts, deepest routes, full-hash collisions and bucket order, singleton promotion, representative/no-op rules, one-hash/one-descent factories with exact callback cardinality, and unchanged algebra/diff work bounds. |
 | Hash bag adapter | Positive per-class multiplicities; distinct and expanded totals; checked bounded totals versus unbounded language totals; first representatives and receiver policy. |
 | Bimap adapter | Independent key/value policies, key-first conflict precedence, equal root counts, reciprocal mapping, and port-specific inverse-view identity. |
@@ -1896,7 +1850,7 @@ of each result to force policy failures in the claimed phase.
   reachable in the raced operations to support concurrent calls; immutable structure does not make
   caller policy state thread-safe.
 - C handle lineage construction/destruction follows the owning family's retention contract. Do not
-  race independent edits/copies/destruction for C HAMT/Patricia/Tungsten lineages with non-atomic
+  race independent edits/copies/destruction for C HAMT/Patricia lineages with non-atomic
   references; C FingerTree families with atomic immutable representation references may use their
   documented read/share boundary. Only already retained values enter a concurrent test.
 
@@ -1947,7 +1901,7 @@ memo cell, callback ceiling, allocation bound, amortization, benchmark result, o
 1. **Private CHAMP path.** Factor and exhaustively test it behind unchanged public map/set APIs, then
    adopt it selectively in hash composites. This is an implementation refactor, not a public cursor
    shipment.
-2. **Patricia cursor.** Ship the smallest true ordered-tree zipper first; fixed key width makes
+2. **Patricia cursor.** Ship the smallest true ordered-tree cursor first; fixed key width makes
    contexts and worst-case bounds unusually crisp.
 3. **Deque and raw measured cursor checkpoints.** Lock the shared gap/measure API without promising a
    focused representation; use named consumers and counters before optimizing.
@@ -1960,11 +1914,8 @@ memo cell, callback ceiling, allocation bound, amortization, benchmark result, o
    positional group/value operations before claiming cursor-operation parity.
 7. **Merkle cursor.** Prototype canonical dirty closure and prove exact cross-language wire parity
    before any public surface. Treat this as a trust-boundary feature, not a generic ordered adapter.
-8. **Tungsten adapters.** Add only for a Tungsten consumer, after a suitable general mechanism exists
-   or as an independently leaf-owned implementation. Port kernel-driven behavior across Tungsten
-   siblings only.
-9. **Optional traversal objects.** Graph and Ctrie snapshot traversal require named consumers and
-   separate terminology; they do not block zipper work.
+8. **Optional traversal objects.** Graph and Ctrie snapshot traversal require named consumers and
+   separate terminology; they do not block cursor work.
 
 Existing rope cursors need no rollout phase. Their current API, tests, and performance boundary
 remain authoritative.
@@ -1979,8 +1930,7 @@ A public cursor is ready only when:
 - policies, representatives, null/presence, error precedence, and failure atomicity are locked;
 - public docs separate semantic checkpoint and focused implementation costs;
 - C ownership and all language-local lifetime constraints are complete;
-- cross-language golden artifacts pass where bytes/hashes are shared; and
-- Tungsten/general dependency scans remain clean.
+- cross-language golden artifacts pass where bytes/hashes are shared.
 
 An optimized focused representation additionally requires a proof-scoped complexity statement,
 operation counters, retained-memory analysis, and isolated benchmark evidence for a named history.
@@ -1991,23 +1941,23 @@ to weaken semantics.
 
 | Topic | Decision |
 | --- | --- |
-| Public name | `Cursor`; “zipper” describes design/representation. |
+| Public and design terminology | `Cursor`. |
 | Version relationship | Cursor owns one immutable logical version; edits branch; snapshot is non-consuming. |
 | Sequence focus | Gap, including empty/start/end. |
 | Search-ordered focus | Key-/value-sorted gap whose next entry is the exact/lower-bound candidate. |
 | Insertion-ordered focus | Positional gap in explicit collection order; equality-seek misses do not infer an insertion position. |
 | Raw measured position | Measure/neighbor based; no fabricated count unless the measure/substrate provides one. |
 | Snapshot memo | Required only where a family ships it; otherwise optional invisible optimization. |
-| Public CHAMP cursor | Rejected; private edit-path zipper only. |
+| Public CHAMP cursor | Rejected; private edit path only. |
 | Heap cursors | Rejected for measured priority queue and Brodal–Okasaki heap. |
-| Graph | Separate snapshot traversal, not a Huet zipper. |
+| Graph | Separate snapshot traversal, not a cursor. |
 | Live concurrent cursor | Rejected; snapshot-bound read traversal only. |
 | Generic runtime interface | Rejected; concrete cursor types plus shared laws. |
 | Bookmarks and rebase | Deferred; no implicit cross-version application. |
 | Selection/range objects | Deferred; ranges are operations relative to one gap where specified. |
-| Mutable/transient cursor | Outside persistent zipper scope and terminology. |
+| Mutable/transient cursor | Outside persistent cursor scope and terminology. |
 | Cross-language representation parity | Not required; observable semantics and honest local docs are required. |
-| Tungsten authority | Application leaf only; no reverse dependency or general semantic inheritance. |
+| Tungsten collections | Excluded; no cursor is proposed or required. |
 
 ## Coverage Audit
 
@@ -2016,11 +1966,12 @@ This proposal covers every persistent family in the current
 
 - numerics are explicitly excluded as scalars;
 - every CHAMP, derived hash-composition, Patricia, Merkle, and concurrent-snapshot family has a
-  public/private/no-zipper decision;
+  public/private/no-cursor decision;
 - every FingerTree, sequence, sorted, priority, interval, RRB, Range, rope, bit-set, canonical,
   DABA, and builder surface has a design or exclusion;
 - every neutral Ordered set/map/multimap has a proposed atomic semantic-cursor design; and
-- both Tungsten persistent collections have proposed leaf-local cursor designs.
+- Tungsten application collections are explicitly excluded; their repository-general substrates
+  retain their own cursor decisions.
 
 The audit treats result carriers, codecs, measures, policies, proofs, packs, stores, builders,
 transients, and mutable DABA state as supporting mechanisms rather than silently counting them as
@@ -2031,15 +1982,15 @@ unreviewed persistent aggregates.
 - Gérard Huet, [The Zipper](https://www.st.cs.uni-saarland.de/edu/seminare/2005/advanced-fp/docs/huet-zipper.pdf),
   *Journal of Functional Programming* 7(5), 1997
   ([DOI 10.1017/S0956796897002864](https://doi.org/10.1017/S0956796897002864)).
-- [Zipper overview](https://en.wikipedia.org/wiki/Zipper_(data_structure)), the user-provided
-  orientation reference.
+- [Historical concept overview](https://en.wikipedia.org/wiki/Zipper_(data_structure)), the
+  user-provided orientation reference.
 - [Data-structure catalog](../reference/data-structure-catalog.md) for current public families and
   language entry points.
 - [Semantic contracts](../reference/semantic-contracts.md) for current persistence, policy,
   ordering, ownership, and cursor obligations.
 - [Axis 2 lifecycle and sequence-cursor plan](axis2-lifecycle-and-sequence-cursors.md) and the
   [C# rope C0 decision](../../src/CSharp/docs/FingerTree/rope-cursor-c0-decision.md) for the shipped
-  zipper-as-version precedent and its proof boundary.
+  cursor-as-version precedent and its proof boundary.
 - [Porting and semantic parity guide](../guides/porting-and-semantic-parity.md) for implementation and
   documentation workflow.
 - [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)

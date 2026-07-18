@@ -291,7 +291,7 @@ newline-aware text surface. Both measured APIs expose ordered before/after measu
 measure seek. Haskell likewise ships opaque snapshot-plus-gap `MeasuredRopeCursor v a` and
 `TextRopeCursor` aliases with ordered measures, absolute search, pure persistent edits, and Haskell
 `Char`-element text positions. Every sibling cursor preserves branching and edit behavior without
-claiming the C# zipper or its focus-local complexity. C text positions count byte-sized `char` elements and use
+claiming the C# focused cursor representation or its focus-local complexity. C text positions count byte-sized `char` elements and use
 the existing LF-only zero-based line/column rules.
 The Rust checkpoint uses chunked measured storage for both positional `Rope<T>` and custom-measured
 `MeasuredRope<T, P>` and stores `TextRope` content in a newline-measured rope while its API notes track
@@ -395,7 +395,7 @@ evidence, not permission to make a general structure depend on Tungsten.
 - Use the [workspace map](workspace-map.md) when choosing the correct language/data-structure directory.
 - Use the [semantic contracts reference](semantic-contracts.md) when checking shared persistence,
   ownership, policy, ordering, and failure-behavior obligations.
-- Use the proposed [repository-wide persistent zipper design](../proposals/repository-wide-persistent-zipper-design.md)
+- Use the proposed [repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md)
   when assessing focused navigation/editing across families. Its applicability matrix and API
   sketches do not add cursor types to the shipped entry-point tables above.
 - Use the [porting and semantic parity guide](../guides/porting-and-semantic-parity.md) when changing behavior that may cross language workspaces.
