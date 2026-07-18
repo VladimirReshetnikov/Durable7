@@ -23,6 +23,7 @@
 #include <memory>
 #include <mutex>
 #include <map>
+#include <optional>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -941,6 +942,98 @@ TEST(Patricia_SignedOrderingHistoriesAndStructuralAlgebra) {
     CHECK_EQ((std::vector<std::int32_t>{-3, -1, 0, 1, 3}), left.union_with(right).to_vector());
     CHECK_EQ((std::vector<std::int32_t>{-1, 1}), left.intersect_with(right).to_vector());
     CHECK_EQ((std::vector<std::int32_t>{-3, 3}), left.except_with(right).to_vector());
+}
+
+TEST(PatriciaCursor_OrderedFactoriesBranchingEditsAndPresenceSafety) {
+    using map_type = persistent_int_map<std::optional<int>>;
+
+    const auto map = map_type{}
+        .set_item(INT32_MAX, 50)
+        .set_item(7, 40)
+        .set_item(0, std::nullopt)
+        .set_item(-5, 20)
+        .set_item(INT32_MIN, 10);
+
+    const auto start = map.get_cursor();
+    CHECK_EQ(std::size_t{5}, start.count());
+    CHECK_EQ(std::size_t{0}, start.position());
+    CHECK(start.is_at_start());
+    CHECK(!start.peek_previous());
+    CHECK_EQ(INT32_MIN, start.peek_next()->key);
+    CHECK_THROWS_AS(start.move_previous(), std::logic_error);
+    CHECK_THROWS_AS(map.get_cursor(6), std::out_of_range);
+
+    const auto exact = map.get_cursor_at_key(0);
+    CHECK(exact.found);
+    CHECK_EQ(std::size_t{2}, exact.cursor.position());
+    CHECK_EQ(0, exact.cursor.peek_next()->key);
+    CHECK(!exact.cursor.peek_next()->value.has_value());
+    CHECK_EQ(-5, exact.cursor.peek_previous()->key);
+
+    const auto miss = map.get_cursor_at_key(3);
+    CHECK(!miss.found);
+    CHECK_EQ(std::size_t{3}, miss.cursor.position());
+    CHECK_EQ(7, miss.cursor.peek_next()->key);
+    CHECK_EQ(std::size_t{2}, map.get_cursor_lower_bound(0).position());
+    CHECK_EQ(std::size_t{3}, map.get_cursor_upper_bound(0).position());
+    CHECK_EQ(std::size_t{4}, map.get_cursor_lower_bound(INT32_MAX).position());
+    CHECK_EQ(std::size_t{5}, map.get_cursor_upper_bound(INT32_MAX).position());
+
+    const auto inserted = miss.cursor.insert(3, 30);
+    CHECK_EQ(std::size_t{4}, inserted.position());
+    CHECK_EQ(3, inserted.peek_previous()->key);
+    CHECK_EQ(7, inserted.peek_next()->key);
+    CHECK(!map.contains_key(3));
+    CHECK(inserted.snapshot().contains_key(3));
+    CHECK(map.get_cursor().snapshot().shares_root_with(map));
+    CHECK_THROWS_AS(miss.cursor.insert(7, 70), std::invalid_argument);
+    CHECK_THROWS_AS(start.insert(3, 30), std::invalid_argument);
+
+    const auto updated = exact.cursor.set_next_value(25);
+    CHECK_EQ(std::size_t{2}, updated.position());
+    CHECK_EQ(std::optional<int>{25}, updated.peek_next()->value);
+    CHECK(!exact.cursor.peek_next()->value.has_value());
+    const auto put_existing = exact.cursor.put(0, 26);
+    CHECK_EQ(std::size_t{2}, put_existing.position());
+    CHECK_EQ(std::optional<int>{26}, put_existing.peek_next()->value);
+    const auto put_missing = miss.cursor.put(3, 31);
+    CHECK_EQ(std::size_t{4}, put_missing.position());
+
+    const auto without_next = exact.cursor.delete_next();
+    CHECK_EQ(std::size_t{2}, without_next.position());
+    CHECK_EQ(7, without_next.peek_next()->key);
+    const auto without_previous = exact.cursor.delete_previous();
+    CHECK_EQ(std::size_t{1}, without_previous.position());
+    CHECK_EQ(INT32_MIN, without_previous.peek_previous()->key);
+    CHECK_EQ(0, without_previous.peek_next()->key);
+
+    const auto end = map.get_cursor_at_end();
+    CHECK(end.is_at_end());
+    CHECK_EQ(INT32_MAX, end.peek_previous()->key);
+    CHECK(!end.peek_next());
+    CHECK_THROWS_AS(end.move_next(), std::logic_error);
+    CHECK_THROWS_AS(end.delete_next(), std::logic_error);
+
+    const auto set = tools::data_structures::hamt::persistent_long_set{}
+        .add(INT64_MAX).add(0).add(INT64_MIN);
+    const auto set_exact = set.get_cursor_at_item(0);
+    CHECK(set_exact.second);
+    CHECK_EQ(std::size_t{1}, set_exact.first.position());
+    CHECK_EQ(std::int64_t{0}, *set_exact.first.peek_next());
+    const auto duplicate = set_exact.first.insert(0);
+    CHECK(duplicate.snapshot().to_vector() == set.to_vector());
+    const auto set_inserted = set.get_cursor_lower_bound(-1).insert(-1);
+    CHECK_EQ(std::int64_t{-1}, *set_inserted.peek_previous());
+    CHECK_EQ(std::int64_t{0}, *set_inserted.peek_next());
+    CHECK_THROWS_AS(set.get_cursor().insert(1), std::invalid_argument);
+
+    const auto entries = map.to_vector();
+    for (std::int32_t probe = -10; probe <= 10; ++probe) {
+        const auto expected = static_cast<std::size_t>(std::lower_bound(
+            entries.begin(), entries.end(), probe,
+            [](const auto& entry, std::int32_t key) { return entry.first < key; }) - entries.begin());
+        CHECK_EQ(expected, map.get_cursor_lower_bound(probe).position());
+    }
 }
 
 TEST(Enumerator_CopiedIteratorAdvancesIndependently) {
