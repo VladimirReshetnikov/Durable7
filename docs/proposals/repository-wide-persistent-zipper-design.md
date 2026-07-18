@@ -789,3 +789,432 @@ zipper.
 mutable staging lifecycles. A persistent zipper would neither describe their ownership nor improve
 their intended operations. They remain out of scope. Immutable snapshots produced by a builder may
 create an ordinary family cursor after publication.
+
+## Ordered And Search-Family Designs
+
+### Common Ordered-Gap Protocol
+
+Every countable ordered family uses a gap even when its factories are key based:
+
+```text
+entries < boundary | entries >= boundary
+                     ^ Position; next entry is the search candidate
+```
+
+`Position` is the number of entries before the gap. An exact search is a lower-bound seek plus a
+`Found` discriminator comparing the next entry with the query. Before-first is position zero;
+after-last is position `Count`. This is equivalent to the ordered search-location states in the
+shared contract while avoiding a separate invalid state for a miss. Sparse bit sets use a wide
+population-rank position; a raw measured tree without a count retains its measure-only protocol.
+
+Applicable ordered cursors recognize:
+
+```text
+AtRank / SeekRank
+LowerBound / UpperBound
+TrySeekExact -> (Found, usable cursor)
+TryPeekPrevious / TryPeekNext
+MovePrevious / MoveNext
+Snapshot
+```
+
+The *next* entry is the focused entry for value update or forward delete. Predecessor and successor
+navigation are in the collection's documented logical order. A factory preserves the exact comparer
+or policy even on an empty result. Comparing a key may throw; the source cursor remains usable.
+
+The portable checkpoint stores `(canonical root, rank or search key, policy)`. A focused ordered-tree
+zipper uses Profile T. Finger-tree-backed ordered facades may use Profile S with order-statistic
+measures. The public contract does not reveal which one a port selected.
+
+### Sorted Bag
+
+`SortedBag<T>` and its language-local multiset siblings receive `SortedBagCursor<T>`.
+
+- `AtRank`, `LowerBound`, `UpperBound`, and exact-range factories preserve the runtime comparer.
+- `Add(item)` always finds the **upper bound** and inserts after all existing comparer-equal
+  occurrences, preserving the collection's stable equal-item insertion rule. The method returns the
+  gap after the new occurrence.
+- `DeleteNext` removes the exact stored occurrence at the gap. `DeletePrevious` removes the exact
+  predecessor and moves the gap left.
+- Do not expose unconstrained `InsertHere`: inserting inside an equal run would create behavior not
+  obtainable from the ordinary bag API.
+- Do not expose arbitrary replacement. Changing an occurrence can change its sort position; the
+  unambiguous operation is delete followed by `Add`, which returns the new upper-bound location.
+
+An element-per-leaf finger-tree port can use an ordered measured-gap zipper. A bucketed port, such
+as one storing a distinct key with a persistent duplicate sequence, uses a nested `(key path,
+occurrence offset)` focus or the root-plus-rank checkpoint. It must preserve the same observable
+stable order without claiming the other representation.
+
+Seek, add, and delete retain the local sorted collection's O(log n) target. Movement within an open
+measured context targets O(1) amortized and O(log n) worst; a bucket boundary may add the bucket's
+local persistent-sequence cost. A complete post-seek traversal targets O(n).
+
+### Sorted Set
+
+`SortedSet<T>` and sibling sorted sets receive `SortedSetCursor<T>`.
+
+- Exact search is lower bound plus comparer equivalence.
+- `Add(item)` at a miss inserts at that lower-bound gap. At a hit it is an identity-preserving no-op
+  and retains the stored representative.
+- `DeleteNext` is allowed only when a next entry exists and removes that exact comparer class.
+- There is no `ReplaceNext`: representative replacement could collide with another class and would
+  violate the ordinary set's representative policy.
+- `Floor`, `Ceiling`, `Lower`, and `Higher` are projections of lower/upper-bound cursor factories;
+  they do not need independent traversal machinery.
+
+The comparer is the complete ordering/equivalence policy and is retained by every cursor and empty
+snapshot. Cursor insertion never accepts an arbitrary position capable of breaking sorted order.
+
+### Sorted Map Or Dictionary
+
+`SortedDictionary<TKey, TValue>`, `SortedMap`, and language-local siblings receive a key-ordered
+cursor.
+
+- Exact/lower/upper/rank search returns a gap whose next entry is the candidate.
+- strict `Insert(key, value)` succeeds only at a missing lower-bound location;
+- `SetItem(key, value)` follows the owning port's stored-key and value-equivalence contract, either
+  updating the next entry or inserting at the missing gap;
+- `SetNextValue(value)` is the focus-local form: it preserves the stored key representative and
+  position and keeps the gap fixed;
+- `DeleteNext` removes the focused key; and
+- no key-rename operation ships in v1. Rename is atomic delete-plus-insert with an explicitly
+  returned new location if later consumer evidence requires it.
+
+Closing a finger-tree implementation recomputes count and last-key order-statistic measures in
+source order. An AVL/B-tree implementation instead repairs balance and key bounds. A configured
+value-equivalent update preserves the current cursor version only where the ordinary map promises
+that no-op; the zipper does not invent a cross-port equality policy.
+
+### Canonical Zip-Zip Sorted Set
+
+`CanonicalSortedSet<T>` uses the sorted-set public cursor, backed in full implementations by a
+Cartesian-tree zipper. A frame is:
+
+```text
+WentLeft  (ancestorItem, ancestorRank, untouchedRight)
+WentRight (untouchedLeft, ancestorItem, ancestorRank)
+```
+
+The cursor retains the exact `ZipTreeRankPolicy<T>` object. A missing-key insertion derives the new
+rank once, then may climb through several frames until heap-priority order permits attachment.
+Removal merges the focused node's left and right subtrees, then rebuilds the remaining path. Both
+operations use the same tie-breaking and split/merge rules as ordinary add/remove.
+
+Every dirty close preserves:
+
+- strict comparator order and one representative per equivalence class;
+- the policy-derived rank for every item and the Cartesian heap relation;
+- cached count and height;
+- reference sharing of untouched subtrees; and
+- content-hash semantics: unchanged nodes retain valid lazy digests, while new path nodes begin with
+  no stale cached digest.
+
+The result topology must equal the topology produced by the canonical ordinary operation for the
+same policy and contents. Costs are O(h), not unconditionally O(log n). Expected logarithmic height
+depends on the documented coherent pseudorandom rank assumptions; a degenerate collision policy can
+make `h = n`. A checkpoint port that represents only sorted contents exposes semantic cursor parity
+without claiming canonical node topology or zip-tree bounds.
+
+### Priority-Search Queue
+
+`PrioritySearchQueue<TKey, TPriority, TValue>` receives a **key-order** cursor. Priority is cached
+augmentation, not a second navigation order.
+
+Factories include exact/lower/upper key, minimum key, end, and optionally `AtMinimumPriority()`. The
+latter reads the root's cached winner and performs an ordinary key seek; it does not walk a
+priority-ordered sequence that does not exist.
+
+An AVL-backed frame stores direction, ancestor entry, untouched sibling, height, count, and enough
+winner information to rebuild through the ordinary balancing constructors. Dirty closure recomputes
+the winner under the exact priority-then-key tie rule at every changed ancestor.
+
+- `SetNext(priority, value)` retains the stored key representative and applies the queue's existing
+  priority/value no-op rule.
+- `SetItem(key, priority, value)` inserts at a miss or updates the exact hit.
+- strict insertion rejects an equivalent key.
+- `DeleteNext` removes the focused key and balances the path.
+- predecessor/successor movement follows key order.
+
+Updating one priority can change every ancestor winner, so it remains O(h). AVL ports target O(log n)
+worst for seek/edit/close. A complete key-order traversal after one seek is O(n) on a linear cursor
+lineage, with O(h) worst for one step; retained branches can repeat climbs. A sorted-array or other
+checkpoint port keeps its local costs. `EnumerateAtMost` remains a winner-pruned query iterator—a
+naive cursor scan must not replace it or claim its output-sensitive pruning bound.
+
+### Interval Tree
+
+`IntervalTree<T>` receives a low-endpoint-ordered cursor. The C# reference promises nondecreasing
+`Low`, not full lexicographic `(Low, High)` order. Equal-low occurrences keep the facade's defined
+placement order; in the current C# implementation a newly inserted equal-low interval precedes the
+older run. Other ports follow their documented local ordering while preserving their shared
+interval-query semantics.
+
+Factories:
+
+- rank and lower-bound by low endpoint;
+- exact stored interval under the local two-endpoint matching rule;
+- first overlap with a closed query interval;
+- first interval containing a point; and
+- start/end.
+
+`SeekNextOverlap(query)` advances through the suffix using cached `MaxHigh` and stops after low
+endpoints exceed `query.High`. It preserves inclusive endpoints and returns a usable end cursor on a
+miss. A focused implementation retains count, last-low, and max-high context summaries; a portable
+one may delegate each continuation to the current augmented search.
+
+Insertion uses the facade's defined low-bound placement, never an arbitrary gap. `DeleteNext`
+removes the exact occurrence represented by the cursor, which avoids ambiguity among duplicate
+intervals. Replacing endpoints is not a local edit because it can move the interval; express it as
+remove-plus-insert and return the newly located cursor. `Coalesce` remains a collection-wide
+operation producing a new cursor only after materializing its result.
+
+Interval validity is delegated to the owning API. A zipper must not silently normalize or reject an
+interval differently from the collection on which it is built. Seek and augmented queries retain
+the local logarithmic/output-sensitive bounds; repeated overlap continuation and duplicate-low
+scans must state any additional run cost honestly.
+
+### Persistent Interval Map
+
+`PersistentIntervalMap<TEndpoint, TValue>` receives a cursor ordered by the unique complete interval
+key `(Low, High)` under the endpoint policy.
+
+- exact/lower/upper/rank factories use lexicographic interval order;
+- first-overlap/containing factories and `SeekNextOverlap` reuse max-high augmentation;
+- strict insert succeeds only at a missing complete key;
+- `SetNextValue` retains the stored interval representative and applies the value-comparer no-op
+  rule; and
+- `DeleteNext` removes the focused complete key.
+
+Context measures preserve count, rightmost complete interval key, and max-high. Whether a port uses
+one augmented tree for exact and overlap queries or composes multiple physical indexes is private;
+every cursor edit publishes the exact-key and augmented-search views together or publishes nothing.
+No endpoint replacement or zipper-level `Coalesce` is proposed because both require application-
+specific payload decisions.
+
+### Persistent Chunked Bit Set
+
+`PersistentChunkedBitSet` receives a set-bit cursor. It traverses present bit indexes, not a dense
+Boolean sequence extending to `int.MaxValue`.
+
+Conceptual state:
+
+```text
+words before focus
+active word index + nonzero 64-bit word + bit offset
+words after focus
+population before active word
+logical set-bit gap rank
+```
+
+Factories are `AtOrAfter(bitIndex)`, exact search with `Found`, `AtRank(populationRank)`, start, and
+end. `Position` uses the same wide count type as population count. Within one word, next/previous use
+trailing/leading-set-bit operations; crossing a word moves through the underlying ordered measured
+context. Rank is cached population before the word plus the popcount below the active offset.
+
+- `Add(bitIndex)` searches at-or-after. A present bit is an identity no-op; a missing bit updates or
+  inserts its word and returns the gap after the new bit.
+- `DeleteNext` and `DeletePrevious` clear the exact neighboring bit.
+- clearing a word's last bit removes the word entry; a publishable cursor never stores a zero word;
+- negative search may return start according to the nonthrowing lookup convention, while addition
+  retains the collection's negative-index validation; and
+- set algebra remains a sparse word-stream operation, not a cursor primitive.
+
+Seek/edit is logarithmic in represented word count plus constant 64-bit work in measured-tree
+ports. Movement within a word is O(1); a cross-word step has the underlying context's boundary bound.
+Enumeration, rank, select, count width, and overflow remain language-local.
+
+## Neutral Ordered Composite Designs
+
+The independently owned Ordered family is a particularly strong public-zipper fit because insertion
+and explicit-position order are semantic. The cursor works over that order while retaining the
+hashed membership/key index as an atomic auxiliary root. It never exposes sparse stamps or depends
+on Tungsten.
+
+### Shared Ordered Context
+
+The conceptual state is:
+
+```text
+OrderedCursorVersion {
+    leftOrderedSequence
+    rightOrderedSequence
+    completeMembershipOrKeyIndex
+    exactPolicies
+    logicalCount
+    optionalCanonicalSnapshotMemo
+}
+```
+
+Navigation transfers one retained ordered entry between left and right without hashing and without
+changing the complete index. An edit prepares an ordered successor and index successor, validates
+their correspondence, then publishes one cursor version. Snapshot joins the two sequences and wraps
+the already complete index. Implementations may instead retain a canonical root plus gap; the
+logical split does not mandate payload duplication, one stamp representation, or a finger tree in
+every port.
+
+Private labels serve only to order index entries. They are not cursor positions, bookmarks,
+serialized values, or rebase anchors. An ordinary insertion chooses a label between neighbors. Gap
+exhaustion relabels and rebuilds one unpublished complete result; the returned cursor is reconstructed
+at the same logical gap. No relabel amortization crosses retained branches.
+
+### Persistent Ordered Set
+
+`PersistentOrderedSet<T>` receives `PersistentOrderedSetCursor<T>`.
+
+Surface additions to the positional protocol are `TrySeekValue(equalValue)`, which places the gap
+before the stored representative, and optional `TryInsert` result forms.
+
+- `Insert(item)` adds an absent comparer class at the gap and returns after it. An equivalent
+  existing class is an exact cursor/version no-op; it neither moves nor replaces the stored
+  representative.
+- `InsertRange` captures once, normalizes under the receiver policy, keeps first incoming
+  representatives, removes already-present and intra-range duplicates, and prepares the complete
+  result before publication. If no class is inserted, it preserves the cursor state.
+- `DeletePrevious`/`DeleteNext` remove the exact stored representative from order and membership
+  index atomically.
+- There is no `ReplaceNext`, because replacement conflicts with first-representative retention and
+  may collide with another class.
+- A future `MoveValueHere` must be named as movement, retain the stored representative, and define
+  destination against a pre-removal gap. V1 omits it rather than overloading duplicate insertion.
+
+Let `w <= 7` be CHAMP depth and `c` a collision scan in the reference design. Value seek costs
+O(w + c + log n); ordinary insert/delete combines O(w + c) lookup/index work with the ordered
+context's endpoint or path work. Relabeling costs O(n(w + c)) per produced version. A focused dirty
+snapshot joins the sides in the sequence's logarithmic bound and adopts the complete index in O(1)
+structural work; a root-plus-gap checkpoint retains ordinary operation costs.
+
+### Persistent Ordered Map
+
+`PersistentOrderedMap<TKey, TValue>` uses the same ordered gap over entries and a complete keyed
+index.
+
+- `TrySeekKey` places the gap before the stored entry and recovers the first stored key
+  representative.
+- strict `Insert`/`TryInsert` adds only a missing key at the gap. Duplicate insertion never moves the
+  key.
+- `SetNextValue` changes only the next entry's payload, preserving stored key, stamp, and position;
+  it applies the exact existing value-policy no-op rule.
+- `DeletePrevious`/`DeleteNext` removes the complete entry from both indexes.
+- V1 has no key rename. A future explicit `MoveKeyHere` retains the stored key and uses a separately
+  documented final-index rule.
+
+Value replacement never needs relabeling. It creates the replacement entry object required by ports
+whose two indexes share entry identity, then updates both sides atomically. Hash, equality, value-
+equality, allocation, or sequence failure leaves the old cursor reusable.
+
+### Persistent Ordered Multimap
+
+`PersistentOrderedMultimap<TKey, TValue>` has two nested orders: key-group order, then distinct-value
+order inside each nonempty group. Flattened enumeration is grouped; it is not one global pair-arrival
+sequence. Do not invent `PairPosition` or logarithmic random pair rank when the outer structure does
+not cache value-group prefix counts.
+
+The cursor is the sum:
+
+```text
+Empty
+| FocusedGroup {
+      outerGroupsBefore,
+      storedKeyRepresentative,
+      innerValueGap,
+      outerGroupsAfter,
+      completeOuterKeyIndex,
+      pairCount,
+      keyPolicy,
+      valuePolicy
+  }
+```
+
+Navigation enters a group at its start/end, moves to previous/next group, seeks a group by index or
+key, and moves within the focused value order. An optional `MoveNextPair` walks inside a group then
+crosses to the next group; it is sequential convenience, not a random global-rank contract.
+
+Edits:
+
+- an empty cursor can create one singleton group;
+- `InsertGroupBefore/After(key, firstValue)` is strict and atomically creates a nonempty group;
+- `InsertValue(value)` adds an absent value class at the inner gap. A duplicate is an exact no-op;
+- deleting a value updates the focused group while it remains nonempty;
+- deleting its final value removes the whole group and reanchors to successor-at-start, otherwise
+  predecessor-at-end, otherwise `Empty`; and
+- deleting a group subtracts its complete value count and uses the same deterministic reanchor.
+
+No publishable intermediate contains an empty group. Pair-count overflow is checked before
+publication. A dirty snapshot closes the inner context, installs that complete group in the outer
+context/index, then closes the outer context. Its focused cost is the relevant inner and outer hash
+lookups plus O(log v + log k) sequence closure; inner and outer relabeling retain their separate
+O(v...) and O(k...) per-version bounds. A flattened seek without an outer pair-count measure is
+honestly O(k + log v).
+
+## Tungsten Application-Leaf Designs
+
+These designs live inside Tungsten packages and follow the normative
+[application-leaf boundary](../reference/tungsten-application-leaf-boundary.md). A Tungsten type may
+consume a repository-general deque or ordered cursor. A general library may not reference, wrap,
+subclass, or adopt the Tungsten cursor or its kernel-driven behavior.
+
+### Tungsten Persistent List
+
+`PersistentList<T>` receives the leaf-local equivalent of the deque positional cursor. Prefer an
+adapter over a general deque cursor when that dependency exists in the allowed direction.
+
+Peeks, move, seek, insertion/range insertion, previous/next deletion, and snapshot follow the shared
+gap contract. `ReplaceNext` follows Tungsten List `SetItem`: it creates a new logical version even
+for an equal or identical value and invokes no equality callback. Empty insertion is the exact
+no-op. An optional `UpdateNext` invokes its updater exactly once after boundary validation and
+publishes nothing on failure.
+
+The focused target is the consuming deque's local bound. A sibling root-plus-gap implementation may
+ship with ordinary O(log n) edits but must not claim the C# rope or a future tuned-deque locality
+profile.
+
+### Tungsten Persistent Association
+
+`PersistentAssociation<TKey, TValue>` receives an Association-order gap cursor plus complete key
+index and retained policy. Its update and movement behavior is explicitly application-specific.
+
+- `TrySeekKey` places the gap before the stored rule.
+- `SetNextValue` preserves the focused stored key, position, and stamp and applies Association's
+  existing value no-op rule.
+- `DeletePrevious`/`DeleteNext` removes both keyed and ordered state atomically.
+- `InsertHere(key, value)` mirrors Association's current positional insertion rule. The position is
+  interpreted against the pre-removal association. If an equivalent key at rank `r` precedes target
+  `p`, remove it and insert at `p - 1`; otherwise insert at `p`. The returned gap is after the
+  installed rule.
+- Existing-key insertion adopts the incoming key representative and creates a new logical version/
+  stamp even when the resulting key/value pair compares equal, exactly where the Tungsten contract
+  requires it. It is not neutral Ordered-map behavior.
+
+`Append`, `Prepend`, keyed/positional take, join, and stable sorts remain collection-wide operations;
+they may return a cursor over their completed result but are not disguised as focus-local edits.
+Private stamp exhaustion retains the application leaf's unpublished relabel behavior.
+
+C's cursor uses explicit copy/move/dispose and the Tungsten package's established source/result
+alias rules. Its non-atomic shared-state reference counts require related-version construction to be
+serialized before completed snapshots are handed to concurrent readers. Managed and value-semantic
+ports use their own lifetime/result conventions. Sibling Tungsten ports may use C# as semantic
+authority; neutral Ordered validation must never use Tungsten as an oracle.
+
+## Numeric Exclusions
+
+### Fixed-Width Integers
+
+`UInt256`/`Int256`, 512-bit, and 1024-bit values are numeric scalars. Their limb arrays are fixed-size
+implementation details, not public recursive constructors. A limb zipper would expose layout and
+endianness, add more state than copying 4/8/16 limbs, and provide no asymptotic structural-sharing
+benefit. A bit-gap editor would actually be a shift/mask/bit-string API; insertion and deletion do
+not naturally preserve fixed width. No cursor is designed.
+
+### Sparse Integer
+
+`SparseInteger` is also a scalar. C# may use recursive sparse storage internally, while TypeScript,
+Python, and OCaml use their arbitrary-precision integer substrates. Publicly freezing a tree path
+would make one representation a cross-language semantic authority. Moving a set-bit exponent can
+also trigger numeric carries, ordering/uniqueness repair, and a canonical small/large representation
+transition rather than one local subtree replacement.
+
+Consumers needing navigable sparse set bits should use `PersistentChunkedBitSet`; consumers needing
+numeric edits use existing arithmetic and bit operations. `BitConverterEx`, codecs, policies,
+measures, predicates, result records, and split carriers are stateless or auxiliary values rather
+than persistent aggregates and receive no zipper.
