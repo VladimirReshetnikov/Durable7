@@ -3,6 +3,7 @@
 #include <tools/data_structures/ordered/persistent_ordered_map.hpp>
 #include <tools/data_structures/ordered/persistent_ordered_multimap.hpp>
 #include <tools/data_structures/ordered/persistent_ordered_set.hpp>
+#include <tools/data_structures/ordered/persistent_ordered_cursors.hpp>
 
 #include <string_view>
 
