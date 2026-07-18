@@ -60,11 +60,13 @@ from .merkle_proofs_merge import (
     verify_merkle_proof,
 )
 from .merkle_search_tree import (
+    MerkleCursorSearch,
     MerkleEncodedBlock,
     MerkleEntry,
     MerkleMapDifference,
     MerkleMapDifferenceKind,
     MerkleSearchTree,
+    MerkleSearchTreeCursor,
     MerkleSearchTreeStatistics,
 )
 from .persistent_bi_map import (
@@ -170,6 +172,7 @@ __all__ = [
     "MerkleBlockStore",
     "MerkleCodec",
     "MerkleComparator",
+    "MerkleCursorSearch",
     "MerkleDigest",
     "MerkleEncodedBlock",
     "MerkleEntry",
@@ -189,6 +192,7 @@ __all__ = [
     "MerkleProofVerificationResult",
     "MerkleRangeQuery",
     "MerkleSearchTree",
+    "MerkleSearchTreeCursor",
     "MerkleSearchTreePolicy",
     "MerkleSearchTreeStatistics",
     "MerkleSyncPlan",

@@ -75,6 +75,78 @@ def make_tree(
     )
 
 
+def test_cursor_navigates_ranks_and_publishes_canonical_edits() -> None:
+    policy = string_policy("python-cursor-v1")
+    source = MerkleSearchTree.from_entries(((-10, "a"), (0, None), (10, "c")), policy)
+    entries = tuple(source)
+    for position in range(source.count + 1):
+        cursor = source.cursor(position)
+        assert cursor.position == position
+        assert cursor.is_at_start is (position == 0)
+        assert cursor.is_at_end is (position == source.count)
+        assert cursor.snapshot() is source
+        assert cursor.peek_previous() == (None if position == 0 else entries[position - 1])
+        assert cursor.peek_next() == (None if position == source.count else entries[position])
+
+    assert source.lower_bound_cursor(-5).position == 1
+    assert source.upper_bound_cursor(0).position == 2
+    assert source.cursor_at_key(0).found
+    assert source.cursor_at_key(0).cursor.position == 1
+    assert not source.cursor_at_key(5).found
+    assert source.cursor_at_key(5).cursor.position == 2
+
+    exact = source.cursor_at_key(0).cursor
+    assert exact.set_next_value(None) is exact
+    changed = exact.set_next_value("b").snapshot()
+    assert changed.get(0) == "b"
+    assert changed.root_hash != source.root_hash
+    assert changed.policy is source.policy
+    assert source.get_entry(0) == MerkleEntry(0, None)
+
+    inserted = source.lower_bound_cursor(5).insert(5, "five")
+    assert inserted.position == 3
+    assert [entry.key for entry in inserted.snapshot()] == [-10, 0, 5, 10]
+    assert inserted.delete_previous().snapshot().root_hash == source.root_hash
+    assert [entry.key for entry in source.cursor_at_end().delete_previous().snapshot()] == [-10, 0]
+    assert [entry.key for entry in source.cursor().delete_next().snapshot()] == [0, 10]
+
+    with pytest.raises(IndexError):
+        source.cursor(-1)
+    with pytest.raises(IndexError):
+        source.cursor().move_previous()
+    with pytest.raises(IndexError):
+        source.cursor_at_end().move_next()
+    with pytest.raises(KeyError):
+        exact.insert(0, "duplicate")
+    with pytest.raises(ValueError):
+        source.cursor().insert(5, "wrong gap")
+
+
+@given(st.sets(st.integers(min_value=-2_000, max_value=2_000), max_size=300))
+@settings(max_examples=50)
+def test_cursor_cached_ranks_and_bounds_match_sorted_model(values: set[int]) -> None:
+    keys = sorted(values)
+    tree = MerkleSearchTree.from_entries(((key, str(key)) for key in keys), string_policy())
+    for position in range(len(keys) + 1):
+        cursor = tree.cursor(position)
+        previous = cursor.peek_previous()
+        next_entry = cursor.peek_next()
+        assert (None if previous is None else previous.key) == (
+            None if position == 0 else keys[position - 1]
+        )
+        assert (None if next_entry is None else next_entry.key) == (
+            None if position == len(keys) else keys[position]
+        )
+    for probe in range(-2_100, 2_101, 97):
+        rank = next((index for index, key in enumerate(keys) if key >= probe), len(keys))
+        found = rank < len(keys) and keys[rank] == probe
+        assert tree.lower_bound_cursor(probe).position == rank
+        assert tree.upper_bound_cursor(probe).position == rank + (1 if found else 0)
+        result = tree.cursor_at_key(probe)
+        assert result.cursor.position == rank
+        assert result.found is found
+
+
 def test_canonical_codecs_digest_and_policy_vectors() -> None:
     assert INT32_MERKLE_CODEC.encoding_id == "i32-be-v1"
     assert INT32_MERKLE_CODEC.encode(0x01020304) == bytes.fromhex("01020304")

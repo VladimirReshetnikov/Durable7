@@ -171,6 +171,69 @@ class MerkleSearchTree(Generic[K, V]):
     def root_hash(self) -> MerkleDigest:
         return self._policy.empty_digest if self._root is None else self._root.digest
 
+    def cursor(self, position: int = 0) -> MerkleSearchTreeCursor[K, V]:
+        """Create an immutable ordered cursor at a rank gap in ``0 .. count``."""
+        return MerkleSearchTreeCursor(self, position)
+
+    def cursor_at_end(self) -> MerkleSearchTreeCursor[K, V]:
+        """Create an immutable ordered cursor after the final entry."""
+        return MerkleSearchTreeCursor(self, self.count)
+
+    def lower_bound_cursor(self, key: K) -> MerkleSearchTreeCursor[K, V]:
+        """Create a cursor before the first entry whose key is not less than ``key``."""
+        rank, _ = self._lower_bound_rank_for_cursor(key)
+        return MerkleSearchTreeCursor(self, rank)
+
+    def upper_bound_cursor(self, key: K) -> MerkleSearchTreeCursor[K, V]:
+        """Create a cursor before the first entry whose key is greater than ``key``."""
+        rank, found = self._lower_bound_rank_for_cursor(key)
+        return MerkleSearchTreeCursor(self, rank + 1 if found else rank)
+
+    def cursor_at_key(self, key: K) -> MerkleCursorSearch[K, V]:
+        """Create a lower-bound cursor and report whether its next entry has ``key``."""
+        rank, found = self._lower_bound_rank_for_cursor(key)
+        return MerkleCursorSearch(MerkleSearchTreeCursor(self, rank), found)
+
+    def _entry_at_for_cursor(self, rank: int) -> MerkleEntry[K, V] | None:
+        if rank < 0 or rank >= self.count:
+            return None
+        node = self._root
+        while node is not None:
+            current = node
+            descended = False
+            for index, stored in enumerate(current.entries):
+                child = current.children[index]
+                child_count = 0 if child is None else child.count
+                if rank < child_count:
+                    node = child
+                    descended = True
+                    break
+                rank -= child_count
+                if rank == 0:
+                    return MerkleEntry(stored.key, stored.value)
+                rank -= 1
+            if not descended:
+                node = current.children[-1]
+        raise AssertionError("Merkle subtree counts do not contain the requested rank")
+
+    def _lower_bound_rank_for_cursor(self, key: K) -> tuple[int, bool]:
+        rank = 0
+        node = self._root
+        while node is not None:
+            position = _lower_bound(node.entries, key, self._policy.comparer)
+            for index in range(position):
+                child = node.children[index]
+                rank += (0 if child is None else child.count) + 1
+            found = (
+                position < len(node.entries)
+                and self._policy.comparer(node.entries[position].key, key) == 0
+            )
+            if found:
+                child = node.children[position]
+                return rank + (0 if child is None else child.count), True
+            node = node.children[position]
+        return rank, False
+
     def get_entry(self, key: K) -> MerkleEntry[K, V] | None:
         found = self._find_record(key)
         return None if found is None else MerkleEntry(found.key, found.value)
@@ -679,11 +742,111 @@ class MerkleSearchTree(Generic[K, V]):
             pending.extend(child for child in reversed(node.children) if child is not None)
 
 
+@dataclass(frozen=True, slots=True)
+class MerkleSearchTreeCursor(Generic[K, V]):
+    """Immutable tree-snapshot-plus-rank gap cursor in policy-comparer order."""
+
+    tree: MerkleSearchTree[K, V]
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        if self.position < 0 or self.position > self.tree.count:
+            raise IndexError(f"Cursor position {self.position} is outside 0 .. {self.tree.count}.")
+
+    @property
+    def count(self) -> int:
+        return self.tree.count
+
+    @property
+    def is_at_start(self) -> bool:
+        return self.position == 0
+
+    @property
+    def is_at_end(self) -> bool:
+        return self.position == self.count
+
+    def peek_previous(self) -> MerkleEntry[K, V] | None:
+        return None if self.is_at_start else self.tree._entry_at_for_cursor(self.position - 1)
+
+    def peek_next(self) -> MerkleEntry[K, V] | None:
+        return self.tree._entry_at_for_cursor(self.position)
+
+    def move_previous(self) -> MerkleSearchTreeCursor[K, V]:
+        if self.is_at_start:
+            raise IndexError("Cursor is already at the start.")
+        return MerkleSearchTreeCursor(self.tree, self.position - 1)
+
+    def move_next(self) -> MerkleSearchTreeCursor[K, V]:
+        if self.is_at_end:
+            raise IndexError("Cursor is already at the end.")
+        return MerkleSearchTreeCursor(self.tree, self.position + 1)
+
+    def seek(self, position: int) -> MerkleSearchTreeCursor[K, V]:
+        return self if position == self.position else MerkleSearchTreeCursor(self.tree, position)
+
+    def insert(self, key: K, value: V) -> MerkleSearchTreeCursor[K, V]:
+        """Strictly insert at a missing lower-bound gap and return the gap after it."""
+        rank, found = self.tree._lower_bound_rank_for_cursor(key)
+        if found:
+            raise KeyError("The key is already present.")
+        self._ensure_current_gap(rank)
+        return MerkleSearchTreeCursor(self.tree.set_item(key, value), self.position + 1)
+
+    def set_item(self, key: K, value: V) -> MerkleSearchTreeCursor[K, V]:
+        """Update an exact next entry or insert at a missing lower-bound gap."""
+        rank, found = self.tree._lower_bound_rank_for_cursor(key)
+        self._ensure_current_gap(rank)
+        edited = self.tree.set_item(key, value)
+        if edited is self.tree:
+            return self
+        return MerkleSearchTreeCursor(edited, self.position if found else self.position + 1)
+
+    set = set_item
+
+    def set_next_value(self, value: V) -> MerkleSearchTreeCursor[K, V]:
+        next_entry = self.peek_next()
+        if next_entry is None:
+            raise IndexError("No entry follows the cursor gap.")
+        edited = self.tree.set_item(next_entry.key, value)
+        return self if edited is self.tree else MerkleSearchTreeCursor(edited, self.position)
+
+    def delete_previous(self) -> MerkleSearchTreeCursor[K, V]:
+        previous = self.peek_previous()
+        if previous is None:
+            raise IndexError("No entry precedes the cursor gap.")
+        return MerkleSearchTreeCursor(self.tree.remove(previous.key), self.position - 1)
+
+    def delete_next(self) -> MerkleSearchTreeCursor[K, V]:
+        next_entry = self.peek_next()
+        if next_entry is None:
+            raise IndexError("No entry follows the cursor gap.")
+        return MerkleSearchTreeCursor(self.tree.remove(next_entry.key), self.position)
+
+    def snapshot(self) -> MerkleSearchTree[K, V]:
+        return self.tree
+
+    def _ensure_current_gap(self, rank: int) -> None:
+        if rank != self.position:
+            raise ValueError(
+                f"The key belongs at gap {rank}, not at the current gap {self.position}."
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class MerkleCursorSearch(Generic[K, V]):
+    """Presence-safe exact-key cursor search result."""
+
+    cursor: MerkleSearchTreeCursor[K, V]
+    found: bool
+
+
 __all__ = [
+    "MerkleCursorSearch",
     "MerkleEncodedBlock",
     "MerkleEntry",
     "MerkleMapDifference",
     "MerkleMapDifferenceKind",
     "MerkleSearchTree",
+    "MerkleSearchTreeCursor",
     "MerkleSearchTreeStatistics",
 ]
