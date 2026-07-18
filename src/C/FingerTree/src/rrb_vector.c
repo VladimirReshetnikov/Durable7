@@ -1575,6 +1575,377 @@ bool ft_rrb_vector_validate(const ft_rrb_vector* vector, ft_rrb_statistics* stat
     return accumulator.valid && count == vector->root->count && height == vector->root->height;
 }
 
+static bool ft_rrb_vector_cursor_is_valid(const ft_rrb_vector_cursor* cursor)
+{
+    return cursor != NULL && ft_rrb_policy_valid(cursor->vector.policy) &&
+        cursor->position <= ft_rrb_vector_size(&cursor->vector);
+}
+
+static ft_status ft_rrb_vector_cursor_stage(
+    const ft_rrb_vector* vector,
+    size_t position,
+    ft_rrb_vector_cursor* cursor)
+{
+    (void)memset(cursor, 0, sizeof(*cursor));
+    ft_status status = ft_rrb_vector_copy(vector, &cursor->vector);
+    if (status == FT_STATUS_OK) {
+        cursor->position = position;
+    }
+    return status;
+}
+
+static void ft_rrb_vector_cursor_publish(
+    const ft_rrb_vector_cursor* source,
+    ft_rrb_vector_cursor* staged,
+    ft_rrb_vector_cursor* result)
+{
+    if (result == source) {
+        ft_rrb_vector_cursor_dispose(result);
+    }
+    ft_rrb_vector_cursor_move(result, staged);
+}
+
+static ft_status ft_rrb_vector_cursor_publish_vector(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector* vector,
+    size_t position,
+    ft_rrb_vector_cursor* result)
+{
+    ft_rrb_vector_cursor staged = {0};
+    ft_rrb_vector_move(&staged.vector, vector);
+    staged.position = position;
+    ft_rrb_vector_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rrb_vector_get_cursor(
+    const ft_rrb_vector* vector,
+    size_t position,
+    ft_rrb_vector_cursor* result)
+{
+    if (vector == NULL || result == NULL || !ft_rrb_policy_valid(vector->policy)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_rrb_vector_size(vector)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_rrb_vector_cursor_stage(vector, position, result);
+}
+
+ft_status ft_rrb_vector_cursor_copy(
+    const ft_rrb_vector_cursor* source,
+    ft_rrb_vector_cursor* destination)
+{
+    if (!ft_rrb_vector_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_rrb_vector_cursor_stage(&source->vector, source->position, destination);
+}
+
+void ft_rrb_vector_cursor_move(
+    ft_rrb_vector_cursor* destination,
+    ft_rrb_vector_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_rrb_vector_move(&destination->vector, &source->vector);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_rrb_vector_cursor_dispose(ft_rrb_vector_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_rrb_vector_dispose(&cursor->vector);
+        cursor->position = 0;
+    }
+}
+
+bool ft_rrb_vector_cursor_valid(const ft_rrb_vector_cursor* cursor)
+{
+    return ft_rrb_vector_cursor_is_valid(cursor);
+}
+
+bool ft_rrb_vector_cursor_empty(const ft_rrb_vector_cursor* cursor)
+{
+    return !ft_rrb_vector_cursor_is_valid(cursor) || ft_rrb_vector_empty(&cursor->vector);
+}
+
+size_t ft_rrb_vector_cursor_size(const ft_rrb_vector_cursor* cursor)
+{
+    return ft_rrb_vector_cursor_is_valid(cursor) ? ft_rrb_vector_size(&cursor->vector) : 0;
+}
+
+size_t ft_rrb_vector_cursor_position(const ft_rrb_vector_cursor* cursor)
+{
+    return ft_rrb_vector_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_rrb_vector_cursor_is_at_start(const ft_rrb_vector_cursor* cursor, bool* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rrb_vector_cursor_is_at_end(const ft_rrb_vector_cursor* cursor, bool* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_rrb_vector_size(&cursor->vector);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_rrb_vector_cursor_try_peek_previous(
+    const ft_rrb_vector_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_rrb_vector_at(&cursor->vector, cursor->position - 1u, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_rrb_vector_cursor_try_peek_next(
+    const ft_rrb_vector_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == ft_rrb_vector_size(&cursor->vector)) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_rrb_vector_at(&cursor->vector, cursor->position, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_rrb_vector_cursor_seek(
+    const ft_rrb_vector_cursor* cursor,
+    size_t position,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_rrb_vector_size(&cursor->vector)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (result == cursor && position == cursor->position) {
+        return FT_STATUS_OK;
+    }
+    ft_rrb_vector_cursor staged;
+    ft_status status = ft_rrb_vector_cursor_stage(&cursor->vector, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_rrb_vector_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_rrb_vector_cursor_move_previous(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_rrb_vector_empty(&cursor->vector) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_rrb_vector_cursor_seek(cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_rrb_vector_cursor_move_next(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_rrb_vector_size(&cursor->vector);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_rrb_vector_cursor_seek(cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_rrb_vector_cursor_insert_array(
+    const ft_rrb_vector_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL ||
+        (values == NULL && count != 0)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count == 0) {
+        return ft_rrb_vector_cursor_copy(cursor, result);
+    }
+    if (cursor->position > SIZE_MAX - count) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_rrb_vector edited = {0};
+    ft_status status = ft_rrb_vector_insert_range(
+        &cursor->vector,
+        cursor->position,
+        values,
+        count,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_rrb_vector_cursor_publish_vector(cursor, &edited, cursor->position + count, result)
+        : status;
+}
+
+ft_status ft_rrb_vector_cursor_insert(
+    const ft_rrb_vector_cursor* cursor,
+    const void* value,
+    ft_rrb_vector_cursor* result)
+{
+    return value == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_rrb_vector_cursor_insert_array(cursor, value, 1, result);
+}
+
+ft_status ft_rrb_vector_cursor_insert_vector(
+    const ft_rrb_vector_cursor* cursor,
+    const ft_rrb_vector* values,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || values == NULL || result == NULL ||
+        !ft_rrb_policy_valid(values->policy) || cursor->vector.policy != values->policy) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t count = ft_rrb_vector_size(values);
+    if (count == 0) {
+        return ft_rrb_vector_cursor_copy(cursor, result);
+    }
+    if (cursor->position > SIZE_MAX - count) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_rrb_split_result split;
+    ft_status status = ft_rrb_vector_split_at(&cursor->vector, cursor->position, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_rrb_vector prefix = {0};
+    status = ft_rrb_vector_concat(&split.left, values, &prefix);
+    if (status != FT_STATUS_OK) {
+        ft_rrb_vector_dispose(&split.left);
+        ft_rrb_vector_dispose(&split.right);
+        return status;
+    }
+    ft_rrb_vector edited = {0};
+    status = ft_rrb_vector_concat(&prefix, &split.right, &edited);
+    ft_rrb_vector_dispose(&prefix);
+    ft_rrb_vector_dispose(&split.left);
+    ft_rrb_vector_dispose(&split.right);
+    return status == FT_STATUS_OK
+        ? ft_rrb_vector_cursor_publish_vector(cursor, &edited, cursor->position + count, result)
+        : status;
+}
+
+ft_status ft_rrb_vector_cursor_delete_previous(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_rrb_vector_empty(&cursor->vector) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_rrb_vector edited = {0};
+    ft_status status = ft_rrb_vector_remove_range(
+        &cursor->vector,
+        cursor->position - 1u,
+        1,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_rrb_vector_cursor_publish_vector(cursor, &edited, cursor->position - 1u, result)
+        : status;
+}
+
+ft_status ft_rrb_vector_cursor_delete_next(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_rrb_vector_size(&cursor->vector);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_rrb_vector edited = {0};
+    ft_status status = ft_rrb_vector_remove_range(
+        &cursor->vector,
+        cursor->position,
+        1,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_rrb_vector_cursor_publish_vector(cursor, &edited, cursor->position, result)
+        : status;
+}
+
+ft_status ft_rrb_vector_cursor_replace_next(
+    const ft_rrb_vector_cursor* cursor,
+    const void* value,
+    ft_rrb_vector_cursor* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_rrb_vector_size(&cursor->vector);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_rrb_vector edited = {0};
+    ft_status status = ft_rrb_vector_set(
+        &cursor->vector,
+        cursor->position,
+        value,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_rrb_vector_cursor_publish_vector(cursor, &edited, cursor->position, result)
+        : status;
+}
+
+ft_status ft_rrb_vector_cursor_snapshot(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector* result)
+{
+    if (!ft_rrb_vector_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->vector) {
+        return FT_STATUS_OK;
+    }
+    return ft_rrb_vector_copy(&cursor->vector, result);
+}
+
 static void ft_rrb_builder_clear_staging(
     const ft_rrb_policy* policy,
     ft_rrb_builder_rep* rep)

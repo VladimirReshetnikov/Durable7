@@ -3110,6 +3110,517 @@ ft_status ft_tree_visit(const ft_tree* tree, ft_visit_fn visitor, void* context)
     return ft_visit_rep(tree->policy, tree->rep, visitor, context);
 }
 
+static bool ft_tree_cursor_is_valid(const ft_tree_cursor* cursor)
+{
+    return cursor != NULL && ft_tree_is_valid(&cursor->tree) &&
+        cursor->position <= ft_tree_size(&cursor->tree);
+}
+
+static ft_status ft_tree_cursor_stage(
+    const ft_tree* tree,
+    size_t position,
+    ft_tree_cursor* cursor)
+{
+    (void)memset(cursor, 0, sizeof(*cursor));
+    ft_status status = ft_tree_copy(tree, &cursor->tree);
+    if (status == FT_STATUS_OK) {
+        cursor->position = position;
+    }
+    return status;
+}
+
+static void ft_tree_cursor_publish(
+    const ft_tree_cursor* source,
+    ft_tree_cursor* staged,
+    ft_tree_cursor* result)
+{
+    if (result == source) {
+        ft_tree_cursor_dispose(result);
+    }
+    ft_tree_cursor_move(result, staged);
+}
+
+static ft_status ft_tree_cursor_find_position(
+    const ft_tree* tree,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    size_t* position)
+{
+    ft_tree left = {0};
+    ft_tree right = {0};
+    ft_status status = ft_tree_split(
+        tree,
+        predicate,
+        predicate_context,
+        found,
+        &left,
+        NULL,
+        &right);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+
+    if (*found) {
+        *position = ft_tree_size(&left);
+        ft_tree_dispose(&left);
+        ft_tree_dispose(&right);
+    } else {
+        *position = ft_tree_size(tree);
+    }
+    return FT_STATUS_OK;
+}
+
+ft_status ft_tree_get_cursor_at_start(const ft_tree* tree, ft_tree_cursor* result)
+{
+    if (!ft_tree_is_valid(tree) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_tree_cursor_stage(tree, 0, result);
+}
+
+ft_status ft_tree_get_cursor_at_end(const ft_tree* tree, ft_tree_cursor* result)
+{
+    if (!ft_tree_is_valid(tree) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_tree_cursor_stage(tree, ft_tree_size(tree), result);
+}
+
+ft_status ft_tree_get_cursor_by_measure(
+    const ft_tree* tree,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_tree_cursor* result)
+{
+    if (!ft_tree_is_valid(tree) || predicate == NULL || found == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t position = 0;
+    ft_status status = ft_tree_cursor_find_position(
+        tree,
+        predicate,
+        predicate_context,
+        found,
+        &position);
+    if (status == FT_STATUS_OK) {
+        status = ft_tree_cursor_stage(tree, position, result);
+    }
+    return status;
+}
+
+ft_status ft_tree_cursor_copy(const ft_tree_cursor* source, ft_tree_cursor* destination)
+{
+    if (!ft_tree_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_tree_cursor_stage(&source->tree, source->position, destination);
+}
+
+void ft_tree_cursor_move(ft_tree_cursor* destination, ft_tree_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    destination->tree = source->tree;
+    destination->position = source->position;
+    (void)memset(source, 0, sizeof(*source));
+}
+
+void ft_tree_cursor_dispose(ft_tree_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_tree_dispose(&cursor->tree);
+        cursor->position = 0;
+    }
+}
+
+bool ft_tree_cursor_valid(const ft_tree_cursor* cursor)
+{
+    return ft_tree_cursor_is_valid(cursor);
+}
+
+ft_status ft_tree_cursor_is_at_start(const ft_tree_cursor* cursor, bool* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_tree_cursor_is_at_end(const ft_tree_cursor* cursor, bool* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_tree_size(&cursor->tree);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_tree_cursor_measure_side(
+    const ft_tree_cursor* cursor,
+    bool before,
+    void* destination)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    ft_tree_split_result split;
+    ft_status status = ft_tree_split_at(&cursor->tree, cursor->position, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    status = ft_tree_measure(before ? &split.left : &split.right, destination);
+    ft_tree_dispose(&split.left);
+    ft_tree_dispose(&split.right);
+    return status;
+}
+
+ft_status ft_tree_cursor_measure_before(const ft_tree_cursor* cursor, void* destination)
+{
+    return ft_tree_cursor_measure_side(cursor, true, destination);
+}
+
+ft_status ft_tree_cursor_measure_after(const ft_tree_cursor* cursor, void* destination)
+{
+    return ft_tree_cursor_measure_side(cursor, false, destination);
+}
+
+ft_status ft_tree_cursor_try_peek_previous(
+    const ft_tree_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_tree_at(&cursor->tree, cursor->position - 1u, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_tree_cursor_try_peek_next(
+    const ft_tree_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == ft_tree_size(&cursor->tree)) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_tree_at(&cursor->tree, cursor->position, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+static ft_status ft_tree_cursor_seek_position(
+    const ft_tree_cursor* cursor,
+    size_t position,
+    ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_tree_size(&cursor->tree)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (result == cursor && position == cursor->position) {
+        return FT_STATUS_OK;
+    }
+    ft_tree_cursor staged;
+    ft_status status = ft_tree_cursor_stage(&cursor->tree, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_tree_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_tree_cursor_move_previous(const ft_tree_cursor* cursor, ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_tree_empty(&cursor->tree) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_tree_cursor_seek_position(cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_tree_cursor_move_next(const ft_tree_cursor* cursor, ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_tree_size(&cursor->tree);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_tree_cursor_seek_position(cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_tree_cursor_seek_by_measure(
+    const ft_tree_cursor* cursor,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || predicate == NULL || found == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+
+    size_t position = 0;
+    ft_status status = ft_tree_cursor_find_position(
+        &cursor->tree,
+        predicate,
+        predicate_context,
+        found,
+        &position);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    return ft_tree_cursor_seek_position(cursor, position, result);
+}
+
+static ft_status ft_tree_cursor_publish_tree(
+    const ft_tree_cursor* cursor,
+    ft_tree* tree,
+    size_t position,
+    ft_tree_cursor* result)
+{
+    ft_tree_cursor staged = {0};
+    staged.tree = *tree;
+    staged.position = position;
+    (void)memset(tree, 0, sizeof(*tree));
+    ft_tree_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_tree_cursor_insert(
+    const ft_tree_cursor* cursor,
+    const void* value,
+    ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_tree edited = {0};
+    ft_status status = ft_tree_insert_at(&cursor->tree, cursor->position, value, &edited);
+    return status == FT_STATUS_OK
+        ? ft_tree_cursor_publish_tree(cursor, &edited, cursor->position + 1u, result)
+        : status;
+}
+
+ft_status ft_tree_cursor_delete_previous(const ft_tree_cursor* cursor, ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_tree_empty(&cursor->tree) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_tree edited = {0};
+    ft_status status = ft_tree_remove_at(&cursor->tree, cursor->position - 1u, &edited);
+    return status == FT_STATUS_OK
+        ? ft_tree_cursor_publish_tree(cursor, &edited, cursor->position - 1u, result)
+        : status;
+}
+
+ft_status ft_tree_cursor_delete_next(const ft_tree_cursor* cursor, ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_tree_size(&cursor->tree);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_tree edited = {0};
+    ft_status status = ft_tree_remove_at(&cursor->tree, cursor->position, &edited);
+    return status == FT_STATUS_OK
+        ? ft_tree_cursor_publish_tree(cursor, &edited, cursor->position, result)
+        : status;
+}
+
+ft_status ft_tree_cursor_replace_next(
+    const ft_tree_cursor* cursor,
+    const void* value,
+    ft_tree_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_tree_size(&cursor->tree);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_tree edited = {0};
+    ft_status status = ft_tree_set_at(&cursor->tree, cursor->position, value, &edited);
+    return status == FT_STATUS_OK
+        ? ft_tree_cursor_publish_tree(cursor, &edited, cursor->position, result)
+        : status;
+}
+
+ft_status ft_tree_cursor_snapshot(const ft_tree_cursor* cursor, ft_tree* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->tree) {
+        return FT_STATUS_OK;
+    }
+    return ft_tree_copy(&cursor->tree, result);
+}
+
+ft_status ft_persistent_deque_get_cursor(
+    const ft_persistent_deque* deque,
+    size_t position,
+    ft_persistent_deque_cursor* result)
+{
+    if (!ft_tree_is_valid(deque) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_tree_size(deque)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_tree_cursor_stage(deque, position, result);
+}
+
+bool ft_persistent_deque_cursor_empty(const ft_persistent_deque_cursor* cursor)
+{
+    return !ft_tree_cursor_is_valid(cursor) || ft_tree_empty(&cursor->tree);
+}
+
+size_t ft_persistent_deque_cursor_size(const ft_persistent_deque_cursor* cursor)
+{
+    return ft_tree_cursor_is_valid(cursor) ? ft_tree_size(&cursor->tree) : 0;
+}
+
+size_t ft_persistent_deque_cursor_position(const ft_persistent_deque_cursor* cursor)
+{
+    return ft_tree_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_persistent_deque_cursor_seek(
+    const ft_persistent_deque_cursor* cursor,
+    size_t position,
+    ft_persistent_deque_cursor* result)
+{
+    return ft_tree_cursor_seek_position(cursor, position, result);
+}
+
+static ft_status ft_persistent_deque_from_array(
+    const ft_tree_policy* policy,
+    const void* values,
+    size_t count,
+    ft_persistent_deque* result)
+{
+    if (count != 0 && policy->value.size > SIZE_MAX / count) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_tree current = {0};
+    ft_status status = ft_tree_init(&current, policy);
+    const unsigned char* bytes = values;
+    for (size_t index = 0; status == FT_STATUS_OK && index != count; ++index) {
+        ft_tree next = {0};
+        status = ft_tree_push_back(&current, bytes + index * policy->value.size, &next);
+        if (status == FT_STATUS_OK) {
+            ft_tree_dispose(&current);
+            current = next;
+        }
+    }
+    if (status != FT_STATUS_OK) {
+        ft_tree_dispose(&current);
+        return status;
+    }
+    *result = current;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_persistent_deque_cursor_insert_deque(
+    const ft_persistent_deque_cursor* cursor,
+    const ft_persistent_deque* values,
+    ft_persistent_deque_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || !ft_tree_is_valid(values) || result == NULL ||
+        cursor->tree.policy != values->policy) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t count = ft_tree_size(values);
+    if (count == 0) {
+        return ft_tree_cursor_copy(cursor, result);
+    }
+    if (cursor->position > SIZE_MAX - count) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_tree_split_result split;
+    ft_status status = ft_tree_split_at(&cursor->tree, cursor->position, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_tree prefix = {0};
+    status = ft_tree_concat(&split.left, values, &prefix);
+    if (status != FT_STATUS_OK) {
+        ft_tree_dispose(&split.left);
+        ft_tree_dispose(&split.right);
+        return status;
+    }
+    ft_tree edited = {0};
+    status = ft_tree_concat(&prefix, &split.right, &edited);
+    ft_tree_dispose(&prefix);
+    ft_tree_dispose(&split.left);
+    ft_tree_dispose(&split.right);
+    return status == FT_STATUS_OK
+        ? ft_tree_cursor_publish_tree(cursor, &edited, cursor->position + count, result)
+        : status;
+}
+
+ft_status ft_persistent_deque_cursor_insert_array(
+    const ft_persistent_deque_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_persistent_deque_cursor* result)
+{
+    if (!ft_tree_cursor_is_valid(cursor) || result == NULL || (values == NULL && count != 0)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count == 0) {
+        return ft_tree_cursor_copy(cursor, result);
+    }
+    ft_persistent_deque range;
+    ft_status status = ft_persistent_deque_from_array(cursor->tree.policy, values, count, &range);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    status = ft_persistent_deque_cursor_insert_deque(cursor, &range, result);
+    ft_tree_dispose(&range);
+    return status;
+}
+
 static void ft_rev_rep_retain(ft_reversible_deque_rep* rep)
 {
     if (rep != NULL) {
@@ -5237,6 +5748,453 @@ ft_status ft_reversible_deque_visit(const ft_reversible_deque* deque, ft_visit_f
     }
 
     return ft_rev_rep_visit(deque->policy, deque->rep, visitor, context);
+}
+
+static bool ft_reversible_deque_cursor_is_valid(const ft_reversible_deque_cursor* cursor)
+{
+    return cursor != NULL && ft_reversible_deque_is_valid(&cursor->deque) &&
+        cursor->position <= ft_reversible_deque_size(&cursor->deque);
+}
+
+static ft_status ft_reversible_deque_cursor_stage(
+    const ft_reversible_deque* deque,
+    size_t position,
+    ft_reversible_deque_cursor* cursor)
+{
+    (void)memset(cursor, 0, sizeof(*cursor));
+    ft_status status = ft_reversible_deque_copy(deque, &cursor->deque);
+    if (status == FT_STATUS_OK) {
+        cursor->position = position;
+    }
+    return status;
+}
+
+static void ft_reversible_deque_cursor_publish(
+    const ft_reversible_deque_cursor* source,
+    ft_reversible_deque_cursor* staged,
+    ft_reversible_deque_cursor* result)
+{
+    if (result == source) {
+        ft_reversible_deque_cursor_dispose(result);
+    }
+    ft_reversible_deque_cursor_move(result, staged);
+}
+
+static ft_status ft_reversible_deque_cursor_publish_deque(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque* deque,
+    size_t position,
+    ft_reversible_deque_cursor* result)
+{
+    ft_reversible_deque_cursor staged = {0};
+    staged.deque = *deque;
+    staged.position = position;
+    (void)memset(deque, 0, sizeof(*deque));
+    ft_reversible_deque_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_get_cursor(
+    const ft_reversible_deque* deque,
+    size_t position,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_is_valid(deque) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_reversible_deque_size(deque)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_reversible_deque_cursor_stage(deque, position, result);
+}
+
+ft_status ft_reversible_deque_cursor_copy(
+    const ft_reversible_deque_cursor* source,
+    ft_reversible_deque_cursor* destination)
+{
+    if (!ft_reversible_deque_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_reversible_deque_cursor_stage(&source->deque, source->position, destination);
+}
+
+void ft_reversible_deque_cursor_move(
+    ft_reversible_deque_cursor* destination,
+    ft_reversible_deque_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    destination->deque = source->deque;
+    destination->position = source->position;
+    (void)memset(source, 0, sizeof(*source));
+}
+
+void ft_reversible_deque_cursor_dispose(ft_reversible_deque_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_reversible_deque_dispose(&cursor->deque);
+        cursor->position = 0;
+    }
+}
+
+bool ft_reversible_deque_cursor_valid(const ft_reversible_deque_cursor* cursor)
+{
+    return ft_reversible_deque_cursor_is_valid(cursor);
+}
+
+bool ft_reversible_deque_cursor_empty(const ft_reversible_deque_cursor* cursor)
+{
+    return !ft_reversible_deque_cursor_is_valid(cursor) || ft_reversible_deque_empty(&cursor->deque);
+}
+
+size_t ft_reversible_deque_cursor_size(const ft_reversible_deque_cursor* cursor)
+{
+    return ft_reversible_deque_cursor_is_valid(cursor)
+        ? ft_reversible_deque_size(&cursor->deque)
+        : 0;
+}
+
+size_t ft_reversible_deque_cursor_position(const ft_reversible_deque_cursor* cursor)
+{
+    return ft_reversible_deque_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_reversible_deque_cursor_is_at_start(
+    const ft_reversible_deque_cursor* cursor,
+    bool* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_cursor_is_at_end(
+    const ft_reversible_deque_cursor* cursor,
+    bool* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_reversible_deque_size(&cursor->deque);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_cursor_try_peek_previous(
+    const ft_reversible_deque_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_reversible_deque_at(&cursor->deque, cursor->position - 1u, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_reversible_deque_cursor_try_peek_next(
+    const ft_reversible_deque_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == ft_reversible_deque_size(&cursor->deque)) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_reversible_deque_at(&cursor->deque, cursor->position, value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_reversible_deque_cursor_seek(
+    const ft_reversible_deque_cursor* cursor,
+    size_t position,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_reversible_deque_size(&cursor->deque)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (result == cursor && position == cursor->position) {
+        return FT_STATUS_OK;
+    }
+    ft_reversible_deque_cursor staged;
+    ft_status status = ft_reversible_deque_cursor_stage(&cursor->deque, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_reversible_deque_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_reversible_deque_cursor_move_previous(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_reversible_deque_empty(&cursor->deque) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_reversible_deque_cursor_seek(cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_reversible_deque_cursor_move_next(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_reversible_deque_size(&cursor->deque);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_reversible_deque_cursor_seek(cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_reversible_deque_cursor_insert(
+    const ft_reversible_deque_cursor* cursor,
+    const void* value,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_reversible_deque edited = {0};
+    ft_status status = ft_reversible_deque_insert_at(
+        &cursor->deque,
+        cursor->position,
+        value,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_reversible_deque_cursor_publish_deque(
+            cursor,
+            &edited,
+            cursor->position + 1u,
+            result)
+        : status;
+}
+
+ft_status ft_reversible_deque_cursor_insert_deque(
+    const ft_reversible_deque_cursor* cursor,
+    const ft_reversible_deque* values,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) ||
+        !ft_reversible_deque_is_valid(values) || result == NULL ||
+        cursor->deque.policy != values->policy) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t count = ft_reversible_deque_size(values);
+    if (count == 0) {
+        return ft_reversible_deque_cursor_copy(cursor, result);
+    }
+    if (cursor->position > SIZE_MAX - count) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_reversible_deque_split_result split;
+    ft_status status = ft_reversible_deque_split_at(&cursor->deque, cursor->position, &split);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_reversible_deque prefix = {0};
+    status = ft_reversible_deque_concat(&split.left, values, &prefix);
+    if (status != FT_STATUS_OK) {
+        ft_reversible_deque_dispose(&split.left);
+        ft_reversible_deque_dispose(&split.right);
+        return status;
+    }
+    ft_reversible_deque edited = {0};
+    status = ft_reversible_deque_concat(&prefix, &split.right, &edited);
+    ft_reversible_deque_dispose(&prefix);
+    ft_reversible_deque_dispose(&split.left);
+    ft_reversible_deque_dispose(&split.right);
+    return status == FT_STATUS_OK
+        ? ft_reversible_deque_cursor_publish_deque(
+            cursor,
+            &edited,
+            cursor->position + count,
+            result)
+        : status;
+}
+
+static ft_status ft_reversible_deque_from_array(
+    const ft_tree_policy* policy,
+    const void* values,
+    size_t count,
+    ft_reversible_deque* result)
+{
+    if (count != 0 && policy->value.size > SIZE_MAX / count) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_reversible_deque current = {0};
+    ft_status status = ft_reversible_deque_init(&current, policy);
+    const unsigned char* bytes = values;
+    for (size_t index = 0; status == FT_STATUS_OK && index != count; ++index) {
+        ft_reversible_deque next = {0};
+        status = ft_reversible_deque_push_back(
+            &current,
+            bytes + index * policy->value.size,
+            &next);
+        if (status == FT_STATUS_OK) {
+            ft_reversible_deque_dispose(&current);
+            current = next;
+        }
+    }
+    if (status != FT_STATUS_OK) {
+        ft_reversible_deque_dispose(&current);
+        return status;
+    }
+    *result = current;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_reversible_deque_cursor_insert_array(
+    const ft_reversible_deque_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL ||
+        (values == NULL && count != 0)) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count == 0) {
+        return ft_reversible_deque_cursor_copy(cursor, result);
+    }
+    ft_reversible_deque range;
+    ft_status status = ft_reversible_deque_from_array(
+        cursor->deque.policy,
+        values,
+        count,
+        &range);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    status = ft_reversible_deque_cursor_insert_deque(cursor, &range, result);
+    ft_reversible_deque_dispose(&range);
+    return status;
+}
+
+ft_status ft_reversible_deque_cursor_delete_previous(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_reversible_deque_empty(&cursor->deque) ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_reversible_deque edited = {0};
+    ft_status status = ft_reversible_deque_remove_at(
+        &cursor->deque,
+        cursor->position - 1u,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_reversible_deque_cursor_publish_deque(
+            cursor,
+            &edited,
+            cursor->position - 1u,
+            result)
+        : status;
+}
+
+ft_status ft_reversible_deque_cursor_delete_next(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_reversible_deque_size(&cursor->deque);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_reversible_deque edited = {0};
+    ft_status status = ft_reversible_deque_remove_at(
+        &cursor->deque,
+        cursor->position,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_reversible_deque_cursor_publish_deque(cursor, &edited, cursor->position, result)
+        : status;
+}
+
+ft_status ft_reversible_deque_cursor_replace_next(
+    const ft_reversible_deque_cursor* cursor,
+    const void* value,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_reversible_deque_size(&cursor->deque);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_reversible_deque edited = {0};
+    ft_status status = ft_reversible_deque_set_at(
+        &cursor->deque,
+        cursor->position,
+        value,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_reversible_deque_cursor_publish_deque(cursor, &edited, cursor->position, result)
+        : status;
+}
+
+ft_status ft_reversible_deque_cursor_reverse(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t position = ft_reversible_deque_size(&cursor->deque) - cursor->position;
+    ft_reversible_deque reversed = {0};
+    ft_status status = ft_reversible_deque_reverse(&cursor->deque, &reversed);
+    return status == FT_STATUS_OK
+        ? ft_reversible_deque_cursor_publish_deque(cursor, &reversed, position, result)
+        : status;
+}
+
+ft_status ft_reversible_deque_cursor_snapshot(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque* result)
+{
+    if (!ft_reversible_deque_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->deque) {
+        return FT_STATUS_OK;
+    }
+    return ft_reversible_deque_copy(&cursor->deque, result);
 }
 
 static int ft_compare_values(const ft_sorted_multiset* set, const void* left, const void* right)

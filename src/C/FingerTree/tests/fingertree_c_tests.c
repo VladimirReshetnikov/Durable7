@@ -2883,6 +2883,155 @@ static void test_text_rope_long_edit_script(void)
     ft_text_rope_dispose(&rope);
 }
 
+static void test_sequence_cursors(void)
+{
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_measure_policy sum_measure;
+    init_int_sum_measure(&sum_measure);
+    ft_tree_policy sum_policy = {int_type, sum_measure};
+
+    ft_tree tree;
+    REQUIRE_STATUS(ft_tree_init(&tree, &sum_policy), FT_STATUS_OK);
+    const int measured_values[] = {2, 3, 5, 7};
+    for (size_t index = 0; index != 4; ++index) {
+        ft_tree next;
+        REQUIRE_STATUS(ft_tree_push_back(&tree, &measured_values[index], &next), FT_STATUS_OK);
+        ft_tree_dispose(&tree);
+        tree = next;
+    }
+
+    int threshold = 6;
+    bool found = false;
+    ft_tree_cursor measured = {0};
+    REQUIRE_STATUS(
+        ft_tree_get_cursor_by_measure(
+            &tree,
+            int_sum_reaches,
+            &threshold,
+            &found,
+            &measured),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    int before = 0;
+    int after = 0;
+    int value = 0;
+    REQUIRE_STATUS(ft_tree_cursor_measure_before(&measured, &before), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_tree_cursor_measure_after(&measured, &after), FT_STATUS_OK);
+    REQUIRE(before == 5 && after == 12);
+    REQUIRE_STATUS(ft_tree_cursor_try_peek_next(&measured, &found, &value), FT_STATUS_OK);
+    REQUIRE(found && value == 5);
+
+    const int eleven = 11;
+    const int thirteen = 13;
+    ft_tree_cursor inserted = {0};
+    ft_tree_cursor deleted = {0};
+    ft_tree_cursor edited = {0};
+    REQUIRE_STATUS(ft_tree_cursor_insert(&measured, &eleven, &inserted), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_tree_cursor_delete_next(&inserted, &deleted), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_tree_cursor_replace_next(&deleted, &thirteen, &edited), FT_STATUS_OK);
+    const int measured_expected[] = {2, 3, 11, 13};
+    for (size_t index = 0; index != 4; ++index) {
+        value = 0;
+        REQUIRE_STATUS(ft_tree_at(&edited.tree, index, &value), FT_STATUS_OK);
+        REQUIRE(value == measured_expected[index]);
+        value = 0;
+        REQUIRE_STATUS(ft_tree_at(&tree, index, &value), FT_STATUS_OK);
+        REQUIRE(value == measured_values[index]);
+    }
+
+    ft_tree_policy deque_policy;
+    init_int_policy(&deque_policy);
+    ft_persistent_deque deque;
+    REQUIRE_STATUS(ft_persistent_deque_init(&deque, &deque_policy), FT_STATUS_OK);
+    const int deque_values[] = {1, 0, 3};
+    for (size_t index = 0; index != 3; ++index) {
+        ft_tree next;
+        REQUIRE_STATUS(ft_tree_push_back(&deque, &deque_values[index], &next), FT_STATUS_OK);
+        ft_tree_dispose(&deque);
+        deque = next;
+    }
+    ft_persistent_deque_cursor deque_cursor = {0};
+    REQUIRE_STATUS(ft_persistent_deque_get_cursor(&deque, 2, &deque_cursor), FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_persistent_deque_cursor_try_peek_previous(&deque_cursor, &found, &value),
+        FT_STATUS_OK);
+    REQUIRE(found && value == 0);
+    const int range[] = {7, 8};
+    ft_persistent_deque_cursor deque_inserted = {0};
+    ft_persistent_deque_cursor deque_deleted = {0};
+    ft_persistent_deque_cursor deque_edited = {0};
+    REQUIRE_STATUS(
+        ft_persistent_deque_cursor_insert_array(&deque_cursor, range, 2, &deque_inserted),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_persistent_deque_cursor_delete_previous(&deque_inserted, &deque_deleted),
+        FT_STATUS_OK);
+    const int nine = 9;
+    REQUIRE_STATUS(
+        ft_persistent_deque_cursor_replace_next(&deque_deleted, &nine, &deque_edited),
+        FT_STATUS_OK);
+    const int deque_expected[] = {1, 0, 7, 9};
+    REQUIRE(ft_persistent_deque_cursor_position(&deque_edited) == 3);
+    REQUIRE(ft_persistent_deque_cursor_size(&deque_edited) == 4);
+    for (size_t index = 0; index != 4; ++index) {
+        value = 0;
+        REQUIRE_STATUS(ft_tree_at(&deque_edited.tree, index, &value), FT_STATUS_OK);
+        REQUIRE(value == deque_expected[index]);
+    }
+    REQUIRE(ft_tree_size(&deque) == 3);
+
+    ft_reversible_deque reversible;
+    REQUIRE_STATUS(reversible_deque_from_range(&deque_policy, 1, 4, &reversible), FT_STATUS_OK);
+    ft_reversible_deque reversed;
+    REQUIRE_STATUS(ft_reversible_deque_reverse(&reversible, &reversed), FT_STATUS_OK);
+    ft_reversible_deque_cursor reversible_cursor = {0};
+    REQUIRE_STATUS(ft_reversible_deque_get_cursor(&reversed, 1, &reversible_cursor), FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_reversible_deque_cursor_try_peek_previous(&reversible_cursor, &found, &value),
+        FT_STATUS_OK);
+    REQUIRE(found && value == 4);
+    REQUIRE_STATUS(
+        ft_reversible_deque_cursor_try_peek_next(&reversible_cursor, &found, &value),
+        FT_STATUS_OK);
+    REQUIRE(found && value == 3);
+    ft_reversible_deque_cursor reversible_inserted = {0};
+    ft_reversible_deque_cursor reversible_deleted = {0};
+    ft_reversible_deque_cursor reversible_rereversed = {0};
+    REQUIRE_STATUS(
+        ft_reversible_deque_cursor_insert(&reversible_cursor, &nine, &reversible_inserted),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_reversible_deque_cursor_delete_next(&reversible_inserted, &reversible_deleted),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_reversible_deque_cursor_reverse(&reversible_deleted, &reversible_rereversed),
+        FT_STATUS_OK);
+    const int reverse_expected[] = {1, 2, 9, 4};
+    REQUIRE(ft_reversible_deque_cursor_position(&reversible_rereversed) == 2);
+    REQUIRE(reversible_deque_matches(
+        &reversible_rereversed.deque,
+        reverse_expected,
+        4));
+
+    ft_reversible_deque_cursor_dispose(&reversible_rereversed);
+    ft_reversible_deque_cursor_dispose(&reversible_deleted);
+    ft_reversible_deque_cursor_dispose(&reversible_inserted);
+    ft_reversible_deque_cursor_dispose(&reversible_cursor);
+    ft_reversible_deque_dispose(&reversed);
+    ft_reversible_deque_dispose(&reversible);
+    ft_persistent_deque_cursor_dispose(&deque_edited);
+    ft_persistent_deque_cursor_dispose(&deque_deleted);
+    ft_persistent_deque_cursor_dispose(&deque_inserted);
+    ft_persistent_deque_cursor_dispose(&deque_cursor);
+    ft_persistent_deque_dispose(&deque);
+    ft_tree_cursor_dispose(&edited);
+    ft_tree_cursor_dispose(&deleted);
+    ft_tree_cursor_dispose(&inserted);
+    ft_tree_cursor_dispose(&measured);
+    ft_tree_dispose(&tree);
+}
+
 static void run_test(const char* name, void (*test)(void))
 {
     const int before = g_failures;
@@ -2929,6 +3078,7 @@ int main(void)
     run_test("text rope", test_text_rope);
     run_test("text rope cursor", test_text_rope_cursor);
     run_test("text rope long edit script", test_text_rope_long_edit_script);
+    run_test("persistent sequence cursors", test_sequence_cursors);
 
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);

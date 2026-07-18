@@ -2551,3 +2551,478 @@ ft_status ft_range_update_sequence_validate(
     ft_ru_validation_dispose(sequence->policy, &cache);
     return status;
 }
+
+static bool ft_range_update_sequence_cursor_is_valid(
+    const ft_range_update_sequence_cursor* cursor)
+{
+    return cursor != NULL && ft_ru_sequence_valid(&cursor->sequence) &&
+        cursor->position <= ft_range_update_sequence_size(&cursor->sequence);
+}
+
+static ft_status ft_range_update_sequence_cursor_stage(
+    const ft_range_update_sequence* sequence,
+    size_t position,
+    ft_range_update_sequence_cursor* cursor)
+{
+    (void)memset(cursor, 0, sizeof(*cursor));
+    ft_status status = ft_range_update_sequence_copy(sequence, &cursor->sequence);
+    if (status == FT_STATUS_OK) {
+        cursor->position = position;
+    }
+    return status;
+}
+
+static void ft_range_update_sequence_cursor_publish(
+    const ft_range_update_sequence_cursor* source,
+    ft_range_update_sequence_cursor* staged,
+    ft_range_update_sequence_cursor* result)
+{
+    if (result == source) {
+        ft_range_update_sequence_cursor_dispose(result);
+    }
+    ft_range_update_sequence_cursor_move(result, staged);
+}
+
+static ft_status ft_range_update_sequence_cursor_publish_sequence(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence* sequence,
+    size_t position,
+    ft_range_update_sequence_cursor* result)
+{
+    ft_range_update_sequence_cursor staged = {0};
+    ft_range_update_sequence_move(&staged.sequence, sequence);
+    staged.position = position;
+    ft_range_update_sequence_cursor_publish(cursor, &staged, result);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_range_update_sequence_get_cursor(
+    const ft_range_update_sequence* sequence,
+    size_t position,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_ru_sequence_valid(sequence) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_range_update_sequence_size(sequence)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_range_update_sequence_cursor_stage(sequence, position, result);
+}
+
+ft_status ft_range_update_sequence_cursor_copy(
+    const ft_range_update_sequence_cursor* source,
+    ft_range_update_sequence_cursor* destination)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_range_update_sequence_cursor_stage(
+        &source->sequence,
+        source->position,
+        destination);
+}
+
+void ft_range_update_sequence_cursor_move(
+    ft_range_update_sequence_cursor* destination,
+    ft_range_update_sequence_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_range_update_sequence_move(&destination->sequence, &source->sequence);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_range_update_sequence_cursor_dispose(ft_range_update_sequence_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_range_update_sequence_dispose(&cursor->sequence);
+        cursor->position = 0;
+    }
+}
+
+bool ft_range_update_sequence_cursor_valid(const ft_range_update_sequence_cursor* cursor)
+{
+    return ft_range_update_sequence_cursor_is_valid(cursor);
+}
+
+bool ft_range_update_sequence_cursor_empty(const ft_range_update_sequence_cursor* cursor)
+{
+    return !ft_range_update_sequence_cursor_is_valid(cursor) ||
+        ft_range_update_sequence_empty(&cursor->sequence);
+}
+
+size_t ft_range_update_sequence_cursor_size(const ft_range_update_sequence_cursor* cursor)
+{
+    return ft_range_update_sequence_cursor_is_valid(cursor)
+        ? ft_range_update_sequence_size(&cursor->sequence)
+        : 0;
+}
+
+size_t ft_range_update_sequence_cursor_position(const ft_range_update_sequence_cursor* cursor)
+{
+    return ft_range_update_sequence_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_range_update_sequence_cursor_is_at_start(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_range_update_sequence_cursor_is_at_end(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_range_update_sequence_size(&cursor->sequence);
+    return FT_STATUS_OK;
+}
+
+ft_status ft_range_update_sequence_cursor_measure_before(
+    const ft_range_update_sequence_cursor* cursor,
+    void* destination)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_range_update_sequence_measure_range(
+        &cursor->sequence,
+        0,
+        cursor->position,
+        destination);
+}
+
+ft_status ft_range_update_sequence_cursor_measure_after(
+    const ft_range_update_sequence_cursor* cursor,
+    void* destination)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return ft_range_update_sequence_measure_range(
+        &cursor->sequence,
+        cursor->position,
+        ft_range_update_sequence_size(&cursor->sequence) - cursor->position,
+        destination);
+}
+
+ft_status ft_range_update_sequence_cursor_try_peek_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_range_update_sequence_at(
+        &cursor->sequence,
+        cursor->position - 1u,
+        value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_range_update_sequence_cursor_try_peek_next(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* found,
+    void* value)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || found == NULL || value == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == ft_range_update_sequence_size(&cursor->sequence)) {
+        *found = false;
+        return FT_STATUS_OK;
+    }
+    ft_status status = ft_range_update_sequence_at(
+        &cursor->sequence,
+        cursor->position,
+        value);
+    if (status == FT_STATUS_OK) {
+        *found = true;
+    }
+    return status;
+}
+
+ft_status ft_range_update_sequence_cursor_seek(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t position,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_range_update_sequence_size(&cursor->sequence)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (result == cursor && position == cursor->position) {
+        return FT_STATUS_OK;
+    }
+    ft_range_update_sequence_cursor staged;
+    ft_status status = ft_range_update_sequence_cursor_stage(
+        &cursor->sequence,
+        position,
+        &staged);
+    if (status == FT_STATUS_OK) {
+        ft_range_update_sequence_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_range_update_sequence_cursor_move_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_range_update_sequence_empty(&cursor->sequence)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_range_update_sequence_cursor_seek(cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_range_update_sequence_cursor_move_next(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_range_update_sequence_size(&cursor->sequence);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_range_update_sequence_cursor_seek(cursor, cursor->position + 1u, result);
+}
+
+ft_status ft_range_update_sequence_cursor_insert(
+    const ft_range_update_sequence_cursor* cursor,
+    const void* value,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+    ft_range_update_sequence edited = {0};
+    ft_status status = ft_range_update_sequence_insert_at(
+        &cursor->sequence,
+        cursor->position,
+        value,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_range_update_sequence_cursor_publish_sequence(
+            cursor,
+            &edited,
+            cursor->position + 1u,
+            result)
+        : status;
+}
+
+ft_status ft_range_update_sequence_cursor_delete_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_range_update_sequence_empty(&cursor->sequence)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_range_update_sequence edited = {0};
+    ft_status status = ft_range_update_sequence_remove_at(
+        &cursor->sequence,
+        cursor->position - 1u,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_range_update_sequence_cursor_publish_sequence(
+            cursor,
+            &edited,
+            cursor->position - 1u,
+            result)
+        : status;
+}
+
+ft_status ft_range_update_sequence_cursor_delete_next(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_range_update_sequence_size(&cursor->sequence);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_range_update_sequence edited = {0};
+    ft_status status = ft_range_update_sequence_remove_at(
+        &cursor->sequence,
+        cursor->position,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_range_update_sequence_cursor_publish_sequence(
+            cursor,
+            &edited,
+            cursor->position,
+            result)
+        : status;
+}
+
+ft_status ft_range_update_sequence_cursor_replace_next(
+    const ft_range_update_sequence_cursor* cursor,
+    const void* value,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_range_update_sequence_size(&cursor->sequence);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_range_update_sequence edited = {0};
+    ft_status status = ft_range_update_sequence_set_at(
+        &cursor->sequence,
+        cursor->position,
+        value,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_range_update_sequence_cursor_publish_sequence(
+            cursor,
+            &edited,
+            cursor->position,
+            result)
+        : status;
+}
+
+ft_status ft_range_update_sequence_cursor_measure_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    void* destination)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count > cursor->position) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_range_update_sequence_measure_range(
+        &cursor->sequence,
+        cursor->position - count,
+        count,
+        destination);
+}
+
+ft_status ft_range_update_sequence_cursor_measure_next(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    void* destination)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count > ft_range_update_sequence_size(&cursor->sequence) - cursor->position) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_range_update_sequence_measure_range(
+        &cursor->sequence,
+        cursor->position,
+        count,
+        destination);
+}
+
+ft_status ft_range_update_sequence_cursor_apply_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    const void* tag,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || tag == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count > cursor->position) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_range_update_sequence edited = {0};
+    ft_status status = ft_range_update_sequence_apply_range(
+        &cursor->sequence,
+        cursor->position - count,
+        count,
+        tag,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_range_update_sequence_cursor_publish_sequence(
+            cursor,
+            &edited,
+            cursor->position,
+            result)
+        : status;
+}
+
+ft_status ft_range_update_sequence_cursor_apply_next(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    const void* tag,
+    ft_range_update_sequence_cursor* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || tag == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (count > ft_range_update_sequence_size(&cursor->sequence) - cursor->position) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_range_update_sequence edited = {0};
+    ft_status status = ft_range_update_sequence_apply_range(
+        &cursor->sequence,
+        cursor->position,
+        count,
+        tag,
+        &edited);
+    return status == FT_STATUS_OK
+        ? ft_range_update_sequence_cursor_publish_sequence(
+            cursor,
+            &edited,
+            cursor->position,
+            result)
+        : status;
+}
+
+ft_status ft_range_update_sequence_cursor_snapshot(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence* result)
+{
+    if (!ft_range_update_sequence_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->sequence) {
+        return FT_STATUS_OK;
+    }
+    return ft_range_update_sequence_copy(&cursor->sequence, result);
+}

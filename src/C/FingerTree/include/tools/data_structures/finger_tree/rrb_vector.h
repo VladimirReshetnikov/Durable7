@@ -39,6 +39,11 @@ typedef struct ft_rrb_split_result {
     ft_rrb_vector right;
 } ft_rrb_split_result;
 
+typedef struct ft_rrb_vector_cursor {
+    ft_rrb_vector vector;
+    size_t position;
+} ft_rrb_vector_cursor;
+
 typedef struct ft_rrb_statistics {
     size_t count;
     unsigned height;
@@ -134,6 +139,68 @@ ft_status ft_rrb_vector_visit_leaves(
 const void* ft_rrb_vector_root_identity(const ft_rrb_vector* vector);
 bool ft_rrb_vector_shares_root(const ft_rrb_vector* left, const ft_rrb_vector* right);
 bool ft_rrb_vector_validate(const ft_rrb_vector* vector, ft_rrb_statistics* statistics);
+
+ft_status ft_rrb_vector_get_cursor(
+    const ft_rrb_vector* vector,
+    size_t position,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_copy(
+    const ft_rrb_vector_cursor* source,
+    ft_rrb_vector_cursor* destination);
+void ft_rrb_vector_cursor_move(
+    ft_rrb_vector_cursor* destination,
+    ft_rrb_vector_cursor* source);
+void ft_rrb_vector_cursor_dispose(ft_rrb_vector_cursor* cursor);
+bool ft_rrb_vector_cursor_valid(const ft_rrb_vector_cursor* cursor);
+bool ft_rrb_vector_cursor_empty(const ft_rrb_vector_cursor* cursor);
+size_t ft_rrb_vector_cursor_size(const ft_rrb_vector_cursor* cursor);
+size_t ft_rrb_vector_cursor_position(const ft_rrb_vector_cursor* cursor);
+ft_status ft_rrb_vector_cursor_is_at_start(const ft_rrb_vector_cursor* cursor, bool* result);
+ft_status ft_rrb_vector_cursor_is_at_end(const ft_rrb_vector_cursor* cursor, bool* result);
+ft_status ft_rrb_vector_cursor_try_peek_previous(
+    const ft_rrb_vector_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_rrb_vector_cursor_try_peek_next(
+    const ft_rrb_vector_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_rrb_vector_cursor_move_previous(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_move_next(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_seek(
+    const ft_rrb_vector_cursor* cursor,
+    size_t position,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_insert(
+    const ft_rrb_vector_cursor* cursor,
+    const void* value,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_insert_array(
+    const ft_rrb_vector_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_insert_vector(
+    const ft_rrb_vector_cursor* cursor,
+    const ft_rrb_vector* values,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_delete_previous(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_delete_next(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_replace_next(
+    const ft_rrb_vector_cursor* cursor,
+    const void* value,
+    ft_rrb_vector_cursor* result);
+ft_status ft_rrb_vector_cursor_snapshot(
+    const ft_rrb_vector_cursor* cursor,
+    ft_rrb_vector* result);
 
 ft_status ft_rrb_builder_init(ft_rrb_builder* builder, const ft_rrb_policy* policy);
 ft_status ft_rrb_builder_init_from_vector(ft_rrb_builder* builder, const ft_rrb_vector* vector);

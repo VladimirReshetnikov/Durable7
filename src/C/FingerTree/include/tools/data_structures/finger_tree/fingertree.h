@@ -108,7 +108,60 @@ ft_status ft_tree_split(
 
 ft_status ft_tree_visit(const ft_tree* tree, ft_visit_fn visitor, void* context);
 
+/* Immutable measure-aware gap cursor over one exact general tree snapshot.
+ * The position field is representation state; general-tree callers navigate by
+ * ordered measures and neighbors rather than treating it as a count contract. */
+typedef struct ft_tree_cursor {
+    ft_tree tree;
+    size_t position;
+} ft_tree_cursor;
+
+ft_status ft_tree_get_cursor_at_start(const ft_tree* tree, ft_tree_cursor* result);
+ft_status ft_tree_get_cursor_at_end(const ft_tree* tree, ft_tree_cursor* result);
+ft_status ft_tree_get_cursor_by_measure(
+    const ft_tree* tree,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_tree_cursor* result);
+ft_status ft_tree_cursor_copy(const ft_tree_cursor* source, ft_tree_cursor* destination);
+void ft_tree_cursor_move(ft_tree_cursor* destination, ft_tree_cursor* source);
+void ft_tree_cursor_dispose(ft_tree_cursor* cursor);
+bool ft_tree_cursor_valid(const ft_tree_cursor* cursor);
+ft_status ft_tree_cursor_is_at_start(const ft_tree_cursor* cursor, bool* result);
+ft_status ft_tree_cursor_is_at_end(const ft_tree_cursor* cursor, bool* result);
+ft_status ft_tree_cursor_measure_before(const ft_tree_cursor* cursor, void* destination);
+ft_status ft_tree_cursor_measure_after(const ft_tree_cursor* cursor, void* destination);
+ft_status ft_tree_cursor_try_peek_previous(
+    const ft_tree_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_tree_cursor_try_peek_next(
+    const ft_tree_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_tree_cursor_move_previous(const ft_tree_cursor* cursor, ft_tree_cursor* result);
+ft_status ft_tree_cursor_move_next(const ft_tree_cursor* cursor, ft_tree_cursor* result);
+ft_status ft_tree_cursor_seek_by_measure(
+    const ft_tree_cursor* cursor,
+    ft_measure_predicate_fn predicate,
+    void* predicate_context,
+    bool* found,
+    ft_tree_cursor* result);
+ft_status ft_tree_cursor_insert(
+    const ft_tree_cursor* cursor,
+    const void* value,
+    ft_tree_cursor* result);
+ft_status ft_tree_cursor_delete_previous(const ft_tree_cursor* cursor, ft_tree_cursor* result);
+ft_status ft_tree_cursor_delete_next(const ft_tree_cursor* cursor, ft_tree_cursor* result);
+ft_status ft_tree_cursor_replace_next(
+    const ft_tree_cursor* cursor,
+    const void* value,
+    ft_tree_cursor* result);
+ft_status ft_tree_cursor_snapshot(const ft_tree_cursor* cursor, ft_tree* result);
+
 typedef ft_tree ft_persistent_deque;
+typedef ft_tree_cursor ft_persistent_deque_cursor;
 
 #define ft_persistent_deque_init ft_tree_init
 #define ft_persistent_deque_copy ft_tree_copy
@@ -129,6 +182,42 @@ typedef ft_tree ft_persistent_deque;
 #define ft_persistent_deque_remove_at ft_tree_remove_at
 #define ft_persistent_deque_visit ft_tree_visit
 
+ft_status ft_persistent_deque_get_cursor(
+    const ft_persistent_deque* deque,
+    size_t position,
+    ft_persistent_deque_cursor* result);
+#define ft_persistent_deque_cursor_copy ft_tree_cursor_copy
+#define ft_persistent_deque_cursor_move ft_tree_cursor_move
+#define ft_persistent_deque_cursor_dispose ft_tree_cursor_dispose
+#define ft_persistent_deque_cursor_valid ft_tree_cursor_valid
+#define ft_persistent_deque_cursor_is_at_start ft_tree_cursor_is_at_start
+#define ft_persistent_deque_cursor_is_at_end ft_tree_cursor_is_at_end
+#define ft_persistent_deque_cursor_try_peek_previous ft_tree_cursor_try_peek_previous
+#define ft_persistent_deque_cursor_try_peek_next ft_tree_cursor_try_peek_next
+#define ft_persistent_deque_cursor_move_previous ft_tree_cursor_move_previous
+#define ft_persistent_deque_cursor_move_next ft_tree_cursor_move_next
+#define ft_persistent_deque_cursor_insert ft_tree_cursor_insert
+#define ft_persistent_deque_cursor_delete_previous ft_tree_cursor_delete_previous
+#define ft_persistent_deque_cursor_delete_next ft_tree_cursor_delete_next
+#define ft_persistent_deque_cursor_replace_next ft_tree_cursor_replace_next
+#define ft_persistent_deque_cursor_snapshot ft_tree_cursor_snapshot
+bool ft_persistent_deque_cursor_empty(const ft_persistent_deque_cursor* cursor);
+size_t ft_persistent_deque_cursor_size(const ft_persistent_deque_cursor* cursor);
+size_t ft_persistent_deque_cursor_position(const ft_persistent_deque_cursor* cursor);
+ft_status ft_persistent_deque_cursor_seek(
+    const ft_persistent_deque_cursor* cursor,
+    size_t position,
+    ft_persistent_deque_cursor* result);
+ft_status ft_persistent_deque_cursor_insert_array(
+    const ft_persistent_deque_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_persistent_deque_cursor* result);
+ft_status ft_persistent_deque_cursor_insert_deque(
+    const ft_persistent_deque_cursor* cursor,
+    const ft_persistent_deque* values,
+    ft_persistent_deque_cursor* result);
+
 typedef struct ft_reversible_deque_rep ft_reversible_deque_rep;
 
 typedef struct ft_reversible_deque {
@@ -140,6 +229,11 @@ typedef struct ft_reversible_deque_split_result {
     ft_reversible_deque left;
     ft_reversible_deque right;
 } ft_reversible_deque_split_result;
+
+typedef struct ft_reversible_deque_cursor {
+    ft_reversible_deque deque;
+    size_t position;
+} ft_reversible_deque_cursor;
 
 ft_status ft_reversible_deque_init(ft_reversible_deque* deque, const ft_tree_policy* policy);
 ft_status ft_reversible_deque_copy(const ft_reversible_deque* source, ft_reversible_deque* destination);
@@ -174,6 +268,75 @@ ft_status ft_reversible_deque_insert_at(
     ft_reversible_deque* result);
 ft_status ft_reversible_deque_remove_at(const ft_reversible_deque* deque, size_t index, ft_reversible_deque* result);
 ft_status ft_reversible_deque_visit(const ft_reversible_deque* deque, ft_visit_fn visitor, void* context);
+
+ft_status ft_reversible_deque_get_cursor(
+    const ft_reversible_deque* deque,
+    size_t position,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_copy(
+    const ft_reversible_deque_cursor* source,
+    ft_reversible_deque_cursor* destination);
+void ft_reversible_deque_cursor_move(
+    ft_reversible_deque_cursor* destination,
+    ft_reversible_deque_cursor* source);
+void ft_reversible_deque_cursor_dispose(ft_reversible_deque_cursor* cursor);
+bool ft_reversible_deque_cursor_valid(const ft_reversible_deque_cursor* cursor);
+bool ft_reversible_deque_cursor_empty(const ft_reversible_deque_cursor* cursor);
+size_t ft_reversible_deque_cursor_size(const ft_reversible_deque_cursor* cursor);
+size_t ft_reversible_deque_cursor_position(const ft_reversible_deque_cursor* cursor);
+ft_status ft_reversible_deque_cursor_is_at_start(
+    const ft_reversible_deque_cursor* cursor,
+    bool* result);
+ft_status ft_reversible_deque_cursor_is_at_end(
+    const ft_reversible_deque_cursor* cursor,
+    bool* result);
+ft_status ft_reversible_deque_cursor_try_peek_previous(
+    const ft_reversible_deque_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_reversible_deque_cursor_try_peek_next(
+    const ft_reversible_deque_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_reversible_deque_cursor_move_previous(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_move_next(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_seek(
+    const ft_reversible_deque_cursor* cursor,
+    size_t position,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_insert(
+    const ft_reversible_deque_cursor* cursor,
+    const void* value,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_insert_array(
+    const ft_reversible_deque_cursor* cursor,
+    const void* values,
+    size_t count,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_insert_deque(
+    const ft_reversible_deque_cursor* cursor,
+    const ft_reversible_deque* values,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_delete_previous(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_delete_next(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_replace_next(
+    const ft_reversible_deque_cursor* cursor,
+    const void* value,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_reverse(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque_cursor* result);
+ft_status ft_reversible_deque_cursor_snapshot(
+    const ft_reversible_deque_cursor* cursor,
+    ft_reversible_deque* result);
 
 typedef struct ft_sorted_multiset {
     ft_tree tree;

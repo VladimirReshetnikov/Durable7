@@ -145,6 +145,11 @@ typedef struct ft_range_update_split_result {
     ft_range_update_sequence right;
 } ft_range_update_split_result;
 
+typedef struct ft_range_update_sequence_cursor {
+    ft_range_update_sequence sequence;
+    size_t position;
+} ft_range_update_sequence_cursor;
+
 typedef struct ft_range_update_sequence_statistics {
     size_t count;
     size_t height;
@@ -260,6 +265,87 @@ ft_status ft_range_update_sequence_validate(
     const ft_range_update_sequence* sequence,
     bool* valid,
     ft_range_update_sequence_statistics* statistics);
+
+ft_status ft_range_update_sequence_get_cursor(
+    const ft_range_update_sequence* sequence,
+    size_t position,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_copy(
+    const ft_range_update_sequence_cursor* source,
+    ft_range_update_sequence_cursor* destination);
+void ft_range_update_sequence_cursor_move(
+    ft_range_update_sequence_cursor* destination,
+    ft_range_update_sequence_cursor* source);
+void ft_range_update_sequence_cursor_dispose(ft_range_update_sequence_cursor* cursor);
+bool ft_range_update_sequence_cursor_valid(const ft_range_update_sequence_cursor* cursor);
+bool ft_range_update_sequence_cursor_empty(const ft_range_update_sequence_cursor* cursor);
+size_t ft_range_update_sequence_cursor_size(const ft_range_update_sequence_cursor* cursor);
+size_t ft_range_update_sequence_cursor_position(const ft_range_update_sequence_cursor* cursor);
+ft_status ft_range_update_sequence_cursor_is_at_start(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* result);
+ft_status ft_range_update_sequence_cursor_is_at_end(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* result);
+ft_status ft_range_update_sequence_cursor_measure_before(
+    const ft_range_update_sequence_cursor* cursor,
+    void* destination);
+ft_status ft_range_update_sequence_cursor_measure_after(
+    const ft_range_update_sequence_cursor* cursor,
+    void* destination);
+ft_status ft_range_update_sequence_cursor_try_peek_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_range_update_sequence_cursor_try_peek_next(
+    const ft_range_update_sequence_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_range_update_sequence_cursor_move_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_move_next(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_seek(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t position,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_insert(
+    const ft_range_update_sequence_cursor* cursor,
+    const void* value,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_delete_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_delete_next(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_replace_next(
+    const ft_range_update_sequence_cursor* cursor,
+    const void* value,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_measure_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    void* destination);
+ft_status ft_range_update_sequence_cursor_measure_next(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    void* destination);
+ft_status ft_range_update_sequence_cursor_apply_previous(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    const void* tag,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_apply_next(
+    const ft_range_update_sequence_cursor* cursor,
+    size_t count,
+    const void* tag,
+    ft_range_update_sequence_cursor* result);
+ft_status ft_range_update_sequence_cursor_snapshot(
+    const ft_range_update_sequence_cursor* cursor,
+    ft_range_update_sequence* result);
 
 #ifdef __cplusplus
 }

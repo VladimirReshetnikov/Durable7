@@ -787,6 +787,72 @@ static void test_concurrent_readers(void)
     free(values);
 }
 
+static void test_persistent_cursor(void)
+{
+    ft_rrb_policy policy;
+    init_int_policy(&policy);
+    int* values = make_range(0, 96);
+    REQUIRE(values != NULL);
+    const int inserted_values[] = {500, 501, 502};
+    ft_rrb_vector basis = {0};
+    ft_rrb_vector inserted = {0};
+    REQUIRE_STATUS(ft_rrb_vector_from_array(&basis, &policy, values, 96), FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_rrb_vector_from_array(&inserted, &policy, inserted_values, 3),
+        FT_STATUS_OK);
+
+    ft_rrb_vector_cursor cursor = {0};
+    ft_rrb_vector_cursor edited = {0};
+    REQUIRE_STATUS(ft_rrb_vector_get_cursor(&basis, 32, &cursor), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_rrb_vector_cursor_insert_vector(&cursor, &inserted, &edited), FT_STATUS_OK);
+    REQUIRE(ft_rrb_vector_cursor_position(&edited) == 35);
+    REQUIRE(ft_rrb_vector_cursor_size(&edited) == 99);
+    const int seam[] = {30, 31, 500, 501, 502, 32, 33};
+    for (size_t offset = 0; offset != 7; ++offset) {
+        int actual = 0;
+        REQUIRE_STATUS(
+            ft_rrb_vector_at(&edited.vector, 30 + offset, &actual),
+            FT_STATUS_OK);
+        REQUIRE(actual == seam[offset]);
+    }
+    REQUIRE(vector_matches(&basis, values, 96));
+
+    bool found = false;
+    int peeked = -1;
+    REQUIRE_STATUS(
+        ft_rrb_vector_cursor_try_peek_previous(&edited, &found, &peeked),
+        FT_STATUS_OK);
+    REQUIRE(found && peeked == 502);
+    REQUIRE_STATUS(
+        ft_rrb_vector_cursor_try_peek_next(&edited, &found, &peeked),
+        FT_STATUS_OK);
+    REQUIRE(found && peeked == 32);
+
+    ft_rrb_vector_cursor removed = {0};
+    ft_rrb_vector_cursor replaced = {0};
+    REQUIRE_STATUS(ft_rrb_vector_cursor_delete_previous(&edited, &removed), FT_STATUS_OK);
+    const int replacement = 900;
+    REQUIRE_STATUS(
+        ft_rrb_vector_cursor_replace_next(&removed, &replacement, &replaced),
+        FT_STATUS_OK);
+    REQUIRE(ft_rrb_vector_cursor_position(&replaced) == 34);
+    REQUIRE_STATUS(
+        ft_rrb_vector_at(&replaced.vector, 34, &peeked),
+        FT_STATUS_OK);
+    REQUIRE(peeked == replacement);
+    REQUIRE_STATUS(
+        ft_rrb_vector_get_cursor(&basis, 97, &removed),
+        FT_STATUS_OUT_OF_RANGE);
+
+    ft_rrb_vector_cursor_dispose(&replaced);
+    ft_rrb_vector_cursor_dispose(&removed);
+    ft_rrb_vector_cursor_dispose(&edited);
+    ft_rrb_vector_cursor_dispose(&cursor);
+    ft_rrb_vector_dispose(&inserted);
+    ft_rrb_vector_dispose(&basis);
+    free(values);
+}
+
 static void run_test(const char* name, void (*test)(void))
 {
     const int before = g_failures;
@@ -814,6 +880,7 @@ int main(void)
     run_test("RRB policy lifetimes and compatibility", test_policy_lifetimes_and_compatibility);
     run_test("RRB allocation rollback", test_allocation_failure_rollback);
     run_test("RRB concurrent readers", test_concurrent_readers);
+    run_test("RRB persistent cursor", test_persistent_cursor);
 
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);

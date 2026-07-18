@@ -1190,6 +1190,108 @@ static void test_concurrent_retained_snapshot_readers(void)
     ft_range_update_policy_dispose(&policy);
 }
 
+static void test_persistent_cursor(void)
+{
+    test_context context = {0};
+    ft_range_update_policy_config config = make_config(&context, true);
+    ft_range_update_policy policy = {0};
+    ft_range_update_sequence basis = {0};
+    test_element values[4];
+    const void* pointers[4];
+    fill_values(values, 4, 1);
+    make_pointers(values, pointers, 4);
+    REQUIRE_STATUS(ft_range_update_policy_create(&policy, &config), FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_range_update_sequence_from_array(&basis, &policy, pointers, 4),
+        FT_STATUS_OK);
+
+    ft_range_update_sequence_cursor cursor = {0};
+    REQUIRE_STATUS(ft_range_update_sequence_get_cursor(&basis, 2, &cursor), FT_STATUS_OK);
+    test_measure before = {0};
+    test_measure after = {0};
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_measure_before(&cursor, &before),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_measure_after(&cursor, &after),
+        FT_STATUS_OK);
+    REQUIRE(before.count == 2 && before.sum == 3);
+    REQUIRE(after.count == 2 && after.sum == 7);
+
+    test_measure previous = {0};
+    test_measure next = {0};
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_measure_previous(&cursor, 2, &previous),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_measure_next(&cursor, 2, &next),
+        FT_STATUS_OK);
+    REQUIRE(previous.sum == 3 && next.sum == 7);
+
+    ft_range_update_sequence_cursor nullable_cursor = {0};
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_seek(&cursor, 1, &nullable_cursor),
+        FT_STATUS_OK);
+    bool found = false;
+    test_element peeked = {0};
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_try_peek_previous(
+            &nullable_cursor,
+            &found,
+            &peeked),
+        FT_STATUS_OK);
+    REQUIRE(found && peeked.value == 1 && peeked.nullable == NULL);
+
+    test_tag ten = add_tag(10);
+    test_tag twenty = add_tag(20);
+    ft_range_update_sequence_cursor previous_applied = {0};
+    ft_range_update_sequence_cursor next_applied = {0};
+    ft_range_update_sequence_cursor edited = {0};
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_apply_previous(
+            &cursor,
+            1,
+            &ten,
+            &previous_applied),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_apply_next(
+            &previous_applied,
+            2,
+            &twenty,
+            &next_applied),
+        FT_STATUS_OK);
+    const test_element replacement = {99, NULL};
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_replace_next(
+            &next_applied,
+            &replacement,
+            &edited),
+        FT_STATUS_OK);
+    test_element expected[] = {
+        values[0],
+        {12, values[1].nullable},
+        replacement,
+        {24, values[3].nullable}
+    };
+    REQUIRE(ft_range_update_sequence_cursor_position(&edited) == 2);
+    REQUIRE(sequence_matches(&edited.sequence, expected, 4));
+    REQUIRE(sequence_matches(&basis, values, 4));
+    REQUIRE_STATUS(
+        ft_range_update_sequence_cursor_apply_previous(&cursor, 3, &ten, &edited),
+        FT_STATUS_OUT_OF_RANGE);
+    REQUIRE(sequence_matches(&edited.sequence, expected, 4));
+
+    ft_range_update_sequence_cursor_dispose(&edited);
+    ft_range_update_sequence_cursor_dispose(&next_applied);
+    ft_range_update_sequence_cursor_dispose(&previous_applied);
+    ft_range_update_sequence_cursor_dispose(&nullable_cursor);
+    ft_range_update_sequence_cursor_dispose(&cursor);
+    ft_range_update_sequence_dispose(&basis);
+    ft_range_update_policy_dispose(&policy);
+    REQUIRE(context.outstanding_allocations == 0);
+}
+
 typedef void (*test_fn)(void);
 
 static void run_test(const char* name, test_fn test)
@@ -1216,6 +1318,7 @@ int main(void)
     run_test("Range-update callback and allocator failure atomicity", test_callback_and_allocator_failure_atomicity);
     run_test("Range-update maximum-count shared DAG and overflow", test_maximum_count_shared_dag_and_overflow);
     run_test("Range-update concurrent retained snapshot readers", test_concurrent_retained_snapshot_readers);
+    run_test("Range-update persistent cursor", test_persistent_cursor);
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);
         return EXIT_FAILURE;
