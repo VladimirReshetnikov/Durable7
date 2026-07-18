@@ -166,6 +166,7 @@ function* iterate<T>(root: Node<T>): Generator<T, void> {
 
 export interface CanonicalSetLookup<T> { readonly found: boolean; readonly value: T }
 export interface CanonicalSortedSetStatistics { readonly count: number; readonly height: number; readonly maximumGeometricRank: number; readonly priorityCollisionCount: number }
+export interface CanonicalCursorSearch<T> { readonly found: boolean; readonly cursor: CanonicalSortedSetCursor<T> }
 
 /** Immutable policy-canonical Cartesian search tree. */
 export class CanonicalSortedSet<T> implements Iterable<T> {
@@ -208,6 +209,23 @@ export class CanonicalSortedSet<T> implements Iterable<T> {
     public isSupersetOf(values: Iterable<T>): boolean { for (const value of values) if (!this.contains(value)) return false; return true; }
     public isProperSupersetOf(values: Iterable<T>): boolean { const other = CanonicalSortedSet.from(values, this.policy); return this.size > other.size && this.isSupersetOf(other); }
     public overlaps(values: Iterable<T>): boolean { for (const value of values) if (this.contains(value)) return true; return false; }
+    public cursorAt(position = 0): CanonicalSortedSetCursor<T> { return new CanonicalSortedSetCursor(this, position); }
+    public cursorAtLowerBound(value: T): CanonicalSortedSetCursor<T> { return this.cursorAt(this.#boundRank(value, false)); }
+    public cursorAtUpperBound(value: T): CanonicalSortedSetCursor<T> { return this.cursorAt(this.#boundRank(value, true)); }
+    public findCursor(value: T): CanonicalCursorSearch<T> {
+        const cursor = this.cursorAtLowerBound(value);
+        const next = cursor.peekNext();
+        return { found: next !== undefined && this.policy.comparator(next.value, value) === 0, cursor };
+    }
+    #boundRank(value: T, upper: boolean): number {
+        let rank = 0; let node = this.#root;
+        while (node !== undefined) {
+            const comparison = this.policy.comparator(node.item, value);
+            if (comparison < 0 || upper && comparison === 0) { rank += (node.left?.count ?? 0) + 1; node = node.right; }
+            else node = node.left;
+        }
+        return rank;
+    }
     public sharesStorageWith(other: CanonicalSortedSet<T>): boolean {
         if (this.#root === undefined || other.#root === undefined) return false; if (this.#root === other.#root) return true;
         const nodes = new Set<Node<T>>(); const first = [this.#root];
@@ -235,4 +253,23 @@ export class CanonicalSortedSet<T> implements Iterable<T> {
         return { count, height, maximumGeometricRank: maxRank, priorityCollisionCount: collisions };
     }
     public [Symbol.iterator](): IterableIterator<T> { return this.#root === undefined ? [][Symbol.iterator]() : iterate(this.#root); }
+}
+
+/** Immutable policy-preserving root-plus-rank cursor over a canonical sorted set. */
+export class CanonicalSortedSetCursor<T> {
+    public constructor(public readonly set: CanonicalSortedSet<T>, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > set.size) throw new RangeError("Cursor position is outside the canonical sorted set.");
+    }
+    public get size(): number { return this.set.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): { readonly value: T } | undefined { return this.isAtStart ? undefined : { value: Array.from(this.set)[this.position - 1]! }; }
+    public peekNext(): { readonly value: T } | undefined { return this.isAtEnd ? undefined : { value: Array.from(this.set)[this.position]! }; }
+    public movePrevious(): CanonicalSortedSetCursor<T> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new CanonicalSortedSetCursor(this.set, this.position - 1); }
+    public moveNext(): CanonicalSortedSetCursor<T> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new CanonicalSortedSetCursor(this.set, this.position + 1); }
+    public seekRank(position: number): CanonicalSortedSetCursor<T> { return position === this.position ? this : new CanonicalSortedSetCursor(this.set, position); }
+    public add(value: T): CanonicalSortedSetCursor<T> { const location = this.set.cursorAtLowerBound(value); return new CanonicalSortedSetCursor(this.set.add(value), location.position + 1); }
+    public deletePrevious(): CanonicalSortedSetCursor<T> { const item = this.peekPrevious(); if (item === undefined) throw new RangeError("No item precedes the cursor."); return new CanonicalSortedSetCursor(this.set.remove(item.value), this.position - 1); }
+    public deleteNext(): CanonicalSortedSetCursor<T> { const item = this.peekNext(); if (item === undefined) throw new RangeError("No item follows the cursor."); return new CanonicalSortedSetCursor(this.set.remove(item.value), this.position); }
+    public snapshot(): CanonicalSortedSet<T> { return this.set; }
 }

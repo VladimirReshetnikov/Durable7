@@ -71,6 +71,7 @@ export class Interval<T> {
 }
 
 export interface IntervalRemoveResult<T> { readonly tree: IntervalTree<T>; readonly interval: Interval<T> }
+export interface IntervalCursorSearch<T> { readonly found: boolean; readonly cursor: IntervalTreeCursor<T> }
 interface IntervalSummary<T> { readonly maximumHigh: T | undefined; readonly lastLow: T | undefined }
 
 class IntervalMeasure<T> implements MeasurePolicy<Interval<T>, IntervalSummary<T>> {
@@ -137,6 +138,32 @@ export class IntervalTree<T> implements Iterable<Interval<T>> {
         return result;
     }
     public countOverlaps(probe: Interval<T>): number { return this.findOverlaps(probe).length; }
+    public cursorAt(position = 0): IntervalTreeCursor<T> { return new IntervalTreeCursor(this, position); }
+    public cursorAtLowerBound(low: T): IntervalTreeCursor<T> { return this.cursorAt(this.#lowerBound(low)); }
+    public cursorAtUpperBound(low: T): IntervalTreeCursor<T> {
+        const values = this.toArray(); let position = this.#lowerBound(low);
+        while (position < values.length && this.comparator(values[position]!.low, low) === 0) position++;
+        return this.cursorAt(position);
+    }
+    public findCursor(interval: Interval<T>): IntervalCursorSearch<T> {
+        const values = this.toArray(); const lower = this.#lowerBound(interval.low);
+        for (let position = lower; position < values.length && this.comparator(values[position]!.low, interval.low) === 0; position++) {
+            if (this.comparator(values[position]!.high, interval.high) === 0) return { found: true, cursor: this.cursorAt(position) };
+        }
+        return { found: false, cursor: this.cursorAt(lower) };
+    }
+    public findOverlapCursor(probe: Interval<T>): IntervalCursorSearch<T> { return this.findOverlapCursorFrom(0, probe); }
+    public findContainingCursor(point: T): IntervalCursorSearch<T> { return this.findOverlapCursor(new Interval(point, point, this.comparator)); }
+    public findOverlapCursorFrom(start: number, probe: Interval<T>): IntervalCursorSearch<T> {
+        if (!Number.isInteger(start) || start < 0 || start > this.size) throw new RangeError("Cursor start is outside the interval tree.");
+        const values = this.toArray();
+        for (let position = start; position < values.length; position++) {
+            const interval = values[position]!;
+            if (this.comparator(interval.low, probe.high) > 0) break;
+            if (interval.overlaps(probe, this.comparator)) return { found: true, cursor: this.cursorAt(position) };
+        }
+        return { found: false, cursor: this.cursorAt(this.size) };
+    }
     public coalesce(): IntervalTree<T> {
         if (this.size < 2) return this;
         const result: Interval<T>[] = [];
@@ -151,4 +178,29 @@ export class IntervalTree<T> implements Iterable<Interval<T>> {
     public toArray(): Interval<T>[] { return this.#intervals.toArray(); }
     public sharesStorageWith(other: IntervalTree<T>): boolean { return this.#intervals.sharesStructureWith(other.#intervals); }
     public [Symbol.iterator](): IterableIterator<Interval<T>> { return this.#intervals[Symbol.iterator](); }
+}
+
+/** Immutable low-endpoint-order root-plus-rank cursor over an interval tree. */
+export class IntervalTreeCursor<T> {
+    public constructor(public readonly tree: IntervalTree<T>, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > tree.size) throw new RangeError("Cursor position is outside the interval tree.");
+    }
+    public get size(): number { return this.tree.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): { readonly value: Interval<T> } | undefined { return this.isAtStart ? undefined : { value: this.tree.toArray()[this.position - 1]! }; }
+    public peekNext(): { readonly value: Interval<T> } | undefined { return this.isAtEnd ? undefined : { value: this.tree.toArray()[this.position]! }; }
+    public movePrevious(): IntervalTreeCursor<T> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new IntervalTreeCursor(this.tree, this.position - 1); }
+    public moveNext(): IntervalTreeCursor<T> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new IntervalTreeCursor(this.tree, this.position + 1); }
+    public seekRank(position: number): IntervalTreeCursor<T> { return position === this.position ? this : new IntervalTreeCursor(this.tree, position); }
+    public seekNextOverlap(probe: Interval<T>): IntervalCursorSearch<T> { return this.tree.findOverlapCursorFrom(this.position < this.size ? this.position + 1 : this.size, probe); }
+    public insert(interval: Interval<T>): IntervalTreeCursor<T> { const position = this.tree.cursorAtLowerBound(interval.low).position; return new IntervalTreeCursor(this.tree.insert(interval), position + 1); }
+    public deletePrevious(): IntervalTreeCursor<T> { if (this.isAtStart) throw new RangeError("No occurrence precedes the cursor."); return this.deleteAt(this.position - 1); }
+    public deleteNext(): IntervalTreeCursor<T> { if (this.isAtEnd) throw new RangeError("No occurrence follows the cursor."); return this.deleteAt(this.position); }
+    private deleteAt(rank: number): IntervalTreeCursor<T> {
+        const values = this.tree.toArray(); values.splice(rank, 1); values.reverse();
+        const tree = IntervalTree.from(values, this.tree.comparator);
+        return new IntervalTreeCursor(tree, rank < this.position ? this.position - 1 : this.position);
+    }
+    public snapshot(): IntervalTree<T> { return this.tree; }
 }

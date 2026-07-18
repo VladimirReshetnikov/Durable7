@@ -5,6 +5,7 @@ export interface PrioritySearchQueueStatistics { readonly count: number; readonl
 export interface PrioritySearchAddResult<K, P, V> { readonly added: boolean; readonly queue: PrioritySearchQueue<K, P, V> }
 export interface PrioritySearchRemoveResult<K, P, V> { readonly removed: boolean; readonly entry: PrioritySearchEntry<K, P, V> | undefined; readonly queue: PrioritySearchQueue<K, P, V> }
 export interface PrioritySearchMinimumView<K, P, V> { readonly entry: PrioritySearchEntry<K, P, V>; readonly remainder: PrioritySearchQueue<K, P, V> }
+export interface PrioritySearchCursorSearch<K, P, V> { readonly found: boolean; readonly cursor: PrioritySearchQueueCursor<K, P, V> }
 
 class Node<K, P, V> {
     public readonly height: number;
@@ -95,5 +96,40 @@ export class PrioritySearchQueue<K, P, V> implements Iterable<PrioritySearchEntr
         if (count !== this.count) throw new Error("PSQ count invariant failed."); return { count, height: this.height, maximumAbsoluteBalanceFactor: maximumBalance };
     }
     public sharedNodeCount(other: PrioritySearchQueue<K, P, V>): number { const nodes = new Set<Node<K, P, V>>(); const collect = (root: Node<K, P, V> | undefined, destination: Set<Node<K, P, V>>): void => { const pending = root === undefined ? [] : [root]; while (pending.length !== 0) { const node = pending.pop()!; if (destination.has(node)) continue; destination.add(node); if (node.left !== undefined) pending.push(node.left); if (node.right !== undefined) pending.push(node.right); } }; collect(this.#root, nodes); const otherNodes = new Set<Node<K, P, V>>(); collect(other.#root, otherNodes); let count = 0; for (const node of otherNodes) if (nodes.has(node)) count++; return count; }
+    public cursorAt(position = 0): PrioritySearchQueueCursor<K, P, V> { return new PrioritySearchQueueCursor(this, position); }
+    public cursorAtLowerBound(key: K): PrioritySearchQueueCursor<K, P, V> { return this.cursorAt(this.#boundRank(key, false)); }
+    public cursorAtUpperBound(key: K): PrioritySearchQueueCursor<K, P, V> { return this.cursorAt(this.#boundRank(key, true)); }
+    public findCursor(key: K): PrioritySearchCursorSearch<K, P, V> {
+        const cursor = this.cursorAtLowerBound(key); const next = cursor.peekNext();
+        return { found: next !== undefined && this.keyComparator(next.value.key, key) === 0, cursor };
+    }
+    public cursorAtMinimumPriority(): PrioritySearchQueueCursor<K, P, V> { return this.#root === undefined ? this.cursorAt() : this.cursorAtLowerBound(this.#root.winner.key); }
+    #boundRank(key: K, upper: boolean): number {
+        let rank = 0; let node = this.#root;
+        while (node !== undefined) { const comparison = this.keyComparator(node.entry.key, key); if (comparison < 0 || upper && comparison === 0) { rank += (node.left?.count ?? 0) + 1; node = node.right; } else node = node.left; }
+        return rank;
+    }
     public *[Symbol.iterator](): IterableIterator<PrioritySearchEntry<K, P, V>> { const pending: Node<K, P, V>[] = []; let current = this.#root; while (current !== undefined || pending.length !== 0) { while (current !== undefined) { pending.push(current); current = current.left; } const node = pending.pop()!; yield node.entry; current = node.right; } }
+}
+
+/** Immutable key-order root-plus-rank cursor over a priority-search queue. */
+export class PrioritySearchQueueCursor<K, P, V> {
+    public constructor(public readonly queue: PrioritySearchQueue<K, P, V>, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > queue.size) throw new RangeError("Cursor position is outside the priority-search queue.");
+    }
+    public get size(): number { return this.queue.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): { readonly value: PrioritySearchEntry<K, P, V> } | undefined { return this.isAtStart ? undefined : { value: Array.from(this.queue)[this.position - 1]! }; }
+    public peekNext(): { readonly value: PrioritySearchEntry<K, P, V> } | undefined { return this.isAtEnd ? undefined : { value: Array.from(this.queue)[this.position]! }; }
+    public movePrevious(): PrioritySearchQueueCursor<K, P, V> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new PrioritySearchQueueCursor(this.queue, this.position - 1); }
+    public moveNext(): PrioritySearchQueueCursor<K, P, V> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new PrioritySearchQueueCursor(this.queue, this.position + 1); }
+    public seekRank(position: number): PrioritySearchQueueCursor<K, P, V> { return position === this.position ? this : new PrioritySearchQueueCursor(this.queue, position); }
+    public insert(key: K, priority: P, value: V): PrioritySearchQueueCursor<K, P, V> { const location = this.queue.cursorAtLowerBound(key); const result = this.queue.tryAdd(key, priority, value); if (!result.added) throw new TypeError("An equivalent key is already present."); return new PrioritySearchQueueCursor(result.queue, location.position + 1); }
+    public tryInsert(key: K, priority: P, value: V): { readonly added: boolean; readonly cursor: PrioritySearchQueueCursor<K, P, V> } { const location = this.queue.cursorAtLowerBound(key); const result = this.queue.tryAdd(key, priority, value); return { added: result.added, cursor: result.added ? new PrioritySearchQueueCursor(result.queue, location.position + 1) : location }; }
+    public setItem(key: K, priority: P, value: V): PrioritySearchQueueCursor<K, P, V> { const location = this.queue.findCursor(key); return new PrioritySearchQueueCursor(this.queue.setItem(key, priority, value), location.found ? location.cursor.position : location.cursor.position + 1); }
+    public setNext(priority: P, value: V): PrioritySearchQueueCursor<K, P, V> { const entry = this.peekNext(); if (entry === undefined) throw new RangeError("No entry follows the cursor."); return new PrioritySearchQueueCursor(this.queue.setItem(entry.value.key, priority, value), this.position); }
+    public deletePrevious(): PrioritySearchQueueCursor<K, P, V> { const entry = this.peekPrevious(); if (entry === undefined) throw new RangeError("No entry precedes the cursor."); return new PrioritySearchQueueCursor(this.queue.remove(entry.value.key), this.position - 1); }
+    public deleteNext(): PrioritySearchQueueCursor<K, P, V> { const entry = this.peekNext(); if (entry === undefined) throw new RangeError("No entry follows the cursor."); return new PrioritySearchQueueCursor(this.queue.remove(entry.value.key), this.position); }
+    public snapshot(): PrioritySearchQueue<K, P, V> { return this.queue; }
 }

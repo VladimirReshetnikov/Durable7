@@ -44,6 +44,11 @@ export interface ChunkedBitSetStatistics {
     readonly popCount: number;
 }
 
+export interface ChunkedBitSetCursorSearch {
+    readonly found: boolean;
+    readonly cursor: PersistentChunkedBitSetCursor;
+}
+
 /**
  * Immutable sparse bit set over the nonnegative signed-32-bit index domain.
  *
@@ -174,6 +179,20 @@ export class PersistentChunkedBitSet implements Iterable<number> {
 
     public clear(): PersistentChunkedBitSet { return this.isEmpty ? this : PersistentChunkedBitSet.empty(); }
 
+    public cursorAt(position = 0): PersistentChunkedBitSetCursor {
+        return new PersistentChunkedBitSetCursor(this, position);
+    }
+
+    public cursorAtOrAfter(bitIndex: number): PersistentChunkedBitSetCursor {
+        const position = bitIndex <= 0 ? 0 : this.rank(bitIndex - 1);
+        return this.cursorAt(position);
+    }
+
+    public findCursor(bitIndex: number): ChunkedBitSetCursorSearch {
+        const cursor = this.cursorAtOrAfter(bitIndex);
+        return { found: bitIndex >= 0 && cursor.peekNext()?.value === bitIndex, cursor };
+    }
+
     public *[Symbol.iterator](): IterableIterator<number> {
         for (const chunk of this.#chunks) {
             let bits = chunk.bits;
@@ -245,6 +264,26 @@ export class PersistentChunkedBitSet implements Iterable<number> {
         if (result.length === 0) return PersistentChunkedBitSet.empty();
         return new PersistentChunkedBitSet(MeasuredSequence.from(result, bitSetMeasure));
     }
+}
+
+/** Immutable root-plus-population-rank cursor over the present bits of a sparse bit set. */
+export class PersistentChunkedBitSetCursor {
+    public constructor(public readonly set: PersistentChunkedBitSet, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > set.count) throw new RangeError("Cursor position is outside the chunked bit set.");
+    }
+    public get count(): number { return this.set.count; }
+    public get size(): number { return this.count; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.count; }
+    public peekPrevious(): { readonly value: number } | undefined { return this.isAtStart ? undefined : { value: this.set.select(this.position - 1) }; }
+    public peekNext(): { readonly value: number } | undefined { return this.isAtEnd ? undefined : { value: this.set.select(this.position) }; }
+    public movePrevious(): PersistentChunkedBitSetCursor { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new PersistentChunkedBitSetCursor(this.set, this.position - 1); }
+    public moveNext(): PersistentChunkedBitSetCursor { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new PersistentChunkedBitSetCursor(this.set, this.position + 1); }
+    public seekRank(position: number): PersistentChunkedBitSetCursor { return position === this.position ? this : new PersistentChunkedBitSetCursor(this.set, position); }
+    public add(bitIndex: number): PersistentChunkedBitSetCursor { const set = this.set.add(bitIndex); if (set === this.set) return this; const position = bitIndex === 0 ? 0 : this.set.rank(bitIndex - 1); return new PersistentChunkedBitSetCursor(set, position + 1); }
+    public deletePrevious(): PersistentChunkedBitSetCursor { const bit = this.peekPrevious(); if (bit === undefined) throw new RangeError("No set bit precedes the cursor."); return new PersistentChunkedBitSetCursor(this.set.remove(bit.value), this.position - 1); }
+    public deleteNext(): PersistentChunkedBitSetCursor { const bit = this.peekNext(); if (bit === undefined) throw new RangeError("No set bit follows the cursor."); return new PersistentChunkedBitSetCursor(this.set.remove(bit.value), this.position); }
+    public snapshot(): PersistentChunkedBitSet { return this.set; }
 }
 
 function requireBitIndex(bitIndex: number): void {

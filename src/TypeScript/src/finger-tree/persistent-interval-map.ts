@@ -20,6 +20,11 @@ export interface IntervalMapAddResult<T, V> {
     readonly map: PersistentIntervalMap<T, V>;
 }
 
+export interface IntervalMapCursorSearch<T, V> {
+    readonly found: boolean;
+    readonly cursor: PersistentIntervalMapCursor<T, V>;
+}
+
 /** Raised when strict insertion names an existing interval key. */
 export class DuplicateIntervalError extends Error {
     public constructor() {
@@ -204,6 +209,54 @@ export class PersistentIntervalMap<T, V> implements Iterable<IntervalMapEntry<T,
 
     public countOverlaps(probe: Interval<T>): number { return this.findOverlaps(probe).length; }
 
+    public cursorAt(position = 0): PersistentIntervalMapCursor<T, V> {
+        return new PersistentIntervalMapCursor(this, position);
+    }
+
+    public cursorAtLowerBound(interval: Interval<T>): PersistentIntervalMapCursor<T, V> {
+        this.requireValid(interval);
+        return this.cursorAt(this.lowerBound(interval));
+    }
+
+    public cursorAtUpperBound(interval: Interval<T>): PersistentIntervalMapCursor<T, V> {
+        const lower = this.cursorAtLowerBound(interval);
+        const candidate = lower.peekNext();
+        return candidate !== undefined
+            && compareIntervals(candidate.value.interval, interval, this.comparator) === 0
+            ? lower.moveNext()
+            : lower;
+    }
+
+    public findCursor(interval: Interval<T>): IntervalMapCursorSearch<T, V> {
+        const cursor = this.cursorAtLowerBound(interval);
+        const candidate = cursor.peekNext();
+        return {
+            found: candidate !== undefined
+                && compareIntervals(candidate.value.interval, interval, this.comparator) === 0,
+            cursor,
+        };
+    }
+
+    public findOverlapCursor(probe: Interval<T>): IntervalMapCursorSearch<T, V> {
+        return this.findOverlapCursorFrom(0, probe);
+    }
+
+    public findContainingCursor(point: T): IntervalMapCursorSearch<T, V> {
+        return this.findOverlapCursor(new Interval(point, point, this.comparator));
+    }
+
+    public findOverlapCursorFrom(start: number, probe: Interval<T>): IntervalMapCursorSearch<T, V> {
+        this.requireValid(probe);
+        if (!Number.isInteger(start) || start < 0 || start > this.size) throw new RangeError("Cursor start is outside the interval map.");
+        const entries = Array.from(this);
+        for (let position = start; position < entries.length; position++) {
+            const entry = entries[position]!;
+            if (this.comparator(entry.interval.low, probe.high) > 0) break;
+            if (entry.interval.overlaps(probe, this.comparator)) return { found: true, cursor: this.cursorAt(position) };
+        }
+        return { found: false, cursor: this.cursorAt(this.size) };
+    }
+
     public *keys(): Generator<Interval<T>, void> { for (const entry of this.#entries) yield entry.interval; }
     public *values(): Generator<V, void> { for (const entry of this.#entries) yield entry.value; }
     public [Symbol.iterator](): IterableIterator<IntervalMapEntry<T, V>> { return this.#entries[Symbol.iterator](); }
@@ -254,4 +307,26 @@ export class PersistentIntervalMap<T, V> implements Iterable<IntervalMapEntry<T,
     ): PersistentIntervalMap<T, V> {
         return new PersistentIntervalMap(entries, this.comparator, this.valueEquals, this.#measure);
     }
+}
+
+/** Immutable interval-key-order root-plus-rank cursor over a persistent interval map. */
+export class PersistentIntervalMapCursor<T, V> {
+    public constructor(public readonly map: PersistentIntervalMap<T, V>, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > map.size) throw new RangeError("Cursor position is outside the interval map.");
+    }
+    public get size(): number { return this.map.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): { readonly value: IntervalMapEntry<T, V> } | undefined { return this.isAtStart ? undefined : { value: Array.from(this.map)[this.position - 1]! }; }
+    public peekNext(): { readonly value: IntervalMapEntry<T, V> } | undefined { return this.isAtEnd ? undefined : { value: Array.from(this.map)[this.position]! }; }
+    public movePrevious(): PersistentIntervalMapCursor<T, V> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new PersistentIntervalMapCursor(this.map, this.position - 1); }
+    public moveNext(): PersistentIntervalMapCursor<T, V> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new PersistentIntervalMapCursor(this.map, this.position + 1); }
+    public seekRank(position: number): PersistentIntervalMapCursor<T, V> { return position === this.position ? this : new PersistentIntervalMapCursor(this.map, position); }
+    public seekNextOverlap(probe: Interval<T>): IntervalMapCursorSearch<T, V> { return this.map.findOverlapCursorFrom(this.position < this.size ? this.position + 1 : this.size, probe); }
+    public insert(interval: Interval<T>, value: V): PersistentIntervalMapCursor<T, V> { const position = this.map.cursorAtLowerBound(interval).position; return new PersistentIntervalMapCursor(this.map.add(interval, value), position + 1); }
+    public tryInsert(interval: Interval<T>, value: V): { readonly added: boolean; readonly cursor: PersistentIntervalMapCursor<T, V> } { const location = this.map.cursorAtLowerBound(interval); const result = this.map.tryAdd(interval, value); return { added: result.added, cursor: result.added ? new PersistentIntervalMapCursor(result.map, location.position + 1) : location }; }
+    public setNextValue(value: V): PersistentIntervalMapCursor<T, V> { const entry = this.peekNext(); if (entry === undefined) throw new RangeError("No entry follows the cursor."); return new PersistentIntervalMapCursor(this.map.set(entry.value.interval, value), this.position); }
+    public deletePrevious(): PersistentIntervalMapCursor<T, V> { const entry = this.peekPrevious(); if (entry === undefined) throw new RangeError("No entry precedes the cursor."); return new PersistentIntervalMapCursor(this.map.remove(entry.value.interval), this.position - 1); }
+    public deleteNext(): PersistentIntervalMapCursor<T, V> { const entry = this.peekNext(); if (entry === undefined) throw new RangeError("No entry follows the cursor."); return new PersistentIntervalMapCursor(this.map.remove(entry.value.interval), this.position); }
+    public snapshot(): PersistentIntervalMap<T, V> { return this.map; }
 }

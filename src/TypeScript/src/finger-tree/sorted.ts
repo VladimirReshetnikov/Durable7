@@ -14,6 +14,7 @@ export class SortedDuplicateKeyError extends Error {
 export interface SortedAddResult<T> { readonly value: T; readonly added: boolean }
 export interface SortedMapEntry<K, V> { readonly key: K; readonly value: V }
 export interface SortedMapRemoveResult<K, V> { readonly map: SortedMap<K, V>; readonly value: V }
+export interface OrderedCursorSearch<C> { readonly found: boolean; readonly cursor: C }
 
 /** Immutable order-statistic sorted multiset. */
 export class SortedBag<T> implements Iterable<T> {
@@ -55,6 +56,14 @@ export class SortedBag<T> implements Iterable<T> {
     public getValueRange(low: T, high: T): SortedBag<T> {
         if (this.comparator(low, high) > 0) return SortedBag.empty(this.comparator);
         return this.getRange(this.countLessThan(low), this.countAtMost(high) - this.countLessThan(low))!;
+    }
+    public cursorAt(position = 0): SortedBagCursor<T> { return new SortedBagCursor(this, position); }
+    public cursorAtLowerBound(value: T): SortedBagCursor<T> { return this.cursorAt(this.countLessThan(value)); }
+    public cursorAtUpperBound(value: T): SortedBagCursor<T> { return this.cursorAt(this.countAtMost(value)); }
+    public findCursor(value: T): OrderedCursorSearch<SortedBagCursor<T>> {
+        const cursor = this.cursorAtLowerBound(value);
+        const candidate = cursor.peekNext();
+        return { found: candidate !== undefined && this.comparator(candidate.value, value) === 0, cursor };
     }
     public toArray(): T[] { return this.#items.toArray(); }
     public sharesStorageWith(other: SortedBag<T>): boolean { return this.#items.sharesStructureWith(other.#items); }
@@ -114,6 +123,14 @@ export class SortedSet<T> implements Iterable<T> {
     public isProperSupersetOf(values: Iterable<T>): boolean { const other = SortedSet.from(values, this.comparator); return this.size > other.size && this.isSupersetOf(other); }
     public overlaps(values: Iterable<T>): boolean { for (const value of values) if (this.contains(value)) return true; return false; }
     public setEquals(values: Iterable<T>): boolean { const other = values instanceof SortedSet && values.comparator === this.comparator ? values : SortedSet.from(values, this.comparator); return this.size === other.size && this.isSubsetOf(other); }
+    public cursorAt(position = 0): SortedSetCursor<T> { return new SortedSetCursor(this, position); }
+    public cursorAtLowerBound(value: T): SortedSetCursor<T> { return this.cursorAt(this.#items.lowerBound(value, this.comparator)); }
+    public cursorAtUpperBound(value: T): SortedSetCursor<T> { return this.cursorAt(this.#items.upperBound(value, this.comparator)); }
+    public findCursor(value: T): OrderedCursorSearch<SortedSetCursor<T>> {
+        const cursor = this.cursorAtLowerBound(value);
+        const candidate = cursor.peekNext();
+        return { found: candidate !== undefined && this.comparator(candidate.value, value) === 0, cursor };
+    }
     public toArray(): T[] { return this.#items.toArray(); }
     public sharesStorageWith(other: SortedSet<T>): boolean { return this.#items.sharesStructureWith(other.#items); }
     public [Symbol.iterator](): IterableIterator<T> { return this.#items[Symbol.iterator](); }
@@ -173,11 +190,83 @@ export class SortedMap<K, V> implements Iterable<SortedMapEntry<K, V>> {
     public higherEntry(key: K): SortedMapEntry<K, V> | undefined { return this.entryAt(this.#upperBound(key)); }
     public getRange(start: number, count: number): SortedMap<K, V> | undefined { if (!Number.isInteger(start) || !Number.isInteger(count) || start < 0 || count < 0 || start + count > this.size) return undefined; const first = this.#entries.splitAt(start)!; return new SortedMap(first.right.splitAt(count)!.left, this.comparator); }
     public getKeyRange(low: K, high: K): SortedMap<K, V> { if (this.comparator(low, high) > 0) return SortedMap.empty(this.comparator); const start = this.#lowerBound(low); return this.getRange(start, this.#upperBound(high) - start)!; }
+    public cursorAt(position = 0): SortedMapCursor<K, V> { return new SortedMapCursor(this, position); }
+    public cursorAtLowerBound(key: K): SortedMapCursor<K, V> { return this.cursorAt(this.#lowerBound(key)); }
+    public cursorAtUpperBound(key: K): SortedMapCursor<K, V> { return this.cursorAt(this.#upperBound(key)); }
+    public findCursor(key: K): OrderedCursorSearch<SortedMapCursor<K, V>> {
+        const cursor = this.cursorAtLowerBound(key);
+        const candidate = cursor.peekNext();
+        return { found: candidate !== undefined && this.comparator(candidate.value.key, key) === 0, cursor };
+    }
     public toArray(): SortedMapEntry<K, V>[] { return this.#entries.toArray(); }
     public keys(): K[] { return this.toArray().map((entry) => entry.key); }
     public values(): V[] { return this.toArray().map((entry) => entry.value); }
     public sharesStorageWith(other: SortedMap<K, V>): boolean { return this.#entries.sharesStructureWith(other.#entries); }
     public [Symbol.iterator](): IterableIterator<SortedMapEntry<K, V>> { return this.#entries[Symbol.iterator](); }
+}
+
+/** Immutable root-plus-rank cursor over a persistent sorted bag. */
+export class SortedBagCursor<T> {
+    public constructor(public readonly bag: SortedBag<T>, public readonly position = 0) {
+        requireCursorRank(position, bag.size, "sorted bag");
+    }
+    public get size(): number { return this.bag.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): { readonly value: T } | undefined { const value = this.bag.get(this.position - 1); return this.isAtStart ? undefined : { value: value! }; }
+    public peekNext(): { readonly value: T } | undefined { const value = this.bag.get(this.position); return this.isAtEnd ? undefined : { value: value! }; }
+    public movePrevious(): SortedBagCursor<T> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new SortedBagCursor(this.bag, this.position - 1); }
+    public moveNext(): SortedBagCursor<T> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new SortedBagCursor(this.bag, this.position + 1); }
+    public seekRank(position: number): SortedBagCursor<T> { return position === this.position ? this : new SortedBagCursor(this.bag, position); }
+    public add(value: T): SortedBagCursor<T> { const position = this.bag.countAtMost(value); return new SortedBagCursor(this.bag.add(value), position + 1); }
+    public deletePrevious(): SortedBagCursor<T> { if (this.isAtStart) throw new RangeError("No occurrence precedes the cursor."); return this.deleteAt(this.position - 1); }
+    public deleteNext(): SortedBagCursor<T> { if (this.isAtEnd) throw new RangeError("No occurrence follows the cursor."); return this.deleteAt(this.position); }
+    private deleteAt(rank: number): SortedBagCursor<T> {
+        const values = this.bag.toArray(); values.splice(rank, 1);
+        return new SortedBagCursor(SortedBag.from(values, this.bag.comparator), rank < this.position ? this.position - 1 : this.position);
+    }
+    public snapshot(): SortedBag<T> { return this.bag; }
+}
+
+/** Immutable root-plus-rank cursor over a persistent sorted set. */
+export class SortedSetCursor<T> {
+    public constructor(public readonly set: SortedSet<T>, public readonly position = 0) { requireCursorRank(position, set.size, "sorted set"); }
+    public get size(): number { return this.set.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): { readonly value: T } | undefined { return this.isAtStart ? undefined : { value: this.set.get(this.position - 1)! }; }
+    public peekNext(): { readonly value: T } | undefined { return this.isAtEnd ? undefined : { value: this.set.get(this.position)! }; }
+    public movePrevious(): SortedSetCursor<T> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new SortedSetCursor(this.set, this.position - 1); }
+    public moveNext(): SortedSetCursor<T> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new SortedSetCursor(this.set, this.position + 1); }
+    public seekRank(position: number): SortedSetCursor<T> { return position === this.position ? this : new SortedSetCursor(this.set, position); }
+    public add(value: T): SortedSetCursor<T> { const location = this.set.cursorAtLowerBound(value); return new SortedSetCursor(this.set.add(value), location.position + 1); }
+    public deletePrevious(): SortedSetCursor<T> { const item = this.peekPrevious(); if (item === undefined) throw new RangeError("No item precedes the cursor."); return new SortedSetCursor(this.set.remove(item.value), this.position - 1); }
+    public deleteNext(): SortedSetCursor<T> { const item = this.peekNext(); if (item === undefined) throw new RangeError("No item follows the cursor."); return new SortedSetCursor(this.set.remove(item.value), this.position); }
+    public snapshot(): SortedSet<T> { return this.set; }
+}
+
+/** Immutable key-order root-plus-rank cursor over a persistent sorted map. */
+export class SortedMapCursor<K, V> {
+    public constructor(public readonly map: SortedMap<K, V>, public readonly position = 0) { requireCursorRank(position, map.size, "sorted map"); }
+    public get size(): number { return this.map.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): { readonly value: SortedMapEntry<K, V> } | undefined { return this.isAtStart ? undefined : { value: this.map.entryAt(this.position - 1)! }; }
+    public peekNext(): { readonly value: SortedMapEntry<K, V> } | undefined { return this.isAtEnd ? undefined : { value: this.map.entryAt(this.position)! }; }
+    public movePrevious(): SortedMapCursor<K, V> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new SortedMapCursor(this.map, this.position - 1); }
+    public moveNext(): SortedMapCursor<K, V> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new SortedMapCursor(this.map, this.position + 1); }
+    public seekRank(position: number): SortedMapCursor<K, V> { return position === this.position ? this : new SortedMapCursor(this.map, position); }
+    public insert(key: K, value: V): SortedMapCursor<K, V> { const location = this.map.cursorAtLowerBound(key); return new SortedMapCursor(this.map.insert(key, value), location.position + 1); }
+    public tryInsert(key: K, value: V): { readonly added: boolean; readonly cursor: SortedMapCursor<K, V> } { const location = this.map.cursorAtLowerBound(key); const result = this.map.tryInsert(key, value); return { added: result.added, cursor: result.added ? new SortedMapCursor(result.value, location.position + 1) : location }; }
+    public setItem(key: K, value: V): SortedMapCursor<K, V> { const location = this.map.findCursor(key); return new SortedMapCursor(this.map.setItem(key, value), location.found ? location.cursor.position : location.cursor.position + 1); }
+    public setNextValue(value: V): SortedMapCursor<K, V> { const entry = this.peekNext(); if (entry === undefined) throw new RangeError("No entry follows the cursor."); return new SortedMapCursor(this.map.setItem(entry.value.key, value), this.position); }
+    public deletePrevious(): SortedMapCursor<K, V> { const entry = this.peekPrevious(); if (entry === undefined) throw new RangeError("No entry precedes the cursor."); return new SortedMapCursor(this.map.remove(entry.value.key), this.position - 1); }
+    public deleteNext(): SortedMapCursor<K, V> { const entry = this.peekNext(); if (entry === undefined) throw new RangeError("No entry follows the cursor."); return new SortedMapCursor(this.map.remove(entry.value.key), this.position); }
+    public snapshot(): SortedMap<K, V> { return this.map; }
+}
+
+function requireCursorRank(position: number, size: number, family: string): void {
+    if (!Number.isInteger(position) || position < 0 || position > size) throw new RangeError(`Cursor position is outside the ${family}.`);
 }
 
 /** Mutable bulk builder that publishes isolated immutable sorted-set snapshots. */
