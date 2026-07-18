@@ -362,6 +362,78 @@ size_t ft_sorted_multiset_count_of(const ft_sorted_multiset* set, const void* va
 ft_status ft_sorted_multiset_at(const ft_sorted_multiset* set, size_t index, void* destination);
 ft_status ft_sorted_multiset_visit(const ft_sorted_multiset* set, ft_visit_fn visitor, void* context);
 
+/* Immutable root-plus-rank gap cursor over one exact sorted-multiset snapshot. */
+typedef struct ft_sorted_multiset_cursor {
+    ft_sorted_multiset set;
+    size_t position;
+} ft_sorted_multiset_cursor;
+
+ft_status ft_sorted_multiset_get_cursor(
+    const ft_sorted_multiset* set,
+    size_t position,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_get_cursor_lower_bound(
+    const ft_sorted_multiset* set,
+    const void* value,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_get_cursor_upper_bound(
+    const ft_sorted_multiset* set,
+    const void* value,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_get_cursor_at_item(
+    const ft_sorted_multiset* set,
+    const void* value,
+    bool* found,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_cursor_copy(
+    const ft_sorted_multiset_cursor* source,
+    ft_sorted_multiset_cursor* destination);
+void ft_sorted_multiset_cursor_move(
+    ft_sorted_multiset_cursor* destination,
+    ft_sorted_multiset_cursor* source);
+void ft_sorted_multiset_cursor_dispose(ft_sorted_multiset_cursor* cursor);
+bool ft_sorted_multiset_cursor_valid(const ft_sorted_multiset_cursor* cursor);
+bool ft_sorted_multiset_cursor_empty(const ft_sorted_multiset_cursor* cursor);
+size_t ft_sorted_multiset_cursor_size(const ft_sorted_multiset_cursor* cursor);
+size_t ft_sorted_multiset_cursor_position(const ft_sorted_multiset_cursor* cursor);
+ft_status ft_sorted_multiset_cursor_is_at_start(
+    const ft_sorted_multiset_cursor* cursor,
+    bool* result);
+ft_status ft_sorted_multiset_cursor_is_at_end(
+    const ft_sorted_multiset_cursor* cursor,
+    bool* result);
+ft_status ft_sorted_multiset_cursor_try_peek_previous(
+    const ft_sorted_multiset_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_sorted_multiset_cursor_try_peek_next(
+    const ft_sorted_multiset_cursor* cursor,
+    bool* found,
+    void* value);
+ft_status ft_sorted_multiset_cursor_move_previous(
+    const ft_sorted_multiset_cursor* cursor,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_cursor_move_next(
+    const ft_sorted_multiset_cursor* cursor,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_cursor_seek_rank(
+    const ft_sorted_multiset_cursor* cursor,
+    size_t position,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_cursor_add(
+    const ft_sorted_multiset_cursor* cursor,
+    const void* value,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_cursor_delete_previous(
+    const ft_sorted_multiset_cursor* cursor,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_cursor_delete_next(
+    const ft_sorted_multiset_cursor* cursor,
+    ft_sorted_multiset_cursor* result);
+ft_status ft_sorted_multiset_cursor_snapshot(
+    const ft_sorted_multiset_cursor* cursor,
+    ft_sorted_multiset* result);
+
 ft_status ft_sorted_set_init(
     ft_sorted_set* set,
     const ft_tree_policy* policy,
@@ -376,6 +448,34 @@ ft_status ft_sorted_set_remove(const ft_sorted_set* set, const void* value, ft_s
 bool ft_sorted_set_contains(const ft_sorted_set* set, const void* value);
 ft_status ft_sorted_set_at(const ft_sorted_set* set, size_t index, void* destination);
 ft_status ft_sorted_set_visit(const ft_sorted_set* set, ft_visit_fn visitor, void* context);
+
+typedef ft_sorted_multiset_cursor ft_sorted_set_cursor;
+
+#define ft_sorted_set_get_cursor ft_sorted_multiset_get_cursor
+#define ft_sorted_set_get_cursor_lower_bound ft_sorted_multiset_get_cursor_lower_bound
+#define ft_sorted_set_get_cursor_upper_bound ft_sorted_multiset_get_cursor_upper_bound
+#define ft_sorted_set_get_cursor_at_item ft_sorted_multiset_get_cursor_at_item
+#define ft_sorted_set_cursor_copy ft_sorted_multiset_cursor_copy
+#define ft_sorted_set_cursor_move ft_sorted_multiset_cursor_move
+#define ft_sorted_set_cursor_dispose ft_sorted_multiset_cursor_dispose
+#define ft_sorted_set_cursor_valid ft_sorted_multiset_cursor_valid
+#define ft_sorted_set_cursor_empty ft_sorted_multiset_cursor_empty
+#define ft_sorted_set_cursor_size ft_sorted_multiset_cursor_size
+#define ft_sorted_set_cursor_position ft_sorted_multiset_cursor_position
+#define ft_sorted_set_cursor_is_at_start ft_sorted_multiset_cursor_is_at_start
+#define ft_sorted_set_cursor_is_at_end ft_sorted_multiset_cursor_is_at_end
+#define ft_sorted_set_cursor_try_peek_previous ft_sorted_multiset_cursor_try_peek_previous
+#define ft_sorted_set_cursor_try_peek_next ft_sorted_multiset_cursor_try_peek_next
+#define ft_sorted_set_cursor_move_previous ft_sorted_multiset_cursor_move_previous
+#define ft_sorted_set_cursor_move_next ft_sorted_multiset_cursor_move_next
+#define ft_sorted_set_cursor_seek_rank ft_sorted_multiset_cursor_seek_rank
+#define ft_sorted_set_cursor_delete_previous ft_sorted_multiset_cursor_delete_previous
+#define ft_sorted_set_cursor_delete_next ft_sorted_multiset_cursor_delete_next
+#define ft_sorted_set_cursor_snapshot ft_sorted_multiset_cursor_snapshot
+ft_status ft_sorted_set_cursor_add(
+    const ft_sorted_set_cursor* cursor,
+    const void* value,
+    ft_sorted_set_cursor* result);
 
 typedef void (*ft_sorted_map_visit_fn)(const void* key, const void* value, void* context);
 
@@ -439,6 +539,91 @@ ft_status ft_sorted_map_remove(
     const void* key,
     ft_sorted_map* result);
 ft_status ft_sorted_map_visit(const ft_sorted_map* map, ft_sorted_map_visit_fn visitor, void* context);
+
+typedef struct ft_sorted_map_cursor {
+    ft_sorted_map map;
+    size_t position;
+} ft_sorted_map_cursor;
+
+ft_status ft_sorted_map_get_cursor(
+    const ft_sorted_map* map,
+    size_t position,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_get_cursor_lower_bound(
+    const ft_sorted_map* map,
+    const void* key,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_get_cursor_upper_bound(
+    const ft_sorted_map* map,
+    const void* key,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_get_cursor_at_key(
+    const ft_sorted_map* map,
+    const void* key,
+    bool* found,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_copy(
+    const ft_sorted_map_cursor* source,
+    ft_sorted_map_cursor* destination);
+void ft_sorted_map_cursor_move(
+    ft_sorted_map_cursor* destination,
+    ft_sorted_map_cursor* source);
+void ft_sorted_map_cursor_dispose(ft_sorted_map_cursor* cursor);
+bool ft_sorted_map_cursor_valid(const ft_sorted_map_cursor* cursor);
+bool ft_sorted_map_cursor_empty(const ft_sorted_map_cursor* cursor);
+size_t ft_sorted_map_cursor_size(const ft_sorted_map_cursor* cursor);
+size_t ft_sorted_map_cursor_position(const ft_sorted_map_cursor* cursor);
+ft_status ft_sorted_map_cursor_is_at_start(const ft_sorted_map_cursor* cursor, bool* result);
+ft_status ft_sorted_map_cursor_is_at_end(const ft_sorted_map_cursor* cursor, bool* result);
+ft_status ft_sorted_map_cursor_try_peek_previous(
+    const ft_sorted_map_cursor* cursor,
+    bool* found,
+    void* key,
+    void* value);
+ft_status ft_sorted_map_cursor_try_peek_next(
+    const ft_sorted_map_cursor* cursor,
+    bool* found,
+    void* key,
+    void* value);
+ft_status ft_sorted_map_cursor_move_previous(
+    const ft_sorted_map_cursor* cursor,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_move_next(
+    const ft_sorted_map_cursor* cursor,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_seek_rank(
+    const ft_sorted_map_cursor* cursor,
+    size_t position,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_insert(
+    const ft_sorted_map_cursor* cursor,
+    const void* key,
+    const void* value,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_try_insert(
+    const ft_sorted_map_cursor* cursor,
+    const void* key,
+    const void* value,
+    bool* inserted,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_set(
+    const ft_sorted_map_cursor* cursor,
+    const void* key,
+    const void* value,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_set_next_value(
+    const ft_sorted_map_cursor* cursor,
+    const void* value,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_delete_previous(
+    const ft_sorted_map_cursor* cursor,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_delete_next(
+    const ft_sorted_map_cursor* cursor,
+    ft_sorted_map_cursor* result);
+ft_status ft_sorted_map_cursor_snapshot(
+    const ft_sorted_map_cursor* cursor,
+    ft_sorted_map* result);
 
 typedef struct ft_rope_chunk_context ft_rope_chunk_context;
 
@@ -751,6 +936,92 @@ ft_status ft_interval_tree_i64_try_find_overlap(
 size_t ft_interval_tree_i64_count_overlaps(const ft_interval_tree_i64* tree, ft_interval_i64 query);
 ft_status ft_interval_tree_i64_at(const ft_interval_tree_i64* tree, size_t index, ft_interval_i64* destination);
 
+typedef struct ft_interval_tree_i64_cursor {
+    ft_interval_tree_i64 tree;
+    size_t position;
+} ft_interval_tree_i64_cursor;
+
+ft_status ft_interval_tree_i64_get_cursor(
+    const ft_interval_tree_i64* tree,
+    size_t position,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_get_cursor_lower_bound(
+    const ft_interval_tree_i64* tree,
+    int64_t low,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_get_cursor_upper_bound(
+    const ft_interval_tree_i64* tree,
+    int64_t low,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_get_cursor_at_interval(
+    const ft_interval_tree_i64* tree,
+    ft_interval_i64 interval,
+    bool* found,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_find_overlap_cursor(
+    const ft_interval_tree_i64* tree,
+    ft_interval_i64 query,
+    bool* found,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_find_containing_cursor(
+    const ft_interval_tree_i64* tree,
+    int64_t point,
+    bool* found,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_copy(
+    const ft_interval_tree_i64_cursor* source,
+    ft_interval_tree_i64_cursor* destination);
+void ft_interval_tree_i64_cursor_move(
+    ft_interval_tree_i64_cursor* destination,
+    ft_interval_tree_i64_cursor* source);
+void ft_interval_tree_i64_cursor_dispose(ft_interval_tree_i64_cursor* cursor);
+bool ft_interval_tree_i64_cursor_valid(const ft_interval_tree_i64_cursor* cursor);
+bool ft_interval_tree_i64_cursor_empty(const ft_interval_tree_i64_cursor* cursor);
+size_t ft_interval_tree_i64_cursor_size(const ft_interval_tree_i64_cursor* cursor);
+size_t ft_interval_tree_i64_cursor_position(const ft_interval_tree_i64_cursor* cursor);
+ft_status ft_interval_tree_i64_cursor_is_at_start(
+    const ft_interval_tree_i64_cursor* cursor,
+    bool* result);
+ft_status ft_interval_tree_i64_cursor_is_at_end(
+    const ft_interval_tree_i64_cursor* cursor,
+    bool* result);
+ft_status ft_interval_tree_i64_cursor_try_peek_previous(
+    const ft_interval_tree_i64_cursor* cursor,
+    bool* found,
+    ft_interval_i64* interval);
+ft_status ft_interval_tree_i64_cursor_try_peek_next(
+    const ft_interval_tree_i64_cursor* cursor,
+    bool* found,
+    ft_interval_i64* interval);
+ft_status ft_interval_tree_i64_cursor_move_previous(
+    const ft_interval_tree_i64_cursor* cursor,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_move_next(
+    const ft_interval_tree_i64_cursor* cursor,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_seek_rank(
+    const ft_interval_tree_i64_cursor* cursor,
+    size_t position,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_seek_next_overlap(
+    const ft_interval_tree_i64_cursor* cursor,
+    ft_interval_i64 query,
+    bool* found,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_insert(
+    const ft_interval_tree_i64_cursor* cursor,
+    ft_interval_i64 interval,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_delete_previous(
+    const ft_interval_tree_i64_cursor* cursor,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_delete_next(
+    const ft_interval_tree_i64_cursor* cursor,
+    ft_interval_tree_i64_cursor* result);
+ft_status ft_interval_tree_i64_cursor_snapshot(
+    const ft_interval_tree_i64_cursor* cursor,
+    ft_interval_tree_i64* result);
+
 typedef struct ft_interval_tree_context ft_interval_tree_context;
 
 typedef struct ft_interval_tree {
@@ -799,6 +1070,98 @@ ft_status ft_interval_tree_at(
     size_t index,
     void* low,
     void* high);
+
+typedef struct ft_interval_tree_cursor {
+    ft_interval_tree tree;
+    size_t position;
+} ft_interval_tree_cursor;
+
+ft_status ft_interval_tree_get_cursor(
+    const ft_interval_tree* tree,
+    size_t position,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_get_cursor_lower_bound(
+    const ft_interval_tree* tree,
+    const void* low,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_get_cursor_upper_bound(
+    const ft_interval_tree* tree,
+    const void* low,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_get_cursor_at_interval(
+    const ft_interval_tree* tree,
+    const void* low,
+    const void* high,
+    bool* found,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_find_overlap_cursor(
+    const ft_interval_tree* tree,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_find_containing_cursor(
+    const ft_interval_tree* tree,
+    const void* point,
+    bool* found,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_copy(
+    const ft_interval_tree_cursor* source,
+    ft_interval_tree_cursor* destination);
+void ft_interval_tree_cursor_move(
+    ft_interval_tree_cursor* destination,
+    ft_interval_tree_cursor* source);
+void ft_interval_tree_cursor_dispose(ft_interval_tree_cursor* cursor);
+bool ft_interval_tree_cursor_valid(const ft_interval_tree_cursor* cursor);
+bool ft_interval_tree_cursor_empty(const ft_interval_tree_cursor* cursor);
+size_t ft_interval_tree_cursor_size(const ft_interval_tree_cursor* cursor);
+size_t ft_interval_tree_cursor_position(const ft_interval_tree_cursor* cursor);
+ft_status ft_interval_tree_cursor_is_at_start(
+    const ft_interval_tree_cursor* cursor,
+    bool* result);
+ft_status ft_interval_tree_cursor_is_at_end(
+    const ft_interval_tree_cursor* cursor,
+    bool* result);
+ft_status ft_interval_tree_cursor_try_peek_previous(
+    const ft_interval_tree_cursor* cursor,
+    bool* found,
+    void* low,
+    void* high);
+ft_status ft_interval_tree_cursor_try_peek_next(
+    const ft_interval_tree_cursor* cursor,
+    bool* found,
+    void* low,
+    void* high);
+ft_status ft_interval_tree_cursor_move_previous(
+    const ft_interval_tree_cursor* cursor,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_move_next(
+    const ft_interval_tree_cursor* cursor,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_seek_rank(
+    const ft_interval_tree_cursor* cursor,
+    size_t position,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_seek_next_overlap(
+    const ft_interval_tree_cursor* cursor,
+    const void* query_low,
+    const void* query_high,
+    bool* found,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_insert(
+    const ft_interval_tree_cursor* cursor,
+    const void* low,
+    const void* high,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_delete_previous(
+    const ft_interval_tree_cursor* cursor,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_delete_next(
+    const ft_interval_tree_cursor* cursor,
+    ft_interval_tree_cursor* result);
+ft_status ft_interval_tree_cursor_snapshot(
+    const ft_interval_tree_cursor* cursor,
+    ft_interval_tree* result);
 
 typedef struct ft_text_rope {
     ft_measured_rope rope;

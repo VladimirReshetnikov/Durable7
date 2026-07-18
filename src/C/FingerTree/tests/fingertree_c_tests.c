@@ -169,6 +169,19 @@ static int compare_ints(const void* left, const void* right, void* context)
     return (left_value > right_value) - (left_value < right_value);
 }
 
+typedef struct tagged_int {
+    int key;
+    char representative;
+} tagged_int;
+
+static int compare_tagged_ints(const void* left, const void* right, void* context)
+{
+    (void)context;
+    const tagged_int* left_value = (const tagged_int*)left;
+    const tagged_int* right_value = (const tagged_int*)right;
+    return (left_value->key > right_value->key) - (left_value->key < right_value->key);
+}
+
 typedef struct comparison_counter {
     size_t comparisons;
 } comparison_counter;
@@ -1392,6 +1405,184 @@ static void test_sorted_map(void)
     ft_sorted_map_dispose(&extended);
     ft_sorted_map_dispose(&replaced);
     ft_sorted_map_dispose(&map);
+}
+
+static void test_ordered_search_cursors(void)
+{
+    ft_value_type tagged_type;
+    ft_value_type_init(&tagged_type, sizeof(tagged_int));
+    ft_tree_policy tagged_policy;
+    ft_tree_policy_init_size(&tagged_policy, &tagged_type);
+    ft_sorted_multiset bag;
+    REQUIRE_STATUS(
+        ft_sorted_multiset_init(&bag, &tagged_policy, compare_tagged_ints, NULL),
+        FT_STATUS_OK);
+    const tagged_int values[] = {{1, 'a'}, {1, 'b'}, {1, 'c'}, {2, 'd'}};
+    for (size_t index = 0; index != 4; ++index) {
+        ft_sorted_multiset next;
+        REQUIRE_STATUS(ft_sorted_multiset_add(&bag, &values[index], &next), FT_STATUS_OK);
+        ft_sorted_multiset_dispose(&bag);
+        bag = next;
+    }
+
+    const tagged_int probe = {1, 'x'};
+    ft_sorted_multiset_cursor lower = {0};
+    ft_sorted_multiset_cursor upper = {0};
+    REQUIRE_STATUS(ft_sorted_multiset_get_cursor_lower_bound(&bag, &probe, &lower), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_sorted_multiset_get_cursor_upper_bound(&bag, &probe, &upper), FT_STATUS_OK);
+    REQUIRE(ft_sorted_multiset_cursor_position(&lower) == 0);
+    REQUIRE(ft_sorted_multiset_cursor_position(&upper) == 3);
+
+    ft_sorted_multiset_cursor occurrence = {0};
+    ft_sorted_multiset_cursor deleted = {0};
+    REQUIRE_STATUS(ft_sorted_multiset_get_cursor(&bag, 1, &occurrence), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_sorted_multiset_cursor_delete_next(&occurrence, &deleted), FT_STATUS_OK);
+    tagged_int actual = {0};
+    REQUIRE_STATUS(ft_sorted_multiset_at(&deleted.set, 0, &actual), FT_STATUS_OK);
+    REQUIRE(actual.representative == 'a');
+    REQUIRE_STATUS(ft_sorted_multiset_at(&deleted.set, 1, &actual), FT_STATUS_OK);
+    REQUIRE(actual.representative == 'c');
+    REQUIRE_STATUS(ft_sorted_multiset_at(&bag, 1, &actual), FT_STATUS_OK);
+    REQUIRE(actual.representative == 'b');
+
+    ft_tree_policy int_policy;
+    init_int_policy(&int_policy);
+    ft_sorted_set set;
+    REQUIRE_STATUS(ft_sorted_set_init(&set, &int_policy, compare_ints, NULL), FT_STATUS_OK);
+    const int one = 1;
+    const int two = 2;
+    const int three = 3;
+    ft_sorted_set set_next;
+    REQUIRE_STATUS(ft_sorted_set_add(&set, &one, &set_next), FT_STATUS_OK);
+    ft_sorted_set_dispose(&set);
+    set = set_next;
+    REQUIRE_STATUS(ft_sorted_set_add(&set, &three, &set_next), FT_STATUS_OK);
+    ft_sorted_set_dispose(&set);
+    set = set_next;
+    ft_sorted_set_cursor set_cursor = {0};
+    ft_sorted_set_cursor set_added = {0};
+    REQUIRE_STATUS(ft_sorted_set_get_cursor_lower_bound(&set, &two, &set_cursor), FT_STATUS_OK);
+    REQUIRE_STATUS(ft_sorted_set_cursor_add(&set_cursor, &two, &set_added), FT_STATUS_OK);
+    REQUIRE(ft_sorted_set_cursor_position(&set_added) == 2);
+    REQUIRE(ft_sorted_set_size(&set_added.set) == 3);
+    REQUIRE(ft_sorted_set_size(&set) == 2);
+
+    ft_value_type int_type;
+    ft_value_type_init(&int_type, sizeof(int));
+    ft_sorted_map map;
+    REQUIRE_STATUS(ft_sorted_map_init(&map, &int_type, &int_type, compare_ints, NULL), FT_STATUS_OK);
+    const int ten = 10;
+    const int thirty = 30;
+    ft_sorted_map map_next;
+    REQUIRE_STATUS(ft_sorted_map_insert(&map, &one, &ten, &map_next), FT_STATUS_OK);
+    ft_sorted_map_dispose(&map);
+    ft_sorted_map_move(&map, &map_next);
+    REQUIRE_STATUS(ft_sorted_map_insert(&map, &three, &thirty, &map_next), FT_STATUS_OK);
+    ft_sorted_map_dispose(&map);
+    ft_sorted_map_move(&map, &map_next);
+    bool found = true;
+    ft_sorted_map_cursor map_cursor = {0};
+    REQUIRE_STATUS(ft_sorted_map_get_cursor_at_key(&map, &two, &found, &map_cursor), FT_STATUS_OK);
+    REQUIRE(!found && ft_sorted_map_cursor_position(&map_cursor) == 1);
+    const int twenty = 20;
+    bool inserted = false;
+    ft_sorted_map_cursor map_inserted = {0};
+    REQUIRE_STATUS(
+        ft_sorted_map_cursor_try_insert(&map_cursor, &two, &twenty, &inserted, &map_inserted),
+        FT_STATUS_OK);
+    REQUIRE(inserted && ft_sorted_map_cursor_position(&map_inserted) == 2);
+    const int thirty_three = 33;
+    ft_sorted_map_cursor map_updated = {0};
+    REQUIRE_STATUS(
+        ft_sorted_map_cursor_set_next_value(&map_inserted, &thirty_three, &map_updated),
+        FT_STATUS_OK);
+    int stored = 0;
+    REQUIRE_STATUS(ft_sorted_map_try_get(&map_updated.map, &three, &found, &stored), FT_STATUS_OK);
+    REQUIRE(found && stored == 33);
+    const size_t retained_position = ft_sorted_map_cursor_position(&map_updated);
+    REQUIRE_STATUS(
+        ft_sorted_map_cursor_insert(&map_updated, &three, &thirty, &map_updated),
+        FT_STATUS_ALREADY_EXISTS);
+    REQUIRE(ft_sorted_map_cursor_valid(&map_updated));
+    REQUIRE(ft_sorted_map_cursor_position(&map_updated) == retained_position);
+
+    ft_interval_tree_i64 intervals;
+    REQUIRE_STATUS(ft_interval_tree_i64_init(&intervals), FT_STATUS_OK);
+    const ft_interval_i64 interval_values[] = {{1, 2}, {1, 3}, {4, 8}, {9, 10}};
+    for (size_t index = 0; index != 4; ++index) {
+        ft_interval_tree_i64 next;
+        REQUIRE_STATUS(
+            ft_interval_tree_i64_insert(&intervals, interval_values[index], &next),
+            FT_STATUS_OK);
+        ft_interval_tree_i64_dispose(&intervals);
+        ft_interval_tree_i64_move(&intervals, &next);
+    }
+    ft_interval_tree_i64_cursor interval_cursor = {0};
+    REQUIRE_STATUS(
+        ft_interval_tree_i64_get_cursor_at_interval(
+            &intervals,
+            (ft_interval_i64){1, 2},
+            &found,
+            &interval_cursor),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    ft_interval_tree_i64_cursor interval_deleted = {0};
+    REQUIRE_STATUS(
+        ft_interval_tree_i64_cursor_delete_next(&interval_cursor, &interval_deleted),
+        FT_STATUS_OK);
+    REQUIRE(!ft_interval_tree_i64_contains(&interval_deleted.tree, (ft_interval_i64){1, 2}));
+    REQUIRE(ft_interval_tree_i64_contains(&interval_deleted.tree, (ft_interval_i64){1, 3}));
+    ft_interval_tree_i64_cursor overlap_cursor = {0};
+    REQUIRE_STATUS(
+        ft_interval_tree_i64_find_overlap_cursor(
+            &intervals,
+            (ft_interval_i64){6, 7},
+            &found,
+            &overlap_cursor),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    ft_interval_i64 overlap = {0};
+    REQUIRE_STATUS(
+        ft_interval_tree_i64_cursor_try_peek_next(&overlap_cursor, &found, &overlap),
+        FT_STATUS_OK);
+    REQUIRE(found && overlap.low == 4 && overlap.high == 8);
+
+    ft_interval_tree generic;
+    REQUIRE_STATUS(ft_interval_tree_init(&generic, &int_type, compare_ints, NULL), FT_STATUS_OK);
+    const int four = 4;
+    const int eight = 8;
+    ft_interval_tree generic_next;
+    REQUIRE_STATUS(ft_interval_tree_insert(&generic, &one, &two, &generic_next), FT_STATUS_OK);
+    ft_interval_tree_dispose(&generic);
+    ft_interval_tree_move(&generic, &generic_next);
+    REQUIRE_STATUS(ft_interval_tree_insert(&generic, &four, &eight, &generic_next), FT_STATUS_OK);
+    ft_interval_tree_dispose(&generic);
+    ft_interval_tree_move(&generic, &generic_next);
+    ft_interval_tree_cursor generic_cursor = {0};
+    const int six = 6;
+    REQUIRE_STATUS(
+        ft_interval_tree_find_containing_cursor(&generic, &six, &found, &generic_cursor),
+        FT_STATUS_OK);
+    REQUIRE(found && ft_interval_tree_cursor_position(&generic_cursor) == 1);
+
+    ft_interval_tree_cursor_dispose(&generic_cursor);
+    ft_interval_tree_dispose(&generic);
+    ft_interval_tree_i64_cursor_dispose(&overlap_cursor);
+    ft_interval_tree_i64_cursor_dispose(&interval_deleted);
+    ft_interval_tree_i64_cursor_dispose(&interval_cursor);
+    ft_interval_tree_i64_dispose(&intervals);
+    ft_sorted_map_cursor_dispose(&map_updated);
+    ft_sorted_map_cursor_dispose(&map_inserted);
+    ft_sorted_map_cursor_dispose(&map_cursor);
+    ft_sorted_map_dispose(&map);
+    ft_sorted_set_cursor_dispose(&set_added);
+    ft_sorted_set_cursor_dispose(&set_cursor);
+    ft_sorted_set_dispose(&set);
+    ft_sorted_multiset_cursor_dispose(&deleted);
+    ft_sorted_multiset_cursor_dispose(&occurrence);
+    ft_sorted_multiset_cursor_dispose(&upper);
+    ft_sorted_multiset_cursor_dispose(&lower);
+    ft_sorted_multiset_dispose(&bag);
 }
 
 static void test_rope(void)
@@ -3060,6 +3251,7 @@ int main(void)
     run_test("sorted set and multiset", test_sorted_set_and_multiset);
     run_test("sorted facade structural bounds", test_sorted_facade_structural_bounds);
     run_test("sorted map", test_sorted_map);
+    run_test("ordered-search cursors", test_ordered_search_cursors);
     run_test("rope", test_rope);
     run_test("rope cursor", test_rope_cursor);
     run_test("rope cursor model", test_rope_cursor_model);
