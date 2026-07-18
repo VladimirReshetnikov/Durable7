@@ -82,6 +82,7 @@ main = do
   testChampTerminalHashFragments
   testChampStructuralAlgebra
   testPatriciaMapsAndSets
+  testPatriciaCursors
   testActualKeyPreservation
   testAdjustAndStrictMapping
   testPersistentMapFactories
@@ -425,6 +426,120 @@ testPatriciaMapsAndSets = do
   assertEqual "Patricia set union" [-3, -1, 0, 1, 3] (Patricia.setToAscList (Patricia.setUnion leftSet rightSet))
   assertEqual "Patricia set intersection" [-1, 1] (Patricia.setToAscList (Patricia.setIntersection leftSet rightSet))
   assertEqual "Patricia set difference" [-3, 3] (Patricia.setToAscList (Patricia.setDifference leftSet rightSet))
+
+testPatriciaCursors :: IO ()
+testPatriciaCursors = do
+  let keys = [minBound, -1, 0, 17, maxBound] :: [Int32]
+      values = Patricia.fromList [(key, if key == 0 then Nothing else Just (show key)) | key <- keys]
+      required message = maybe (error message) id
+      cursorAtRank position = required "expected valid Patricia cursor rank" (Patricia.cursorAt position values)
+      expectedPrevious position = if position == 0 then Nothing else Just (keys !! (position - 1))
+      expectedNext position = if position == length keys then Nothing else Just (keys !! position)
+  forM_ [0 .. length keys] $ \position -> do
+    let cursorValue = cursorAtRank position
+    assertEqual "Patricia cursor position" position (Patricia.cursorPosition cursorValue)
+    assertEqual "Patricia cursor count" (length keys) (Patricia.cursorCount cursorValue)
+    assertEqual "Patricia cursor start" (position == 0) (Patricia.cursorIsAtStart cursorValue)
+    assertEqual "Patricia cursor end" (position == length keys) (Patricia.cursorIsAtEnd cursorValue)
+    assertEqual "Patricia cursor previous" (expectedPrevious position) (fst <$> Patricia.cursorPeekPrevious cursorValue)
+    assertEqual "Patricia cursor next" (expectedNext position) (fst <$> Patricia.cursorPeekNext cursorValue)
+    assertEqual "Patricia cursor clean snapshot" (Patricia.toAscList values)
+      (Patricia.toAscList (Patricia.cursorSnapshot cursorValue))
+
+  assertEqual "Patricia lower-bound cursor" 1
+    (Patricia.cursorPosition (Patricia.lowerBoundCursor (-2) values))
+  assertEqual "Patricia upper-bound cursor" 2
+    (Patricia.cursorPosition (Patricia.upperBoundCursor (-1) values))
+  assertEqual "Patricia missing lower-bound cursor" 4
+    (Patricia.cursorPosition (Patricia.lowerBoundCursor 18 values))
+  assertEqual "Patricia maximum upper-bound cursor" (length keys)
+    (Patricia.cursorPosition (Patricia.upperBoundCursor maxBound values))
+  let exact = Patricia.cursorAtKey 0 values
+      miss = Patricia.cursorAtKey 1 values
+  assertBool "Patricia exact cursor hit" (Patricia.cursorSearchFound exact)
+  assertEqual "Patricia cursor stored Nothing" (Just (0, Nothing))
+    (Patricia.cursorPeekNext (Patricia.cursorSearchCursor exact))
+  assertBool "Patricia exact cursor miss" (not (Patricia.cursorSearchFound miss))
+  assertEqual "Patricia exact miss rank" 3
+    (Patricia.cursorPosition (Patricia.cursorSearchCursor miss))
+  assertEqual "Patricia exact miss candidate" (Just 17)
+    (fst <$> Patricia.cursorPeekNext (Patricia.cursorSearchCursor miss))
+  assertBool "Patricia invalid negative rank" (isNothing (Patricia.cursorAt (-1) values))
+  assertBool "Patricia invalid excessive rank" (isNothing (Patricia.cursorAt (length keys + 1) values))
+  assertBool "Patricia start move previous" (isNothing (Patricia.cursorMovePrevious (Patricia.cursor values)))
+  assertBool "Patricia end move next" (isNothing (Patricia.cursorMoveNext (Patricia.cursorAtEnd values)))
+
+  let source = Patricia.fromList [(-10, Just "a"), (0, Nothing), (10, Just "c")] :: Patricia.IntMap32 (Maybe String)
+      atZero = Patricia.cursorSearchCursor (Patricia.cursorAtKey 0 source)
+      updated = required "expected focused Patricia value update" (Patricia.cursorSetNextValue (Just "b") atZero)
+      deletedNext = required "expected Patricia next deletion" (Patricia.cursorDeleteNext atZero)
+      deletedPrevious = required "expected Patricia previous deletion" (Patricia.cursorDeletePrevious atZero)
+      missing = Patricia.cursorSearchCursor (Patricia.cursorAtKey 5 source)
+      inserted = required "expected Patricia insertion" (Patricia.cursorInsert 5 (Just "five") missing)
+  assertEqual "Patricia cursor value update rank" 1 (Patricia.cursorPosition updated)
+  assertEqual "Patricia cursor value update" (Just (Just "b")) (Patricia.lookup 0 (Patricia.cursorSnapshot updated))
+  assertEqual "Patricia cursor retained source" (Just Nothing) (Patricia.lookup 0 source)
+  assertEqual "Patricia cursor delete next" [-10, 10]
+    (map fst (Patricia.toAscList (Patricia.cursorSnapshot deletedNext)))
+  assertEqual "Patricia cursor delete previous" [0, 10]
+    (map fst (Patricia.toAscList (Patricia.cursorSnapshot deletedPrevious)))
+  assertEqual "Patricia cursor insertion rank" 3 (Patricia.cursorPosition inserted)
+  assertEqual "Patricia cursor insertion" [-10, 0, 5, 10]
+    (map fst (Patricia.toAscList (Patricia.cursorSnapshot inserted)))
+  assertEqual "Patricia cursor insertion retained source" [-10, 0, 10]
+    (map fst (Patricia.toAscList source))
+  assertBool "strict Patricia cursor duplicate" (isNothing (Patricia.cursorInsert 0 Nothing atZero))
+  assertBool "Patricia cursor wrong insertion gap"
+    (isNothing (Patricia.cursorInsert 5 (Just "wrong") (Patricia.cursor source)))
+  assertBool "Patricia cursor end update"
+    (isNothing (Patricia.cursorSetNextValue Nothing (Patricia.cursorAtEnd source)))
+  assertBool "Patricia cursor start delete previous"
+    (isNothing (Patricia.cursorDeletePrevious (Patricia.cursor source)))
+  assertBool "Patricia cursor end delete next"
+    (isNothing (Patricia.cursorDeleteNext (Patricia.cursorAtEnd source)))
+
+  let longValues = Patricia.fromList
+        [(minBound, minBound), (-1, -1), (0, 0), (2 ^ (40 :: Int), 1), (maxBound, maxBound)] :: Patricia.IntMap64 Int64
+  assertEqual "Int64 Patricia lower boundary cursor" 0
+    (Patricia.cursorPosition (Patricia.lowerBoundCursor minBound longValues))
+  assertEqual "Int64 Patricia upper boundary cursor" 1
+    (Patricia.cursorPosition (Patricia.upperBoundCursor minBound longValues))
+  assertEqual "Int64 Patricia missing lower cursor" 3
+    (Patricia.cursorPosition (Patricia.lowerBoundCursor 1 longValues))
+  assertEqual "Int64 Patricia maximum upper cursor" 5
+    (Patricia.cursorPosition (Patricia.upperBoundCursor maxBound longValues))
+
+  let intSet = Patricia.setFromList [minBound, -1, 0, maxBound] :: Patricia.IntSet32
+      (setFound, setExact) = Patricia.setCursorAtItem 0 intSet
+      (setMissFound, setMiss) = Patricia.setCursorAtItem (-2) intSet
+      setAdded = required "expected Patricia set insertion" (Patricia.setCursorInsert (-2) setMiss)
+      setDuplicate = required "expected Patricia set duplicate no-op" (Patricia.setCursorInsert 0 setExact)
+  assertBool "Patricia set exact cursor" setFound
+  assertBool "Patricia set missing cursor" (not setMissFound)
+  assertEqual "Patricia set cursor insertion rank" 2 (Patricia.setCursorPosition setAdded)
+  assertEqual "Patricia set cursor insertion" [minBound, -2, -1, 0, maxBound]
+    (Patricia.setToAscList (Patricia.setCursorSnapshot setAdded))
+  assertEqual "Patricia set duplicate cursor" (Patricia.setToAscList intSet)
+    (Patricia.setToAscList (Patricia.setCursorSnapshot setDuplicate))
+
+  let histories = take 128 (iterate (\state -> state * 1664525 + 1013904223) (0x6d2b79f5 :: Int))
+      checkRanks state =
+        let generated = [fromIntegral (((state `div` (offset + 1)) `mod` 1001) - 500) :: Int32 | offset <- [0 .. 63]]
+            sortedKeys = uniqueSorted generated
+            randomMap = Patricia.fromList [(key, key) | key <- sortedKeys]
+            probes = [-550, -528 .. 550] :: [Int32]
+            checkProbe probe =
+              let lower = length (takeWhile (< probe) sortedKeys)
+                  upper = length (takeWhile (<= probe) sortedKeys)
+                  searched = Patricia.cursorAtKey probe randomMap
+               in Patricia.cursorPosition (Patricia.lowerBoundCursor probe randomMap) == lower &&
+                  Patricia.cursorPosition (Patricia.upperBoundCursor probe randomMap) == upper &&
+                  Patricia.cursorPosition (Patricia.cursorSearchCursor searched) == lower &&
+                  Patricia.cursorSearchFound searched == (probe `elem` sortedKeys)
+         in all checkProbe probes
+  assertBool "randomized Patricia cursor ranks match sorted model" (all checkRanks histories)
+  where
+    uniqueSorted = foldr (\value rest -> if value `elem` rest then rest else value : rest) [] . sort
 
 testActualKeyPreservation :: IO ()
 testActualKeyPreservation = do

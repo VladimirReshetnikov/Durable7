@@ -23,6 +23,31 @@ module Data.Structures.Hamt.Patricia
   , intersectionWithKey
   , difference
   , toAscList
+  , PatriciaCursor
+  , PatriciaCursorSearch
+  , cursor
+  , cursorAt
+  , cursorAtEnd
+  , lowerBoundCursor
+  , upperBoundCursor
+  , cursorAtKey
+  , cursorSearchFound
+  , cursorSearchCursor
+  , cursorCount
+  , cursorPosition
+  , cursorIsAtStart
+  , cursorIsAtEnd
+  , cursorPeekPrevious
+  , cursorPeekNext
+  , cursorMovePrevious
+  , cursorMoveNext
+  , cursorSeek
+  , cursorInsert
+  , cursorPut
+  , cursorSetNextValue
+  , cursorDeletePrevious
+  , cursorDeleteNext
+  , cursorSnapshot
   , PatriciaSet
   , IntSet32
   , IntSet64
@@ -36,6 +61,26 @@ module Data.Structures.Hamt.Patricia
   , setIntersection
   , setDifference
   , setToAscList
+  , PatriciaSetCursor
+  , setCursor
+  , setCursorAt
+  , setCursorAtEnd
+  , setLowerBoundCursor
+  , setUpperBoundCursor
+  , setCursorAtItem
+  , setCursorCount
+  , setCursorPosition
+  , setCursorIsAtStart
+  , setCursorIsAtEnd
+  , setCursorPeekPrevious
+  , setCursorPeekNext
+  , setCursorMovePrevious
+  , setCursorMoveNext
+  , setCursorSeek
+  , setCursorInsert
+  , setCursorDeletePrevious
+  , setCursorDeleteNext
+  , setCursorSnapshot
   ) where
 
 import Prelude hiding (lookup, null)
@@ -311,6 +356,145 @@ toAscList (PatriciaMap _ root) = maybe [] visit root
     visit (Leaf _ key value) = [(key, value)]
     visit (Branch _ _ _ left right) = visit left ++ visit right
 
+-- | An immutable root-plus-rank gap cursor over one Patricia map snapshot.
+-- The constructor is intentionally hidden. A whole neighbor entry is wrapped
+-- in 'Maybe', so a stored 'Nothing' payload remains distinguishable from a
+-- cursor boundary.
+data PatriciaCursor k v = PatriciaCursor !(PatriciaMap k v) !Int
+
+-- | Exact-search result. A miss retains a usable lower-bound cursor.
+data PatriciaCursorSearch k v = PatriciaCursorSearch !Bool !(PatriciaCursor k v)
+
+cursor :: PatriciaMap k v -> PatriciaCursor k v
+cursor values = PatriciaCursor values 0
+
+cursorAt :: Int -> PatriciaMap k v -> Maybe (PatriciaCursor k v)
+cursorAt position values
+  | position < 0 || position > size values = Nothing
+  | otherwise = Just (PatriciaCursor values position)
+
+cursorAtEnd :: PatriciaMap k v -> PatriciaCursor k v
+cursorAtEnd values = PatriciaCursor values (size values)
+
+lowerBoundCursor :: PatriciaKey k => k -> PatriciaMap k v -> PatriciaCursor k v
+lowerBoundCursor key values = PatriciaCursor values (fst (lowerBoundRank key values))
+
+upperBoundCursor :: PatriciaKey k => k -> PatriciaMap k v -> PatriciaCursor k v
+upperBoundCursor key values =
+  let (position, found) = lowerBoundRank key values
+   in PatriciaCursor values (position + if found then 1 else 0)
+
+cursorAtKey :: PatriciaKey k => k -> PatriciaMap k v -> PatriciaCursorSearch k v
+cursorAtKey key values =
+  let (position, found) = lowerBoundRank key values
+   in PatriciaCursorSearch found (PatriciaCursor values position)
+
+cursorSearchFound :: PatriciaCursorSearch k v -> Bool
+cursorSearchFound (PatriciaCursorSearch found _) = found
+
+cursorSearchCursor :: PatriciaCursorSearch k v -> PatriciaCursor k v
+cursorSearchCursor (PatriciaCursorSearch _ cursorValue) = cursorValue
+
+cursorCount :: PatriciaCursor k v -> Int
+cursorCount (PatriciaCursor values _) = size values
+
+cursorPosition :: PatriciaCursor k v -> Int
+cursorPosition (PatriciaCursor _ position) = position
+
+cursorIsAtStart :: PatriciaCursor k v -> Bool
+cursorIsAtStart cursorValue = cursorPosition cursorValue == 0
+
+cursorIsAtEnd :: PatriciaCursor k v -> Bool
+cursorIsAtEnd cursorValue = cursorPosition cursorValue == cursorCount cursorValue
+
+cursorPeekPrevious :: PatriciaCursor k v -> Maybe (k, v)
+cursorPeekPrevious cursorValue@(PatriciaCursor values position)
+  | cursorIsAtStart cursorValue = Nothing
+  | otherwise = entryAt (position - 1) values
+
+cursorPeekNext :: PatriciaCursor k v -> Maybe (k, v)
+cursorPeekNext (PatriciaCursor values position) = entryAt position values
+
+cursorMovePrevious :: PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorMovePrevious cursorValue@(PatriciaCursor values position)
+  | cursorIsAtStart cursorValue = Nothing
+  | otherwise = Just (PatriciaCursor values (position - 1))
+
+cursorMoveNext :: PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorMoveNext cursorValue@(PatriciaCursor values position)
+  | cursorIsAtEnd cursorValue = Nothing
+  | otherwise = Just (PatriciaCursor values (position + 1))
+
+cursorSeek :: Int -> PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorSeek position cursorValue@(PatriciaCursor values _)
+  | position < 0 || position > cursorCount cursorValue = Nothing
+  | position == cursorPosition cursorValue = Just cursorValue
+  | otherwise = Just (PatriciaCursor values position)
+
+-- | Strictly inserts at a missing lower-bound gap. A duplicate key or a key
+-- belonging at another gap returns 'Nothing'.
+cursorInsert :: PatriciaKey k => k -> v -> PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorInsert key value (PatriciaCursor values position)
+  | found || expected /= position = Nothing
+  | otherwise = Just (PatriciaCursor (insert key value values) (position + 1))
+  where
+    (expected, found) = lowerBoundRank key values
+
+-- | Updates the exact next key or inserts at a missing lower-bound gap. An
+-- update keeps the gap fixed; an insertion returns the gap after the entry.
+cursorPut :: PatriciaKey k => k -> v -> PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorPut key value (PatriciaCursor values position)
+  | expected /= position = Nothing
+  | otherwise = Just (PatriciaCursor (insert key value values) (position + if found then 0 else 1))
+  where
+    (expected, found) = lowerBoundRank key values
+
+-- | Replaces the next value while retaining its stored key. As with ordinary
+-- 'insert', this deliberately requires no @Eq v@ and rebuilds the present-key
+-- path even when the replacement happens to be equal.
+cursorSetNextValue :: PatriciaKey k => v -> PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorSetNextValue value (PatriciaCursor values position) = do
+  (key, _) <- entryAt position values
+  pure (PatriciaCursor (insert key value values) position)
+
+cursorDeletePrevious :: PatriciaKey k => PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorDeletePrevious (PatriciaCursor values position) = do
+  (key, _) <- entryAt (position - 1) values
+  pure (PatriciaCursor (delete key values) (position - 1))
+
+cursorDeleteNext :: PatriciaKey k => PatriciaCursor k v -> Maybe (PatriciaCursor k v)
+cursorDeleteNext (PatriciaCursor values position) = do
+  (key, _) <- entryAt position values
+  pure (PatriciaCursor (delete key values) position)
+
+cursorSnapshot :: PatriciaCursor k v -> PatriciaMap k v
+cursorSnapshot (PatriciaCursor values _) = values
+
+entryAt :: Int -> PatriciaMap k v -> Maybe (k, v)
+entryAt index (PatriciaMap count root)
+  | index < 0 || index >= count = Nothing
+  | otherwise = root >>= nodeEntryAt index
+
+nodeEntryAt :: Int -> Node k v -> Maybe (k, v)
+nodeEntryAt index (Leaf _ key value)
+  | index == 0 = Just (key, value)
+  | otherwise = Nothing
+nodeEntryAt index (Branch _ _ _ left right)
+  | index < nodeSize left = nodeEntryAt index left
+  | otherwise = nodeEntryAt (index - nodeSize left) right
+
+lowerBoundRank :: PatriciaKey k => k -> PatriciaMap k v -> (Int, Bool)
+lowerBoundRank key (PatriciaMap _ root) = maybe (0, False) (go 0) root
+  where
+    path = encodeKey key
+    go rank (Leaf leafPath _ _)
+      | leafPath < path = (rank + 1, False)
+      | otherwise = (rank, leafPath == path)
+    go rank (Branch count prefix mask left right)
+      | prefixOf path mask /= prefix = if path < prefix then (rank, False) else (rank + count, False)
+      | path .&. mask == 0 = go rank left
+      | otherwise = go (rank + nodeSize left) right
+
 newtype PatriciaSet k = PatriciaSet (PatriciaMap k ())
 type IntSet32 = PatriciaSet Int32
 type IntSet64 = PatriciaSet Int64
@@ -335,3 +519,94 @@ setDifference :: PatriciaKey k => PatriciaSet k -> PatriciaSet k -> PatriciaSet 
 setDifference (PatriciaSet left) (PatriciaSet right) = PatriciaSet (difference left right)
 setToAscList :: PatriciaSet k -> [k]
 setToAscList (PatriciaSet values) = map fst (toAscList values)
+
+-- | Immutable root-plus-rank gap cursor over a Patricia set.
+data PatriciaSetCursor k = PatriciaSetCursor !(PatriciaSet k) !Int
+
+setCursor :: PatriciaSet k -> PatriciaSetCursor k
+setCursor values = PatriciaSetCursor values 0
+
+setCursorAt :: Int -> PatriciaSet k -> Maybe (PatriciaSetCursor k)
+setCursorAt position values
+  | position < 0 || position > setSize values = Nothing
+  | otherwise = Just (PatriciaSetCursor values position)
+
+setCursorAtEnd :: PatriciaSet k -> PatriciaSetCursor k
+setCursorAtEnd values = PatriciaSetCursor values (setSize values)
+
+setLowerBoundCursor :: PatriciaKey k => k -> PatriciaSet k -> PatriciaSetCursor k
+setLowerBoundCursor key values@(PatriciaSet mapValue) =
+  PatriciaSetCursor values (fst (lowerBoundRank key mapValue))
+
+setUpperBoundCursor :: PatriciaKey k => k -> PatriciaSet k -> PatriciaSetCursor k
+setUpperBoundCursor key values@(PatriciaSet mapValue) =
+  let (position, found) = lowerBoundRank key mapValue
+   in PatriciaSetCursor values (position + if found then 1 else 0)
+
+-- | Returns an exact-key discriminator and a usable lower-bound cursor.
+setCursorAtItem :: PatriciaKey k => k -> PatriciaSet k -> (Bool, PatriciaSetCursor k)
+setCursorAtItem key values@(PatriciaSet mapValue) =
+  let (position, found) = lowerBoundRank key mapValue
+   in (found, PatriciaSetCursor values position)
+
+setCursorCount :: PatriciaSetCursor k -> Int
+setCursorCount (PatriciaSetCursor values _) = setSize values
+
+setCursorPosition :: PatriciaSetCursor k -> Int
+setCursorPosition (PatriciaSetCursor _ position) = position
+
+setCursorIsAtStart :: PatriciaSetCursor k -> Bool
+setCursorIsAtStart cursorValue = setCursorPosition cursorValue == 0
+
+setCursorIsAtEnd :: PatriciaSetCursor k -> Bool
+setCursorIsAtEnd cursorValue = setCursorPosition cursorValue == setCursorCount cursorValue
+
+setCursorPeekPrevious :: PatriciaSetCursor k -> Maybe k
+setCursorPeekPrevious cursorValue@(PatriciaSetCursor values position)
+  | setCursorIsAtStart cursorValue = Nothing
+  | otherwise = setEntryAt (position - 1) values
+
+setCursorPeekNext :: PatriciaSetCursor k -> Maybe k
+setCursorPeekNext (PatriciaSetCursor values position) = setEntryAt position values
+
+setCursorMovePrevious :: PatriciaSetCursor k -> Maybe (PatriciaSetCursor k)
+setCursorMovePrevious cursorValue@(PatriciaSetCursor values position)
+  | setCursorIsAtStart cursorValue = Nothing
+  | otherwise = Just (PatriciaSetCursor values (position - 1))
+
+setCursorMoveNext :: PatriciaSetCursor k -> Maybe (PatriciaSetCursor k)
+setCursorMoveNext cursorValue@(PatriciaSetCursor values position)
+  | setCursorIsAtEnd cursorValue = Nothing
+  | otherwise = Just (PatriciaSetCursor values (position + 1))
+
+setCursorSeek :: Int -> PatriciaSetCursor k -> Maybe (PatriciaSetCursor k)
+setCursorSeek position cursorValue@(PatriciaSetCursor values _)
+  | position < 0 || position > setCursorCount cursorValue = Nothing
+  | position == setCursorPosition cursorValue = Just cursorValue
+  | otherwise = Just (PatriciaSetCursor values position)
+
+-- | Adds at the current lower-bound gap. An exact duplicate preserves the
+-- same logical cursor; a value belonging at another gap returns 'Nothing'.
+setCursorInsert :: PatriciaKey k => k -> PatriciaSetCursor k -> Maybe (PatriciaSetCursor k)
+setCursorInsert key cursorValue@(PatriciaSetCursor values@(PatriciaSet mapValue) position)
+  | expected /= position = Nothing
+  | found = Just cursorValue
+  | otherwise = Just (PatriciaSetCursor (setInsert key values) (position + 1))
+  where
+    (expected, found) = lowerBoundRank key mapValue
+
+setCursorDeletePrevious :: PatriciaKey k => PatriciaSetCursor k -> Maybe (PatriciaSetCursor k)
+setCursorDeletePrevious (PatriciaSetCursor values position) = do
+  key <- setEntryAt (position - 1) values
+  pure (PatriciaSetCursor (setDelete key values) (position - 1))
+
+setCursorDeleteNext :: PatriciaKey k => PatriciaSetCursor k -> Maybe (PatriciaSetCursor k)
+setCursorDeleteNext (PatriciaSetCursor values position) = do
+  key <- setEntryAt position values
+  pure (PatriciaSetCursor (setDelete key values) position)
+
+setCursorSnapshot :: PatriciaSetCursor k -> PatriciaSet k
+setCursorSnapshot (PatriciaSetCursor values _) = values
+
+setEntryAt :: Int -> PatriciaSet k -> Maybe k
+setEntryAt index (PatriciaSet values) = fst <$> entryAt index values
