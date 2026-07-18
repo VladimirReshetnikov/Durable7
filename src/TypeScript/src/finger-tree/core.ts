@@ -8,6 +8,7 @@ export interface DequeSplit<T> { readonly left: PersistentDeque<T>; readonly rig
 export interface DequeItemSplit<T> { readonly left: PersistentDeque<T>; readonly item: T; readonly right: PersistentDeque<T> }
 export interface DequeRangeSplit<T> { readonly before: PersistentDeque<T>; readonly range: PersistentDeque<T>; readonly after: PersistentDeque<T> }
 export interface DequePop<T> { readonly value: T; readonly rest: PersistentDeque<T> }
+export interface SequenceCursorPeek<T> { readonly value: T }
 
 /** Persistent catenable sequence facade over a measured balanced tree. */
 export class PersistentDeque<T> implements Iterable<T> {
@@ -15,6 +16,7 @@ export class PersistentDeque<T> implements Iterable<T> {
     private constructor(items: MeasuredSequence<T, number>) { this.#items = items; }
     public static empty<T>(): PersistentDeque<T> { return new PersistentDeque(MeasuredSequence.empty(sizePolicy<T>())); }
     public static from<T>(values: Iterable<T>): PersistentDeque<T> { return new PersistentDeque(MeasuredSequence.from(values, sizePolicy<T>())); }
+    public getCursor(position = 0): PersistentDequeCursor<T> { return new PersistentDequeCursor(this, position); }
     public get size(): number { return this.#items.size; }
     public get isEmpty(): boolean { return this.#items.isEmpty; }
     public front(): T | undefined { return this.#items.front(); }
@@ -76,6 +78,7 @@ export class ReversibleDeque<T> implements Iterable<T> {
     private constructor(items: PersistentDeque<T>, reversed: boolean) { this.#items = items; this.#reversed = reversed; }
     public static empty<T>(): ReversibleDeque<T> { return new ReversibleDeque(PersistentDeque.empty<T>(), false); }
     public static from<T>(values: Iterable<T>): ReversibleDeque<T> { return new ReversibleDeque(PersistentDeque.from(values), false); }
+    public getCursor(position = 0): ReversibleDequeCursor<T> { return new ReversibleDequeCursor(this, position); }
     public get size(): number { return this.#items.size; }
     public get isEmpty(): boolean { return this.#items.isEmpty; }
     public front(): T | undefined { return this.#reversed ? this.#items.back() : this.#items.front(); }
@@ -125,6 +128,7 @@ export class ReversibleDeque<T> implements Iterable<T> {
 export interface MeasuredSplit<T, M> { readonly left: FingerTree<T, M>; readonly right: FingerTree<T, M> }
 export interface MeasuredItemSplit<T, M> { readonly left: FingerTree<T, M>; readonly item: T; readonly right: FingerTree<T, M> }
 export interface LocateResult<T, M> { readonly index: number; readonly measureBefore: M; readonly item: T | undefined; readonly found: boolean }
+export interface FingerTreeCursorSearch<T, M> { readonly cursor: FingerTreeCursor<T, M>; readonly found: boolean }
 
 /** General persistent monoid-measured sequence. */
 export class FingerTree<T, M> implements Iterable<T> {
@@ -133,6 +137,12 @@ export class FingerTree<T, M> implements Iterable<T> {
     private constructor(items: MeasuredSequence<T, M>, policy: MeasurePolicy<T, M>) { this.#items = items; this.policy = policy; }
     public static empty<T, M>(policy: MeasurePolicy<T, M>): FingerTree<T, M> { return new FingerTree(MeasuredSequence.empty(policy), policy); }
     public static from<T, M>(values: Iterable<T>, policy: MeasurePolicy<T, M>): FingerTree<T, M> { return new FingerTree(MeasuredSequence.from(values, policy), policy); }
+    public getCursorAtStart(): FingerTreeCursor<T, M> { return new FingerTreeCursor(this, 0); }
+    public getCursorAtEnd(): FingerTreeCursor<T, M> { return new FingerTreeCursor(this, this.size); }
+    public cursorByMeasure(predicate: (measure: M) => boolean): FingerTreeCursorSearch<T, M> {
+        const located = this.tryLocate(predicate);
+        return { cursor: new FingerTreeCursor(this, located.found ? located.index : this.size), found: located.found };
+    }
     public get size(): number { return this.#items.size; }
     public get isEmpty(): boolean { return this.#items.isEmpty; }
     public measure(): M { return this.#items.measure; }
@@ -184,4 +194,159 @@ export class FingerTree<T, M> implements Iterable<T> {
     public toArray(): T[] { return this.#items.toArray(); }
     public sharesStorageWith(other: FingerTree<T, M>): boolean { return this.#items.sharesStructureWith(other.#items); }
     public [Symbol.iterator](): IterableIterator<T> { return this.#items[Symbol.iterator](); }
+}
+
+/** Immutable snapshot-plus-position cursor over a persistent deque. */
+export class PersistentDequeCursor<T> {
+    public constructor(public readonly deque: PersistentDeque<T>, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > deque.size) {
+            throw new RangeError("Cursor position is outside the deque.");
+        }
+    }
+    public get size(): number { return this.deque.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): SequenceCursorPeek<T> | undefined {
+        return this.isAtStart ? undefined : { value: this.deque.get(this.position - 1)! };
+    }
+    public peekNext(): SequenceCursorPeek<T> | undefined {
+        return this.isAtEnd ? undefined : { value: this.deque.get(this.position)! };
+    }
+    public movePrevious(): PersistentDequeCursor<T> {
+        if (this.isAtStart) throw new RangeError("Cursor is already at the start.");
+        return new PersistentDequeCursor(this.deque, this.position - 1);
+    }
+    public moveNext(): PersistentDequeCursor<T> {
+        if (this.isAtEnd) throw new RangeError("Cursor is already at the end.");
+        return new PersistentDequeCursor(this.deque, this.position + 1);
+    }
+    public seek(position: number): PersistentDequeCursor<T> {
+        return position === this.position ? this : new PersistentDequeCursor(this.deque, position);
+    }
+    public insert(value: T): PersistentDequeCursor<T> {
+        return new PersistentDequeCursor(this.deque.insertAt(this.position, value)!, this.position + 1);
+    }
+    public insertRange(values: Iterable<T>): PersistentDequeCursor<T> {
+        const middle = PersistentDeque.from(values);
+        if (middle.isEmpty) return this;
+        const split = this.deque.splitAt(this.position)!;
+        return new PersistentDequeCursor(split.left.concat(middle).concat(split.right), this.position + middle.size);
+    }
+    public deletePrevious(): PersistentDequeCursor<T> {
+        if (this.isAtStart) throw new RangeError("No element precedes the cursor.");
+        return new PersistentDequeCursor(this.deque.removeAt(this.position - 1)!, this.position - 1);
+    }
+    public deleteNext(): PersistentDequeCursor<T> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new PersistentDequeCursor(this.deque.removeAt(this.position)!, this.position);
+    }
+    public replaceNext(value: T): PersistentDequeCursor<T> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new PersistentDequeCursor(this.deque.setItem(this.position, value)!, this.position);
+    }
+    public snapshot(): PersistentDeque<T> { return this.deque; }
+}
+
+/** Immutable logical-order cursor over a persistent O(1)-reversible deque. */
+export class ReversibleDequeCursor<T> {
+    public constructor(public readonly deque: ReversibleDeque<T>, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > deque.size) {
+            throw new RangeError("Cursor position is outside the reversible deque.");
+        }
+    }
+    public get size(): number { return this.deque.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): SequenceCursorPeek<T> | undefined {
+        return this.isAtStart ? undefined : { value: this.deque.get(this.position - 1)! };
+    }
+    public peekNext(): SequenceCursorPeek<T> | undefined {
+        return this.isAtEnd ? undefined : { value: this.deque.get(this.position)! };
+    }
+    public movePrevious(): ReversibleDequeCursor<T> {
+        if (this.isAtStart) throw new RangeError("Cursor is already at the start.");
+        return new ReversibleDequeCursor(this.deque, this.position - 1);
+    }
+    public moveNext(): ReversibleDequeCursor<T> {
+        if (this.isAtEnd) throw new RangeError("Cursor is already at the end.");
+        return new ReversibleDequeCursor(this.deque, this.position + 1);
+    }
+    public seek(position: number): ReversibleDequeCursor<T> {
+        return position === this.position ? this : new ReversibleDequeCursor(this.deque, position);
+    }
+    public insert(value: T): ReversibleDequeCursor<T> { return this.insertRange([value]); }
+    public insertRange(values: Iterable<T>): ReversibleDequeCursor<T> {
+        const middle = ReversibleDeque.from(values);
+        if (middle.isEmpty) return this;
+        const split = this.deque.splitAt(this.position)!;
+        return new ReversibleDequeCursor(split[0].concat(middle).concat(split[1]), this.position + middle.size);
+    }
+    public deletePrevious(): ReversibleDequeCursor<T> {
+        if (this.isAtStart) throw new RangeError("No element precedes the cursor.");
+        const split = this.deque.splitAt(this.position - 1)!;
+        return new ReversibleDequeCursor(split[0].concat(split[1].splitAt(1)![1]), this.position - 1);
+    }
+    public deleteNext(): ReversibleDequeCursor<T> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        const split = this.deque.splitAt(this.position)!;
+        return new ReversibleDequeCursor(split[0].concat(split[1].splitAt(1)![1]), this.position);
+    }
+    public replaceNext(value: T): ReversibleDequeCursor<T> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        const split = this.deque.splitAt(this.position)!;
+        return new ReversibleDequeCursor(split[0].append(value).concat(split[1].splitAt(1)![1]), this.position);
+    }
+    public reverse(): ReversibleDequeCursor<T> { return new ReversibleDequeCursor(this.deque.reverse(), this.size - this.position); }
+    public snapshot(): ReversibleDeque<T> { return this.deque; }
+}
+
+/** Immutable measure-aware cursor over one exact general measured-tree version. */
+export class FingerTreeCursor<T, M> {
+    readonly #position: number;
+    public constructor(public readonly tree: FingerTree<T, M>, position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > tree.size) {
+            throw new RangeError("Cursor position is outside the measured tree.");
+        }
+        this.#position = position;
+    }
+    public get isAtStart(): boolean { return this.#position === 0; }
+    public get isAtEnd(): boolean { return this.#position === this.tree.size; }
+    public get measureBefore(): M { return this.tree.prefixMeasure(this.#position)!; }
+    public get measureAfter(): M { return this.tree.splitAtIndex(this.#position)!.right.measure(); }
+    public peekPrevious(): SequenceCursorPeek<T> | undefined {
+        return this.isAtStart ? undefined : { value: this.tree.get(this.#position - 1)! };
+    }
+    public peekNext(): SequenceCursorPeek<T> | undefined {
+        return this.isAtEnd ? undefined : { value: this.tree.get(this.#position)! };
+    }
+    public movePrevious(): FingerTreeCursor<T, M> {
+        if (this.isAtStart) throw new RangeError("Cursor is already at the start.");
+        return new FingerTreeCursor(this.tree, this.#position - 1);
+    }
+    public moveNext(): FingerTreeCursor<T, M> {
+        if (this.isAtEnd) throw new RangeError("Cursor is already at the end.");
+        return new FingerTreeCursor(this.tree, this.#position + 1);
+    }
+    public seekByMeasure(predicate: (measure: M) => boolean): FingerTreeCursor<T, M> {
+        return this.tree.cursorByMeasure(predicate).cursor;
+    }
+    public searchByMeasure(predicate: (measure: M) => boolean): FingerTreeCursorSearch<T, M> {
+        return this.tree.cursorByMeasure(predicate);
+    }
+    public insert(value: T): FingerTreeCursor<T, M> {
+        return new FingerTreeCursor(this.tree.insertAt(this.#position, value)!, this.#position + 1);
+    }
+    public deletePrevious(): FingerTreeCursor<T, M> {
+        if (this.isAtStart) throw new RangeError("No element precedes the cursor.");
+        return new FingerTreeCursor(this.tree.removeAt(this.#position - 1)!, this.#position - 1);
+    }
+    public deleteNext(): FingerTreeCursor<T, M> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new FingerTreeCursor(this.tree.removeAt(this.#position)!, this.#position);
+    }
+    public replaceNext(value: T): FingerTreeCursor<T, M> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new FingerTreeCursor(this.tree.setItem(this.#position, value)!, this.#position);
+    }
+    public snapshot(): FingerTree<T, M> { return this.tree; }
 }

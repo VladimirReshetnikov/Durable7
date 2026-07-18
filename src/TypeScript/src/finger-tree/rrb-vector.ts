@@ -149,6 +149,7 @@ function* iterate<T>(root: RrbNode<T>): Generator<T, void> {
 
 export interface RrbPop<T> { readonly value: T; readonly rest: RrbVector<T> }
 export interface RrbVectorSplit<T> { readonly left: RrbVector<T>; readonly right: RrbVector<T> }
+export interface RrbCursorPeek<T> { readonly value: T }
 export interface RrbVectorStatistics {
     readonly count: number; readonly height: number; readonly leafCount: number; readonly branchCount: number;
     readonly regularBranchCount: number; readonly relaxedBranchCount: number;
@@ -167,6 +168,7 @@ export class RrbVector<T> implements Iterable<T> {
         return new RrbVectorBuilder<T>().appendAll(values).toImmutable();
     }
     public static builder<T>(): RrbVectorBuilder<T> { return new RrbVectorBuilder<T>(); }
+    public getCursor(position = 0): RrbVectorCursor<T> { return new RrbVectorCursor(this, position); }
     public get size(): number { return this.#root?.count ?? 0; }
     public get isEmpty(): boolean { return this.#root === undefined; }
     public get height(): number { return this.#root?.height ?? 0; }
@@ -236,6 +238,59 @@ export class RrbVector<T> implements Iterable<T> {
         return { count: result[0], height: result[1], leafCount, branchCount, regularBranchCount: regular, relaxedBranchCount: relaxed, minimumLeafLength: minLeaf, maximumLeafLength: maxLeaf, minimumBranchingFactor: branchCount === 0 ? 0 : minBranch, maximumBranchingFactor: maxBranch };
     }
     public [Symbol.iterator](): IterableIterator<T> { return this.#root === undefined ? [][Symbol.iterator]() : iterate(this.#root); }
+}
+
+/** Immutable snapshot-plus-position gap cursor over a persistent RRB vector. */
+export class RrbVectorCursor<T> {
+    public constructor(public readonly vector: RrbVector<T>, public readonly position = 0) {
+        if (!Number.isInteger(position) || position < 0 || position > vector.size) {
+            throw new RangeError("Cursor position is outside the RRB vector.");
+        }
+    }
+    public get size(): number { return this.vector.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public peekPrevious(): RrbCursorPeek<T> | undefined {
+        return this.isAtStart ? undefined : { value: this.vector.get(this.position - 1)! };
+    }
+    public peekNext(): RrbCursorPeek<T> | undefined {
+        return this.isAtEnd ? undefined : { value: this.vector.get(this.position)! };
+    }
+    public movePrevious(): RrbVectorCursor<T> {
+        if (this.isAtStart) throw new RangeError("Cursor is already at the start.");
+        return new RrbVectorCursor(this.vector, this.position - 1);
+    }
+    public moveNext(): RrbVectorCursor<T> {
+        if (this.isAtEnd) throw new RangeError("Cursor is already at the end.");
+        return new RrbVectorCursor(this.vector, this.position + 1);
+    }
+    public seek(position: number): RrbVectorCursor<T> {
+        return position === this.position ? this : new RrbVectorCursor(this.vector, position);
+    }
+    public insert(value: T): RrbVectorCursor<T> {
+        return new RrbVectorCursor(this.vector.insertAt(this.position, value)!, this.position + 1);
+    }
+    public insertRange(values: Iterable<T>): RrbVectorCursor<T> {
+        return this.insertVector(RrbVector.from(values));
+    }
+    public insertVector(values: RrbVector<T>): RrbVectorCursor<T> {
+        if (values.isEmpty) return this;
+        const split = this.vector.splitAt(this.position)!;
+        return new RrbVectorCursor(split.left.concat(values).concat(split.right), this.position + values.size);
+    }
+    public deletePrevious(): RrbVectorCursor<T> {
+        if (this.isAtStart) throw new RangeError("No element precedes the cursor.");
+        return new RrbVectorCursor(this.vector.removeAt(this.position - 1)!, this.position - 1);
+    }
+    public deleteNext(): RrbVectorCursor<T> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new RrbVectorCursor(this.vector.removeAt(this.position)!, this.position);
+    }
+    public replaceNext(value: T): RrbVectorCursor<T> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new RrbVectorCursor(this.vector.setItem(this.position, value)!, this.position);
+    }
+    public snapshot(): RrbVector<T> { return this.vector; }
 }
 
 /** Mutable append staging surface that publishes immutable RRB snapshots. */

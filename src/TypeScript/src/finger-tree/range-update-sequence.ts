@@ -753,6 +753,9 @@ export interface RangeUpdateSequenceSplit<Element, Measure, Tag> {
     readonly right: RangeUpdateSequence<Element, Measure, Tag>;
 }
 
+/** Presence-safe neighboring value returned by a Range cursor. */
+export interface RangeUpdateCursorPeek<Element> { readonly value: Element }
+
 /** Structural diagnostics returned by `RangeUpdateSequence.validateStructure`. */
 export interface RangeUpdateSequenceStatistics {
     readonly count: number;
@@ -873,6 +876,11 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
 
     /** Cross-port alias for `size`. */
     public get count(): number { return this.size; }
+
+    /** Creates an immutable positional and measured cursor at a gap in `0..size`. */
+    public getCursor(position = 0): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        return new RangeUpdateSequenceCursor(this, position);
+    }
 
     public get isEmpty(): boolean { return this.#root === undefined; }
 
@@ -1099,5 +1107,78 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
 
     private checkRoomForOneMore(): void {
         if (this.size === MAX_COUNT) throw countOverflowError();
+    }
+}
+
+/** Immutable snapshot-plus-position cursor over a persistent lazy range-update sequence. */
+export class RangeUpdateSequenceCursor<Element, Measure, Tag> {
+    public constructor(
+        public readonly sequence: RangeUpdateSequence<Element, Measure, Tag>,
+        public readonly position = 0,
+    ) {
+        if (!Number.isInteger(position) || position < 0 || position > sequence.size) {
+            throw new RangeError("Cursor position is outside the Range sequence.");
+        }
+    }
+    public get size(): number { return this.sequence.size; }
+    public get isAtStart(): boolean { return this.position === 0; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
+    public get measureBefore(): Measure { return this.sequence.measureRange(0, this.position); }
+    public get measureAfter(): Measure { return this.sequence.measureRange(this.position, this.size - this.position); }
+    public peekPrevious(): RangeUpdateCursorPeek<Element> | undefined {
+        return this.isAtStart ? undefined : { value: this.sequence.get(this.position - 1) };
+    }
+    public peekNext(): RangeUpdateCursorPeek<Element> | undefined {
+        return this.isAtEnd ? undefined : { value: this.sequence.get(this.position) };
+    }
+    public movePrevious(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        if (this.isAtStart) throw new RangeError("Cursor is already at the start.");
+        return new RangeUpdateSequenceCursor(this.sequence, this.position - 1);
+    }
+    public moveNext(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        if (this.isAtEnd) throw new RangeError("Cursor is already at the end.");
+        return new RangeUpdateSequenceCursor(this.sequence, this.position + 1);
+    }
+    public seek(position: number): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        return position === this.position ? this : new RangeUpdateSequenceCursor(this.sequence, position);
+    }
+    public insert(value: Element): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        return new RangeUpdateSequenceCursor(this.sequence.insert(this.position, value), this.position + 1);
+    }
+    public deletePrevious(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        if (this.isAtStart) throw new RangeError("No element precedes the cursor.");
+        return new RangeUpdateSequenceCursor(this.sequence.removeAt(this.position - 1), this.position - 1);
+    }
+    public deleteNext(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new RangeUpdateSequenceCursor(this.sequence.removeAt(this.position), this.position);
+    }
+    public replaceNext(value: Element): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
+        return new RangeUpdateSequenceCursor(this.sequence.setItem(this.position, value), this.position);
+    }
+    public measurePrevious(count: number): Measure {
+        this.checkDirectionalCount(count, this.position);
+        return this.sequence.measureRange(this.position - count, count);
+    }
+    public measureNext(count: number): Measure {
+        this.checkDirectionalCount(count, this.size - this.position);
+        return this.sequence.measureRange(this.position, count);
+    }
+    public applyPrevious(count: number, tag: Tag): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        this.checkDirectionalCount(count, this.position);
+        const sequence = this.sequence.applyRange(this.position - count, count, tag);
+        return sequence === this.sequence ? this : new RangeUpdateSequenceCursor(sequence, this.position);
+    }
+    public applyNext(count: number, tag: Tag): RangeUpdateSequenceCursor<Element, Measure, Tag> {
+        this.checkDirectionalCount(count, this.size - this.position);
+        const sequence = this.sequence.applyRange(this.position, count, tag);
+        return sequence === this.sequence ? this : new RangeUpdateSequenceCursor(sequence, this.position);
+    }
+    public snapshot(): RangeUpdateSequence<Element, Measure, Tag> { return this.sequence; }
+    private checkDirectionalCount(count: number, available: number): void {
+        if (!Number.isInteger(count) || count < 0 || count > available) {
+            throw new RangeError("Directional count is outside the cursor side.");
+        }
     }
 }
