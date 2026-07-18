@@ -988,7 +988,8 @@ public fun main() {
         "overflowingRangesAreRejected" to ::overflowingRangesAreRejected,
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     ) + measuredRopeCursorTestCases() + rrbVectorTestCases() + dabaLiteTestCases() +
-        canonicalSortedSetTestCases() + priorityCoreTestCases() + rangeUpdateSequenceTestCases()
+        canonicalSortedSetTestCases() + priorityCoreTestCases() + rangeUpdateSequenceTestCases() +
+        sequenceCursorTestCases()
 
     for ((name, test) in tests) {
         test()

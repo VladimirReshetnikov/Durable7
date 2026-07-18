@@ -100,6 +100,14 @@ public class RangeUpdateSequence<T, M, Tag> private constructor(
     public val isEmpty: Boolean
         get() = root == null
 
+    /** Creates an immutable logical cursor before the first element. */
+    public fun cursor(): RangeUpdateSequenceCursor<T, M, Tag> =
+        RangeUpdateSequenceCursor.create(this, 0)
+
+    /** Creates an immutable logical cursor at a boundary in `0..size`. */
+    public fun cursorAt(position: Int): RangeUpdateSequenceCursor<T, M, Tag>? =
+        if (position < 0 || position > size) null else RangeUpdateSequenceCursor.create(this, position)
+
     /** The cached ordered logical measure. */
     public val measure: M
         get() = if (root == null) emptyMeasure else root.measure

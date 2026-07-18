@@ -128,6 +128,13 @@ public class PersistentDeque<T> private constructor(
     public val isEmpty: Boolean
         get() = items.isEmpty
 
+    /** Creates an immutable cursor before the first element. */
+    public fun cursor(): PersistentDequeCursor<T> = PersistentDequeCursor.create(this, 0)
+
+    /** Creates an immutable cursor at a boundary in `0..size`. */
+    public fun cursorAt(position: Int): PersistentDequeCursor<T>? =
+        if (position < 0 || position > size) null else PersistentDequeCursor.create(this, position)
+
     public fun front(): T? = items.front()
 
     public fun back(): T? = items.back()
@@ -613,6 +620,13 @@ public class ReversibleDeque<T> private constructor(
     public val isEmpty: Boolean
         get() = root.isEmpty
 
+    /** Creates a logical-order cursor before the first element. */
+    public fun cursor(): ReversibleDequeCursor<T> = ReversibleDequeCursor.create(this, 0)
+
+    /** Creates a logical-order cursor at a boundary in `0..size`. */
+    public fun cursorAt(position: Int): ReversibleDequeCursor<T>? =
+        if (position < 0 || position > size) null else ReversibleDequeCursor.create(this, position)
+
     public fun front(): T? = root.front()
 
     public fun back(): T? = root.back()
@@ -712,6 +726,21 @@ public class FingerTree<T, M> private constructor(
 
     public val isEmpty: Boolean
         get() = items.isEmpty
+
+    /** Creates a measure-aware cursor before the first element. */
+    public fun cursorAtStart(): FingerTreeCursor<T, M> = FingerTreeCursor.create(this, 0)
+
+    /** Creates a measure-aware cursor after the final element. */
+    public fun cursorAtEnd(): FingerTreeCursor<T, M> = FingerTreeCursor.create(this, size)
+
+    /** Locates the first inclusive prefix satisfying [predicate], or returns an end cursor. */
+    public fun cursorByMeasure(predicate: (M) -> Boolean): FingerTreeCursorSearch<T, M> {
+        val located = tryLocate(predicate)
+        return FingerTreeCursorSearch(
+            FingerTreeCursor.create(this, if (located.found) located.index else size),
+            located.found,
+        )
+    }
 
     public fun measure(): M = items.measure()
 

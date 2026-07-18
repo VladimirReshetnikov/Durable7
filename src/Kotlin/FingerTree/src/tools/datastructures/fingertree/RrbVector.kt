@@ -62,6 +62,13 @@ public class RrbVector<T> private constructor(
     public val isEmpty: Boolean
         get() = root == null
 
+    /** Creates an immutable cursor before the first element. */
+    public fun cursor(): RrbVectorCursor<T> = RrbVectorCursor.create(this, 0)
+
+    /** Creates an immutable cursor at a boundary in `0..size`. */
+    public fun cursorAt(position: Int): RrbVectorCursor<T>? =
+        if (position < 0 || position > size) null else RrbVectorCursor.create(this, position)
+
     /** Internal tree height, where a leaf has height zero. */
     public val height: Int
         get() = root?.height ?: 0
