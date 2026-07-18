@@ -16,8 +16,12 @@ val comparator : 'endpoint t -> 'endpoint Common.Comparator.t
 val count : 'endpoint t -> int
 val is_empty : 'endpoint t -> bool
 val maximum_high : 'endpoint t -> 'endpoint option
+val nth : int -> 'endpoint t -> 'endpoint interval option
+val lower_bound : 'endpoint -> 'endpoint t -> int
+val upper_bound : 'endpoint -> 'endpoint t -> int
 val insert : 'endpoint interval -> 'endpoint t -> 'endpoint t
 val remove : 'endpoint interval -> 'endpoint t -> bool * 'endpoint t
+val remove_at : int -> 'endpoint t -> ('endpoint t, string) result
 val find_overlap : 'endpoint interval -> 'endpoint t -> 'endpoint interval option
 val find_all_overlaps : 'endpoint interval -> 'endpoint t -> 'endpoint interval list
 val query_point : 'endpoint -> 'endpoint t -> 'endpoint interval list

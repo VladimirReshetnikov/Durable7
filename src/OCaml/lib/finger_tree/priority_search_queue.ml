@@ -36,6 +36,18 @@ let lower_bound key queue =
   done;
   !low
 
+let upper_bound key queue =
+  let low = ref 0 in
+  let high = ref (count queue) in
+  while !low < !high do
+    let middle = !low + ((!high - !low) / 2) in
+    if compare_key queue queue.entries.(middle).key key <= 0 then low := middle + 1
+    else high := middle
+  done;
+  !low
+
+let nth index queue = if index < 0 || index >= count queue then None else Some queue.entries.(index)
+
 let find_index key queue =
   let index = lower_bound key queue in
   if index < count queue && compare_key queue queue.entries.(index).key key = 0 then Some index

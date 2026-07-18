@@ -86,6 +86,8 @@ let of_list policy values =
 let minimum value = Sorted_set.minimum value.set
 let maximum value = Sorted_set.maximum value.set
 let nth index value = Sorted_set.nth index value.set
+let lower_bound element value = Sorted_set.count_less_than element value.set
+let upper_bound element value = Sorted_set.count_at_most element value.set
 let to_list value = Sorted_set.to_list value.set
 
 let higher policy left_item left_rank right_item right_rank =

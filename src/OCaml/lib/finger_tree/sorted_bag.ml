@@ -27,6 +27,10 @@ let remove value bag =
   if index = count bag || compare bag bag.values.(index) value <> 0 then bag
   else { bag with values = Sorted_helpers.remove index bag.values }
 
+let remove_at index bag =
+  if index < 0 || index >= count bag then Error "sorted-bag index is out of bounds"
+  else Ok { bag with values = Sorted_helpers.remove index bag.values }
+
 let remove_all value bag =
   let first = count_less_than value bag in
   let last = count_at_most value bag in

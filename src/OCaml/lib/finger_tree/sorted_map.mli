@@ -11,6 +11,8 @@ val is_empty : ('key, 'value) t -> bool
 val entry_key : ('key, 'value) entry -> 'key
 val entry_value : ('key, 'value) entry -> 'value
 val nth : int -> ('key, 'value) t -> ('key, 'value) entry option
+val lower_bound : 'key -> ('key, 'value) t -> int
+val upper_bound : 'key -> ('key, 'value) t -> int
 val find_entry : 'key -> ('key, 'value) t -> ('key, 'value) entry option
 val find_opt : 'key -> ('key, 'value) t -> 'value option
 val mem : 'key -> ('key, 'value) t -> bool

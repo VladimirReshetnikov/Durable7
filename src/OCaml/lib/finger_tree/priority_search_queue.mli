@@ -16,6 +16,9 @@ val entry_priority : ('key, 'priority, 'value) entry -> 'priority
 val entry_value : ('key, 'priority, 'value) entry -> 'value
 val find : 'key -> ('key, 'priority, 'value) t -> ('key, 'priority, 'value) entry option
 val mem : 'key -> ('key, 'priority, 'value) t -> bool
+val nth : int -> ('key, 'priority, 'value) t -> ('key, 'priority, 'value) entry option
+val lower_bound : 'key -> ('key, 'priority, 'value) t -> int
+val upper_bound : 'key -> ('key, 'priority, 'value) t -> int
 
 val add :
   'key ->

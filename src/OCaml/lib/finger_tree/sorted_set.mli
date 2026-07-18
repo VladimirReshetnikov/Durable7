@@ -11,6 +11,8 @@ val minimum : 'element t -> 'element option
 val maximum : 'element t -> 'element option
 val nth : int -> 'element t -> 'element option
 val index_of : 'element -> 'element t -> int option
+val count_less_than : 'element -> 'element t -> int
+val count_at_most : 'element -> 'element t -> int
 val find : 'element -> 'element t -> 'element option
 val mem : 'element -> 'element t -> bool
 val add : 'element -> 'element t -> bool * 'element t

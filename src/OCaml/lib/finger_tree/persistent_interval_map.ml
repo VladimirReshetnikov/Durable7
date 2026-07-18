@@ -17,7 +17,7 @@ let compare_interval map left_low left_high right_low right_high =
   let by_low = compare map left_low right_low in
   if by_low <> 0 then by_low else compare map left_high right_high
 
-let lower_bound low high map =
+let lower_bound_index low high map =
   let left = ref 0 in
   let right = ref (count map) in
   while !left < !right do
@@ -28,12 +28,23 @@ let lower_bound low high map =
   done;
   !left
 
+let upper_bound ~low ~high map =
+  let index = lower_bound_index low high map in
+  if
+    index < count map
+    && compare_interval map map.entries.(index).low map.entries.(index).high low high = 0
+  then index + 1
+  else index
+
+let lower_bound ~low ~high map = lower_bound_index low high map
+let nth index map = if index < 0 || index >= count map then None else Some map.entries.(index)
+
 let validate_interval ~low ~high map =
   if compare map low high > 0 then Error "interval low endpoint exceeds its high endpoint"
   else Ok ()
 
 let find_index ~low ~high map =
-  let index = lower_bound low high map in
+  let index = lower_bound_index low high map in
   if
     index < count map
     && compare_interval map map.entries.(index).low map.entries.(index).high low high = 0
@@ -45,7 +56,7 @@ let find_exact ~low ~high map =
 
 let add ~low ~high value map =
   Result.bind (validate_interval ~low ~high map) (fun () ->
-      let index = lower_bound low high map in
+      let index = lower_bound_index low high map in
       if
         index < count map
         && compare_interval map map.entries.(index).low map.entries.(index).high low high = 0

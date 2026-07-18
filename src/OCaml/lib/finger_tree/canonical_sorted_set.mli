@@ -28,5 +28,7 @@ val remove : 'element -> 'element t -> bool * 'element t
 val minimum : 'element t -> 'element option
 val maximum : 'element t -> 'element option
 val nth : int -> 'element t -> 'element option
+val lower_bound : 'element -> 'element t -> int
+val upper_bound : 'element -> 'element t -> int
 val to_list : 'element t -> 'element list
 val statistics : 'element t -> statistics

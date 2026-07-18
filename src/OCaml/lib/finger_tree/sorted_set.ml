@@ -13,6 +13,8 @@ let index_of value set =
   let index = Sorted_helpers.lower_bound (compare set) value set.values in
   if index < count set && compare set set.values.(index) value = 0 then Some index else None
 
+let count_less_than value set = Sorted_helpers.lower_bound (compare set) value set.values
+let count_at_most value set = Sorted_helpers.upper_bound (compare set) value set.values
 let find value set = Option.map (fun index -> set.values.(index)) (index_of value set)
 let mem value set = Option.is_some (index_of value set)
 

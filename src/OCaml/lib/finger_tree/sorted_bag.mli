@@ -16,6 +16,7 @@ val count_of : 'element -> 'element t -> int
 val mem : 'element -> 'element t -> bool
 val add : 'element -> 'element t -> 'element t
 val remove : 'element -> 'element t -> 'element t
+val remove_at : int -> 'element t -> ('element t, string) result
 val remove_all : 'element -> 'element t -> 'element t
 val range : start:int -> count:int -> 'element t -> ('element t, string) result
 val value_range : minimum:'element -> maximum:'element -> 'element t -> 'element t

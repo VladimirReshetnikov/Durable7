@@ -27,6 +27,18 @@ let comparator tree = tree.order
 let count tree = Array.length tree.intervals
 let is_empty tree = count tree = 0
 let maximum_high tree = tree.cached_maximum_high
+let nth index tree = if index < 0 || index >= count tree then None else Some tree.intervals.(index)
+
+let lower_bound low tree =
+  let low_index = ref 0 in
+  let high_index = ref (count tree) in
+  while !low_index < !high_index do
+    let middle = !low_index + ((!high_index - !low_index) / 2) in
+    if Common.Comparator.compare tree.order tree.intervals.(middle).interval_low low < 0 then
+      low_index := middle + 1
+    else high_index := middle
+  done;
+  !low_index
 
 let find_maximum order intervals =
   Array.fold_left
@@ -49,6 +61,8 @@ let upper_bound_low low tree =
     else high_index := middle
   done;
   !low_index
+
+let upper_bound = upper_bound_low
 
 let insert interval tree =
   let intervals =
@@ -82,6 +96,12 @@ let remove interval tree =
   | Some index ->
       let intervals = Sorted_helpers.remove index tree.intervals in
       (true, { tree with intervals; cached_maximum_high = find_maximum tree.order intervals })
+
+let remove_at index tree =
+  if index < 0 || index >= count tree then Error "interval-tree index is out of bounds"
+  else
+    let intervals = Sorted_helpers.remove index tree.intervals in
+    Ok { tree with intervals; cached_maximum_high = find_maximum tree.order intervals }
 
 let find_all_overlaps interval tree =
   Array.fold_right

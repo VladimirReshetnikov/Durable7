@@ -367,6 +367,200 @@ let test_daba_lite () =
   Daba_lite.clear window;
   Alcotest.(check bool) "clear" true (Daba_lite.is_empty window)
 
+type cursor_ranked = { rank : int; label : string }
+
+let cursor_ranked_order =
+  Common.Comparator.create (fun left right -> Int.compare left.rank right.rank)
+
+let test_sorted_ordered_search_cursors () =
+  let ranked rank label = { rank; label } in
+  let bag =
+    Sorted_bag.of_list cursor_ranked_order
+      [ ranked 1 "low"; ranked 2 "first"; ranked 2 "second"; ranked 2 "third" ]
+  in
+  let selected = Option.get (Ordered_search_cursor.sorted_bag_at 2 bag) in
+  let original_labels = List.map (fun item -> item.label) (Sorted_bag.to_list bag) in
+  Alcotest.(check (option string))
+    "selected duplicate" (Some "second")
+    (Option.map (fun item -> item.label) (Ordered_search_cursor.sorted_bag_peek_next selected));
+  let edited = Option.get (Ordered_search_cursor.sorted_bag_delete_next selected) in
+  Alcotest.(check (list string))
+    "exact duplicate deletion"
+    (List.filteri (fun index _ -> index <> 2) original_labels)
+    (List.map
+       (fun item -> item.label)
+       (Sorted_bag.to_list (Ordered_search_cursor.sorted_bag_snapshot edited)));
+  Alcotest.(check (list string))
+    "bag source retained" original_labels
+    (List.map (fun item -> item.label) (Sorted_bag.to_list bag));
+  let maybe_order =
+    Common.Comparator.create (fun left right ->
+        match (left, right) with
+        | None, None -> 0
+        | None, Some _ -> -1
+        | Some _, None -> 1
+        | Some left, Some right -> Int.compare left right)
+  in
+  let maybe_cursor =
+    Option.get
+      (Ordered_search_cursor.sorted_bag_at 1 (Sorted_bag.of_list maybe_order [ None; Some 2 ]))
+  in
+  Alcotest.(check (option (option int)))
+    "stored None remains present" (Some None)
+    (Ordered_search_cursor.sorted_bag_peek_previous maybe_cursor);
+  let set = Sorted_set.of_list int_order [ 1; 3; 5 ] in
+  let gap = Ordered_search_cursor.sorted_set_lower_bound 4 set in
+  Alcotest.(check int) "set lower-bound rank" 2 (Ordered_search_cursor.sorted_set_position gap);
+  Alcotest.(check (pair (option int) (option int)))
+    "set neighbors" (Some 3, Some 5)
+    ( Ordered_search_cursor.sorted_set_peek_previous gap,
+      Ordered_search_cursor.sorted_set_peek_next gap );
+  check_int_list "set cursor insertion" [ 1; 3; 4; 5 ]
+    (Sorted_set.to_list
+       (Ordered_search_cursor.sorted_set_snapshot (Ordered_search_cursor.sorted_set_add 4 gap)));
+  let map =
+    Result.get_ok (Sorted_map.of_list int_order [ (1, "one"); (3, "three"); (5, "five") ])
+  in
+  let found = Ordered_search_cursor.sorted_map_find 3 map in
+  Alcotest.(check bool) "map exact cursor" true (Ordered_search_cursor.search_found found);
+  let changed =
+    Option.get
+      (Ordered_search_cursor.sorted_map_set_next_value "THREE"
+         (Ordered_search_cursor.search_value found))
+  in
+  let inserted = Result.get_ok (Ordered_search_cursor.sorted_map_insert 4 "four" changed) in
+  Alcotest.(check (list (pair int string)))
+    "map cursor edits"
+    [ (1, "one"); (3, "THREE"); (4, "four"); (5, "five") ]
+    (Sorted_map.to_list (Ordered_search_cursor.sorted_map_snapshot inserted))
+
+let test_policy_and_priority_search_cursors () =
+  let policy =
+    Canonical_sorted_set.create_policy ~comparator:int_order ~rank_hash:Int64.of_int ~seed:0x5a17L
+  in
+  let set = Canonical_sorted_set.of_list policy [ 1; 3; 5 ] in
+  let inserted =
+    Ordered_search_cursor.canonical_add 4 (Ordered_search_cursor.canonical_lower_bound 4 set)
+  in
+  Alcotest.(check int)
+    "canonical insertion rank" 3
+    (Ordered_search_cursor.canonical_position inserted);
+  check_int_list "canonical cursor edit" [ 1; 3; 4; 5 ]
+    (Canonical_sorted_set.to_list (Ordered_search_cursor.canonical_snapshot inserted));
+  let queue =
+    Priority_search_queue.empty ~key_comparator:int_order ~priority_comparator:int_order
+  in
+  let _, queue = Priority_search_queue.set 1 30 "one" queue in
+  let _, queue = Priority_search_queue.set 3 10 "three" queue in
+  let _, queue = Priority_search_queue.set 5 20 "five" queue in
+  let minimum = Ordered_search_cursor.priority_search_minimum queue in
+  Alcotest.(check (option int))
+    "priority minimum cursor" (Some 3)
+    (Option.map Priority_search_queue.entry_key
+       (Ordered_search_cursor.priority_search_peek_next minimum));
+  let changed = Option.get (Ordered_search_cursor.priority_search_set_next 40 "THREE" minimum) in
+  Alcotest.(check (option int))
+    "priority winner moved" (Some 5)
+    (Option.map Priority_search_queue.entry_key
+       (Priority_search_queue.minimum (Ordered_search_cursor.priority_search_snapshot changed)));
+  let insertion = Ordered_search_cursor.priority_search_try_insert 4 5 "four" changed in
+  Alcotest.(check bool)
+    "priority cursor insertion" true
+    (Ordered_search_cursor.insertion_added insertion);
+  Alcotest.(check (option int))
+    "priority winner after insertion" (Some 4)
+    (Option.map Priority_search_queue.entry_key
+       (Priority_search_queue.minimum
+          (Ordered_search_cursor.priority_search_snapshot
+             (Ordered_search_cursor.insertion_value insertion))))
+
+let test_interval_ordered_search_cursors () =
+  let ranked rank label = { rank; label } in
+  let interval low high =
+    Result.get_ok (Interval_tree.make_interval cursor_ranked_order low high)
+  in
+  let first = interval (ranked 1 "first-low") (ranked 5 "first-high") in
+  let second = interval (ranked 1 "second-low") (ranked 5 "second-high") in
+  let late = interval (ranked 7 "late-low") (ranked 9 "late-high") in
+  let tree = Interval_tree.of_list cursor_ranked_order [ first; second; late ] in
+  let selected = Option.get (Ordered_search_cursor.interval_tree_at 1 tree) in
+  Alcotest.(check (option string))
+    "selected interval occurrence" (Some "second-low")
+    (Option.map
+       (fun item -> (Interval_tree.low item).label)
+       (Ordered_search_cursor.interval_tree_peek_next selected));
+  let edited = Option.get (Ordered_search_cursor.interval_tree_delete_next selected) in
+  Alcotest.(check (option string))
+    "remaining equal interval" (Some "first-low")
+    (Option.map
+       (fun item -> (Interval_tree.low item).label)
+       (Ordered_search_cursor.interval_tree_peek_previous edited));
+  Alcotest.(check (option string))
+    "interval successor" (Some "late-low")
+    (Option.map
+       (fun item -> (Interval_tree.low item).label)
+       (Ordered_search_cursor.interval_tree_peek_next edited));
+  let probe = interval (ranked 4 "probe-low") (ranked 8 "probe-high") in
+  let first_hit = Ordered_search_cursor.interval_tree_find_overlap probe tree in
+  let second_hit =
+    Ordered_search_cursor.interval_tree_seek_next_overlap probe
+      (Ordered_search_cursor.search_value first_hit)
+  in
+  Alcotest.(check bool) "first overlap" true (Ordered_search_cursor.search_found first_hit);
+  Alcotest.(check int)
+    "first overlap rank" 0
+    (Ordered_search_cursor.interval_tree_position (Ordered_search_cursor.search_value first_hit));
+  Alcotest.(check bool) "continued overlap" true (Ordered_search_cursor.search_found second_hit);
+  Alcotest.(check int)
+    "continued overlap rank" 1
+    (Ordered_search_cursor.interval_tree_position (Ordered_search_cursor.search_value second_hit))
+
+let test_interval_map_and_bit_set_cursors () =
+  let map = Persistent_interval_map.empty int_order in
+  let map = Result.get_ok (Persistent_interval_map.add ~low:1 ~high:3 "one" map) in
+  let map = Result.get_ok (Persistent_interval_map.add ~low:5 ~high:8 "five" map) in
+  let map = Result.get_ok (Persistent_interval_map.add ~low:10 ~high:12 "ten" map) in
+  let first_hit =
+    Result.get_ok (Ordered_search_cursor.interval_map_find_overlap ~low:2 ~high:11 map)
+  in
+  let second_hit =
+    Result.get_ok
+      (Ordered_search_cursor.interval_map_seek_next_overlap ~low:2 ~high:11
+         (Ordered_search_cursor.search_value first_hit))
+  in
+  Alcotest.(check (option string))
+    "first interval-map overlap" (Some "one")
+    (Option.map Persistent_interval_map.entry_value
+       (Ordered_search_cursor.interval_map_peek_next (Ordered_search_cursor.search_value first_hit)));
+  let changed =
+    Option.get
+      (Result.get_ok
+         (Ordered_search_cursor.interval_map_set_next_value "FIVE"
+            (Ordered_search_cursor.search_value second_hit)))
+  in
+  Alcotest.(check (option string))
+    "interval-map cursor update" (Some "FIVE")
+    (Option.map Persistent_interval_map.entry_value
+       (Ordered_search_cursor.interval_map_peek_next changed));
+  Alcotest.(check (option string))
+    "interval-map source retained" (Some "five")
+    (Option.map Persistent_interval_map.entry_value
+       (Persistent_interval_map.find_exact ~low:5 ~high:8 map));
+  let bits = Result.get_ok (Persistent_chunked_bit_set.of_list [ 1; 64; 130 ]) in
+  let gap = Ordered_search_cursor.chunked_bit_set_at_or_after 65 bits in
+  Alcotest.(check int) "bit-set cursor rank" 2 (Ordered_search_cursor.chunked_bit_set_position gap);
+  Alcotest.(check (pair (option int) (option int)))
+    "bit-set neighbors" (Some 64, Some 130)
+    ( Ordered_search_cursor.chunked_bit_set_peek_previous gap,
+      Ordered_search_cursor.chunked_bit_set_peek_next gap );
+  let inserted = Result.get_ok (Ordered_search_cursor.chunked_bit_set_add 100 gap) in
+  check_int_list "bit-set cursor insertion" [ 1; 64; 100; 130 ]
+    (Persistent_chunked_bit_set.to_list (Ordered_search_cursor.chunked_bit_set_snapshot inserted));
+  let deleted = Option.get (Ordered_search_cursor.chunked_bit_set_delete_previous inserted) in
+  check_int_list "bit-set cursor deletion" [ 1; 64; 130 ]
+    (Persistent_chunked_bit_set.to_list (Ordered_search_cursor.chunked_bit_set_snapshot deleted));
+  check_int_list "bit-set source retained" [ 1; 64; 130 ] (Persistent_chunked_bit_set.to_list bits)
+
 let () =
   Alcotest.run "FingerTree core"
     [
@@ -389,5 +583,13 @@ let () =
           Alcotest.test_case "meldable heap" `Quick test_meldable_heap;
           Alcotest.test_case "priority search queue" `Quick test_priority_search_queue;
           Alcotest.test_case "DABA Lite" `Quick test_daba_lite;
+          Alcotest.test_case "sorted ordered-search cursors" `Quick
+            test_sorted_ordered_search_cursors;
+          Alcotest.test_case "policy and priority-search cursors" `Quick
+            test_policy_and_priority_search_cursors;
+          Alcotest.test_case "interval ordered-search cursors" `Quick
+            test_interval_ordered_search_cursors;
+          Alcotest.test_case "interval-map and bit-set cursors" `Quick
+            test_interval_map_and_bit_set_cursors;
         ] );
     ]
