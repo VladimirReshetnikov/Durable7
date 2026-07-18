@@ -1901,3 +1901,539 @@ cleanup:
     }
     return status;
 }
+
+static ft_status ft_psq_cursor_bound(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    bool upper_bound,
+    size_t* position,
+    bool* found)
+{
+    if (!ft_psq_queue_valid(queue) || key == NULL || position == NULL || found == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t rank = 0;
+    ft_psq_node* node = queue->root;
+    *found = false;
+    while (node != NULL) {
+        int comparison = 0;
+        ft_status status = ft_psq_key_compare(
+            queue->policy, key, node->entry->key->bytes, &comparison);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+        const size_t left_count = ft_psq_node_count(node->left);
+        if (comparison == 0) {
+            if (rank > SIZE_MAX - left_count ||
+                (upper_bound && rank + left_count == SIZE_MAX)) {
+                return FT_STATUS_OVERFLOW;
+            }
+            rank += left_count + (upper_bound ? 1u : 0u);
+            *found = true;
+            break;
+        }
+        if (comparison < 0) {
+            node = node->left;
+        } else {
+            if (left_count == SIZE_MAX || rank > SIZE_MAX - left_count - 1u) {
+                return FT_STATUS_OVERFLOW;
+            }
+            rank += left_count + 1u;
+            node = node->right;
+        }
+    }
+    *position = rank;
+    return FT_STATUS_OK;
+}
+
+static ft_psq_node* ft_psq_cursor_node_at(
+    const ft_priority_search_queue* queue,
+    size_t position)
+{
+    ft_psq_node* node = queue->root;
+    while (node != NULL) {
+        const size_t left_count = ft_psq_node_count(node->left);
+        if (position < left_count) {
+            node = node->left;
+        } else if (position == left_count) {
+            return node;
+        } else {
+            position -= left_count + 1u;
+            node = node->right;
+        }
+    }
+    return NULL;
+}
+
+static bool ft_psq_cursor_is_valid(const ft_priority_search_queue_cursor* cursor)
+{
+    return cursor != NULL && ft_psq_queue_valid(&cursor->queue) &&
+        cursor->position <= ft_priority_search_queue_size(&cursor->queue);
+}
+
+static ft_status ft_psq_cursor_stage(
+    const ft_priority_search_queue* queue,
+    size_t position,
+    ft_priority_search_queue_cursor* result)
+{
+    (void)memset(result, 0, sizeof(*result));
+    ft_status status = ft_priority_search_queue_copy(queue, &result->queue);
+    if (status == FT_STATUS_OK) {
+        result->position = position;
+    }
+    return status;
+}
+
+static void ft_psq_cursor_publish(
+    const ft_priority_search_queue_cursor* source,
+    ft_priority_search_queue_cursor* staged,
+    ft_priority_search_queue_cursor* result)
+{
+    if (result == source) {
+        ft_priority_search_queue_cursor_dispose(result);
+    }
+    ft_priority_search_queue_cursor_move(result, staged);
+}
+
+static void ft_psq_cursor_publish_queue(
+    const ft_priority_search_queue_cursor* source,
+    ft_priority_search_queue* queue,
+    size_t position,
+    ft_priority_search_queue_cursor* result)
+{
+    ft_priority_search_queue_cursor staged = {0};
+    ft_priority_search_queue_move(&staged.queue, queue);
+    staged.position = position;
+    ft_psq_cursor_publish(source, &staged, result);
+}
+
+ft_status ft_priority_search_queue_get_cursor(
+    const ft_priority_search_queue* queue,
+    size_t position,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_queue_valid(queue) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_priority_search_queue_size(queue)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_psq_cursor_stage(queue, position, result);
+}
+
+static ft_status ft_psq_get_bound_cursor(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    bool upper_bound,
+    bool* found,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_queue_valid(queue) || key == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t position = 0;
+    bool located = false;
+    ft_status status = ft_psq_cursor_bound(
+        queue, key, upper_bound, &position, &located);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_priority_search_queue_cursor staged;
+    status = ft_psq_cursor_stage(queue, position, &staged);
+    if (status == FT_STATUS_OK) {
+        if (found != NULL) {
+            *found = located;
+        }
+        ft_priority_search_queue_cursor_move(result, &staged);
+    }
+    return status;
+}
+
+ft_status ft_priority_search_queue_get_cursor_lower_bound(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    ft_priority_search_queue_cursor* result)
+{
+    return ft_psq_get_bound_cursor(queue, key, false, NULL, result);
+}
+
+ft_status ft_priority_search_queue_get_cursor_upper_bound(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    ft_priority_search_queue_cursor* result)
+{
+    return ft_psq_get_bound_cursor(queue, key, true, NULL, result);
+}
+
+ft_status ft_priority_search_queue_get_cursor_at_key(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    bool* found,
+    ft_priority_search_queue_cursor* result)
+{
+    return found == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_psq_get_bound_cursor(queue, key, false, found, result);
+}
+
+ft_status ft_priority_search_queue_get_cursor_at_minimum_priority(
+    const ft_priority_search_queue* queue,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_queue_valid(queue) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    return queue->root == NULL
+        ? ft_priority_search_queue_get_cursor(queue, 0, result)
+        : ft_priority_search_queue_get_cursor_lower_bound(
+            queue, queue->root->winner->key->bytes, result);
+}
+
+ft_status ft_priority_search_queue_cursor_copy(
+    const ft_priority_search_queue_cursor* source,
+    ft_priority_search_queue_cursor* destination)
+{
+    if (!ft_psq_cursor_is_valid(source) || destination == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
+    return ft_psq_cursor_stage(&source->queue, source->position, destination);
+}
+
+void ft_priority_search_queue_cursor_move(
+    ft_priority_search_queue_cursor* destination,
+    ft_priority_search_queue_cursor* source)
+{
+    if (destination == NULL || source == NULL || destination == source) {
+        return;
+    }
+    (void)memset(destination, 0, sizeof(*destination));
+    ft_priority_search_queue_move(&destination->queue, &source->queue);
+    destination->position = source->position;
+    source->position = 0;
+}
+
+void ft_priority_search_queue_cursor_dispose(ft_priority_search_queue_cursor* cursor)
+{
+    if (cursor != NULL) {
+        ft_priority_search_queue_dispose(&cursor->queue);
+        (void)memset(cursor, 0, sizeof(*cursor));
+    }
+}
+
+bool ft_priority_search_queue_cursor_valid(const ft_priority_search_queue_cursor* cursor)
+{
+    return ft_psq_cursor_is_valid(cursor);
+}
+
+bool ft_priority_search_queue_cursor_empty(const ft_priority_search_queue_cursor* cursor)
+{
+    return !ft_psq_cursor_is_valid(cursor) || ft_priority_search_queue_empty(&cursor->queue);
+}
+
+size_t ft_priority_search_queue_cursor_size(const ft_priority_search_queue_cursor* cursor)
+{
+    return ft_psq_cursor_is_valid(cursor) ? ft_priority_search_queue_size(&cursor->queue) : 0;
+}
+
+size_t ft_priority_search_queue_cursor_position(const ft_priority_search_queue_cursor* cursor)
+{
+    return ft_psq_cursor_is_valid(cursor) ? cursor->position : 0;
+}
+
+ft_status ft_priority_search_queue_cursor_is_at_start(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == 0;
+    return FT_STATUS_OK;
+}
+
+ft_status ft_priority_search_queue_cursor_is_at_end(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    *result = cursor->position == ft_priority_search_queue_size(&cursor->queue);
+    return FT_STATUS_OK;
+}
+
+static ft_status ft_psq_cursor_peek(
+    const ft_priority_search_queue_cursor* cursor,
+    size_t position,
+    bool* found,
+    ft_priority_search_entry_ref* entry)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || found == NULL || entry == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    ft_psq_node* node = ft_psq_cursor_node_at(&cursor->queue, position);
+    *found = node != NULL;
+    if (node == NULL) {
+        (void)memset(entry, 0, sizeof(*entry));
+    } else {
+        *entry = ft_psq_entry_ref_of(node->entry);
+    }
+    return FT_STATUS_OK;
+}
+
+ft_status ft_priority_search_queue_cursor_try_peek_previous_ref(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* found,
+    ft_priority_search_entry_ref* entry)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || found == NULL || entry == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        *found = false;
+        (void)memset(entry, 0, sizeof(*entry));
+        return FT_STATUS_OK;
+    }
+    return ft_psq_cursor_peek(cursor, cursor->position - 1u, found, entry);
+}
+
+ft_status ft_priority_search_queue_cursor_try_peek_next_ref(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* found,
+    ft_priority_search_entry_ref* entry)
+{
+    return ft_psq_cursor_peek(
+        cursor,
+        cursor == NULL ? 0 : cursor->position,
+        found,
+        entry);
+}
+
+ft_status ft_priority_search_queue_cursor_seek_rank(
+    const ft_priority_search_queue_cursor* cursor,
+    size_t position,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (position > ft_priority_search_queue_size(&cursor->queue)) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    if (cursor == result && cursor->position == position) {
+        return FT_STATUS_OK;
+    }
+    ft_priority_search_queue_cursor staged;
+    ft_status status = ft_psq_cursor_stage(&cursor->queue, position, &staged);
+    if (status == FT_STATUS_OK) {
+        ft_psq_cursor_publish(cursor, &staged, result);
+    }
+    return status;
+}
+
+ft_status ft_priority_search_queue_cursor_move_previous(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_priority_search_queue_empty(&cursor->queue)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_priority_search_queue_cursor_seek_rank(
+        cursor, cursor->position - 1u, result);
+}
+
+ft_status ft_priority_search_queue_cursor_move_next(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_priority_search_queue_size(&cursor->queue);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_priority_search_queue_cursor_seek_rank(
+        cursor, cursor->position + 1u, result);
+}
+
+static ft_status ft_psq_cursor_set_or_insert(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* key,
+    const void* priority,
+    const void* value,
+    bool require_absent,
+    bool* inserted,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || key == NULL || priority == NULL ||
+        value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    size_t position = 0;
+    bool found = false;
+    ft_status status = ft_psq_cursor_bound(
+        &cursor->queue, key, false, &position, &found);
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    if (require_absent && found && inserted == NULL) {
+        return FT_STATUS_ALREADY_EXISTS;
+    }
+    if (!found && position == SIZE_MAX) {
+        return FT_STATUS_OVERFLOW;
+    }
+
+    ft_priority_search_queue edited = {0};
+    bool local_inserted = false;
+    if (require_absent) {
+        status = ft_priority_search_queue_try_add(
+            &cursor->queue, key, priority, value, &local_inserted, &edited);
+    } else {
+        status = ft_priority_search_queue_set(
+            &cursor->queue, key, priority, value, &edited);
+        local_inserted = !found;
+    }
+    if (status != FT_STATUS_OK) {
+        return status;
+    }
+    ft_psq_cursor_publish_queue(
+        cursor,
+        &edited,
+        local_inserted ? position + 1u : position,
+        result);
+    if (inserted != NULL) {
+        *inserted = local_inserted;
+    }
+    return FT_STATUS_OK;
+}
+
+ft_status ft_priority_search_queue_cursor_insert(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* key,
+    const void* priority,
+    const void* value,
+    ft_priority_search_queue_cursor* result)
+{
+    return ft_psq_cursor_set_or_insert(
+        cursor, key, priority, value, true, NULL, result);
+}
+
+ft_status ft_priority_search_queue_cursor_try_insert(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* key,
+    const void* priority,
+    const void* value,
+    bool* inserted,
+    ft_priority_search_queue_cursor* result)
+{
+    return inserted == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_psq_cursor_set_or_insert(
+            cursor, key, priority, value, true, inserted, result);
+}
+
+ft_status ft_priority_search_queue_cursor_set_item(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* key,
+    const void* priority,
+    const void* value,
+    ft_priority_search_queue_cursor* result)
+{
+    return ft_psq_cursor_set_or_insert(
+        cursor, key, priority, value, false, NULL, result);
+}
+
+ft_status ft_priority_search_queue_cursor_set_next(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* priority,
+    const void* value,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || priority == NULL || value == NULL || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    ft_psq_node* node = ft_psq_cursor_node_at(&cursor->queue, cursor->position);
+    if (node == NULL) {
+        return ft_priority_search_queue_empty(&cursor->queue)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_priority_search_queue edited = {0};
+    ft_status status = ft_priority_search_queue_set(
+        &cursor->queue,
+        node->entry->key->bytes,
+        priority,
+        value,
+        &edited);
+    if (status == FT_STATUS_OK) {
+        ft_psq_cursor_publish_queue(cursor, &edited, cursor->position, result);
+    }
+    return status;
+}
+
+static ft_status ft_psq_cursor_delete_at(
+    const ft_priority_search_queue_cursor* cursor,
+    size_t rank,
+    size_t position,
+    ft_priority_search_queue_cursor* result)
+{
+    ft_psq_node* node = ft_psq_cursor_node_at(&cursor->queue, rank);
+    if (node == NULL) {
+        return FT_STATUS_OUT_OF_RANGE;
+    }
+    ft_priority_search_queue edited = {0};
+    ft_status status = ft_priority_search_queue_remove(
+        &cursor->queue, node->entry->key->bytes, &edited);
+    if (status == FT_STATUS_OK) {
+        ft_psq_cursor_publish_queue(cursor, &edited, position, result);
+    }
+    return status;
+}
+
+ft_status ft_priority_search_queue_cursor_delete_previous(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (cursor->position == 0) {
+        return ft_priority_search_queue_empty(&cursor->queue)
+            ? FT_STATUS_EMPTY
+            : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_psq_cursor_delete_at(
+        cursor, cursor->position - 1u, cursor->position - 1u, result);
+}
+
+ft_status ft_priority_search_queue_cursor_delete_next(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result)
+{
+    if (!ft_psq_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    const size_t size = ft_priority_search_queue_size(&cursor->queue);
+    if (cursor->position == size) {
+        return size == 0 ? FT_STATUS_EMPTY : FT_STATUS_OUT_OF_RANGE;
+    }
+    return ft_psq_cursor_delete_at(cursor, cursor->position, cursor->position, result);
+}
+
+ft_status ft_priority_search_queue_cursor_snapshot(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue* result)
+{
+    return !ft_psq_cursor_is_valid(cursor) || result == NULL
+        ? FT_STATUS_INVALID_ARGUMENT
+        : ft_priority_search_queue_copy(&cursor->queue, result);
+}

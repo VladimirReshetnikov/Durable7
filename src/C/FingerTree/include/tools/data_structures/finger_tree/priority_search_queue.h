@@ -128,6 +128,13 @@ typedef struct ft_priority_search_queue {
     ft_psq_node* root;
 } ft_priority_search_queue;
 
+/* Immutable key-order root-plus-rank gap cursor. The retained queue keeps the
+ * policy and all borrowed entry representatives alive. */
+typedef struct ft_priority_search_queue_cursor {
+    ft_priority_search_queue queue;
+    size_t position;
+} ft_priority_search_queue_cursor;
+
 typedef struct ft_priority_search_queue_statistics {
     size_t count;
     size_t height;
@@ -250,6 +257,97 @@ ft_status ft_priority_search_queue_validate(
     const ft_priority_search_queue* queue,
     bool* valid,
     ft_priority_search_queue_statistics* statistics);
+
+ft_status ft_priority_search_queue_get_cursor(
+    const ft_priority_search_queue* queue,
+    size_t position,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_get_cursor_lower_bound(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_get_cursor_upper_bound(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_get_cursor_at_key(
+    const ft_priority_search_queue* queue,
+    const void* key,
+    bool* found,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_get_cursor_at_minimum_priority(
+    const ft_priority_search_queue* queue,
+    ft_priority_search_queue_cursor* result);
+
+ft_status ft_priority_search_queue_cursor_copy(
+    const ft_priority_search_queue_cursor* source,
+    ft_priority_search_queue_cursor* destination);
+void ft_priority_search_queue_cursor_move(
+    ft_priority_search_queue_cursor* destination,
+    ft_priority_search_queue_cursor* source);
+void ft_priority_search_queue_cursor_dispose(ft_priority_search_queue_cursor* cursor);
+bool ft_priority_search_queue_cursor_valid(const ft_priority_search_queue_cursor* cursor);
+bool ft_priority_search_queue_cursor_empty(const ft_priority_search_queue_cursor* cursor);
+size_t ft_priority_search_queue_cursor_size(const ft_priority_search_queue_cursor* cursor);
+size_t ft_priority_search_queue_cursor_position(const ft_priority_search_queue_cursor* cursor);
+ft_status ft_priority_search_queue_cursor_is_at_start(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* result);
+ft_status ft_priority_search_queue_cursor_is_at_end(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* result);
+/* Borrowed entry references remain valid while the cursor is retained. */
+ft_status ft_priority_search_queue_cursor_try_peek_previous_ref(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* found,
+    ft_priority_search_entry_ref* entry);
+ft_status ft_priority_search_queue_cursor_try_peek_next_ref(
+    const ft_priority_search_queue_cursor* cursor,
+    bool* found,
+    ft_priority_search_entry_ref* entry);
+ft_status ft_priority_search_queue_cursor_move_previous(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_move_next(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_seek_rank(
+    const ft_priority_search_queue_cursor* cursor,
+    size_t position,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_insert(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* key,
+    const void* priority,
+    const void* value,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_try_insert(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* key,
+    const void* priority,
+    const void* value,
+    bool* inserted,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_set_item(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* key,
+    const void* priority,
+    const void* value,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_set_next(
+    const ft_priority_search_queue_cursor* cursor,
+    const void* priority,
+    const void* value,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_delete_previous(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_delete_next(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue_cursor* result);
+ft_status ft_priority_search_queue_cursor_snapshot(
+    const ft_priority_search_queue_cursor* cursor,
+    ft_priority_search_queue* result);
 
 #ifdef __cplusplus
 }

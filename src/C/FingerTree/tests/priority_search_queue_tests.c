@@ -1792,6 +1792,155 @@ static ft_status plain_value_equals(
     return FT_STATUS_OK;
 }
 
+static void test_cursor_key_order_minimum_and_persistent_edits(void)
+{
+    ft_psq_policy_config config;
+    ft_psq_policy policy;
+    ft_priority_search_queue queue;
+    ft_priority_search_queue snapshot;
+    ft_priority_search_queue_cursor cursor;
+    ft_priority_search_queue_cursor retained;
+    test_key keys[] = {
+        { 30, 300 },
+        { 10, 100 },
+        { 20, 200 }
+    };
+    test_priority priorities[] = {
+        { 3, 30 },
+        { 5, 10 },
+        { 1, 20 }
+    };
+    test_value values[] = {
+        { 3000, NULL },
+        { 1000, NULL },
+        { 2000, NULL }
+    };
+    ft_priority_search_input inputs[] = {
+        { &keys[0], &priorities[0], &values[0] },
+        { &keys[1], &priorities[1], &values[1] },
+        { &keys[2], &priorities[2], &values[2] }
+    };
+    test_key inserted_key = make_key(25, 250);
+    test_priority inserted_priority = make_priority(0, 25);
+    test_value inserted_value = make_value(2500, NULL);
+    test_key duplicate_key = make_key(20, 999);
+    test_priority replacement_priority = make_priority(7, 70);
+    test_value replacement_value = make_value(2070, NULL);
+    ft_priority_search_entry_ref entry;
+    bool found = false;
+    bool inserted = false;
+    bool at_boundary = false;
+
+    ft_psq_policy_config_init(
+        &config,
+        sizeof(test_key),
+        &g_key_type_identity,
+        plain_key_compare,
+        sizeof(test_priority),
+        &g_priority_type_identity,
+        plain_priority_compare,
+        plain_priority_equals,
+        sizeof(test_value),
+        &g_value_type_identity,
+        plain_value_equals);
+    REQUIRE_STATUS(ft_psq_policy_create(&policy, &config), FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_from_array(&queue, &policy, inputs, 3),
+        FT_STATUS_OK);
+
+    REQUIRE_STATUS(
+        ft_priority_search_queue_get_cursor_at_minimum_priority(&queue, &cursor),
+        FT_STATUS_OK);
+    REQUIRE(ft_priority_search_queue_cursor_position(&cursor) == 1);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_try_peek_next_ref(&cursor, &found, &entry),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(((const test_key*)entry.key)->representative == 200);
+    REQUIRE(((const test_priority*)entry.priority)->rank == 1);
+
+    REQUIRE_STATUS(ft_priority_search_queue_cursor_copy(&cursor, &retained), FT_STATUS_OK);
+    ft_priority_search_queue_dispose(&queue);
+    ft_psq_policy_dispose(&policy);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_try_peek_next_ref(&retained, &found, &entry),
+        FT_STATUS_OK);
+    REQUIRE(found && ((const test_value*)entry.value)->payload == 2000);
+
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_try_insert(
+            &cursor,
+            &inserted_key,
+            &inserted_priority,
+            &inserted_value,
+            &inserted,
+            &cursor),
+        FT_STATUS_OK);
+    REQUIRE(inserted);
+    REQUIRE(ft_priority_search_queue_cursor_position(&cursor) == 3);
+    REQUIRE(ft_priority_search_queue_cursor_size(&cursor) == 4);
+    REQUIRE_STATUS(ft_priority_search_queue_cursor_snapshot(&cursor, &snapshot), FT_STATUS_OK);
+
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_try_insert(
+            &cursor,
+            &duplicate_key,
+            &replacement_priority,
+            &replacement_value,
+            &inserted,
+            &cursor),
+        FT_STATUS_OK);
+    REQUIRE(!inserted);
+    REQUIRE(ft_priority_search_queue_cursor_position(&cursor) == 1);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_insert(
+            &cursor,
+            &duplicate_key,
+            &replacement_priority,
+            &replacement_value,
+            &cursor),
+        FT_STATUS_ALREADY_EXISTS);
+    REQUIRE(ft_priority_search_queue_cursor_position(&cursor) == 1);
+
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_set_next(
+            &cursor, &replacement_priority, &replacement_value, &cursor),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_try_peek_next_ref(&cursor, &found, &entry),
+        FT_STATUS_OK);
+    REQUIRE(found);
+    REQUIRE(((const test_key*)entry.key)->representative == 200);
+    REQUIRE(((const test_priority*)entry.priority)->rank == 7);
+    REQUIRE(((const test_value*)entry.value)->payload == 2070);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_delete_next(&cursor, &cursor),
+        FT_STATUS_OK);
+    REQUIRE(ft_priority_search_queue_cursor_position(&cursor) == 1);
+    REQUIRE(ft_priority_search_queue_cursor_size(&cursor) == 3);
+
+    ft_priority_search_queue_cursor_dispose(&cursor);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_get_cursor_at_minimum_priority(&snapshot, &cursor),
+        FT_STATUS_OK);
+    REQUIRE(ft_priority_search_queue_cursor_position(&cursor) == 2);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_seek_rank(&cursor, 4, &cursor),
+        FT_STATUS_OK);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_is_at_end(&cursor, &at_boundary),
+        FT_STATUS_OK);
+    REQUIRE(at_boundary);
+    REQUIRE_STATUS(
+        ft_priority_search_queue_cursor_move_next(&cursor, &cursor),
+        FT_STATUS_OUT_OF_RANGE);
+    REQUIRE(ft_priority_search_queue_cursor_size(&retained) == 3);
+
+    ft_priority_search_queue_cursor_dispose(&retained);
+    ft_priority_search_queue_cursor_dispose(&cursor);
+    ft_priority_search_queue_dispose(&snapshot);
+}
+
 typedef struct concurrent_context {
     const ft_priority_search_queue* queue;
     bool success;
@@ -1945,6 +2094,7 @@ int main(void)
     run_test("PSQ range threshold pruning equations", test_range_threshold_pruning_equations);
     run_test("PSQ twenty-thousand retained model", test_twenty_thousand_retained_model);
     run_test("PSQ failure atomicity and callback sweeps", test_failure_atomicity_and_callback_sweeps);
+    run_test("PSQ cursor key order minimum and persistent edits", test_cursor_key_order_minimum_and_persistent_edits);
     run_test("PSQ concurrent distinct-handle readers", test_concurrent_distinct_handle_readers);
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);
