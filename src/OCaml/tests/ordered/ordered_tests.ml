@@ -81,6 +81,153 @@ let test_ordered_multimap () =
     "pair count decremented" 2
     (Persistent_ordered_multimap.pair_count without_pair)
 
+let test_ordered_cursors () =
+  let set_source =
+    Persistent_ordered_set.of_list case_insensitive_policy [ "Alpha"; "beta"; "gamma" ]
+  in
+  let set_cursor = Option.get (Persistent_ordered_cursor.ordered_set_at 1 set_source) in
+  Alcotest.(check (option string))
+    "set cursor previous" (Some "Alpha")
+    (Persistent_ordered_cursor.ordered_set_peek_previous set_cursor);
+  Alcotest.(check (option string))
+    "set cursor next" (Some "beta")
+    (Persistent_ordered_cursor.ordered_set_peek_next set_cursor);
+  let set_inserted = Persistent_ordered_cursor.ordered_set_insert "delta" set_cursor in
+  Alcotest.(check int)
+    "set cursor insertion gap" 2
+    (Persistent_ordered_cursor.ordered_set_position set_inserted);
+  check_strings "set cursor insertion"
+    [ "Alpha"; "delta"; "beta"; "gamma" ]
+    (Persistent_ordered_set.to_list (Persistent_ordered_cursor.ordered_set_snapshot set_inserted));
+  let set_duplicate = Persistent_ordered_cursor.ordered_set_try_insert "BETA" set_inserted in
+  Alcotest.(check bool)
+    "set cursor duplicate" false
+    (Persistent_ordered_cursor.insertion_added set_duplicate);
+  Alcotest.(check int)
+    "set cursor duplicate preserves gap" 2
+    (Persistent_ordered_cursor.ordered_set_position
+       (Persistent_ordered_cursor.insertion_value set_duplicate));
+  let set_deleted =
+    Option.get (Persistent_ordered_cursor.ordered_set_delete_previous set_inserted)
+  in
+  check_strings "set cursor deletion" [ "Alpha"; "beta"; "gamma" ]
+    (Persistent_ordered_set.to_list (Persistent_ordered_cursor.ordered_set_snapshot set_deleted));
+  Alcotest.(check bool)
+    "set cursor retains policy" true
+    (Persistent_ordered_set.mem "ALPHA"
+       (Persistent_ordered_cursor.ordered_set_snapshot set_deleted));
+  let set_found = Persistent_ordered_cursor.ordered_set_find "BETA" set_source in
+  Alcotest.(check bool) "set cursor found" true (Persistent_ordered_cursor.search_found set_found);
+  Alcotest.(check int)
+    "set cursor found position" 1
+    (Persistent_ordered_cursor.ordered_set_position
+       (Persistent_ordered_cursor.search_value set_found));
+
+  let map_source =
+    Persistent_ordered_map.of_list case_insensitive_policy [ ("a", 1); ("b", 2); ("c", 3) ]
+  in
+  let map_cursor = Option.get (Persistent_ordered_cursor.ordered_map_at 1 map_source) in
+  let map_inserted =
+    Result.get_ok (Persistent_ordered_cursor.ordered_map_insert "x" 9 map_cursor)
+  in
+  let map_updated =
+    Option.get (Persistent_ordered_cursor.ordered_map_set_next_value 20 map_inserted)
+  in
+  Alcotest.(check (list (pair string int)))
+    "map cursor edits"
+    [ ("a", 1); ("x", 9); ("b", 20); ("c", 3) ]
+    (Persistent_ordered_map.to_list (Persistent_ordered_cursor.ordered_map_snapshot map_updated));
+  let map_duplicate = Persistent_ordered_cursor.ordered_map_try_insert "B" 200 map_updated in
+  Alcotest.(check bool)
+    "map cursor duplicate" false
+    (Persistent_ordered_cursor.insertion_added map_duplicate);
+  Alcotest.(check int)
+    "map duplicate focuses representative" 2
+    (Persistent_ordered_cursor.ordered_map_position
+       (Persistent_ordered_cursor.insertion_value map_duplicate));
+  let map_deleted =
+    Option.get
+      (Persistent_ordered_cursor.ordered_map_delete_next
+         (Option.get (Persistent_ordered_cursor.ordered_map_delete_previous map_updated)))
+  in
+  Alcotest.(check (list (pair string int)))
+    "map cursor deletes"
+    [ ("a", 1); ("c", 3) ]
+    (Persistent_ordered_map.to_list (Persistent_ordered_cursor.ordered_map_snapshot map_deleted));
+  Alcotest.(check (list (pair string int)))
+    "map cursor source snapshot"
+    [ ("a", 1); ("b", 2); ("c", 3) ]
+    (Persistent_ordered_map.to_list (Persistent_ordered_cursor.ordered_map_snapshot map_cursor));
+
+  let int_policy = Common.Hash_policy.create ~hash:Hashtbl.hash ~equal:Int.equal in
+  let multimap_source =
+    Persistent_ordered_multimap.of_list ~key_policy:case_insensitive_policy ~value_policy:int_policy
+      [ ("b", 2); ("a", 9); ("B", 1); ("c", 7) ]
+  in
+  let pairs multimap =
+    List.map
+      (fun entry ->
+        (Persistent_ordered_multimap.entry_key entry, Persistent_ordered_multimap.entry_value entry))
+      (Persistent_ordered_multimap.entries multimap)
+  in
+  Alcotest.(check (list (pair string int)))
+    "multimap grouped source"
+    [ ("b", 2); ("b", 1); ("a", 9); ("c", 7) ]
+    (pairs multimap_source);
+  let pair_found = Persistent_ordered_cursor.ordered_multimap_find "B" 1 multimap_source in
+  let multimap_start =
+    Option.get (Persistent_ordered_cursor.ordered_multimap_at 0 multimap_source)
+  in
+  Alcotest.(check bool)
+    "multimap start has no previous pair" true
+    (Option.is_none (Persistent_ordered_cursor.ordered_multimap_peek_previous multimap_start));
+  Alcotest.(check bool)
+    "multimap cursor found" true
+    (Persistent_ordered_cursor.search_found pair_found);
+  Alcotest.(check int)
+    "multimap cursor pair position" 1
+    (Persistent_ordered_cursor.ordered_multimap_position
+       (Persistent_ordered_cursor.search_value pair_found));
+  let multimap_added =
+    Persistent_ordered_cursor.ordered_multimap_insert "b" 3
+      (Persistent_ordered_cursor.search_value pair_found)
+  in
+  Alcotest.(check int)
+    "multimap grouped insertion gap" 3
+    (Persistent_ordered_cursor.ordered_multimap_position multimap_added);
+  let multimap_duplicate =
+    Persistent_ordered_cursor.ordered_multimap_try_insert "B" 3 multimap_added
+  in
+  Alcotest.(check bool)
+    "multimap cursor duplicate" false
+    (Persistent_ordered_cursor.insertion_added multimap_duplicate);
+  let multimap_deleted =
+    Option.get
+      (Persistent_ordered_cursor.ordered_multimap_delete_next
+         (Option.get (Persistent_ordered_cursor.ordered_multimap_delete_previous multimap_added)))
+  in
+  Alcotest.(check (list (pair string int)))
+    "multimap cursor deletes and contracts group"
+    [ ("b", 2); ("b", 1); ("c", 7) ]
+    (pairs (Persistent_ordered_cursor.ordered_multimap_snapshot multimap_deleted));
+  Alcotest.(check int)
+    "multimap cursor delete gap" 2
+    (Persistent_ordered_cursor.ordered_multimap_position multimap_deleted);
+  let group_found = Persistent_ordered_cursor.ordered_multimap_find_group "A" multimap_source in
+  Alcotest.(check bool)
+    "multimap group cursor found" true
+    (Persistent_ordered_cursor.search_found group_found);
+  Alcotest.(check int)
+    "multimap group cursor position" 2
+    (Persistent_ordered_cursor.ordered_multimap_position
+       (Persistent_ordered_cursor.search_value group_found));
+  Alcotest.(check (list (pair string int)))
+    "multimap cursor source snapshot"
+    [ ("b", 2); ("b", 1); ("a", 9); ("c", 7) ]
+    (pairs
+       (Persistent_ordered_cursor.ordered_multimap_snapshot
+          (Persistent_ordered_cursor.search_value pair_found)))
+
 let ordered_set_model =
   QCheck.Test.make ~count:200 ~name:"ordered set retains first representatives"
     QCheck.(list (pair (int_bound 15) bool))
@@ -110,6 +257,7 @@ let () =
           Alcotest.test_case "ordered set" `Quick test_ordered_set;
           Alcotest.test_case "ordered map" `Quick test_ordered_map;
           Alcotest.test_case "ordered multimap" `Quick test_ordered_multimap;
+          Alcotest.test_case "ordered cursors" `Quick test_ordered_cursors;
           Alcotest.test_case "ordered-set model" `Quick test_model;
         ] );
     ]
