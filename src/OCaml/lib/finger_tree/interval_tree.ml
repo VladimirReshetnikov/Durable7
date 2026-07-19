@@ -65,8 +65,10 @@ let upper_bound_low low tree =
 let upper_bound = upper_bound_low
 
 let insert interval tree =
+  (* A new interval with a low endpoint equal to an existing run is placed before that run,
+     matching the sibling ports and keeping the miss cursor's gap consistent with insertion. *)
   let intervals =
-    Sorted_helpers.insert (upper_bound_low interval.interval_low tree) interval tree.intervals
+    Sorted_helpers.insert (lower_bound interval.interval_low tree) interval tree.intervals
   in
   let cached_maximum_high =
     match tree.cached_maximum_high with

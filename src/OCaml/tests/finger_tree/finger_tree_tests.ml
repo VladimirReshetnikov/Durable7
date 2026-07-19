@@ -186,7 +186,17 @@ let test_range_update_sequence () =
   Alcotest.(check int) "updated aggregate" 45 (Range_update_sequence.measure updated);
   Alcotest.(check (result int string))
     "range aggregate" (Ok 39)
-    (Range_update_sequence.measure_range ~start:1 ~length:3 updated)
+    (Range_update_sequence.measure_range ~start:1 ~length:3 updated);
+  (* A zero-length update fires no callbacks and preserves version identity: the returned sequence
+     and cursor are physically the same objects that were supplied. *)
+  let zero_update = Result.get_ok (Range_update_sequence.update_range ~start:2 ~length:0 99 source) in
+  Alcotest.(check bool) "zero-length update returns the same sequence" true (zero_update == source);
+  let cursor = Option.get (Range_update_sequence.cursor_at 2 source) in
+  let zero_next = Result.get_ok (Range_update_sequence.cursor_update_next 0 99 cursor) in
+  Alcotest.(check bool) "zero-length cursor update returns the same cursor" true (zero_next == cursor);
+  let zero_previous = Result.get_ok (Range_update_sequence.cursor_update_previous 0 99 cursor) in
+  Alcotest.(check bool)
+    "zero-length previous cursor update returns the same cursor" true (zero_previous == cursor)
 
 let test_sequence_cursors () =
   let deque_source = Persistent_deque.of_list [ Some 1; None; Some 3 ] in
@@ -506,7 +516,9 @@ let test_interval_ordered_search_cursors () =
   let second = interval (ranked 1 "second-low") (ranked 5 "second-high") in
   let late = interval (ranked 7 "late-low") (ranked 9 "late-high") in
   let tree = Interval_tree.of_list cursor_ranked_order [ first; second; late ] in
-  let selected = Option.get (Ordered_search_cursor.interval_tree_at 1 tree) in
+  (* Equal-low intervals: the most recently inserted occurrence ("second") is placed before the
+     earlier run, so it occupies rank 0. *)
+  let selected = Option.get (Ordered_search_cursor.interval_tree_at 0 tree) in
   Alcotest.(check (option string))
     "selected interval occurrence" (Some "second-low")
     (Option.map
@@ -517,12 +529,29 @@ let test_interval_ordered_search_cursors () =
     "remaining equal interval" (Some "first-low")
     (Option.map
        (fun item -> (Interval_tree.low item).label)
-       (Ordered_search_cursor.interval_tree_peek_previous edited));
+       (Ordered_search_cursor.interval_tree_peek_next edited));
   Alcotest.(check (option string))
     "interval successor" (Some "late-low")
     (Option.map
        (fun item -> (Interval_tree.low item).label)
-       (Ordered_search_cursor.interval_tree_peek_next edited));
+       (Ordered_search_cursor.interval_tree_peek_next
+          (Option.get (Ordered_search_cursor.interval_tree_move_next edited))));
+  (* A miss cursor must identify exactly where a subsequent matching insert lands. *)
+  let miss_tree = Interval_tree.of_list cursor_ranked_order [ first; late ] in
+  let missing = interval (ranked 1 "missing-low") (ranked 7 "missing-high") in
+  let miss = Ordered_search_cursor.interval_tree_find missing miss_tree in
+  Alcotest.(check bool) "interval miss" false (Ordered_search_cursor.search_found miss);
+  let miss_cursor = Ordered_search_cursor.search_value miss in
+  let miss_gap = Ordered_search_cursor.interval_tree_position miss_cursor in
+  let after_insert = Ordered_search_cursor.interval_tree_insert missing miss_cursor in
+  Alcotest.(check (option string))
+    "insert lands at miss gap" (Some "missing-low")
+    (Option.map
+       (fun item -> (Interval_tree.low item).label)
+       (Interval_tree.nth miss_gap (Ordered_search_cursor.interval_tree_snapshot after_insert)));
+  Alcotest.(check int)
+    "insert cursor sits after the miss gap" (miss_gap + 1)
+    (Ordered_search_cursor.interval_tree_position after_insert);
   let probe = interval (ranked 4 "probe-low") (ranked 8 "probe-high") in
   let first_hit = Ordered_search_cursor.interval_tree_find_overlap probe tree in
   let second_hit =

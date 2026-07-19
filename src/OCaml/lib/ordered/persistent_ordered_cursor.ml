@@ -56,17 +56,19 @@ let ordered_set_move_next cursor =
 let ordered_set_seek ordered_set_position_value cursor =
   ordered_set_at ordered_set_position_value cursor.ordered_set
 
-let ordered_set_insert element cursor =
+let ordered_set_insert_with_flag element cursor =
   let added, ordered_set =
     Result.get_ok
       (Persistent_ordered_set.insert cursor.ordered_set_position_value element cursor.ordered_set)
   in
-  if not added then cursor
-  else { ordered_set; ordered_set_position_value = cursor.ordered_set_position_value + 1 }
+  if not added then (false, cursor)
+  else (true, { ordered_set; ordered_set_position_value = cursor.ordered_set_position_value + 1 })
+
+let ordered_set_insert element cursor = snd (ordered_set_insert_with_flag element cursor)
 
 let ordered_set_try_insert element cursor =
-  let insertion_cursor = ordered_set_insert element cursor in
-  { added = insertion_cursor != cursor; insertion_cursor }
+  let added, insertion_cursor = ordered_set_insert_with_flag element cursor in
+  { added; insertion_cursor }
 
 let ordered_set_delete_previous cursor =
   Result.to_option
@@ -261,44 +263,57 @@ let ordered_multimap_find_group key ordered_multimap =
           };
       }
 
-let ordered_multimap_insert key value cursor =
+let ordered_multimap_insert_with_flag key value cursor =
   let added, ordered_multimap = Persistent_ordered_multimap.add key value cursor.ordered_multimap in
-  if not added then cursor
+  if not added then (false, cursor)
   else
+    (* Derive the published gap from the accepted pair's flattened rank. A value that is
+       non-reflexive under the value policy (e.g. [Float.nan]) is invisible to the content
+       re-scan, so fall back to the total pair count rather than raising on [Option.get]. *)
     let ordered_multimap_position_value =
-      Option.get (ordered_multimap_index_of key value ordered_multimap) + 1
+      match ordered_multimap_index_of key value ordered_multimap with
+      | Some index -> index + 1
+      | None -> Persistent_ordered_multimap.pair_count ordered_multimap
     in
-    { ordered_multimap; ordered_multimap_position_value }
+    (true, { ordered_multimap; ordered_multimap_position_value })
+
+let ordered_multimap_insert key value cursor =
+  snd (ordered_multimap_insert_with_flag key value cursor)
 
 let ordered_multimap_try_insert key value cursor =
-  let insertion_cursor = ordered_multimap_insert key value cursor in
-  { added = insertion_cursor != cursor; insertion_cursor }
+  let added, insertion_cursor = ordered_multimap_insert_with_flag key value cursor in
+  { added; insertion_cursor }
 
 let ordered_multimap_delete_previous cursor =
-  Option.map
-    (fun entry ->
-      let _, ordered_multimap =
+  Option.bind (ordered_multimap_peek_previous cursor) (fun entry ->
+      let removed, ordered_multimap =
         Persistent_ordered_multimap.remove
           (Persistent_ordered_multimap.entry_key entry)
           (Persistent_ordered_multimap.entry_value entry)
           cursor.ordered_multimap
       in
-      {
-        ordered_multimap;
-        ordered_multimap_position_value = cursor.ordered_multimap_position_value - 1;
-      })
-    (ordered_multimap_peek_previous cursor)
+      if not removed then None
+      else
+        Some
+          {
+            ordered_multimap;
+            ordered_multimap_position_value = cursor.ordered_multimap_position_value - 1;
+          })
 
 let ordered_multimap_delete_next cursor =
-  Option.map
-    (fun entry ->
-      let _, ordered_multimap =
+  Option.bind (ordered_multimap_peek_next cursor) (fun entry ->
+      let removed, ordered_multimap =
         Persistent_ordered_multimap.remove
           (Persistent_ordered_multimap.entry_key entry)
           (Persistent_ordered_multimap.entry_value entry)
           cursor.ordered_multimap
       in
-      { ordered_multimap; ordered_multimap_position_value = cursor.ordered_multimap_position_value })
-    (ordered_multimap_peek_next cursor)
+      if not removed then None
+      else
+        Some
+          {
+            ordered_multimap;
+            ordered_multimap_position_value = cursor.ordered_multimap_position_value;
+          })
 
 let ordered_multimap_snapshot cursor = cursor.ordered_multimap

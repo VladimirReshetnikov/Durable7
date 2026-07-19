@@ -228,6 +228,33 @@ let test_ordered_cursors () =
        (Persistent_ordered_cursor.ordered_multimap_snapshot
           (Persistent_ordered_cursor.search_value pair_found)))
 
+let test_ordered_multimap_cursor_nan () =
+  (* A value that is non-reflexive under the value policy (here [Float.nan], since [nan = nan] is
+     [false]) exercises the multimap cursor's edit-then-publish contract. *)
+  let float_policy = Common.Hash_policy.create ~hash:Hashtbl.hash ~equal:( = ) in
+  let source =
+    Persistent_ordered_multimap.empty ~key_policy:case_insensitive_policy ~value_policy:float_policy
+  in
+  let cursor = Option.get (Persistent_ordered_cursor.ordered_multimap_at 0 source) in
+  (* Defect 1: inserting a pair the collection accepts must not raise. *)
+  let inserted = Persistent_ordered_cursor.ordered_multimap_insert "k" Float.nan cursor in
+  Alcotest.(check int)
+    "nan pair accepted" 1
+    (Persistent_ordered_multimap.pair_count
+       (Persistent_ordered_cursor.ordered_multimap_snapshot inserted));
+  let gap = Persistent_ordered_cursor.ordered_multimap_position inserted in
+  Alcotest.(check bool) "nan cursor gap is valid" true (gap >= 0 && gap <= 1);
+  (* Defect 2: a delete the collection cannot perform must report failure with [None] rather than
+     publishing an unchanged version as success. *)
+  let at_pair =
+    Option.get
+      (Persistent_ordered_cursor.ordered_multimap_at 0
+         (Persistent_ordered_cursor.ordered_multimap_snapshot inserted))
+  in
+  Alcotest.(check bool)
+    "nan delete does not falsely succeed" true
+    (Option.is_none (Persistent_ordered_cursor.ordered_multimap_delete_next at_pair))
+
 let ordered_set_model =
   QCheck.Test.make ~count:200 ~name:"ordered set retains first representatives"
     QCheck.(list (pair (int_bound 15) bool))
@@ -258,6 +285,7 @@ let () =
           Alcotest.test_case "ordered map" `Quick test_ordered_map;
           Alcotest.test_case "ordered multimap" `Quick test_ordered_multimap;
           Alcotest.test_case "ordered cursors" `Quick test_ordered_cursors;
+          Alcotest.test_case "ordered multimap nan cursor" `Quick test_ordered_multimap_cursor_nan;
           Alcotest.test_case "ordered-set model" `Quick test_model;
         ] );
     ]

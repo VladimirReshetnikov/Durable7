@@ -9,6 +9,10 @@ val count : ('endpoint, 'value) t -> int
 val nth : int -> ('endpoint, 'value) t -> ('endpoint, 'value) entry option
 val lower_bound : low:'endpoint -> high:'endpoint -> ('endpoint, 'value) t -> int
 val upper_bound : low:'endpoint -> high:'endpoint -> ('endpoint, 'value) t -> int
+
+val validate_interval :
+  low:'endpoint -> high:'endpoint -> ('endpoint, 'value) t -> (unit, string) result
+
 val entry_low : ('endpoint, 'value) entry -> 'endpoint
 val entry_high : ('endpoint, 'value) entry -> 'endpoint
 val entry_value : ('endpoint, 'value) entry -> 'value

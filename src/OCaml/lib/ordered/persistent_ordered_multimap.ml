@@ -20,6 +20,11 @@ let pair_count map = map.pairs
 let is_empty map = map.pairs = 0
 let entry_key entry = entry.key
 let entry_value entry = entry.value
+
+let checked_increment pairs =
+  if pairs = max_int then invalid_arg "ordered multimap pair count overflow";
+  pairs + 1
+
 let mem_key key map = Persistent_ordered_map.mem key map.groups
 
 let values key map =
@@ -45,7 +50,7 @@ let add key value map =
         {
           map with
           groups = Result.get_ok (Persistent_ordered_map.add key group map.groups);
-          pairs = map.pairs + 1;
+          pairs = checked_increment map.pairs;
         } )
   | Some entry ->
       let added, group =
@@ -56,7 +61,7 @@ let add key value map =
         let _, groups =
           Persistent_ordered_map.set (Persistent_ordered_map.entry_key entry) group map.groups
         in
-        (true, { map with groups; pairs = map.pairs + 1 })
+        (true, { map with groups; pairs = checked_increment map.pairs })
 
 let of_list ~key_policy ~value_policy pairs =
   List.fold_left

@@ -52,17 +52,28 @@ let measure_range ~start ~length:count sequence =
 
 let update_range ~start ~length:count tag sequence =
   if not (valid_range start count sequence) then Error "range update is out of bounds"
-  else
+  else if count = 0 then Ok sequence
+  else begin
+    let algebra = sequence.algebra in
     let values = Array.copy sequence.values in
     for index = start to start + count - 1 do
-      values.(index) <- sequence.algebra.apply_element tag values.(index)
+      values.(index) <- algebra.apply_element tag values.(index)
     done;
-    (* Exercise the algebra's aggregate law at the publication boundary. The rebuilt element measure
-       remains the source of truth for this initial OCaml checkpoint. *)
-    ignore
-      (sequence.algebra.apply_measure tag ~length:count
-         (fold_measure sequence.algebra (Array.sub sequence.values start count)));
-    Ok (make sequence.algebra values)
+    (* Recombine the cached aggregate through the algebra's range law: the untouched prefix and
+       suffix measures bracket [apply_measure] over the transformed span. The law gate guarantees
+       this agrees with re-measuring the rewritten elements. *)
+    let prefix = fold_measure algebra (Array.sub sequence.values 0 start) in
+    let span =
+      algebra.apply_measure tag ~length:count
+        (fold_measure algebra (Array.sub sequence.values start count))
+    in
+    let suffix =
+      fold_measure algebra
+        (Array.sub sequence.values (start + count) (length sequence - start - count))
+    in
+    let cached_measure = algebra.combine (algebra.combine prefix span) suffix in
+    Ok { sequence with values; cached_measure }
+  end
 
 let insert index value sequence =
   if index < 0 || index > length sequence then
@@ -151,6 +162,7 @@ let cursor_measure_next count value =
 
 let cursor_update_previous count tag value =
   if count < 0 || count > value.cursor_position then Error "cursor previous range is out of bounds"
+  else if count = 0 then Ok value
   else
     Result.map
       (fun snapshot -> { cursor_snapshot = snapshot; cursor_position = value.cursor_position })
@@ -159,6 +171,7 @@ let cursor_update_previous count tag value =
 let cursor_update_next count tag value =
   if count < 0 || count > cursor_length value - value.cursor_position then
     Error "cursor next range is out of bounds"
+  else if count = 0 then Ok value
   else
     Result.map
       (fun snapshot -> { cursor_snapshot = snapshot; cursor_position = value.cursor_position })

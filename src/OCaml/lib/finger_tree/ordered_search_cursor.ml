@@ -325,9 +325,24 @@ let rec find_interval_rank predicate start tree =
     | Some interval when predicate interval -> Some start
     | _ -> find_interval_rank predicate (start + 1) tree
 
+(* Exact search only walks the contiguous equal-low run: intervals are ordered by low endpoint,
+   so once the low endpoint stops matching no later interval can be an exact match. *)
+let rec find_equal_low_rank tree low predicate start =
+  if start >= Interval_tree.count tree then None
+  else
+    match Interval_tree.nth start tree with
+    | None -> None
+    | Some candidate ->
+        if Common.Comparator.compare (Interval_tree.comparator tree) (Interval_tree.low candidate) low <> 0
+        then None
+        else if predicate candidate then Some start
+        else find_equal_low_rank tree low predicate (start + 1)
+
 let interval_tree_find interval tree =
   let lower = Interval_tree.lower_bound (Interval_tree.low interval) tree in
-  match find_interval_rank (interval_equal tree interval) lower tree with
+  match
+    find_equal_low_rank tree (Interval_tree.low interval) (interval_equal tree interval) lower
+  with
   | Some tree_position -> { found = true; search_cursor = { tree; tree_position } }
   | None -> { found = false; search_cursor = { tree; tree_position = lower } }
 
@@ -364,7 +379,7 @@ let interval_tree_seek_next_overlap query cursor =
     query cursor.tree
 
 let interval_tree_insert interval cursor =
-  let tree_position = Interval_tree.upper_bound (Interval_tree.low interval) cursor.tree + 1 in
+  let tree_position = Interval_tree.lower_bound (Interval_tree.low interval) cursor.tree + 1 in
   { tree = Interval_tree.insert interval cursor.tree; tree_position }
 
 let interval_tree_delete_previous cursor =
@@ -442,7 +457,7 @@ let rec find_interval_map_rank predicate start map =
 
 let interval_map_find_overlap_from start ~low ~high map =
   Result.map
-    (fun _ ->
+    (fun () ->
       match find_interval_map_rank (interval_map_entry_overlaps ~low ~high map) start map with
       | Some interval_map_position_value ->
           { found = true; search_cursor = { interval_map = map; interval_map_position_value } }
@@ -455,7 +470,7 @@ let interval_map_find_overlap_from start ~low ~high map =
                 interval_map_position_value = Persistent_interval_map.count map;
               };
           })
-    (Persistent_interval_map.query_overlap ~low ~high map)
+    (Persistent_interval_map.validate_interval ~low ~high map)
 
 let interval_map_find_overlap ~low ~high map = interval_map_find_overlap_from 0 ~low ~high map
 
