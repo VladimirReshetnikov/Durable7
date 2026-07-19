@@ -1,5 +1,8 @@
 """Cursor contracts for the independently owned ordered collections."""
 
+import operator
+
+from vladimir_reshetnikov.data_structures import HashPolicy, create_hash_policy
 from vladimir_reshetnikov.data_structures.ordered import (
     OrderedMapEntry,
     OrderedMultimapEntry,
@@ -72,6 +75,46 @@ def test_multimap_cursor_uses_flattened_grouped_pair_ranks() -> None:
     assert source.pair_count == 4
     group = source.find_group_cursor("a")
     assert group.found and group.cursor.position == 2
+
+
+def test_multimap_cursor_tolerates_values_non_reflexive_under_the_value_policy() -> None:
+    """Cursor add derives the gap from the key group; delete guards against no-op removal."""
+
+    values: HashPolicy[float] = create_hash_policy(hash, operator.eq)
+    nan = float("nan")
+    # A bare ``operator.eq`` policy is a legitimate strict policy under which NaN is non-reflexive.
+    assert not values.equivalent(nan, nan)
+
+    source = PersistentOrderedMultimap.from_items(
+        [("a", 1.0), ("b", 2.0), ("a", 3.0)], value_policy=values
+    )
+    assert [(entry.key, entry.value) for entry in source] == [("a", 1.0), ("a", 3.0), ("b", 2.0)]
+
+    # add() must not re-scan for the accepted pair by value equality; the gap lands after the group.
+    added_nan = source.cursor_at(0).add("a", nan)
+    assert added_nan.map.pair_count == 4
+    assert added_nan.position == 3
+    stored = added_nan.map._cursor_entry_at(2)
+    assert stored.key == "a" and stored.value != stored.value  # a stored NaN precedes the gap
+    assert [(entry.key, entry.value) for entry in source] == [("a", 1.0), ("a", 3.0), ("b", 2.0)]
+
+    # A normal reflexive value still lands at the same group boundary.
+    added_real = source.cursor_at(0).add("a", 7.0)
+    assert added_real.position == 3
+    assert added_real.peek_previous() == OrderedMultimapEntry("a", 7.0)
+
+    # delete() must not report a false success when remove-by-content is a no-op for a stored NaN.
+    with_nan = PersistentOrderedMultimap[str, float].empty(value_policy=values).add("a", nan)
+    assert with_nan.pair_count == 1
+    after_nan = with_nan.cursor_at(1)
+    assert after_nan.delete_previous() is after_nan
+    before_nan = with_nan.cursor_at(0)
+    assert before_nan.delete_next() is before_nan
+
+    # A reflexive value deletes normally through the same guarded path.
+    with_real = PersistentOrderedMultimap[str, float].empty(value_policy=values).add("a", 5.0)
+    deleted = with_real.cursor_at(1).delete_previous()
+    assert deleted.map.is_empty and deleted.position == 0
 
 
 def test_ordered_cursors_expose_non_consuming_snapshots() -> None:

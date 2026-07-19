@@ -215,6 +215,28 @@ class PersistentOrderedMultimap(Generic[K, V]):
                 return position
         return -1
 
+    def _cursor_group_end(self, key: K) -> int:
+        """Pair rank of the gap immediately after the last pair of an equivalent key group.
+
+        Returns the pair-end gap when the key is absent. Key groups are contiguous in the flattened
+        enumeration, so this walks the leading pairs once and consults only the key policy, never
+        the value policy.
+        """
+
+        position = 0
+        group_end = 0
+        seen_group = False
+        for pair in self:
+            if self.key_policy.equivalent(pair.key, key):
+                position += 1
+                seen_group = True
+                group_end = position
+            elif seen_group:
+                return group_end
+            else:
+                position += 1
+        return group_end if seen_group else position
+
     def add(self, key: K, value: V) -> PersistentOrderedMultimap[K, V]:
         group = self._groups.try_get_entry(key)
         if group.found and group.entry is not None:
@@ -351,31 +373,55 @@ class PersistentOrderedMultimapCursor(Generic[K, V]):
         )
 
     def add(self, key: K, value: V) -> PersistentOrderedMultimapCursor[K, V]:
+        """Add under grouped semantics and return the inserted pair's following gap.
+
+        The gap is derived from the key group's end using only the key policy rather than by
+        re-scanning for the accepted pair by value equality. A value that is not reflexive under the
+        value policy, such as ``float("nan")`` under a bare ``operator.eq`` policy, is one the
+        collection accepts but a content re-scan can never find again, so re-scanning would raise on
+        a pair the collection just stored.
+        """
+
         updated = self.map.add(key, value)
         if updated is self.map:
             return self
-        position = updated._cursor_index_of(key, value)
-        if position < 0:
-            raise RuntimeError("The inserted pair is missing from the ordered multimap.")
-        return PersistentOrderedMultimapCursor(updated, position + 1)
+        return PersistentOrderedMultimapCursor(updated, updated._cursor_group_end(key))
 
     def try_add(self, key: K, value: V) -> tuple[bool, PersistentOrderedMultimapCursor[K, V]]:
         cursor = self.add(key, value)
         return cursor is not self, cursor
 
     def delete_previous(self) -> PersistentOrderedMultimapCursor[K, V]:
+        """Delete the pair immediately before the gap.
+
+        Removal locates the pair by content and is a no-op when the stored value is not reflexive
+        under the value policy (a ``float("nan")``, for instance); the pair count validates the
+        removal, so a no-op returns this receiver rather than a false success that removed nothing.
+        """
+
         pair = self.peek_previous()
         if pair is None:
             raise IndexError("The ordered-multimap cursor has no previous pair.")
-        return PersistentOrderedMultimapCursor(
-            self.map.remove(pair.key, pair.value), self.position - 1
-        )
+        updated = self.map.remove(pair.key, pair.value)
+        if updated.pair_count == self.map.pair_count:
+            return self
+        return PersistentOrderedMultimapCursor(updated, self.position - 1)
 
     def delete_next(self) -> PersistentOrderedMultimapCursor[K, V]:
+        """Delete the pair immediately after the gap.
+
+        Removal locates the pair by content and is a no-op when the stored value is not reflexive
+        under the value policy (a ``float("nan")``, for instance); the pair count validates the
+        removal, so a no-op returns this receiver rather than a false success that removed nothing.
+        """
+
         pair = self.peek_next()
         if pair is None:
             raise IndexError("The ordered-multimap cursor has no next pair.")
-        return PersistentOrderedMultimapCursor(self.map.remove(pair.key, pair.value), self.position)
+        updated = self.map.remove(pair.key, pair.value)
+        if updated.pair_count == self.map.pair_count:
+            return self
+        return PersistentOrderedMultimapCursor(updated, self.position)
 
     def snapshot(self) -> PersistentOrderedMultimap[K, V]:
         """Return the retained multimap version; the cursor stays usable and unconsumed."""

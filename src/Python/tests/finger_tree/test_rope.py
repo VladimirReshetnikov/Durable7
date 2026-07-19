@@ -197,6 +197,16 @@ def test_cursor_insert_histories_agree_with_python_strings(
         assert cursor.position == position
 
 
+def test_text_cursor_empty_insert_preserves_receiver_and_snapshot_identity() -> None:
+    cursor = TextRope.from_text("alpha\nbeta").get_cursor(6)
+    # An empty insert is an identity no-op that must keep the memoized clean snapshot.
+    assert cursor.insert("") is cursor
+    assert cursor.insert("").snapshot() is cursor.snapshot()
+    edited = cursor.insert("Z")
+    assert edited is not cursor
+    assert edited.snapshot().as_string() == "alpha\nZbeta"
+
+
 def test_text_cursor_snapshot_reuses_the_path_copied_measured_rope(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

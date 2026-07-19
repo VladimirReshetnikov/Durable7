@@ -764,7 +764,10 @@ class TextRopeCursor:
         return self.seek(offset)
 
     def insert(self, text: str) -> TextRopeCursor:
-        return TextRopeCursor(self.cursor.insert_range(text))
+        # Empty text is an identity no-op in the measured cursor; returning this receiver preserves
+        # the memoized snapshot instead of rewrapping the same measured cursor in a fresh facade.
+        inserted = self.cursor.insert_range(text)
+        return self if inserted is self.cursor else TextRopeCursor(inserted)
 
     def delete_previous(self) -> TextRopeCursor:
         return TextRopeCursor(self.cursor.delete_previous())
