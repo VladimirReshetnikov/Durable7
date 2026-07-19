@@ -555,8 +555,13 @@ private:
     {
         if constexpr (std::equality_comparable<Key>) {
             return left == right;
+        } else {
+            // C++ has no general identity predicate for copied value-semantic keys. Equality-
+            // comparable keys receive the stronger check; other keys are governed by the retained
+            // key policy. The explicit else keeps the discarded branch from leaving an unreachable
+            // trailing return under the equality-comparable instantiation (MSVC C4702 under /WX).
+            return true;
         }
-        return true;
     }
 
     [[nodiscard]] persistent_ordered_map comparer_preserving_empty() const
