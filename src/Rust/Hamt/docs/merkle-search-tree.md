@@ -3,7 +3,8 @@
 - Created (UTC): 2026-07-12T04:30:09Z
 - Repository HEAD: 8a926e3bdb0cc37da0c8a15c4c32352c2ebcb1f5
 - Audience: Maintainers implementing or reviewing the Rust Merkle search tree
-- Scope: Core API, codecs, `MST2` blocks, persistence, proofs, synchronization, and merge
+- Scope: Core API, codecs, `MST2` blocks, the ordered cursor, persistence, proofs, synchronization,
+  and merge
 
 `MerkleSearchTree<K, V>` is a safe-Rust semantic and wire port of the C# canonical Merkle search
 tree. It is a deterministic ordered map and content-addressed block tree, not a probabilistic skip
@@ -77,6 +78,82 @@ nonempty block is encoded in this order:
 The block address is SHA-256 over those complete bytes. The integration suite locks the same
 single-entry domain, block, and root golden vector as C# and also proves independent insertion
 histories produce identical preorder block bytes.
+
+## Ordered persistent cursor
+
+`MerkleSearchTreeCursor<K, V>` owns a retained `MerkleSearchTree<K, V>` snapshot plus a
+comparer-order rank gap in `0..=len`. It is a **Profile R snapshot-plus-rank semantic checkpoint**:
+every edit delegates to the ordinary canonical tree operation, and the cursor claims none of the C#
+rope tier's focused representation, snapshot memo, callback ceiling, allocation bound, or amortized
+locality. No frames are retained, so context space is O(1).
+
+Create one with `cursor()` at the start gap, `cursor_at(position)` for a rank gap, `cursor_at_end()`
+after the final entry, `lower_bound_cursor(key)`, `upper_bound_cursor(key)`, or `cursor_at_key(key)`.
+`cursor_at` returns `Option` and rejects a position above `len`; every other factory is total.
+`cursor_at_key` returns a bare `(MerkleSearchTreeCursor<K, V>, bool)` tuple whose flag reports
+whether the gap's next entry is an exact comparer match, so a miss still returns a usable insertion
+gap rather than an invalid state. `upper_bound_cursor` is the lower bound advanced past an exact
+hit. Every factory retains the exact `MerkleSearchTreePolicy<K, V>` handle, including on an empty
+tree.
+
+Navigation is immutable and never consumes the receiver: `len`, `is_empty`, `position`,
+`is_at_start`, `is_at_end`, borrowed `peek_previous` / `peek_next` returning
+`Option<&MerkleEntry<K, V>>`, `move_previous` / `move_next`, and `seek(position)`. Boundary movement
+and an out-of-range seek return `None`. `snapshot()` returns the cursor version's canonical
+immutable tree by root sharing and leaves the cursor usable. Navigation and snapshotting require
+neither `K: Clone` nor `V: Clone`, matching the core.
+
+Edits use two channels, deliberately separated by what can fail:
+
+- `insert(key, value)` and `set_item(key, value)` return `Result<Self, MerkleCursorEditError>`.
+  `insert` rejects an equivalent existing key with `DuplicateKey`; both reject a key whose
+  lower-bound rank is not the cursor's current gap with `WrongGap { expected, actual }`. Canonical
+  encoding or tree-construction failure surfaces as `Tree(MerkleTreeError)`, and
+  `MerkleCursorEditError` implements `Display`, `Error`, and `From<MerkleTreeError>`.
+- `set_next_value(value)` returns `Result<Option<Self>, MerkleTreeError>`: the outer `Result`
+  carries codec failure, and the inner `Option` is `None` only when the gap is at the end.
+  `delete_previous()` and `delete_next()` return `Option<Self>` and cannot fail otherwise, because
+  removing a key that the cursor just borrowed invokes no encoder.
+
+Gap conventions after each edit are:
+
+| Operation | Resulting gap |
+| --- | --- |
+| `insert` | `position + 1`, immediately after the new entry |
+| `set_item` on a miss | `position + 1` |
+| `set_item` on an exact hit | `position`, unchanged |
+| `set_item` recognized as an encoded-value no-op | `position`, unchanged, receiver root retained |
+| `set_next_value` | `position`, unchanged |
+| `delete_previous` | `position - 1` |
+| `delete_next` | `position`, unchanged |
+
+`set_item` and `set_next_value` detect the ordinary encoded-value no-op through `shares_root_with`
+and return the receiver cursor rather than an equal new version. `set_next_value` names its target
+by the stored key handle recovered from `peek_next`, so the first stored key representative survives
+a value update exactly as it does under `set_item`. Because every cursor edit calls the ordinary
+canonical `set_item` or `remove`, the resulting policy binding, representative retention, canonical
+encoding, `MST2` bytes, block digests, root digest, and failure atomicity are identical to a direct
+tree edit. Cursor state is local navigation state and never appears in `MST2`, `MSP2`, a pack, a
+proof, a sync plan, or a store.
+
+The trust boundary is the tree's, unchanged. Build a cursor only from a tree constructed normally or
+obtained through a fully verified `load` / `import`; the cursor weakens no codec round-trip check
+and consumes no verification budget of its own. `MerkleBlock`, `MerkleBlockPack`, `MerkleProof`, and
+store content never become editable through it.
+
+Let `h` be block height and `e_i` the entry occupancy of visited block `i`. `len` and `position` are
+O(1) reads. Creating a cursor at start, end, or a rank is O(1). `find_position` inside one block is
+a binary search, so key seek costs O(sum log(e_i + 1)) comparator calls, but the surrounding rank
+accumulation in `lower_bound_rank_for_cursor` sums the cached child counts preceding the selected
+interval, and `entry_at_rank_for_cursor` scans a block's entries while subtracting child counts.
+Blocks cache each child's total count rather than a cumulative child-prefix table, so a bound
+factory, a rank seek, the initial `position`, **and every peek** cost O(sum (e_i + 1)). Moving the
+gap is O(1) because it only rewrites an integer and clones two handles, so a complete traversal by
+move-plus-peek is O(n · sum (e_i + 1)) rather than O(n). An edit plus its snapshot is expected
+O(16 log16 n) block visits plus the changed encoded bytes under uniform layers, and O(n) plus those
+bytes for a degenerate block distribution, because the edit delegates to the canonical operation.
+`snapshot` is O(1) in both the clean and the dirty case, since the retained tree is already
+canonical.
 
 ## Blocks, stores, and transfer packs
 

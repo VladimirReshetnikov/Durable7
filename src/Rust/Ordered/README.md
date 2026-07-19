@@ -39,9 +39,37 @@ The public surface covers:
   convenience forms that deliberately ignore the argument's hash-builder state;
 - subset, proper-subset, superset, proper-superset, overlap, and set-equality relations;
 - ordered iteration, vector conversion, indexing, root-sharing diagnostics, and complete dual-index
-  validation; and
+  validation;
 - grouped ordered-multimap construction, lookup, insertion, pair/key-group removal, clear,
-  root-sharing diagnostics, and nested invariant validation.
+  root-sharing diagnostics, and nested invariant validation; and
+- immutable position-gap cursors for all three collections, with rank and equality-search factories,
+  neighbor peeks and movement, atomic dual-index edits, and borrowed snapshots.
+
+## Cursors
+
+`PersistentOrderedSetCursor<T, S>`, `PersistentOrderedMapCursor<K, V, S>`, and
+`PersistentOrderedMultimapCursor<K, V, SK, SV>` live in the public `cursors` module and are
+re-exported from the crate root together with `OrderedCursorSearch<C>` and `OrderedCursorInsert<C>`.
+A cursor is an immutable value pairing one retained collection version with a validated gap: the set
+and map navigate explicit position order, while the multimap navigates the grouped pair rank of
+`iter`. Navigation and edits return new cursors, every retained cursor stays branchable, and
+`snapshot()` borrows the version without consuming the cursor.
+
+These are Profile R root-plus-position semantic checkpoints. Each edit delegates to the ordinary
+persistent operation so both indexes publish atomically, and none of the C# rope cursor's focused
+representation, memoization, allocation, callback-count, or amortized-locality claims are inherited.
+Private sparse stamps are never exposed; a cursor position is a gap count.
+
+Two separate result carriers keep the discriminators unambiguous: `OrderedCursorSearch::found`
+reports that an equivalent entry already exists and is returned only by the non-editing
+`find_cursor` / `find_group_cursor` factories, while `OrderedCursorInsert::added` reports that
+`try_insert` actually published a new entry. A key reported `found: true` is exactly a key reported
+`added: false`, which is why they are not one field on one type.
+
+The multimap cursor's peeks, searches, and deletions walk the flattening iterator and are linear in
+the pair rank rather than logarithmic; the set and map cursors' equality search pays the
+squared-logarithmic stamp-location tier. [API notes](docs/api-notes.md) give the complete factory,
+gap-convention, error-channel, and complexity contract.
 
 Private signed 64-bit sparse stamps leave a large gap between ordinary neighbors. Positional inserts
 and moves choose an endpoint label or midpoint when possible. Exhausted gaps and endpoint overflow

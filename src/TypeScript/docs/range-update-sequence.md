@@ -113,6 +113,87 @@ operand. A throwing enumerator, algebra callback, or checked structural operatio
 partial sequence and cannot mutate any input. As with other JavaScript libraries, no recoverability
 claim is made for process-level out-of-memory termination.
 
+## Positional and measured cursor
+
+`RangeUpdateSequenceCursor<Element, Measure, Tag>` is the sequence's public cursor. It is a
+**Profile R root-plus-position semantic checkpoint**: it retains one exact immutable
+`RangeUpdateSequence` plus a validated gap and delegates every edit to the ordinary persistent
+operation. It claims none of the C# rope tier's focused representation, bounded active window,
+snapshot memo, callback ceiling, allocation bound, or amortized-locality result.
+
+`getCursor(position = 0)` is the only factory. The gap is a boundary in `0 .. size`: elements
+`[0, position)` precede it and `[position, size)` follow it. Empty, start, and end gaps are ordinary
+valid states, and the constructor is public, so `new RangeUpdateSequenceCursor(sequence, position)`
+is equivalent. There is no uninitialized cursor: the constructor validates `position` and either
+produces a usable value or throws.
+
+| Contract area | Members |
+| --- | --- |
+| State | `sequence`, `position`, `size`, `isAtStart`, `isAtEnd` |
+| Measures | `measureBefore`, `measureAfter`, `measurePrevious(count)`, `measureNext(count)` |
+| Navigation | `peekPrevious`, `peekNext`, `movePrevious`, `moveNext`, `seek` |
+| Edits | `insert`, `replaceNext`, `deletePrevious`, `deleteNext` |
+| Tags | `applyPrevious(count, tag)`, `applyNext(count, tag)` |
+| Materialization | `snapshot()` |
+
+Peeks return a `RangeUpdateCursorPeek<Element>` wrapper — `{ value }` — or `undefined` at a
+boundary, so a stored `undefined` element stays distinct from the absence of a neighbor. `insert`
+returns the gap after the inserted element; `deletePrevious` removes `position - 1` and moves the gap
+left; `deleteNext` and `replaceNext` address `position` and keep the gap fixed. `replaceNext` routes
+through `setItem`, so it is unconditional in the same sense the sequence is: the core has no
+element-equality policy. The cursor has no `insertRange`; splice through `concat`/`splitAt` on the
+snapshot instead.
+
+### Tag and range contract
+
+`applyPrevious(k, tag)` targets `[position - k, position)` and `applyNext(k, tag)` targets
+`[position, position + k)`; both keep the gap fixed and both delegate to `applyRange`, so the whole
+lazy-tag invariant above is preserved unchanged. `measurePrevious(k)` and `measureNext(k)` cover the
+same two ranges through `measureRange`.
+
+All four validate `k` first — it must be a nonnegative integer no greater than the number of elements
+available on that side — and they raise `RangeError` before any tag, `isIdentity`, element, or measure
+callback runs. A zero-length directional range is therefore callback-free: `measurePrevious(0)` and
+`measureNext(0)` return the policy's empty measure and `applyPrevious(0, tag)`/`applyNext(0, tag)`
+return the receiver cursor. A recognized identity tag likewise leaves `applyRange` returning the
+receiver sequence, and the cursor then returns the receiver cursor rather than a new wrapper.
+
+Because the underlying range update is a path copy that pushes pending tags immutably, a cursor tag
+edit never mutates the source sequence, never transforms a newly inserted or replacement element with
+an older tag, and leaves every retained cursor and snapshot usable if an algebra callback throws. The
+cursor does not add a global overlay tag: a whole-sequence nonidentity update through
+`applyNext(size, tag)` from the start gap is the sequence's own O(1) root-wrapper update, but a
+proper subrange is the ordinary O(log n) path.
+
+`measureBefore` and `measureAfter` are `measureRange(0, position)` and
+`measureRange(position, size - position)`. Both are read-only descents that carry inherited tags and
+allocate no persistent nodes, so — unlike `FingerTreeCursor` and `MeasuredRopeCursor`, whose
+`measureAfter` performs a structural split — this cursor's two measure sides are symmetric in cost.
+Combining them in that order equals `snapshot().measure`.
+
+### Cursor errors, identity, and complexity
+
+`RangeError` carries **both** channels: an out-of-range constructor or `seek` position, an
+out-of-range directional `count`, and the boundary conditions "Cursor is already at the start/end"
+and "No element precedes/follows the cursor" all raise it. Callers cannot distinguish a bad argument
+from a boundary by exception type; use `isAtStart`, `isAtEnd`, and `size` to test boundaries in
+advance, or `peekPrevious`/`peekNext`, which report a boundary as `undefined` instead of throwing.
+
+`seek(position)` returns the receiver for a zero-distance move; every other navigation and every
+changing edit returns a new immutable cursor over the same or a new logical version. Retained
+cursors and their snapshots stay valid and branchable. `snapshot()` returns the exact retained
+sequence object and never consumes the cursor, so the algebra object, canonical-empty identity, and
+`concat` policy-identity requirement are preserved verbatim.
+
+- Cursor creation, `size`, `position`, `isAtStart`, `isAtEnd`, `snapshot()`: O(1).
+- `movePrevious`, `moveNext`, `seek`: O(1); they rewrite the gap only. Reading the neighbor
+  afterwards costs a fresh O(log n) descent, so a full traversal by move-plus-peek is O(n log n).
+- `peekPrevious`, `peekNext`: O(log n).
+- `insert`, `replaceNext`, `deletePrevious`, `deleteNext`: O(log n) worst case.
+- `measureBefore`, `measureAfter`, `measurePrevious`, `measureNext`: O(log n) worst case.
+- `applyPrevious`, `applyNext`: O(log n) worst case for a proper subrange; O(1) when the range covers
+  the whole sequence, and callback-free for a zero length or a recognized identity tag.
+
 ## Diagnostics and runtime-specific iteration
 
 `validateStructure` recursively verifies counts, heights, AVL balance, pending-tag canonicalization,

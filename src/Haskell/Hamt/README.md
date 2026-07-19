@@ -216,3 +216,88 @@ right values in argument order; the keyed forms additionally receive the shared 
 `insert` deliberately does not require `Eq` for values, so replacement rebuilds the affected leaf
 and path even when the new value is extensionally equal; callers that need equality-gated no-op
 identity must compare first.
+
+## Patricia Ordered Cursors
+
+`Data.Structures.Hamt.Patricia` also exposes an immutable ordered gap cursor per family:
+`PatriciaCursor k v` over `IntMap32`/`IntMap64` and `PatriciaSetCursor k` over `IntSet32`/`IntSet64`.
+Both are opaque snapshot-plus-rank values. A cursor retains one exact map or set version plus a
+validated rank in `0 .. size` and denotes the gap between the entries before and at that rank. The
+navigation axis is the module's ascending signed-key order, so the sign-flipping key encoding,
+compressed common prefixes, and branching masks all stay private.
+
+Map factories are `cursor` (gap zero), `cursorAt` (a validated rank, `Nothing` outside `0 .. size`),
+`cursorAtEnd`, `lowerBoundCursor`, `upperBoundCursor`, and `cursorAtKey`. The last returns a
+`PatriciaCursorSearch k v`, whose `cursorSearchFound` reports whether the next entry is the exact key
+and whose `cursorSearchCursor` is the lower-bound gap; a miss is therefore a usable insertion gap
+rather than an invalid cursor. The set spellings are `setCursor`, `setCursorAt`, `setCursorAtEnd`,
+`setLowerBoundCursor`, `setUpperBoundCursor`, and `setCursorAtItem`, which returns a plain
+`(Bool, PatriciaSetCursor k)` pair rather than a named record.
+
+`cursorCount`, `cursorPosition`, `cursorIsAtStart`, and `cursorIsAtEnd` query a cursor without
+touching the trie. `cursorPeekPrevious` and `cursorPeekNext` return the whole neighbouring `(k, v)`
+entry — or `k` for a set — wrapped in `Maybe`, so a stored `Nothing` payload stays distinguishable
+from a boundary. `cursorMovePrevious`, `cursorMoveNext`, and `cursorSeek` return a new cursor over
+the same logical version, and a same-rank `cursorSeek` returns the receiver unchanged.
+`cursorSnapshot` returns the retained map and never consumes the cursor, so every retained ancestor
+remains valid and branchable.
+
+Edits keep these gap conventions:
+
+- `cursorInsert` strictly adds a missing key and returns the gap after the new entry;
+- `cursorPut` updates the exact next entry with the gap fixed, or inserts at a missing lower-bound
+  gap and returns the gap after the new entry;
+- `cursorSetNextValue` replaces the next value, retains its stored key, and keeps the gap fixed;
+- `cursorDeletePrevious` removes the preceding entry and moves the gap left; and
+- `cursorDeleteNext` removes the next entry and keeps the gap fixed.
+
+`setCursorInsert`, `setCursorDeletePrevious`, and `setCursorDeleteNext` are the set analogues. Every
+edit delegates to the ordinary `insert`/`delete` operation, so cached branch counts, prefix
+compression, and unary-parent collapse behave exactly as they do for a direct call. Because these
+repairs never reorder surviving keys, gap continuity across an edit is semantic rather than
+incidental.
+
+### Haskell-specific cursor behavior
+
+Three properties below follow from immutability and from this module's deliberate constraint set,
+not from an implementation shortfall.
+
+Cursors are opaque pure values with hidden constructors. No uninitialized, moved-from, or disposed
+state is representable, so the invalid-default contract that the C, C++, C#, and Rust ports must
+enforce at run time is discharged here by the type system: every value a caller can obtain is
+already a valid cursor over a valid version.
+
+The Patricia core deliberately carries no `Eq` constraint on values. `insert` therefore rebuilds the
+affected leaf and path even when the replacement is extensionally equal to the stored value, and
+`cursorPut` and `cursorSetNextValue` inherit exactly that — a present-key replacement always
+publishes a new version and never returns the receiver. This is the cost of leaving the value type
+unconstrained; callers needing equality-gated identity must compare before calling.
+
+`cursorInsert` collapses two distinct rejections into one `Nothing`. It refuses both a key that is
+already present and a key whose lower-bound rank is not the current gap, and the `Maybe` result
+cannot tell the two apart; callers needing the distinction should consult `cursorAtKey` first. The
+set spelling separates them instead, because a duplicate there has a meaningful successful answer:
+`setCursorInsert` returns `Just` the unchanged receiver for a duplicate at its own lower-bound gap
+and `Nothing` only for a wrong gap. Ports that carry a typed error report both cases distinctly, as
+does this package's own Merkle cursor, whose `MerkleCursorEditError` names `MerkleCursorDuplicateKey`
+and `MerkleCursorWrongGap` separately.
+
+### Cursor complexity
+
+These are Profile R snapshot-plus-rank checkpoints in the sense of the repository-wide persistent
+cursor design: a cursor is exactly `(root, rank)`, it retains no path frames, and every edit
+delegates to the ordinary persistent operation. They inherit none of the C# rope tier's focused
+representation, memoized snapshot, callback ceiling, allocation bound, or amortized-locality claims.
+
+With key width `W` of 32 or 64:
+
+- `cursorCount`, `cursorPosition`, `cursorIsAtStart`, `cursorIsAtEnd`, and `cursorSnapshot` are O(1);
+- `cursorMovePrevious`, `cursorMoveNext`, and `cursorSeek` are O(1), because they rewrite only an
+  integer;
+- `cursorPeekPrevious` and `cursorPeekNext` are O(W): each is an unconditional root descent through
+  the cached branch counts, not a step along a retained path;
+- `lowerBoundCursor`, `upperBoundCursor`, `cursorAtKey`, and every edit are O(W); and
+- a complete in-order traversal by repeated move-plus-peek is therefore O(n · W), not O(n).
+
+Cursor context is O(1) in space. Editing through a cursor invalidates neither the source cursor nor
+any earlier snapshot, and branching costs nothing beyond retaining the two roots.

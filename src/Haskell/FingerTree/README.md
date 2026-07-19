@@ -132,10 +132,192 @@ checks the derived `newlineCount + 1` line count instead of wrapping at `maxBoun
 
 The text helpers use the measured rope's cached newline counts for offset/line navigation rather
 than rescanning the entire text. The interval tree is a low-sorted finger tree annotated with both
-maximum-high and last-low values: lower-bound insertion and the first overlap query are O(log n),
-and overlap enumeration repeatedly prunes prefixes whose maximum high cannot reach the probe.
+maximum-high and last-low values: lower-bound insertion is O(log n), `IntervalTree.findOverlap` is
+O(log n), and `IntervalTree.findOverlaps` repeatedly prunes prefixes whose maximum high cannot reach
+the probe. That pruning belongs to those tree-level queries; the rank-oriented overlap cursor
+factories described below reach the augmentation only through indexed lookup and do not share it.
 `compact`, full enumeration, and text/string conversion remain intentionally linear in the number
 of returned elements.
+
+## Persistent cursor tier
+
+Every applicable family in this package ships an immutable public cursor. All of them are opaque
+values with hidden constructors, all navigation and editing returns new cursor values, retained
+ancestors stay valid and branchable, and `snapshot` never consumes its receiver. With one named
+exception below they are Profile R snapshot-plus-position or snapshot-plus-rank checkpoints in the
+sense of the repository-wide persistent cursor design: the cursor is a retained collection plus a
+validated integer, it holds no path frames, and every edit delegates to the ordinary persistent
+operation. None of them inherits the C# rope tier's focused representation, memoized snapshot,
+callback ceiling, allocation bound, or amortized-locality claims.
+
+Because a cursor is a pure value, no uninitialized, moved-from, or disposed state is representable.
+The invalid-default contract that the C, C++, C#, and Rust ports must enforce at run time is
+discharged here by the type system — a consequence of immutability rather than an omitted check.
+
+The `Data.Structures.FingerTree` facade re-exports `RopeCursor` and every ordered-search cursor
+type. The remaining cursor types — the five sequence cursors below plus `MeasuredRopeCursor` and
+`TextRopeCursor` — are reachable only through their own modules.
+
+### General measured tree: the one true split cursor
+
+`Data.Structures.FingerTree.Measured` exports `Cursor v a` and `CursorSearch v a` (fields
+`cursorSearchCursor`, `cursorSearchFound`). This is the one family that is **not** a root-plus-index
+checkpoint: a cursor retains the snapshot together with the left and right trees of an actual split,
+so the ordered measure partition is already materialized.
+
+The surface is measure- and neighbor-oriented and deliberately invents no `count` or `position`,
+because an arbitrary monoid cannot be read as an index. Factories are `cursorAtStart`, `cursorAtEnd`,
+and `cursorByMeasure`, whose monotone-prefix predicate selects the gap before the first satisfying
+element and whose miss returns an end cursor with `cursorSearchFound == False`. `cursorIsAtStart`,
+`cursorIsAtEnd`, `cursorMeasureBefore`, and `cursorMeasureAfter` query it; `cursorPeekPrevious`,
+`cursorPeekNext`, `cursorMovePrevious`, `cursorMoveNext`, and `cursorSeekByMeasure` navigate it;
+`cursorInsert`, `cursorDeletePrevious`, `cursorDeleteNext`, and `cursorReplaceNext` edit it, and
+`cursorSnapshot` publishes it. Insertion returns the gap after the new element, `cursorDeletePrevious`
+moves the gap left, and forward deletion and replacement keep it fixed.
+
+`cursorMeasureBefore` and `cursorMeasureAfter` combine in that order to the snapshot measure, with no
+inverse, commutativity, or element equality assumed. Both are **O(1)**: each reads the cached root
+annotation of a retained half rather than performing a split, so this family alone does not pay a
+split to answer an ordered measure question. Peeks and unit movement are O(1) amortized along one
+cursor lineage and O(log n) worst at a spine crossing; branching immediately before a crossing can
+repeat that work independently, since deferred work in one branch is not paid for by a sibling. Edits
+reassemble the two sides and cost O(log(min(|left|, |right|))). `cursorSeekByMeasure` re-splits the
+retained snapshot from the root in O(log n) and does not reuse the open path. `cursorSnapshot` is
+O(1). Only `Show` is derived: a derived `Read` could fabricate a cursor whose retained snapshot
+disagrees with its two halves, and a derived structural `Eq` would contradict the extensional
+equality the deque snapshots use.
+
+### Positional sequence cursors
+
+`Deque.Cursor a`, `ReversibleDeque.Cursor a`, `RrbVector.Cursor a`, and
+`RangeUpdateSequence.Cursor element measureValue tag` share one positional gap protocol: `cursor`
+opens at gap zero, `cursorAt` validates a position in `0 .. count` and returns `Nothing` outside it,
+and `cursorPosition`, `cursorCount`, `cursorIsAtStart`, `cursorIsAtEnd`, `cursorPeekPrevious`,
+`cursorPeekNext`, `cursorMovePrevious`, `cursorMoveNext`, `cursorSeek`, `cursorInsert`,
+`cursorDeletePrevious`, `cursorDeleteNext`, `cursorReplaceNext`, and `cursorSnapshot` behave
+uniformly. Insertion returns the gap after the inserted values, `cursorDeletePrevious` moves the gap
+left, and forward deletion and replacement keep it fixed. `cursorCount` is an O(1) cached read and
+movement is O(1) in all four, because it rewrites only an integer.
+
+`Deque.Cursor` adds `cursorInsertList`, which returns the receiver for an empty list. Replacement is
+unconditional and carries no `Eq a`, because the deque has no element-equality policy. Peeks and
+point edits are O(log n) measured splits, and inserting `m` values is O(m + log n). Element counts
+are checked as the measure monoid combines them, so a length overflow raises rather than publishing
+a wrapped negative count that would make every cursor bound check meaningless.
+
+`ReversibleDeque.Cursor` adds `cursorReverse`, which maps gap `p` to `count - p`, swaps the logical
+sides, and is O(1) because the underlying reversal is a root mirror. Peeks are O(log n). Its edits,
+however, are the honest exception in this package: `cursorInsert`, `cursorInsertList`,
+`cursorDeletePrevious`, `cursorDeleteNext`, and `cursorReplaceNext` all round-trip the whole deque
+through a list and rebuild it, so each is **Θ(n)** and shares no structure with the source. The
+source and every retained snapshot remain valid and the results are correct; only the cost is
+linear. No locality claim is made for this family.
+
+`RrbVector.Cursor` adds `cursorInsertList` and `cursorInsertVector`, the latter splicing an existing
+vector through split-and-append with structural sharing. Its `cursorReplaceNext` requires `Eq a` and
+applies the vector's element-equality no-op rule, returning the source vector when the element is
+unchanged. Peeks and point edits are O(log32 n), `cursorInsertList` of `m` values is
+O(m + log32 n), and `cursorInsertVector` adds the vector's concat/rebalance bound. Count growth is
+checked before a result is constructed.
+
+`RangeUpdateSequence.Cursor` adds ordered measures and lazy-tag range operations:
+`cursorMeasureBefore`, `cursorMeasureAfter`, `cursorMeasurePrevious`, `cursorMeasureNext`,
+`cursorApplyPrevious`, and `cursorApplyNext`. `cursorApplyPrevious k tag` targets
+`[position - k, position)` and `cursorApplyNext k tag` targets `[position, position + k)`; both keep
+the gap fixed and validate the complete range before any identity test, tag action, or measure
+callback. A zero-length range or a semantically identity tag returns the source sequence unchanged.
+`cursorReplaceNext` carries no `Eq element`, so it always rebuilds, and earlier range tags do not
+transform the supplied replacement.
+
+Unlike the general measured tree above, this cursor is root-plus-position, so its ordered measure
+reads are **not** O(1): `cursorMeasureBefore` and `cursorMeasureAfter` call `measureRange`, which is
+O(1) only in its two boundary cases — an empty range returns the algebra's identity measure without
+invoking element or tag callbacks, and a whole-sequence range returns the cached root measure — and
+O(log n) otherwise. Peeks, point edits, range measures, and proper range updates are O(log n); a
+whole-sequence nonidentity tag remains the sequence's O(1) root update.
+
+Rope, measured-rope, and text cursors are described above and are unchanged by this tier.
+
+### Ordered-search cursors
+
+`Data.Structures.FingerTree.OrderedSearchCursor` holds one ordered gap cursor for each of seven
+families: `SortedBagCursor a`, `SortedSetCursor a`, `SortedMapCursor k v`,
+`CanonicalSortedSetCursor a`, `PrioritySearchQueueCursor k p v`, `IntervalTreeCursor a`,
+`IntervalMapCursor a v`, and `ChunkedBitSetCursor`. Two shared carriers appear throughout:
+`CursorSearch` with fields `cursorFound` and `searchCursor`, and `CursorInsert` with fields
+`cursorAdded` and `insertionCursor`.
+
+Each family follows one naming shape — `…CursorAt` for a validated rank, `…LowerBoundCursor` and
+`…UpperBoundCursor` for order bounds, `find…Cursor` for an exact search returning `CursorSearch`,
+then `…CursorPosition`, `…PeekPrevious`, `…PeekNext`, `…MovePrevious`, `…MoveNext`, `…SeekRank`, the
+family-appropriate edits, and `…Snapshot`. Every cursor denotes a gap whose *next* entry is the
+search candidate, so a miss is a usable insertion gap rather than an invalid state, and every
+factory retains the exact comparator, rank policy, or endpoint policy of its source.
+
+Family-specific rules:
+
+- `sortedBagAdd` always inserts at the **upper** bound, after every existing comparer-equal
+  occurrence, preserving the bag's stable equal-item insertion rule, and returns the gap after the
+  new occurrence. `sortedBagDeletePrevious` and `sortedBagDeleteNext` remove the exact occurrence at
+  that rank. There is deliberately no arbitrary in-run insertion and no replacement, because
+  changing an occurrence can move its sort position.
+- `sortedSetAdd` inserts an absent item at its lower bound and returns the gap after it; an
+  equivalent present class leaves the set unchanged, retains its first stored representative, and
+  still reports the gap after that class. Deletions remove the exact comparer class, and there is no
+  replacement.
+- `sortedMapInsert` is strict and returns `Nothing` for a duplicate key; `sortedMapTryInsert` reports
+  the same outcome through `CursorInsert`. `sortedMapSetItem` updates an exact hit or inserts at a
+  miss, and `sortedMapSetNextValue` rewrites the next value while retaining its stored key and gap.
+- `canonicalAdd` returns `Either CanonicalSetError`, because deriving a zip-zip rank is itself
+  fallible. The cursor retains the exact `ZipTreeRankPolicy`, and a closed result has the same
+  topology as the ordinary canonical operation for the same policy and contents.
+- The priority-search queue cursor is a **key-order** cursor; priority is cached augmentation, not a
+  second navigation order. `prioritySearchMinimumCursor` reads the cached winner and then performs
+  an ordinary key seek rather than walking a priority sequence that does not exist.
+  `prioritySearchSetNext` retains the stored key representative.
+- The interval-tree cursor is ordered by nondecreasing low endpoint. `findIntervalCursor` matches an
+  exact stored interval on both endpoints, `findOverlapCursor` and `findContainingCursor` locate a
+  first overlap, and `intervalTreeSeekNextOverlap` continues strictly after the focused occurrence
+  so a factory's hit cannot be rediscovered forever. `intervalTreeInsert` uses the facade's low-bound
+  placement, and deletions remove the exact occurrence at the cursor's rank rather than an ambiguous
+  equal interval.
+- The interval-map cursor is ordered by the unique complete `(low, high)` interval key.
+  `intervalMapTryInsert` reports whether a complete key was added, `intervalMapSetNextValue` retains
+  the stored interval representative, and the overlap factories and `intervalMapSeekNextOverlap`
+  mirror the interval-tree spellings.
+- The chunked-bit-set cursor traverses present set bits, not a dense Boolean sequence.
+  `chunkedBitSetCursorAt` takes an `Int64` population rank in `0 .. size`, while
+  `chunkedBitSetCursorAtOrAfter` and `findChunkedBitSetCursor` take a bit index; the latter adds the
+  found flag. `chunkedBitSetInsert` is an exact no-op for a bit already present — receiver and gap
+  both preserved — and otherwise returns the gap after the new bit. Deletions clear the exact
+  neighbouring bit.
+
+Every edit in this module calls the owning collection's ordinary persistent operation, so
+comparators, canonical ranks and rotations, winner caches, maximum-high summaries, and sparse-word
+contraction behave exactly as they do for a direct call.
+
+Complexity is uniform where the substrate is: `…CursorPosition` and `…Snapshot` are O(1), rank
+validation reads a cached count, and `…MovePrevious`/`…MoveNext`/`…SeekRank` are O(1) because they
+rewrite only an integer. Beyond that:
+
+- Sorted-bag peeks, bounds, additions, and deletions are O(log n) measured descents. Sorted-set and
+  sorted-map peeks, bounds, and edits are O(log n) in their `Data.Set`/`Data.Map` substrates.
+- `cursorBoundRank` and `cursorIndex` for the canonical sorted set and the priority-search queue are
+  single O(h) descents through cached subtree counts. For the AVL-backed queue that is O(log n); for
+  the canonical set, expected logarithmic height depends on the documented coherent pseudorandom
+  rank assumptions, and a degenerate rank policy makes `h = n`.
+- Interval-tree and interval-map indexed lookup and lower-bound ranks are O(log n).
+  `intervalTreeUpperBoundCursor` additionally probes forward once per equal-low occurrence, so an
+  equal-low run of length `d` costs O((1 + d) log n).
+- The overlap factories are the honest exception. `findOverlapCursor`, `findContainingCursor`,
+  `intervalTreeSeekNextOverlap`, and their interval-map counterparts probe candidate ranks one at a
+  time from the start rank, each with an O(log n) indexed lookup, and stop at the first overlap. A
+  hit at rank `r` from start `s` costs O((r - s + 1) log n), and a miss scans to the end at
+  Θ(n log n). They do **not** use the maximum-high pruning that `IntervalTree.findOverlap` and
+  `IntervalTree.findOverlaps` apply. Callers who need the pruned query should run it on the snapshot
+  and build a cursor from its result.
+- Chunked-bit-set membership, insertion, deletion, rank, and select are logarithmic in the number of
+  represented nonzero 64-bit words, plus bounded constant work inside one word.
 
 ```powershell
 cd src\Haskell

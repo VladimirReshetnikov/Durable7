@@ -107,6 +107,130 @@ normalized argument is empty.
 The six relation methods use the same eager normalization and distinct-class counts. Duplicate
 argument values count once under `Eq`/`Hash`.
 
+## Persistent ordered cursors
+
+The public `cursors` module supplies `PersistentOrderedSetCursor<T, S>`,
+`PersistentOrderedMapCursor<K, V, S>`, and `PersistentOrderedMultimapCursor<K, V, SK, SV>`, plus the
+two result carriers `OrderedCursorSearch<C> { found, cursor }` and
+`OrderedCursorInsert<C> { added, cursor }`. All five are re-exported from the crate root.
+
+Each cursor is a **Profile R root-plus-position semantic checkpoint**: it retains one complete
+collection value plus a validated `usize` gap, publishes both indexes atomically by delegating to
+the ordinary persistent operation, and retains no ordered-sequence context frames. None of the C#
+rope tier's focused representation, snapshot memo, callback ceiling, allocation bound, or amortized
+locality is claimed here. Sparse stamps never enter the cursor contract; a cursor position is a gap
+count, not a label.
+
+Rust ownership supplies the invalid-default contract that the C# struct cursors state explicitly.
+These types have no `Default` and no observable moved-from state, and use after a move is a
+compile-time error, so every nameable cursor is fully initialized. A cursor over an empty collection
+is an ordinary value with `position() == 0` for which `is_at_start` and `is_at_end` are both true.
+
+### Axes, factories, and navigation
+
+The set and map cursors use the collection's explicit position order — insertion order as modified
+by `move_to*`, `reverse`, and one-shot sorting. The multimap cursor uses the grouped pair rank of
+`iter`: key-group order first, then value order inside each group. It is a rank over a derived
+enumeration, not a retained global pair-arrival history.
+
+`cursor_at(position)` on all three returns `Option`, accepting `0..=len` for the set and map and
+`0..=pair_count()` for the multimap. `find_cursor` is the equality-search factory: the set takes a
+value, the map takes a key, and the multimap takes a `(key, value)` pair. The multimap additionally
+offers `find_group_cursor(key)`, which locates the first pair of a key's group. Every search factory
+returns `OrderedCursorSearch`; a hit places the gap immediately **before** the stored entry, and a
+miss returns `found: false` with a usable end cursor at `len` / `pair_count()`.
+
+Navigation is `position`, `is_at_start`, `is_at_end`, borrowed `peek_previous` / `peek_next`,
+`move_previous` / `move_next`, `seek(position)`, and `snapshot()`. The set and map cursors add `len`
+and `is_empty`; the multimap cursor exposes `pair_count()` instead. Boundary movement and an
+out-of-range seek return `None`, and `seek` to the current position returns a root-sharing clone
+without re-validating. Unlike the FingerTree crate's sequence cursors, `snapshot()` here returns a
+**borrow** of the retained collection (`&PersistentOrderedSet<T, S>` and siblings) rather than an
+owned clone; clone the borrow when an owned value is wanted. Snapshotting never consumes the cursor,
+and every retained cursor remains an independently branchable version.
+
+### The two discriminators
+
+`found` and `added` are deliberately different fields on deliberately different types, so no generic
+code written over either carrier can confuse them:
+
+- `OrderedCursorSearch::found` reports **presence**: `true` means an equivalent entry already exists
+  in the receiver. It is produced only by `find_cursor` and `find_group_cursor`, which never edit.
+- `OrderedCursorInsert::added` reports **publication**: `true` means the attempt created a new
+  entry. It is produced only by `try_insert`. A rejected duplicate reports `added: false` and
+  returns a cursor whose retained version shares roots with the receiver.
+
+The two therefore have opposite senses for the same key — a key that `find_cursor` reports as
+`found: true` is exactly a key that `try_insert` reports as `added: false` — which is why they are
+not one field on one type.
+
+### Edits and gap conventions
+
+The set cursor's `insert(value)` is infallible and returns `Self`, because a duplicate is the
+collection's own root-sharing no-op. The map cursor's `insert(key, value)` returns
+`Result<Self, DuplicateKey>`, re-using the HAMT crate's error type. The multimap cursor's
+`insert(key, value)` is infallible and takes an explicit key: it appends the value to that key's
+existing group, or appends a new trailing group, exactly as `PersistentOrderedMultimap::insert`
+does. It does **not** insert into the group the cursor currently focuses, and the resulting gap is
+therefore derived from where the pair actually landed in grouped order, which may be far from the
+receiver's gap. Everything else is `Option`-valued: `set_next_value`, `delete_previous`, and
+`delete_next` return `None` when the addressed neighbor does not exist.
+
+| Cursor and operation | Resulting gap |
+| --- | --- |
+| set `insert` / `try_insert` on an absent class | `position + 1` |
+| set `insert` / `try_insert` on a duplicate | `position`, unchanged, both roots retained |
+| map `insert` on an absent key | `position + 1` |
+| map `try_insert` on an absent key | `position + 1` |
+| map `try_insert` on a duplicate | the existing key's index — the gap **moves** to before the retained entry |
+| map `set_next_value` | `position`, unchanged |
+| multimap `insert` / `try_insert` on an absent pair | one past the inserted pair's grouped rank |
+| multimap `insert` / `try_insert` on a duplicate pair | `position`, unchanged, groups root retained |
+| any `delete_previous` | `position - 1` |
+| any `delete_next` | `position`, unchanged |
+
+The map's duplicate `try_insert` is the one case where a rejected edit relocates the gap; the set
+and multimap keep it. This is intentional — the map result focuses the retained entry so a caller
+can immediately `set_next_value` — but it is a real asymmetry across the three types and callers
+should not assume a uniform rule.
+
+There is no `replace_next` on the set or multimap cursors: replacing a representative would conflict
+with first-representative retention and could collide with another equality class. The map's
+`set_next_value` is the only in-place payload edit; it clones the stored key and routes through
+`set_item`, so the first key representative, its stamp, and its explicit position all survive, and
+an equal value shares both roots. All three cursors retain their source collection's exact
+`BuildHasher` policies, including on an empty result.
+
+Failure atomicity follows the collections. A panic in hashing, equality, cloning, or allocation
+abandons only an unpublished successor; the receiver cursor, its snapshot, and every retained branch
+remain valid. No half-updated membership index is observable, because the ordinary operation
+publishes the ordered sequence and the CHAMP index together.
+
+### Honest local complexity
+
+Let `w <= 7` be CHAMP depth and `c` an equal-hash collision scan.
+
+For the **set and map cursors**: `cursor_at`, `position`, `len`, `move_previous`, `move_next`, and
+`seek` are O(1) — they clone two `Arc` roots and rewrite an integer. `peek_previous` and `peek_next`
+are O(log n), one positional descent of the deque. `find_cursor` is O(w + c + log² n): one CHAMP
+probe recovers the private stamp, then `index_of_stamp` binary-searches the ordered sequence and
+pays an O(log n) positional descent for **every** probe, giving the squared-logarithmic stamp
+location tier. Insertion and deletion combine an O(w + c) index update with an O(log n) sequence
+edit; when the sparse-stamp gap between neighbors is exhausted, the ordinary relabel fallback
+rebuilds one complete version at O(n (w + c)) and the cursor is reconstructed at the contractually
+resulting gap. `snapshot` is O(1) and borrows.
+
+For the **multimap cursor** the bounds are materially worse and must not be read across from the
+other two. `pair_count`, `position`, `move_previous`, `move_next`, and `seek` are O(1), but
+`peek_previous` and `peek_next` walk the flattening iterator with `iter().nth(position)` and are
+therefore O(position), i.e. O(n) worst case in the pair count. `find_cursor` and
+`find_group_cursor` scan with `iter().position(..)` and are O(n). `insert` performs the ordinary
+grouped insertion and then re-scans the successor with `iter().position(..)` to locate the new
+pair's rank, so it is O(n) plus the hashed outer/group edit. `delete_previous` and `delete_next`
+recover their target through the same O(position) walk before removing it. The outer key groups do
+not cache value-group prefix counts, so no logarithmic random pair rank is available and none is
+claimed.
+
 ## Persistence and diagnostics
 
 `shares_roots_with`, `shares_order_storage_with`, and `shares_membership_root_with` expose sharing

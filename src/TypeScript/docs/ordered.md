@@ -114,6 +114,113 @@ Membership remains bounded-CHAMP-depth plus any equal-hash collision scan; posit
 movement, and edits are logarithmic in the sequence size, and enumeration is linear. This port does
 not inherit the tuned C# deque's endpoint amortization or struct-enumerator allocation claims.
 
+## Ordered cursors
+
+All three facades ship a public cursor: `PersistentOrderedSetCursor<T>`,
+`PersistentOrderedMapCursor<K, V>`, and `PersistentOrderedMultimapCursor<K, V>`. Each is a
+**Profile R root-plus-position semantic checkpoint** — an immutable exported class retaining one
+exact collection version plus a validated gap, delegating every edit to the ordinary persistent
+operation of that facade. None of them claims the C# rope tier's focused representation, snapshot
+memo, callback ceiling, allocation bound, or amortized-locality result; the private sparse `bigint`
+stamps never enter the cursor contract.
+
+The semantic axis is the collection's own explicit order. For the set and map the gap is a boundary
+in `0 .. size` over insertion/explicit-position order; for the multimap it is a boundary in
+`0 .. pairCount` over the **flattened grouped** pair enumeration — key-group order, then value order
+inside each group. The multimap cursor is therefore one pair-rank axis rather than the nested
+outer-group plus inner-value pair of cursors described for the reference design.
+
+| Contract area | Set | Map | Multimap |
+| --- | --- | --- | --- |
+| Factories | `getCursor`, `getCursorAtItem` | `getCursor`, `getCursorAtKey` | `getCursor`, `getCursorAtPair`, `getCursorAtGroup` |
+| State | `snapshot`, `position`, `size`, `isAtStart`, `isAtEnd` | same, with `size` | `snapshot`, `position`, `pairCount`, `isAtStart`, `isAtEnd` |
+| Navigation | `tryPeekPrevious`, `tryPeekNext`, `movePrevious`, `moveNext`, `seek` | same | same |
+| Edits | `insert`, `tryInsert`, `deletePrevious`, `deleteNext` | `insert`, `tryInsert`, `setNextValue`, `deletePrevious`, `deleteNext` | `add`, `tryAdd`, `deletePrevious`, `deleteNext` |
+
+`getCursor(position = 0)` builds a gap directly. The three equality-seek factories return
+`{ found, cursor }`; on a miss they return `found: false` with a usable cursor at the append position
+(`size`, or `pairCount` for the multimap) rather than an invalid state. `getCursorAtGroup` locates
+the group's first pair. All three constructors are public and validate their position, so there is no
+uninitialized cursor state.
+
+`tryPeekPrevious`/`tryPeekNext` on the set return the presence-discriminated
+`OrderedSetCursorPeek<T>` — `{ found: true, value }` or `{ found: false }` — so a stored `undefined`
+representative is never confused with a boundary. The map and multimap return an
+`OrderedMapEntry<K, V>` or `OrderedMultimapEntry<K, V>` object, or `undefined` at a boundary; the
+entry object itself is always present, so no separate discriminator is needed there.
+
+### Gap conventions and duplicate handling
+
+Insertion returns the gap after the newly ordered element; `deletePrevious` removes the entry before
+the gap and moves the gap left; `deleteNext` removes the entry after the gap and keeps the gap fixed.
+Every deletion updates the ordered sequence and the CHAMP index atomically through the facade's own
+`removeAt`/`remove`, so no publishable intermediate has a disagreeing pair of indexes and, for the
+multimap, no publishable intermediate holds an empty group.
+
+Duplicate handling deliberately follows each facade's ordinary contract, and the three differ:
+
+- **Set** `insert(item)` is a silent exact no-op for an existing equivalence class. It returns the
+  receiver cursor unchanged — the class is neither moved nor re-represented — and `tryInsert` reports
+  that through `{ inserted: false, cursor }` with `cursor === receiver`.
+- **Map** `insert(key, value)` is strict and throws `DuplicateKeyError` for an existing key.
+  `tryInsert` is the nonthrowing form and reports `{ inserted: false, cursor }` with the cursor placed
+  at the existing key's index.
+- **Multimap** `add(key, value)` follows grouped `add` semantics: a duplicate `(key, value)` pair is
+  an exact no-op returning the receiver cursor, while a new pair joins its existing group — so the
+  resulting gap is inside that group, not at the end of the enumeration.
+
+There is no `replaceNext` on the set, because replacement would conflict with first-representative
+retention and could collide with another class. The map's focus-local update is `setNextValue`, which
+routes through `set`: it preserves the stored key representative, the stamp, and the position, keeps
+the gap fixed, and applies the map's configured `valueEquals` no-op rule, returning the receiver
+cursor when the value is equivalent. No key rename, no positional movement, and no range insertion are
+exposed on any of the three cursors; use the facades' `moveTo`/`moveToFirst`/`moveToLast` and
+`insert`/`createRange` surfaces and take a fresh cursor.
+
+Every cursor retains the exact `HashPolicy` objects, the map's `valueEquals` function object, and the
+multimap's independent key and value policies. `snapshot` is a public readonly **property** holding
+the retained collection — not a `snapshot()` method as in the finger-tree, Patricia, and Merkle
+cursors — and reading it neither consumes nor invalidates the cursor. Every retained cursor and every
+sibling branch stays valid.
+
+### Errors and complexity
+
+`RangeError` carries **both** the bad-argument and the boundary channel. An out-of-range constructor
+or `seek` position raises it, and so do the boundary conditions "already at the start/end" and "has no
+previous/next entry". Callers cannot tell the two apart by exception type; test `isAtStart`,
+`isAtEnd`, and `size`/`pairCount` first, or use the `tryPeek*` members, which report a boundary as an
+absent result instead of throwing. `DuplicateKeyError` from map `insert` and
+`OrderedSetMissingValueError` from facade movement remain distinct types. A hash, equivalence, or
+value-equality callback that throws leaves the receiver cursor and its snapshot untouched.
+
+Let `n` be the collection size, `w` the bounded CHAMP depth, `c` an equal-hash collision scan, `k` the
+multimap's key-group count, and `p` its pair count.
+
+Set and map:
+
+- Cursor creation, `size`, `position`, `isAtStart`, `isAtEnd`, `snapshot`: O(1).
+- `getCursorAtItem`/`getCursorAtKey`: O(w + c) index lookup plus an O(log n) stamp locate.
+- `tryPeekPrevious`/`tryPeekNext`: O(log n).
+- `movePrevious`, `moveNext`, `seek`: O(1); the following peek pays a fresh O(log n) descent, so a
+  full traversal by move-plus-peek is O(n log n).
+- `insert`, `tryInsert`, `setNextValue`, `deletePrevious`, `deleteNext`: O(w + c) index work plus
+  O(log n) sequence work, and O(n(w + c)) on a version whose insertion exhausts the sparse label gap
+  and triggers a relabel.
+
+Multimap — the flattened pair axis is **not** backed by a pair-prefix measure, and the port does not
+pretend otherwise:
+
+- Cursor creation, `pairCount`, `position`, `isAtStart`, `isAtEnd`, `snapshot`: O(1).
+- `tryPeekPrevious`/`tryPeekNext`: **O(p)**. Pair-rank selection walks the grouped enumeration from
+  the beginning rather than descending a cached prefix count.
+- `getCursorAtPair` and `getCursorAtGroup`: **O(p)** for the same reason.
+- `movePrevious`, `moveNext`, `seek`: O(1), with the same O(p) cost on the next peek.
+- `add`/`tryAdd`: the grouped insertion itself is O(w_k + c_k) outer plus O(w_v + c_v) inner index
+  work with O(log k + log v) sequence closure, but locating the resulting gap re-scans the published
+  successor, making the whole call **O(p)**.
+- `deletePrevious`/`deleteNext`: O(p) to identify the focused pair plus the grouped removal's index
+  and sequence work.
+
 ## Validation
 
 The Ordered suites port the C# examples, boundaries, representative rules, grouped-multimap order

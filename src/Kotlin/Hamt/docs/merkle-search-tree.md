@@ -90,6 +90,79 @@ The tree retains caller key and value references exactly as JVM objects. It sepa
 canonical bytes captured at insertion time. Public encoded-byte APIs return fresh arrays, so callers
 cannot mutate tree content addresses through returned buffers.
 
+## Ordered Persistent Cursor
+
+`MerkleSearchTreeCursor<K, V>` is the specialized ordered cursor for this family. It retains one
+exact immutable tree snapshot plus a comparator-order rank gap in `0..size`, and it is a **Profile R
+root-plus-rank semantic checkpoint** in the sense of the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md).
+It deliberately inherits none of the C# rope tier's focused representation, prepared-measure
+fragments, snapshot memo, callback ceiling, allocation bound, or amortized-locality claim. Block
+topology, levels, digests, and canonical bytes stay private; ordered key navigation is the only
+exposed axis.
+
+Create a cursor from the tree:
+
+```text
+cursor()                 // gap zero
+cursorAt(position)       // null outside 0..size
+cursorAtEnd()            // gap size
+lowerBoundCursor(key)    // gap before the first key >= the argument
+upperBoundCursor(key)    // gap after an exact hit, otherwise the lower bound
+cursorAtKey(key)         // MerkleCursorSearch(cursor, found)
+```
+
+`MerkleCursorSearch<K, V>` publishes a separate `found` flag, so an exact-key miss still returns a
+usable insertion gap rather than an invalid cursor. The bound factories preserve the exact policy
+object even on an empty tree.
+
+Cursor members are `size`, `position`, `isAtStart`, `isAtEnd`, `peekPrevious`, `peekNext`,
+`movePrevious`, `moveNext`, `seek`, `insert`, `setItem`, `setNextValue`, `deletePrevious`,
+`deleteNext`, and `snapshot`. Peeks return `MerkleEntry<K, V>?`, so a present entry whose value is
+`null` remains distinguishable from a missing neighbor.
+
+Navigation and edits are immutable and return new cursor values. `insert` strictly rejects a key that
+is already present, and both `insert` and `setItem` additionally reject a key whose lower-bound rank
+is not the current gap; both failures raise `IllegalArgumentException`. Gap conventions after each
+edit are:
+
+| Operation | Resulting gap |
+| --- | --- |
+| `insert(key, value)` | `position + 1`, immediately after the new entry |
+| `setItem(key, value)` on an exact hit | `position`, unchanged |
+| `setItem(key, value)` on a miss | `position + 1` |
+| `setNextValue(value)` | `position`, unchanged; the stored key representative is retained |
+| `deleteNext()` | `position`, unchanged |
+| `deletePrevious()` | `position - 1` |
+
+The identity rules of the owning tree carry through unchanged. `setItem` and `setNextValue` return
+this exact cursor when the replacement encodes to identical canonical value bytes, because the
+ordinary `MerkleSearchTree.setItem` returns the same tree object. `seek` to the current position
+returns the same cursor. Boundary operations return `null`: `peekPrevious` and `movePrevious` at the
+start, `moveNext` at the end, `seek` outside `0..size`, and `setNextValue`, `deleteNext`, or
+`deletePrevious` with no neighbor. Position growth uses `Math.addExact` and raises
+`ArithmeticException` before publication.
+
+Every cursor edit calls the ordinary canonical `setItem` or `remove`. Key-derived geometric levels,
+canonical block geometry, `MST2` bytes, root digests, first-key-representative retention, codec round
+trips, and failure atomicity are therefore identical to direct tree edits — the cursor adds no second
+publication path. Cursor state is purely local navigation state and never appears in an `MST2` block,
+an `MSP2` proof, a pack, or a store.
+
+The cursor is an ordinary immutable class with a private constructor and no public `copy`, so there
+is no uninitialized, default, moved-from, or disposed state; the only invalid outcome is a factory
+returning `null`. `snapshot()` returns this cursor version's canonical tree in O(1) and never
+consumes the cursor, and every retained cursor and snapshot stays valid and branchable. Published
+cursors are safe for concurrent read-only use to the same extent as the retained tree and its
+comparator and codec callbacks.
+
+Let `h` be the block height and `b` the entry count of a visited block. Rank lookup descends using
+cached subtree counts, and lower-bound search binary-searches each block's separators; both visit
+O(h) blocks, performing O(log b) comparator calls plus an O(b) child-count summation per block. Unit
+movement, `seek`, and `snapshot` are O(1), while the next peek pays the rank descent, so no
+O(1)-amortized traversal is claimed. Cursor edits carry the ordinary O(h)-block path copy and its
+re-encoding cost.
+
 ## Exact `MST2` Blocks
 
 The empty-tree address is SHA-256 over this 37-byte manifest:

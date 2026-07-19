@@ -52,6 +52,7 @@ The Kotlin surface provides:
 - `prepend`, element `append`, `insertAt`, `setItem`, and `removeAt`;
 - `concat`, `splitAt`, and `getRange`;
 - `applyRange` and `measureRange`;
+- `cursor()` and `cursorAt(position)` producing a `RangeUpdateSequenceCursor<T, M, Tag>`;
 - `validateStructure`, `sharesRootWith`, and test-facing `sharesStructureWith` diagnostics.
 
 Invalid indices, boundaries, and ranges return `null`, matching the existing Kotlin workspace.
@@ -85,6 +86,88 @@ the inherited action when observed.
 values. `applyRange` splits at both boundaries, applies one lazy tag to the isolated middle root, and
 joins the pieces. Split/join paths copy AVL spines; pushing may additionally replace an off-spine
 child root while retaining that child's interior. No node reachable from an older facade is mutated.
+
+## Positional and measured cursor
+
+`RangeUpdateSequenceCursor<T, M, Tag>` is a **Profile R snapshot-plus-position semantic checkpoint**
+in the sense of the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md).
+It retains one exact `RangeUpdateSequence` version plus a validated gap in `0..size`, and every edit,
+measure, and tag operation delegates to the ordinary persistent operation described above. It
+inherits none of the C# rope tier's focused representation, prepared-measure fragments, snapshot
+memo, callback ceiling, allocation bound, or amortized-locality claim.
+
+`RangeUpdateSequence.cursor()` creates the gap-zero cursor; `cursorAt(position)` returns `null`
+outside `0..size`. The cursor is an ordinary immutable class with a private constructor, so there is
+no uninitialized, default, or consumed state. `snapshot()` returns the exact retained sequence in
+O(1) and never consumes the cursor; retained cursors remain valid and branchable.
+
+```text
+size, position, isAtStart, isAtEnd
+measureBefore, measureAfter
+peekPrevious / peekNext
+movePrevious / moveNext / seek
+insert / deletePrevious / deleteNext / replaceNext
+measurePrevious(count) / measureNext(count)
+applyPrevious(count, tag) / applyNext(count, tag)
+snapshot
+```
+
+Gap conventions follow the shared positional model: `insert` leaves the gap after the inserted value,
+`deletePrevious` is backspace and moves the gap left, and `deleteNext` and `replaceNext` address the
+next element and keep the gap fixed. `seek` to the current position returns the same cursor by
+identity. `replaceNext` uses `setItem`, so a replacement element does **not** receive older range
+tags. There is no `insertRange`.
+
+### Measures and relative ranges
+
+`measureBefore` is `measureRange(0, position)` and `measureAfter` is
+`measureRange(position, size - position)`, so `combine(measureBefore, measureAfter)` equals `measure`
+in that order. Both reflect every carried tag, because the underlying descent composes an ancestor
+tag as the newer action over each node's pending tag without publishing pushed nodes. Neither
+accessor splits or path-copies the tree; both are read-only descents that consume a fully covered
+subtree's cached logical measure directly. At the start and end gaps one side degenerates to the
+whole-sequence O(1) cached measure and the other to the monoid identity, with no element or tag
+callback.
+
+`measurePrevious(k)` measures `[position - k, position)` and `measureNext(k)` measures
+`[position, position + k)`. `applyPrevious(k, tag)` targets `[position - k, position)` and
+`applyNext(k, tag)` targets `[position, position + k)`; both keep the gap fixed. All four validate
+the complete range with subtraction-safe arithmetic **before** any `isIdentity`, measure, or tag
+callback runs.
+
+### Error channel
+
+The cursor's channel is split by operation kind rather than by type:
+
+| Channel | Operations |
+| --- | --- |
+| `null` result | `cursorAt` outside `0..size`; `peekPrevious`/`peekNext` at a boundary; `movePrevious`/`moveNext` at a boundary; `seek` outside `0..size`; `deletePrevious`/`deleteNext` at a boundary; `replaceNext` at the end gap |
+| Thrown exception | `measurePrevious`, `measureNext`, `applyPrevious`, and `applyNext` reject a negative or oversized `count` with `IllegalArgumentException` from `require`; `insert` rejects count growth past `Int.MAX_VALUE` with `ArithmeticException`; algebra callbacks propagate their own exceptions |
+
+This is the only cursor family in the Kotlin FingerTree workspace whose *read* operations throw, and
+the reason is that a range length is a caller-supplied argument rather than a boundary the cursor
+already owns. A failed precondition or a throwing algebra callback leaves the receiver cursor and its
+snapshot unchanged and retryable.
+
+### Cursor complexity
+
+| Operation | Worst-case structural bound |
+| --- | --- |
+| create, `movePrevious`/`moveNext`, `seek`, `snapshot` | O(1) |
+| `peekPrevious`/`peekNext` | O(log n), no persistent node allocation |
+| `measureBefore`/`measureAfter` at the start or end gap | O(1) |
+| proper `measureBefore`/`measureAfter`, `measurePrevious`, `measureNext` | O(log n), no persistent node allocation |
+| `insert`, `deletePrevious`, `deleteNext`, `replaceNext` | O(log n) copied nodes |
+| zero-length `applyPrevious`/`applyNext`, or a recognized identity tag | O(1), receiver retained |
+| whole-sequence `applyPrevious`/`applyNext` | O(1), one replacement root |
+| proper `applyPrevious`/`applyNext` | O(log n) copied nodes |
+
+The whole-sequence O(1) tag result is available here only because this port is a clean
+root-plus-gap checkpoint that hands the complete range to `applyRange`; it is not a claim about a
+dirty focused path, and no focused representation is implemented. Unit navigation is O(1) on the
+position alone, but the following peek or measure pays the table's descent cost, so no
+O(1)-amortized traversal is claimed. As above, these bounds treat algebra callbacks as O(1).
 
 ## Complexity
 

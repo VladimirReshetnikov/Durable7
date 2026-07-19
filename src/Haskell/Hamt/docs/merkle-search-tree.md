@@ -61,6 +61,75 @@ diagnostics. Validation re-encodes every key and value, recomputes hash levels, 
 intervals and descending child levels, verifies cached count/height/block-count/minimum/maximum
 metadata, rebuilds every complete block, and authenticates every digest.
 
+## Ordered persistent cursor
+
+`MerkleCursor k v` is an immutable snapshot-plus-rank gap cursor in policy-comparer key order. It
+retains one exact tree version plus a validated rank in `0 .. size` and denotes the gap between the
+entries before and at that rank. It is a navigator over an already trusted in-memory tree, never an
+editor for raw stored blocks.
+
+Factories are `cursor` (gap zero), `cursorAt` (a validated rank, `Nothing` outside `0 .. size`),
+`cursorAtEnd`, `lowerBoundCursor`, `upperBoundCursor`, and `cursorAtKey`. `cursorAtKey` returns a
+`MerkleCursorSearch k v` that publishes a separate found flag: `cursorSearchFound` reports whether
+the next entry is the exact key, and `cursorSearchCursor` is the lower-bound gap either way, so a
+miss still yields a usable insertion gap rather than an invalid cursor.
+
+`cursorCount`, `cursorPosition`, `cursorIsAtStart`, and `cursorIsAtEnd` query a cursor without
+descending. `cursorPeekPrevious` and `cursorPeekNext` return the neighbouring `MerkleEntry k v` in
+`Maybe`, so a stored `Nothing` payload stays distinguishable from a boundary. `cursorMovePrevious`,
+`cursorMoveNext`, and `cursorSeek` return a new cursor over the same logical version, and a same-rank
+`cursorSeek` returns the receiver unchanged. `cursorSnapshot` returns the retained tree and never
+consumes the cursor, so every retained ancestor remains valid and branchable.
+
+Edits keep these gap conventions:
+
+- `cursorInsert` strictly adds a missing key and returns the gap after the new entry;
+- `cursorPut` updates the exact next entry with the gap fixed, or inserts at a missing lower-bound
+  gap and returns the gap after the new entry;
+- `cursorSetNextValue` replaces the next value, retains its stored key representative, and keeps the
+  gap fixed;
+- `cursorDeletePrevious` removes the preceding entry and moves the gap left; and
+- `cursorDeleteNext` removes the next entry and keeps the gap fixed.
+
+Two result channels are in play, and they carry different information. `cursorInsert` and `cursorPut`
+return `Either MerkleCursorEditError`, whose constructors name the three failures separately:
+`MerkleCursorDuplicateKey` for a key the tree already holds, `MerkleCursorWrongGap expected actual`
+for a key whose lower-bound rank is not the current gap — carrying both ranks, so the caller can
+reseek without a second search — and `MerkleCursorTreeError` wrapping an ordinary codec, comparator,
+or construction failure. `cursorSetNextValue`, `cursorDeletePrevious`, and `cursorDeleteNext` instead
+return `Either MerkleTreeError (Maybe (MerkleCursor k v))`, which layers the two orthogonal outcomes
+rather than conflating them: `Left` is a genuine tree failure, `Right Nothing` means the requested
+neighbour does not exist, and `Right (Just cursor)` is the published successor.
+
+Every edit calls the ordinary canonical `insert`/`delete`. Policy, comparator, first-key
+representative retention, canonical value-byte no-op recognition, hash levels, `MST2` block bytes,
+block digests, and the root digest are therefore identical to those produced by a direct tree edit
+with the same logical contents, and failure atomicity is likewise inherited: a `Left` publishes no
+tree and leaves the receiving cursor and every retained snapshot usable. Cursor state is local
+navigation state only. It never appears in an `MST2` block, an `MSP2` query, a pack, a proof, a sync
+plan, or a store, and `cursorSnapshot` publishes a complete canonical in-memory tree without writing
+to a `MerkleBlockStore`. Build a cursor only from a tree constructed normally or obtained through a
+fully verified `loadTree`/`importPack`; the cursor weakens no codec round-trip check and relaxes no
+verification budget.
+
+Cursors are opaque pure values with hidden constructors. No uninitialized, moved-from, or disposed
+state is representable, so the invalid-default contract that the C, C++, C#, and Rust ports enforce
+at run time is discharged here by the type system — a deliberate consequence of immutability rather
+than an omitted check.
+
+This is a Profile R snapshot-plus-rank checkpoint in the sense of the repository-wide persistent
+cursor design, and it claims none of the C# rope tier's focused representation, memoized snapshot,
+callback ceiling, allocation bound, or amortized-locality properties. Let `h` be block height and
+`e_i` the entry occupancy of visited block `i`. `size`, `cursorCount`, `cursorPosition`, and
+`cursorSnapshot` are O(1). Moving the gap is O(1), because it rewrites only an integer. Nodes cache
+each child's total subtree count rather than cumulative child-prefix ranks, so `cursorPeekPrevious`,
+`cursorPeekNext`, and every key- or rank-based factory re-descend from the root and scan child counts
+within each visited block, costing O(sum (e_i + 1)) work. A key seek locates its separator by binary
+search, so it spends only O(sum log (e_i + 1)) comparator calls inside that same O(sum (e_i + 1))
+bound; the linear term is count accumulation, not comparison. A complete traversal by repeated
+move-plus-peek is therefore O(n · sum (e_i + 1)), not O(n). Each edit costs one ordinary canonical
+`insert`/`delete` plus the re-encoding of the changed blocks. Cursor context is O(1) in space.
+
 ## `MST2` wire
 
 The empty manifest is:

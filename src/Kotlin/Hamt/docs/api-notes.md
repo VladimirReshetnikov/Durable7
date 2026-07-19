@@ -22,6 +22,9 @@ Primary entry points:
 - `DuplicateKeyException`, `AddResult<T>`, and removal result records.
 - `ConcurrentHashTrie<K,V>` and its immutable `Snapshot<K,V>`.
 - `PersistentIntMap<V>` / `PersistentIntSet` and `PersistentLongMap<V>` / `PersistentLongSet`.
+- `PersistentIntMapCursor<V>`, `PersistentLongMapCursor<V>`, `PersistentIntSetCursor`,
+  `PersistentLongSetCursor`, and their `PatriciaMapEntry<K, V>` / `PatriciaCursorSearch<C>` carriers.
+- `MerkleSearchTreeCursor<K, V>` and `MerkleCursorSearch<K, V>`.
 - `MerkleSearchTree<K, V>`, `MerkleSearchTreePolicy<K, V>`, `MerkleEntry<K, V>`, and the
   `MerkleMapDifference<K, V>` variants.
 - `MerkleCodec<T>`, `MerkleDigest`, the strict built-in codecs, and `MerkleEncodedBlock`.
@@ -227,6 +230,70 @@ result-tree traversal. Map `union` and `intersect` overloads accept a
 `(key, leftValue, rightValue) -> value` function that is invoked exactly for keys present in both
 operands; disjoint subtrees remain structurally shared.
 
+### Patricia Persistent Cursors
+
+CHAMP itself has no public cursor, because hash-trie order has no semantic neighbor. The Patricia
+family does: ascending signed key order is public, so `PersistentIntMap<V>`, `PersistentLongMap<V>`,
+`PersistentIntSet`, and `PersistentLongSet` each ship an ordered gap cursor.
+`PersistentIntMapCursor<V>`, `PersistentLongMapCursor<V>`, `PersistentIntSetCursor`, and
+`PersistentLongSetCursor` are **Profile R root-plus-rank semantic checkpoints** in the sense of the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md):
+each retains one exact collection version plus a validated rank in `0..size`, and every edit
+delegates to the ordinary persistent `put`, `add`, or `remove`. They inherit none of the C# rope
+tier's focused representation, memo, callback ceiling, allocation bound, or amortized-locality
+claim. No compressed bit path, prefix, or branching mask becomes public.
+
+The collection-side factories are:
+
+```text
+cursor()                    // gap zero
+cursorAt(position)          // null outside 0..size
+cursorAtEnd()               // gap size
+lowerBoundCursor(key)       // gap before the first key >= the argument
+upperBoundCursor(key)       // gap after an exact hit, otherwise the lower bound
+cursorAtKey(key)            // maps: PatriciaCursorSearch(cursor, found)
+cursorAtItem(value)         // sets: PatriciaCursorSearch(cursor, found)
+```
+
+`PatriciaCursorSearch<C>` publishes a separate `found` flag, so a miss still yields a usable
+insertion gap rather than an invalid cursor. Map peeks return `PatriciaMapEntry<K, V>?`, whose
+`value` may itself legitimately be `null`; set peeks return `Int?` or `Long?` keys directly.
+
+Cursor members are `size`, `position`, `isAtStart`, `isAtEnd`, `peekPrevious`, `peekNext`,
+`movePrevious`, `moveNext`, `seek`, `deletePrevious`, `deleteNext`, `snapshot`, plus map `insert`,
+`put`, and `setNextValue`, or set `add`.
+
+These cursors **validate the gap** rather than relocating to it. `insert`, `put`, and `add` first
+compute the argument's lower-bound rank and reject a rank that is not the current gap with
+`IllegalArgumentException`; `insert` additionally rejects a key that is already present. That is a
+deliberate difference from the FingerTree ordered-search cursors, which silently relocate to the
+key's own ordered location.
+
+Gap conventions after each edit:
+
+| Operation | Resulting gap |
+| --- | --- |
+| `insert(key, value)`, `add(value)` on a miss | `position + 1`, immediately after the new entry |
+| `put(key, value)` on an exact hit | `position`, unchanged |
+| `put(key, value)` on a miss | `position + 1` |
+| `setNextValue(value)` | `position`, unchanged; the stored key representative is retained |
+| `deleteNext()` | `position`, unchanged |
+| `deletePrevious()` | `position - 1` |
+
+Identity-preserving no-ops return the receiver cursor itself: `put` and `setNextValue` when the
+underlying map returns the same root under its value-equality rule, `add` for an already-present
+item, and `seek` to the current position. Boundary operations return `null` — `peekPrevious` and
+`movePrevious` at the start, `moveNext` at the end, `seek` outside `0..size`, and `setNextValue`,
+`deleteNext`, or `deletePrevious` with no neighbor. Position growth uses `Math.addExact`, so an
+unrepresentable count raises `ArithmeticException` before publication.
+
+Every Patricia node caches its subtree cardinality. Rank lookup is one count-guided descent and
+lower-bound search is one prefix-guided descent accumulating left-subtree counts, so both are
+**O(width)** — bounded by the 32 or 64 key bits, not by O(log n). Edits pay the ordinary compressed
+spine path copy. Cursor creation, movement, `seek`, and `snapshot` are O(1). Cursor state is purely
+local navigation state: it never enters the trie, and `snapshot()` returns the exact retained
+collection.
+
 ## Merkle Search Tree
 
 `MerkleSearchTreePolicy<K, V>` combines comparator semantics, a caller-owned policy ID, and
@@ -243,6 +310,12 @@ tree object, while changed paths share untouched block objects. Lookups preserve
 `getEntry`; iteration and `enumerateRange` use explicit stacks; `diff` skips matching block digests
 and returns unambiguous added/removed/changed variants. `contentEquals` compares compatible content
 addresses, while `mapEquals` permits a caller-supplied value relation.
+
+`cursor`, `cursorAt`, `cursorAtEnd`, `lowerBoundCursor`, `upperBoundCursor`, and `cursorAtKey` create
+the ordered `MerkleSearchTreeCursor<K, V>` described in
+[Merkle search tree](merkle-search-tree.md#ordered-persistent-cursor). Its edits call the ordinary
+canonical operations, so policy, representative, encoding, digest, and failure behavior are identical
+to direct tree edits.
 
 The tree retains caller key and value references. Codecs own their encoded byte snapshots, and all
 public byte-returning APIs return defensive copies. `blocksPreorder`, `shape`, `sharedBlockCount`,

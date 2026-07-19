@@ -10,23 +10,33 @@ The public crate is `tools-data-structures-fingertree`, with library name
 
 Current public families:
 
-- `PersistentDeque<T>` and `ReversibleDeque<T>`;
+- `PersistentDeque<T>` and `ReversibleDeque<T>`, with `PersistentDequeCursor<T>` and
+  `ReversibleDequeCursor<T>`;
 - `DabaLite<T, M>`, `DabaMonoid<T>`, `DabaLiteStatistics`, and the empty/invariant error types;
-- `RrbVector<T>`, `RrbVectorBuilder<T>`, and the split/pop/statistics result types;
-- `CanonicalSortedSet<T>`, `ZipTreeRankPolicy<T>`, stable comparer/hash traits and built-ins,
+- `RrbVector<T>`, `RrbVectorCursor<T>`, `RrbVectorBuilder<T>`, and the split/pop/statistics result
+  types;
+- `CanonicalSortedSet<T>`, `CanonicalSortedSetCursor<T>`, `CanonicalCursorSearch<T>`,
+  `ZipTreeRankPolicy<T>`, stable comparer/hash traits and built-ins,
   algebra/diff result types, validation statistics, and policy/invariant errors;
 - `BrodalOkasakiHeap<T>`, `BrodalMinimumView<T>`, ordering policy/comparer types,
   validation statistics, and meld/invariant errors;
-- `PrioritySearchQueue<K, P, V>`, `PrioritySearchEntry<K, P, V>`, add/remove/minimum result
+- `PrioritySearchQueue<K, P, V>`, `PrioritySearchQueueCursor<K, P, V>`,
+  `PrioritySearchCursorSearch<K, P, V>`, `PrioritySearchEntry<K, P, V>`, add/remove/minimum result
   handles, borrowing iterators, validation statistics, and range/invariant errors;
-- `FingerTree<T, P>` over `MeasurePolicy<T>`;
+- `FingerTree<T, P>` over `MeasurePolicy<T>`, with `FingerTreeCursor<T, P>` and
+  `FingerTreeCursorSearch<T, P>`;
 - built-in policies `SizeMeasure`, `SumMeasure<T>`, `MaxMeasure`, `MinMeasure`, `KeyMeasure<T>`,
   `ProductMeasure<T, PFirst, PSecond>` with `MeasurePair<TFirst, TSecond>`, and
   `OrderStatisticMeasure<T>` with `RankedKey<T>`;
-- `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`;
+- `SortedBag<T>`, `SortedSet<T>`, and `SortedMap<K, V>`, with `SortedBagCursor<T>`,
+  `SortedSetCursor<T>`, `SortedMapCursor<K, V>`, `OrderedCursorSearch<C>`, and
+  `OrderedCursorInsert<C>`;
 - `PriorityQueue<T, P>` and `PriorityEntry<T, P>`;
-- `Interval<T>`, `IntervalTree<T>`, `PersistentIntervalMap<T, V>`, and interval-map result types;
-- `PersistentChunkedBitSet`, `ChunkedBitSetStatistics`, `NegativeBitIndex`, and its invariant error;
+- `Interval<T>`, `IntervalTree<T>`, `IntervalTreeCursor<T>`, `IntervalCursorSearch<T>`,
+  `PersistentIntervalMap<T, V>`, `PersistentIntervalMapCursor<T, V>`,
+  `IntervalMapCursorSearch<T, V>`, and interval-map result types;
+- `PersistentChunkedBitSet`, `PersistentChunkedBitSetCursor`, `ChunkedBitSetCursorSearch`,
+  `ChunkedBitSetStatistics`, `NegativeBitIndex`, and its invariant error;
 - `Rope<T>`, positional `RopeCursor<T>`, `MeasuredRope<T, P>`, `MeasuredRopeCursor<T, P>`,
   `MeasuredRopeCursorSearch<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope`, `TextRopeCursor`,
   `TextRopeCursorSearch`, `RopeBuilder`, `NewlineMeasure`, `NewlineStyle`, and `LineColumn`.
@@ -85,6 +95,248 @@ word order, nonzero words, and exact cached chunk/population summaries.
 Lookup, point edits, rank, and select are logarithmic in the number of represented words, plus
 constant 64-bit word work. Algebra is linear in the combined represented-word counts. The signed
 32-bit domain is intentional cross-language API parity rather than a Rust machine-word limit.
+
+## Persistent cursor tier
+
+Beyond the rope cursors documented below, the crate ships public cursors for the deque, reversible
+deque, RRB vector, general measured finger tree, sorted bag/set/map, canonical zip-zip sorted set,
+priority-search queue, interval tree, interval map, and chunked bit set. `PriorityQueue<T, P>`,
+`BrodalOkasakiHeap<T>`, `DabaLite<T, M>`, and the RRB/rope builders deliberately have no cursor:
+the two heaps expose the minimum as their only semantic location, and the DABA window and builders
+are mutable lifecycles rather than persistent aggregate values.
+
+Every one of these is a **Profile R semantic checkpoint** — a retained collection value plus a
+validated gap or rank, whose edits delegate to the ordinary persistent operation. None of them
+retains context frames, and none inherits the C# rope tier's focused representation, bounded focus,
+carry flush, prepared-measure fragments, snapshot memo, callback ceiling, allocation bound, or
+amortized-locality claims. The sibling checkpoints in this crate make no such claim either.
+
+Rust ownership provides the invalid-default contract that the C# struct cursors have to state
+explicitly. No cursor type implements `Default`, no moved-from state is observable, and use after a
+move is a compile-time error, so every nameable cursor is fully initialized. A cursor over an empty
+collection is an ordinary value at gap zero for which `is_at_start` and `is_at_end` are both true.
+
+The error channel is **not** uniform across the crate, and callers should not assume it is:
+
+- boundary movement, an out-of-range seek, and an absent neighbor always use `Option`;
+- `SortedMapCursor::insert` returns `Result<Self, DuplicateKeyError>`;
+- `CanonicalSortedSetCursor::insert` returns `Result<Self, CanonicalSetError>` for an incoherent
+  rank hash;
+- `PrioritySearchQueueCursor::insert` returns `Result<Self, PrioritySearchAddResult<K, P, V>>`,
+  carrying the rejected attempt's result record as its error;
+- `PersistentChunkedBitSetCursor::insert` returns `Result<Self, NegativeBitIndex>`; and
+- the interval-map cursor validates directly constructed public-field intervals, so
+  `cursor_at_lower_bound`, `cursor_at_upper_bound`, `find_cursor`, `find_overlap_cursor`,
+  `seek_next_overlap`, `insert`, `set_next_value`, `delete_previous`, and `delete_next` all return
+  `Result<_, IntervalMapError>`, with the deletions and `set_next_value` nesting an `Option` inside
+  that `Result`.
+
+`snapshot` is likewise not uniform. The sequence cursors — deque, reversible deque, RRB vector,
+general measured tree, and the rope family — return an owned root-sharing collection clone, while
+the ordered and search cursors — sorted bag/set/map, canonical set, priority-search queue, interval
+tree, interval map, and chunked bit set — return a borrow of the retained collection. Neither form
+consumes the cursor.
+
+Search factories that can miss return a presence-discriminated record rather than an invalid cursor:
+`OrderedCursorSearch<C>` for the sorted family, `FingerTreeCursorSearch<T, P>`,
+`CanonicalCursorSearch<T>`, `PrioritySearchCursorSearch<K, P, V>`, `IntervalCursorSearch<T>`,
+`IntervalMapCursorSearch<T, V>`, and `ChunkedBitSetCursorSearch`. In all of them `found` reports
+presence only. The sorted family additionally exposes `OrderedCursorInsert<C>`, whose `added` field
+reports publication; the two are separate types so generic code cannot confuse the discriminators,
+and a key reported `found: true` is exactly a key reported `added: false`.
+
+## Sequence cursors
+
+`PersistentDeque::cursor()` and `cursor_at(position)` create `PersistentDequeCursor<T>`;
+`ReversibleDeque` and `RrbVector` expose the same pair for `ReversibleDequeCursor<T>` and
+`RrbVectorCursor<T>`. `cursor_at` accepts every gap in `0..=len` and returns `None` outside it. All
+three share the positional vocabulary `len`, `is_empty`, `position`, `is_at_start`, `is_at_end`,
+borrowed `peek_previous` / `peek_next`, `move_previous` / `move_next`, `seek`, `insert`,
+`insert_range`, `delete_previous`, `delete_next`, `replace_next`, and `snapshot`. Unlike the Ordered
+crate's cursors, `snapshot` here returns an owned root-sharing collection clone rather than a
+borrow. Empty-range insertion and seeking to the current position return unchanged root-sharing
+cursors.
+
+Gap conventions are uniform in this family: `insert` and `insert_range` leave the gap after the
+inserted values, `delete_previous` implements backspace and moves the gap left, and `delete_next`
+and `replace_next` keep it fixed. Sequences have no element-equality policy, so `replace_next` is
+unconditional on the deque and reversible deque; the RRB vector's `replace_next` routes through
+`set_item` and therefore applies the vector's existing equal-element root-preserving rule, which is
+why it alone requires `T: Clone + PartialEq` while its insertions and deletions require only
+`T: Clone`.
+
+The deque and reversible-deque cursors impose **no** `T: Clone` bound at all, including on edits:
+the `Arc`-shared balanced tree splits and concatenates by sharing nodes rather than copying stored
+values. This is a genuine difference from `RopeCursor<T>`, whose chunked substrate must clone the
+affected chunk.
+
+`ReversibleDequeCursor::reverse()` additionally reverses the logical snapshot and maps the gap from
+`p` to `len - p`, swapping the logical sides. It returns `Self` unconditionally, since every valid
+gap has a valid mirror. Reversal is O(1) because the underlying reversible deque wraps or cancels a
+shared mirrored-tree view rather than materializing elements.
+
+`FingerTree<T, P>` uses a measure-aware cursor instead of a positional one, because an arbitrary
+monoid cannot be interpreted as an index. `cursor_at_start()` and `cursor_at_end()` are O(1) total
+factories, and `cursor_by_measure(predicate)` returns `FingerTreeCursorSearch<T, P>` locating the
+gap before the first element whose inclusive prefix satisfies a lawful monotone predicate; a miss
+reports `found: false` with a usable end cursor. `FingerTreeCursor<T, P>` therefore exposes
+`is_at_start`, `is_at_end`, `measure_before`, `measure_after`, borrowed peeks, unit movement,
+`seek_by_measure`, `insert`, `delete_previous`, `delete_next`, `replace_next`, and `snapshot` — and
+deliberately **no** `len`, `position`, or positional `seek`, so no fabricated element count leaks
+into an arbitrary-monoid API. Combining `measure_before` with `measure_after` in that order yields
+the snapshot measure; no inverse or commutativity is assumed. Like the deque cursors, none of its
+operations requires `T: Clone`.
+
+Complexity for this family, with `n` the length and `m` an inserted range size:
+
+| Operation | Deque / reversible deque | RRB vector | Measured finger tree |
+| --- | --- | --- | --- |
+| Create, clone, unit move, `seek`, `snapshot` | O(1) | O(1) | O(1) create/move/snapshot |
+| `peek_previous` / `peek_next` | O(log n) | O(log32 n) | O(log n) |
+| `insert`, `delete_previous`, `delete_next`, `replace_next` | O(log n) | O(log32 n) plus seam rebalancing | O(log n) split plus concat |
+| `insert_range` of `m` values | O(m + log n) | O(m + log32 n); `insert_vector` splices a built vector with sharing | not offered |
+| `measure_before` | — | — | O(log n) read-only descent, no allocation |
+| `measure_after` | — | — | O(log n), but performs a full structural `split_at_index` and allocates a discarded left tree |
+| `reverse` | O(1) | — | — |
+| Traverse `k` neighbors after one seek | O(k log n) | O(k log32 n) | O(k log n) |
+
+The asymmetry between `measure_before` and `measure_after` on the finger-tree cursor is real and
+deliberate: the prefix measure is a read-only descent that reuses cached node measures, while the
+suffix measure is currently obtained by splitting the tree at the gap and reading the right side's
+cached root measure. Both are logarithmic, but only the latter allocates. Because no port retains
+radix or digit frames, a linear scan after one seek costs one lookup per step; the O(k + log32 n)
+and O(1)-amortized figures in the repository cursor design belong to the unimplemented focused tier.
+
+## Ordered and search cursors
+
+The comparator- and rank-ordered families all use the shared gap protocol: `position` counts entries
+before the gap, the next entry is the search candidate and the target of forward deletion or value
+update, before-first is gap zero, and after-last is gap `len`. A miss is an ordinary usable cursor,
+not an invalid one. Every factory retains the source collection's exact comparator, rank policy, or
+priority policy, including on an empty result.
+
+### Sorted bag, set, and map
+
+`SortedBag`, `SortedSet`, and `SortedMap` each offer `cursor_at(rank)` returning `Option`, total
+`cursor_at_lower_bound` and `cursor_at_upper_bound`, and `find_cursor` returning
+`OrderedCursorSearch`. The cursors share `len`, `is_empty`, `position`, `is_at_start`, `is_at_end`,
+borrowed peeks, `move_previous` / `move_next`, `seek_rank`, and a borrowing `snapshot`.
+
+`SortedBagCursor::add(value)` finds the **upper** bound and inserts after every existing
+comparer-equal occurrence, preserving the bag's stable equal-item rule, and returns the gap after
+the new occurrence. It exposes no arbitrary `insert_here` and no replacement, because either could
+create an order not obtainable from the ordinary bag API. `delete_previous` and `delete_next` remove
+the exact stored occurrence at the gap.
+
+`SortedSetCursor::add(value)` inserts an absent class at its lower bound. A duplicate is the
+collection's root-sharing no-op that retains the stored representative, but note that the cursor
+still reports the gap as `lower_bound + 1` in both cases, so after adding an already present value
+the gap sits immediately **after** the retained representative. There is no `replace_next`, because
+representative replacement could collide with another class.
+
+`SortedMapCursor` adds `insert` (strict, `Result<Self, DuplicateKeyError>`), `try_insert` (returning
+`OrderedCursorInsert`), `set_item` (insert-or-update by key), `set_next_value` (focus-local payload
+update that clones and retains the stored key and keeps the gap fixed), and keyed
+`delete_previous` / `delete_next`. `try_insert` on a duplicate reports `added: false` and leaves the
+gap at the retained entry's lower bound rather than one past it. No key-rename operation ships.
+
+All three are backed by order-statistic measured trees, so rank selection, lower/upper bounds,
+peeks, insertions, and deletions are each O(log n), and a complete post-seek traversal by
+move-plus-peek is O(n log n) rather than O(n).
+
+### Canonical zip-zip sorted set
+
+`CanonicalSortedSet` offers `cursor_at(rank)`, `cursor_at_lower_bound`, `cursor_at_upper_bound`, and
+`find_cursor` returning `CanonicalCursorSearch<T>`. The cursor retains the exact
+`ZipTreeRankPolicy<T>` handle, so a snapshot reproduces canonical topology; `find_cursor` compares
+through that policy's comparer rather than `PartialEq`. `insert` returns
+`Result<Self, CanonicalSetError>` and propagates `IncoherentRankHash`; a duplicate is the ordinary
+root-sharing no-op that retains the old representative, and the resulting gap is one past the
+retained equivalent item. `delete_previous` and `delete_next` clone the focused item and route
+through the ordinary `remove`, so the closed topology equals what the ordinary operation produces
+for the same policy and contents.
+
+Rank selection and bound search descend the Cartesian tree using cached subtree counts, so peeks,
+bound factories, and edits are **O(h)** — not unconditionally O(log n). Expected logarithmic height
+depends on the documented coherent pseudorandom rank assumptions; a constant or degenerate rank hash
+makes `h = n`. Navigation, `position`, and `len` require no `T: Clone`; only the edits do.
+
+### Priority-search queue
+
+`PrioritySearchQueue` offers `cursor_at(rank)`, `cursor_at_lower_bound`, `cursor_at_upper_bound`,
+`find_cursor` returning `PrioritySearchCursorSearch<K, P, V>`, and `cursor_at_minimum_priority()`.
+The last reads the root's cached O(1) winner and then performs an ordinary key seek; it does not
+walk a priority-ordered sequence, because key order is the only navigation order and priority
+remains cached augmentation.
+
+`insert` returns `Result<Self, PrioritySearchAddResult<K, P, V>>`, using the rejected attempt's own
+result record as the error payload. `set_item` inserts at a miss or updates an exact hit;
+`set_next` is the focus-local form that retains the stored key representative and keeps the gap
+fixed, applying the queue's existing priority/value no-op rule. `delete_previous` and `delete_next`
+name their target through the retained `PrioritySearchEntry` key handle rather than cloning `K`, so
+cursor deletion extends the family's non-`Clone` support; only `insert`, `set_item`, and `set_next`
+require `K: Clone, P: Clone + PartialEq, V: Clone + PartialEq`.
+
+The queue is an AVL tree caching count, height, and the subtree winner, so bound search and rank
+selection descend with cached counts in O(log n), and edits recompute winners along the changed path
+in O(log n). `enumerate_at_most` remains the winner-pruned output-sensitive query; a cursor scan is
+not a substitute for it and does not claim its pruning bound.
+
+### Interval tree and interval map
+
+`IntervalTree` offers `cursor_at(rank)`, `cursor_at_lower_bound(low)`, `cursor_at_upper_bound(low)`,
+`find_cursor(interval)`, `find_overlap_cursor(probe)`, and `find_containing_cursor(point)`;
+`IntervalTreeCursor<T>` adds `seek_next_overlap(probe)`, which searches strictly after the currently
+focused occurrence so a factory's gap-before-hit result cannot rediscover the same occurrence
+forever. Order is nondecreasing low endpoint. `find_cursor` matches both endpoints by `Ord::cmp`,
+agreeing with `index_of`, and a miss returns the low-endpoint lower bound. `insert` uses the
+facade's defined low-bound placement and returns the gap after it; `delete_previous` and
+`delete_next` remove the exact occurrence the cursor addresses, which disambiguates duplicate
+intervals. Endpoint replacement is not offered, because changing an endpoint can move the interval.
+
+`PersistentIntervalMap` mirrors that surface over the unique complete `(low, high)` key, adding
+`set_next_value`, and wraps every fallible member in `Result<_, IntervalMapError>` so that a
+directly constructed invalid public-field `Interval` is rejected exactly as the ordinary map rejects
+it. `insert` is strict and `set_next_value` retains the stored interval representative while
+applying the payload `PartialEq` no-op rule.
+
+Complexity here must be read carefully, because the cursor paths and the ordinary query paths differ:
+
+- Interval-map `cursor_at_lower_bound`, `cursor_at_upper_bound`, `find_cursor`, and the peeks use
+  the measured last-interval summary and are O(log n). Its `insert`, `set_next_value`, and deletions
+  are the ordinary O(log n) operations.
+- Interval-tree `cursor_at_lower_bound`, `cursor_at_upper_bound`, and the peeks are likewise
+  O(log n) through the last-low summary.
+- Interval-tree `find_cursor` locates the low-endpoint lower bound logarithmically but then walks
+  the in-order iterator from rank zero to that bound and scans the equal-low run linearly, so it is
+  O(position + d) for an equal-low run of length `d`, i.e. O(n) worst case.
+- **Every overlap cursor path is a linear in-order scan, not an augmented descent.**
+  `find_overlap_cursor`, `find_containing_cursor`, and `seek_next_overlap` on both the tree and the
+  map advance the iterator to the start rank, then scan forward while low endpoints do not exceed
+  the probe's high endpoint. That is O(start + r) for `r` scanned candidates and O(n) worst case.
+  The collections' own `overlaps` and overlap-enumeration queries do use the cached maximum-high
+  augmentation and keep their O(log n) first-hit and O((k + 1) log n) all-hits bounds; the cursor
+  factories currently do not, and no augmented bound is claimed for them.
+
+### Chunked bit set
+
+`PersistentChunkedBitSet` offers `cursor_at(populationRank)` returning `Option` over `0..=len` and
+total `cursor_at_or_after(bit_index)`, plus `find_cursor(bit_index)` returning
+`ChunkedBitSetCursorSearch`. The cursor traverses present set bits rather than a dense Boolean
+sequence: `peek_previous` and `peek_next` return `Option<i32>` bit indexes, and `position` and `len`
+use the same `u64` width as the population count. A negative search index clamps to the start gap,
+following the collection's nonthrowing lookup convention, while `insert` retains the negative-index
+validation and returns `Result<Self, NegativeBitIndex>`.
+
+`insert(bit_index)` on a present bit is an identity no-op returning a root-sharing cursor at the
+unchanged gap; on an absent bit it returns the gap immediately after the new bit.
+`delete_previous` and `delete_next` clear the exact neighboring bit and follow the family's gap
+rules. Set algebra remains a sparse word-stream operation and is deliberately not a cursor
+primitive.
+
+Peeks and edits are `select` and `rank` operations: logarithmic in the number of represented nonzero
+words plus constant 64-bit word work. Rank movement and `seek_rank` are O(1), so a full traversal by
+move-plus-peek pays one logarithmic `select` per step.
 
 ## Positional rope cursor
 

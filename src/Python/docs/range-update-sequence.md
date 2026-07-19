@@ -125,6 +125,85 @@ Identity behavior is observable:
 - compatible empty concatenation retains the nonempty operand; and
 - `set_item` always returns a successor.
 
+## Positional and measured cursor
+
+`RangeUpdateSequence.get_cursor(position=0)` returns a `RangeUpdateSequenceCursor[T, M, U]`, the
+family's public cursor. It is a **Profile R root-plus-position semantic checkpoint** in the sense of
+the [repository-wide cursor design][cursor-design]:
+a frozen, slotted dataclass holding one retained sequence version plus a validated gap in
+`0 .. len(sequence)`, and nothing else. It retains no AVL context frames, no normalized edit spine,
+no composed-tag stack, and no canonical-snapshot memo. It therefore inherits **none** of the C# rope
+cursor tier's focused representation, memoization, callback ceiling, allocation bound, or
+amortized-locality claims; every operation below delegates to the ordinary persistent operation
+named beside it and costs exactly what that operation costs. There is no uninitialized, default, or
+moved-from cursor state — the constructor validates the position immediately.
+
+State and navigation are `count`, `is_at_start`, `is_at_end`, `measure_before`, `measure_after`,
+`peek_previous()`, `peek_next()`, `move_previous()`, `move_next()`, `seek(position)`, and
+`snapshot()`. Peeks return `SequenceCursorPeek[T]` or `None`, so a stored `None` element stays
+distinct from a boundary; `snapshot()` returns the retained sequence and never consumes the cursor.
+Edits are `insert(value)`, `delete_previous()`, `delete_next()`, and `replace_next(value)`. Range
+operations are `measure_previous(count)`, `measure_next(count)`, `apply_previous(count, tag)`, and
+`apply_next(count, tag)`.
+
+Gap conventions follow the shared positional model. `insert` places the value at the gap and returns
+the gap after it. `delete_previous` removes the element at `position - 1` and moves the gap left.
+`delete_next` removes the element at `position` and keeps the gap fixed. `replace_next` addresses
+`position` and keeps the gap fixed; because the generic core has no element-equality policy it is
+unconditional and always publishes a successor. `apply_previous(k, tag)` targets
+`[position - k, position)` and `apply_next(k, tag)` targets `[position, position + k)`; both keep
+the gap fixed. `seek(position)` returns the receiver when the position is unchanged, and both
+`apply_previous` and `apply_next` return the receiver cursor whenever the underlying `apply_range`
+returns the receiver sequence.
+
+The cursor keeps the two error channels the sequence already defines. Boundary positions are
+`IndexError`: constructing or seeking outside `0 .. len(sequence)` goes through
+`_check_boundary_index`, and `move_previous`, `move_next`, `delete_previous`, `delete_next`, and
+`replace_next` raise `IndexError` at a boundary with no adjacent element. Directional counts are
+`ValueError`: `measure_previous`, `measure_next`, `apply_previous`, and `apply_next` validate
+`count` against the available direction before any policy call, and the underlying `apply_range` and
+`measure_range` keep the same index-versus-count split. `insert` raises `OverflowError` at the
+signed-32-bit element ceiling before touching the tree. Validation always precedes policy callbacks,
+so a rejected argument invokes no `measure`, `combine`, `is_identity`, `compose`, `apply_element`,
+or `apply_measure`.
+
+Tag semantics are the collection's, unchanged. Navigation, peeks, and measure reads are read-only
+descents: they carry an inherited tag as local state, composing it as `compose(inherited, pending)`
+at each child frame, and never push a tag or path-copy a node. Moving away and back therefore leaves
+the retained snapshot reference-identical. A structural edit through a tagged path pushes the old
+pending tag onto both children before inserting or replacing, so an older range update cannot
+transform a newly supplied element, and rotations rebuild height, count, and cached logical measure
+afterwards. The cursor never treats `identity_tag`, `None`, or tag equality as an absence marker;
+the separate presence bit remains authoritative, and a composed tag is cleared only through
+`is_identity`.
+
+Both measure properties are read-only. `measure_before` is `measure_range(0, position)` and
+`measure_after` is `measure_range(position, count - position)`; neither performs a structural split
+and neither allocates a persistent node. `combine(measure_before, measure_after)` equals
+`snapshot().measure` in that order, and both reflect every carried tag. A zero-length
+`measure_previous` or `measure_next` returns the algebra identity without invoking any element or
+tag callback, because `measure_range` short-circuits on `count == 0` before reading the root.
+Likewise a zero-length `apply_previous` or `apply_next` returns the receiver without calling
+`is_identity`, while a nonempty range with a tag recognized as identity returns the receiver after
+exactly one `is_identity` call.
+
+Costs are the sequence's own. Navigation — `count`, the boundary predicates, `move_previous`,
+`move_next`, and `seek` — only rewrites an integer and is O(1). A peek is one O(log n) indexed
+lookup, so a full traversal by move-plus-peek is O(n log n); prefer ordinary iteration, which is
+O(n) with an O(log n) stack. `measure_before`, `measure_after`, `measure_previous`, and
+`measure_next` are O(log n) read-only descents that consume the cached measure of each fully covered
+subtree. `insert`, `delete_previous`, `delete_next`, and `replace_next` are O(log n) path-copying
+edits. A proper subrange `apply_previous`/`apply_next` splits twice, tags the isolated middle root,
+and rejoins, so it is O(log n). A nonidentity tag covering the whole sequence — `apply_next(count,
+tag)` at the start, or `apply_previous(count, tag)` at the end — retains the substrate's O(1) root
+update, transforming the root value and root measure and allocating one replacement node; the clean
+root-plus-gap checkpoint is exactly the case in which that O(1) result is legitimately inherited.
+`snapshot()` is O(1) because the cursor already holds the canonical facade, and it needs no memo.
+
+Because every edit is a whole ordinary operation over an immutable tree, failure atomicity is the
+collection's: a throwing policy callback publishes no successor sequence and therefore no successor
+cursor, and the receiver cursor, its snapshot, and every retained branch remain valid and usable.
+
 ## Validation and Python iteration
 
 Element and boundary positions reject negative indexing rather than adopting Python's usual
@@ -156,3 +235,5 @@ For an already provisioned environment, `test.ps1 -SkipInstall` retains the comp
 Mypy, pytest/Hypothesis, package-build, metadata, and installed-wheel smoke gates. Do not overlap
 those commands with another workspace build or test process. Benchmarks are outside this gate and
 remain postponed until an isolated session.
+
+[cursor-design]: ../../../docs/proposals/repository-wide-persistent-cursor-design.md
