@@ -102,4 +102,64 @@ public sealed class PersistentOrderedCursorTests
         Assert.True(source.TryGetGroupCursor("a", out var group));
         Assert.Equal(2, group.Position);
     }
+
+    /// <summary>
+    /// Verifies that a value non-reflexive under the value policy (an IEEE <see cref="double.NaN"/>)
+    /// inserts at the group end without a value re-scan and never reports a false-success deletion,
+    /// while a normal reflexive value keeps its correct insert and delete gaps.
+    /// </summary>
+    [Fact]
+    public void MultimapCursor_HandlesNonReflexiveValuePolicy()
+    {
+        // NaN != NaN under this policy, an idiomatic and legitimate IEEE float comparison.
+        var source = PersistentOrderedMultimap<string, double>
+            .Create(valueComparer: new IeeeDoubleComparer())
+            .Add("a", 1.0)
+            .Add("a", 2.0)
+            .Add("b", 3.0);
+        Assert.Equal(3, source.PairCount);
+
+        // Adding a NaN into group "a" must not throw; its gap is the group end, not a value scan.
+        var added = source.GetCursor().Add("a", double.NaN);
+        Assert.Equal(3, added.Position);
+        Assert.Equal(4, added.PairCount);
+        var pairs = added.Snapshot().ToArray();
+        Assert.Equal(["a", "a", "a", "b"], pairs.Select(pair => pair.Key));
+        Assert.Equal([1.0, 2.0], pairs.Take(2).Select(pair => pair.Value));
+        Assert.True(double.IsNaN(pairs[2].Value));
+        Assert.Equal(3.0, pairs[3].Value);
+
+        // The NaN pair sits at rank 2 and cannot be removed by content; a delete must not silently
+        // succeed while removing nothing.
+        var atNanGap = added.Seek(3);
+        Assert.True(atNanGap.TryPeekPrevious(out var nanPair));
+        Assert.True(double.IsNaN(nanPair.Value));
+        Assert.Throws<InvalidOperationException>(() => added.Seek(3).DeletePrevious());
+        Assert.Throws<InvalidOperationException>(() => added.Seek(2).DeleteNext());
+
+        // A reflexive value still inserts at the group end and deletes with the correct gap.
+        var reflexive = source.GetCursor().Add("b", 4.0);
+        Assert.Equal(4, reflexive.Position);
+        var duplicate = reflexive.Add("b", 4.0);
+        Assert.Same(reflexive.Snapshot(), duplicate.Snapshot());
+        Assert.Equal(reflexive.Position, duplicate.Position);
+
+        var deleted = reflexive.DeletePrevious();
+        Assert.Equal(3, deleted.Position);
+        Assert.Equal(3, deleted.PairCount);
+        Assert.Equal(
+            [
+                KeyValuePair.Create("a", 1.0),
+                KeyValuePair.Create("a", 2.0),
+                KeyValuePair.Create("b", 3.0),
+            ],
+            deleted.Snapshot().ToArray());
+    }
+
+    private sealed class IeeeDoubleComparer : IEqualityComparer<double>
+    {
+        public bool Equals(double x, double y) => x == y;
+
+        public int GetHashCode(double value) => value.GetHashCode();
+    }
 }

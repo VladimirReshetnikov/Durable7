@@ -60,6 +60,34 @@ public sealed partial class PersistentOrderedMultimap<TKey, TValue>
         }
         return -1;
     }
+
+    /// <summary>
+    /// Gets the pair rank of the gap immediately after the last pair of an equivalent key group, or
+    /// the end rank when no such group is present. Key groups are contiguous in the flattened
+    /// enumeration, so this walks the leading pairs once and consults only <see cref="KeyComparer"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Add(TKey, TValue)"/> appends the value to the end of the key's group, or appends a
+    /// fresh last group when the key is absent, so the following gap is a group boundary. Deriving it
+    /// from the group boundary rather than re-scanning for the inserted pair by value keeps insertion
+    /// total: a value that is not reflexive under <see cref="ValueComparer"/>, such as a
+    /// <see cref="double.NaN"/>, is one the collection accepts but a content re-scan can never find
+    /// again.
+    /// </remarks>
+    internal long CursorGroupEnd(TKey key)
+    {
+        long position = 0;
+        var withinGroup = false;
+        foreach (var pair in this)
+        {
+            if (KeyComparer.Equals(pair.Key, key))
+                withinGroup = true;
+            else if (withinGroup)
+                return position;
+            position++;
+        }
+        return position;
+    }
 }
 
 /// <summary>Immutable root-plus-pair-rank gap cursor over a grouped persistent ordered multimap.</summary>
@@ -131,15 +159,18 @@ public readonly struct PersistentOrderedMultimapCursor<TKey, TValue>
     /// Adds a pair using grouped collection semantics and returns its following pair gap. A present
     /// equivalent pair preserves this cursor; insertion is not forced into an unrelated group gap.
     /// </summary>
+    /// <remarks>
+    /// The following gap is derived from the key group's end via <typeparamref name="TKey"/> equality rather
+    /// than by re-scanning for the inserted pair by value. A value that is not reflexive under the
+    /// value policy, such as a <see cref="double.NaN"/>, is one the collection accepts but a content
+    /// re-scan could never find again; the group-end derivation keeps this insertion total.
+    /// </remarks>
     public PersistentOrderedMultimapCursor<TKey, TValue> Add(TKey key, TValue value)
     {
         var snapshot = Value.Add(key, value);
         if (ReferenceEquals(snapshot, Value))
             return this;
-        var position = snapshot.CursorIndexOf(key, value);
-        if (position < 0)
-            throw new InvalidOperationException("The inserted pair is missing from the ordered multimap.");
-        return new(snapshot, checked(position + 1));
+        return new(snapshot, snapshot.CursorGroupEnd(key));
     }
 
     /// <summary>Attempts grouped pair insertion without disturbing this cursor on equivalence.</summary>
@@ -153,19 +184,35 @@ public readonly struct PersistentOrderedMultimapCursor<TKey, TValue>
     }
 
     /// <summary>Deletes the pair immediately before the gap, contracting empty groups.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The gap is at the start, or the peeked pair is not reflexive under the value policy (such as a
+    /// <see cref="double.NaN"/>) and could not be removed by content, which would otherwise report a
+    /// deletion that removed nothing.
+    /// </exception>
     public PersistentOrderedMultimapCursor<TKey, TValue> DeletePrevious()
     {
         if (!TryPeekPrevious(out var pair))
             throw new InvalidOperationException("The ordered-multimap cursor has no previous pair.");
-        return new(Value.Remove(pair.Key, pair.Value), Position - 1);
+        var snapshot = Value.Remove(pair.Key, pair.Value);
+        if (snapshot.PairCount == PairCount)
+            throw NonRemovablePairError();
+        return new(snapshot, Position - 1);
     }
 
     /// <summary>Deletes the pair immediately after the gap, contracting empty groups.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// The gap is at the end, or the peeked pair is not reflexive under the value policy (such as a
+    /// <see cref="double.NaN"/>) and could not be removed by content, which would otherwise report a
+    /// deletion that removed nothing.
+    /// </exception>
     public PersistentOrderedMultimapCursor<TKey, TValue> DeleteNext()
     {
         if (!TryPeekNext(out var pair))
             throw new InvalidOperationException("The ordered-multimap cursor has no next pair.");
-        return new(Value.Remove(pair.Key, pair.Value), Position);
+        var snapshot = Value.Remove(pair.Key, pair.Value);
+        if (snapshot.PairCount == PairCount)
+            throw NonRemovablePairError();
+        return new(snapshot, Position);
     }
 
     /// <summary>Returns the exact persistent ordered-multimap version represented by this cursor.</summary>
@@ -173,4 +220,7 @@ public readonly struct PersistentOrderedMultimapCursor<TKey, TValue>
 
     private static InvalidOperationException UninitializedError() =>
         new("The default value is not an initialized ordered-multimap cursor.");
+
+    private static InvalidOperationException NonRemovablePairError() =>
+        new("The peeked ordered-multimap pair is not reflexive under the value policy and could not be removed.");
 }
