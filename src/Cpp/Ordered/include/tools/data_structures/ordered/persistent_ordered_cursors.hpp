@@ -101,6 +101,34 @@ template <class Multimap>
     return result;
 }
 
+/// Pair rank of the gap immediately after the last pair of the key-equivalent
+/// group, or the end gap when no such group is present.
+///
+/// The pairs of a key group are contiguous in the flattened enumeration, so the
+/// last matching pair fixes the group end.  Consulting only the key policy keeps
+/// this total: a value that is not reflexive under the value policy, such as a
+/// `NaN` under `std::equal_to<double>`, is one the collection accepts but a
+/// content re-scan can never find again. Because `add` appends the value to the
+/// end of the key's group (or appends a fresh last group), this gap is exactly
+/// where the newly inserted pair lands.
+template <class Multimap>
+[[nodiscard]] std::int64_t group_end(
+    const Multimap& map,
+    const typename Multimap::key_type& key)
+{
+    auto result = std::int64_t{-1};
+    auto position = std::int64_t{0};
+    map.for_each_pair([&](const auto& stored_key, const auto&) {
+        if (std::invoke(map.key_eq(), stored_key, key)) {
+            result = position + 1;
+        }
+        if (position < map.pair_count()) {
+            ++position;
+        }
+    });
+    return result < 0 ? map.pair_count() : result;
+}
+
 } // namespace persistent_ordered_cursor_detail
 
 /// Immutable root-plus-explicit-order-position gap cursor over an ordered set.
@@ -429,6 +457,12 @@ public:
     }
 
     /// Adds under grouped semantics; an equivalent pair preserves this gap.
+    ///
+    /// The published gap is derived from the group end using only the key
+    /// policy rather than by re-scanning for the (key, value) pair, so a value
+    /// that is not reflexive under the value policy (such as a `NaN` under
+    /// `std::equal_to<double>`) is inserted without the search failing on a pair
+    /// the collection just accepted.
     [[nodiscard]] persistent_ordered_multimap_cursor add(
         const key_type& key,
         const mapped_type& value) const
@@ -437,13 +471,8 @@ public:
             return *this;
         }
         auto next = snapshot_.add(key, value);
-        const auto index = persistent_ordered_cursor_detail::pair_position(next, key, value);
-        if (index < 0) {
-            throw std::logic_error("inserted pair is absent from persistent ordered multimap");
-        }
-        return {
-            std::move(next),
-            persistent_ordered_cursor_detail::checked_successor(index)};
+        const auto following_gap = persistent_ordered_cursor_detail::group_end(next, key);
+        return {std::move(next), following_gap};
     }
 
     [[nodiscard]] ordered_cursor_insert_result<persistent_ordered_multimap_cursor> try_add(
@@ -462,7 +491,7 @@ public:
         if (!pair) {
             throw std::logic_error("ordered-multimap cursor has no previous pair");
         }
-        return {snapshot_.remove(pair->first, pair->second), position_ - 1};
+        return {deleted_pair(pair->first, pair->second), position_ - 1};
     }
 
     [[nodiscard]] persistent_ordered_multimap_cursor delete_next() const
@@ -471,12 +500,32 @@ public:
         if (!pair) {
             throw std::logic_error("ordered-multimap cursor has no next pair");
         }
-        return {snapshot_.remove(pair->first, pair->second), position_};
+        return {deleted_pair(pair->first, pair->second), position_};
     }
 
     [[nodiscard]] collection_type snapshot() const { return snapshot_; }
 
 private:
+    /// Removes one peeked pair and returns the successor snapshot.
+    ///
+    /// `remove` locates the pair by content and returns its unchanged receiver
+    /// on a miss, which a pair peeked by rank still hits whenever the stored
+    /// value is not reflexive under the value policy (a `NaN`, for instance).
+    /// Publishing that receiver would report a deletion that removed nothing and
+    /// leave the peek returning the same pair forever, so the pair count
+    /// validates the correspondence before a version is published, matching how
+    /// the sibling cursors reject an impossible boundary edit.
+    [[nodiscard]] collection_type deleted_pair(
+        const key_type& key,
+        const mapped_type& value) const
+    {
+        auto next = snapshot_.remove(key, value);
+        if (next.pair_count() == snapshot_.pair_count()) {
+            throw std::logic_error("ordered-multimap cursor deletion removed no pair");
+        }
+        return next;
+    }
+
     collection_type snapshot_;
     size_type position_;
 };

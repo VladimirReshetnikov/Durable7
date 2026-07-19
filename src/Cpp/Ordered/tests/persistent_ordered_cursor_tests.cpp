@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -127,5 +129,46 @@ void add_persistent_ordered_cursor_tests(suite& tests)
         FT_REQUIRE_EQUAL(missing.cursor.position(), source.pair_count());
         FT_REQUIRE(!ordered::get_cursor(source).try_peek_previous());
         FT_REQUIRE((found.cursor.snapshot().to_vector() == source.to_vector()));
+    });
+
+    tests.add("ordered multimap cursors add and delete values non-reflexive under the value policy", [] {
+        using multimap_type = ordered::persistent_ordered_multimap<int, double>;
+        const auto base = multimap_type{}.add(1, 10.0).add(2, 20.0);
+        const auto nan = std::nan("");
+
+        // A NaN is not reflexive under the default std::equal_to<double>; adding
+        // it must not throw, and the published gap must land after key group 1
+        // where OrderedMultimap::add appends the value.
+        const auto added_nan = ordered::get_cursor(base, 0).add(1, nan);
+        FT_REQUIRE_EQUAL(added_nan.size(), std::int64_t{3});
+        FT_REQUIRE_EQUAL(added_nan.position(), std::int64_t{2});
+        const auto peeked_previous = added_nan.try_peek_previous();
+        FT_REQUIRE(peeked_previous.has_value());
+        FT_REQUIRE_EQUAL(peeked_previous->first, 1);
+        FT_REQUIRE(std::isnan(peeked_previous->second));
+        const auto peeked_next = added_nan.try_peek_next();
+        FT_REQUIRE(peeked_next.has_value());
+        FT_REQUIRE_EQUAL(peeked_next->first, 2);
+        FT_REQUIRE_EQUAL(peeked_next->second, 20.0);
+
+        // Deleting the peeked NaN by content removes nothing, so both delete
+        // directions must signal the no-op rather than publish a false success.
+        const auto with_nan = base.add(1, nan);
+        const auto after_nan = ordered::get_cursor(with_nan, 2);
+        const auto stored_nan = after_nan.try_peek_previous();
+        FT_REQUIRE(stored_nan.has_value());
+        FT_REQUIRE(std::isnan(stored_nan->second));
+        FT_REQUIRE_THROWS(std::logic_error, after_nan.delete_previous());
+        FT_REQUIRE_THROWS(std::logic_error, ordered::get_cursor(with_nan, 1).delete_next());
+
+        // A reflexive value continues to insert and delete with the correct gap.
+        const auto added_reflexive = ordered::get_cursor(base, 0).add(1, 11.0);
+        FT_REQUIRE_EQUAL(added_reflexive.position(), std::int64_t{2});
+        FT_REQUIRE((added_reflexive.snapshot().to_vector()
+            == std::vector<std::pair<int, double>>{{1, 10.0}, {1, 11.0}, {2, 20.0}}));
+        const auto removed_reflexive = added_reflexive.delete_previous();
+        FT_REQUIRE_EQUAL(removed_reflexive.position(), std::int64_t{1});
+        FT_REQUIRE((removed_reflexive.snapshot().to_vector()
+            == std::vector<std::pair<int, double>>{{1, 10.0}, {2, 20.0}}));
     });
 }
