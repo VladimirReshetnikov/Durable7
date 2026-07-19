@@ -494,7 +494,63 @@ or record GCC/Clang as the supported local C lane.
 9. **Tests** — the Merkle digest-parity assertion (two lines, highest value per line in the whole
    list), then the universal gaps in §4.5, then C allocation-failure injection.
 
+## Resolution Addendum (2026-07-19, HEAD b9c026b)
+
+After the review above, the recorded backlog was worked through across all nine ports and both
+toolchain blockers were installed/fixed. Every fix was validated on its language's real gate; the
+per-language source commits carry the details. This section records the closed and still-open items
+so the review is not read as an open backlog.
+
+### Toolchain
+
+- **MSVC C gate restored.** `<stdatomic.h>` is now unlocked with `/experimental:c11atomics` in all
+  four C workspaces, so the documented `build.ps1` gate builds again. Fixing it surfaced and closed
+  three further defects the early abort had masked: an unguarded `max_align_t` in
+  `persistent_interval_map.c`, missing `/wd4200` for flexible array members, and a C4701 in
+  `persistent_indexed_map.c`. §5.2 is closed.
+- **OCaml gate installed.** `opam` (2.5.2) plus `alcotest`/`qcheck`/`digestif` were installed into
+  the working `rocq-9.2` switch (`zarith`/`uutf` were already present); with that switch's `bin` and
+  the opam cygwin `bin` (for `x86_64-w64-mingw32-ar`) on `PATH`, `dune @check` and `dune runtest`
+  now run — 58 cases. The `default` switch remains unusable (its bundled `pkgconf` predates
+  `--personality`).
+
+### Fixed and validated
+
+| Area | Items closed | Gate |
+| --- | --- | --- |
+| C# | invalid-default `Position` guard (15 types), measured-rope `Seek` cache | 1,529 tests |
+| C | interval-tree/sorted-cursor self-alias UB & leaks, uninitialized-destroy, ordered-multimap wild-free mitigation, MSVC restoration | MSVC: FingerTree 11, Ordered 4, Tungsten 1, HAMT full (Debug+Release) |
+| C++ | O(n) `bound_rank`/`item_at` → O(log n)/O(h), moved-from Merkle cursor, `noexcept` count-invariant, rope overflow preflight, `replace_next` move, RRB insert, `shares_root_with`/`empty`, `put`→`set_item`, a pre-existing constraint build break | MSVC: FingerTree 28, HAMT 106, Tungsten 1 |
+| Rust | inverted `found` → `OrderedCursorInsert`, O(h) canonical/PSQ rank, non-`Clone` PSQ delete, `Ord` endpoint match, checked `pair_count` | 324 tests, fmt, lib clippy |
+| Kotlin | null-identity `measureBefore` NPE, `prefixMeasure` conflation, interval-map index disagreement, `Seek` identity, map no-op, overflow | full build+test |
+| Haskell | silent multimap no-op delete, multimap insert `error`, deque overflow, `Measured.Cursor` derivations, `deleteAt` order | 4 suites |
+| Python | stale-measure `set_at`, O(n) canonical & PSQ peeks, `is`→`==` no-op, reversed-orientation sharing, text snapshot, ordered `snapshot()` | ruff+mypy+250 tests |
+| TypeScript | O(1) text snapshot + no-op identity, sorted/interval delete sharing, reversed splice sharing, astral `insertRange` guard, snapshot-mismatch check, `size`/`count` | tsc strict + 269 tests |
+| OCaml | multimap `nan` crash + silent no-op delete, pair-count overflow, zero-length apply, interval equal-low ordering, exact-search break, `validate_interval` | `@check` + 58 tests |
+| Docs | cursor sections added to all nine workspaces; design-doc Merkle/Patricia/RRB complexity scoped to the unshipped focused tier; multimap and completeness claims reconciled; two false C# statements and the C write-path `abort()` gap corrected | Markdown links checked |
+
+### Deliberately not fixed (design decisions or shared-signature changes)
+
+- **Ordered multimap flattened-rank cursor** (all nine ports). The nested `FocusedGroup` design is a
+  scope reduction, now documented as such in the design doc; the OCaml/Haskell content-rescan crashes
+  it induced *are* fixed. Promoting to the nested representation is gated on first shipping the
+  ordinary group operations.
+- **`TrySeekValue`/`TrySeekKey`/`InsertRange` on the ordered set/map, and `InsertRange` on the
+  range-update sequence.** Not shipped in any port; several need the owning collection's ordinary
+  operation first. Recorded as unshipped in the design doc rather than implemented under a review.
+- **C fallible `ft_copy_fn`.** The sorted-map copy hook still `abort()`s on OOM. Making it fallible
+  changes a signature shared by every facade value type and the tree core's leaf cloning, so it is a
+  deliberate future change; the write-path abort is now documented.
+- **Haskell ordered-map value-equality field.** Adding it is a breaking API change; the missing
+  `SetNextValue` no-op is recorded as a documented deviation.
+- **OCaml `join` rebalancing (§5.1).** Still unverified in-tree; the measured-depth figures came from
+  a mirrored reimplementation and were not reproduced against the shipped module, so no change was
+  made.
+
 ## Validation Performed
+
+The table below is the original review-time validation. The resolution addendum above supersedes the
+"not run" rows: every port's real gate has since been run green.
 
 | Gate | Result |
 | --- | --- |
@@ -502,7 +558,7 @@ or record GCC/Clang as the supported local C lane.
 | C# `test.ps1` (full solution) | 1,529 passed, 0 failed, 0 skipped (Numerics 319, HAMT 354, FingerTree 724, Ordered 80, Tungsten 52) |
 | C FingerTree, GCC 16.1 + Ninja + CTest | Built clean; 11/11 suites passed |
 | C Ordered, GCC 16.1 + Ninja + CTest | Built clean; 15/15 suites passed, including `ordered_c.cursor` |
-| C FingerTree/Ordered, MSVC | **Blocked pre-existing** — see §5.2 |
+| C FingerTree/Ordered, MSVC | Review-time: blocked pre-existing. **Now fixed** — see the resolution addendum. |
 | OCaml `measured_tree` | Type-checked standalone; behavior verified before/after with a compiled driver; all new test assertions checked against the compiled module |
-| OCaml `dune build` (full) | **Not run** — the available switch lacks `uutf`, `alcotest`, `qcheck`, `zarith`, `digestif` |
-| Rust, TypeScript, Python, Kotlin, Haskell, C++ | **Not run** — no changes were made to those ports |
+| OCaml `dune build` (full) | Review-time: not run. **Now run green** (58 tests) after installing the toolchain. |
+| Rust, TypeScript, Python, Kotlin, Haskell, C++ | Review-time: no changes. **All since fixed and gated green** — see the resolution addendum. |
