@@ -629,6 +629,19 @@ class CanonicalSortedSet(Generic[T]):
                 node = node.left
         return rank
 
+    def _item_at(self, rank: int) -> T:
+        node = self._root
+        while node is not None:
+            left_count = 0 if node.left is None else node.left.count
+            if rank < left_count:
+                node = node.left
+            elif rank == left_count:
+                return node.item
+            else:
+                rank -= left_count + 1
+                node = node.right
+        raise IndexError("Rank is outside the canonical sorted set.")
+
     def cursor_at(self, position: int = 0) -> CanonicalSortedSetCursor[T]:
         return CanonicalSortedSetCursor(self, position)
 
@@ -674,10 +687,14 @@ class CanonicalSortedSetCursor(Generic[T]):
         return self.position == self.count
 
     def peek_previous(self) -> CanonicalCursorPeek[T] | None:
-        return None if self.is_at_start else CanonicalCursorPeek(tuple(self.set)[self.position - 1])
+        if self.is_at_start:
+            return None
+        return CanonicalCursorPeek(self.set._item_at(self.position - 1))
 
     def peek_next(self) -> CanonicalCursorPeek[T] | None:
-        return None if self.is_at_end else CanonicalCursorPeek(tuple(self.set)[self.position])
+        if self.is_at_end:
+            return None
+        return CanonicalCursorPeek(self.set._item_at(self.position))
 
     def move_previous(self) -> CanonicalSortedSetCursor[T]:
         if self.is_at_start:

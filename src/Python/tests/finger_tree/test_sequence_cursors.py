@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 
 from vladimir_reshetnikov.data_structures.finger_tree import (
@@ -98,3 +100,70 @@ def test_range_cursor_preserves_logical_measures_and_directional_tags() -> None:
     assert edited.position == 2
     assert edited.snapshot().to_list() == [1, 12, 99, 24]
     assert basis.to_list() == [1, 2, 3, 4]
+
+
+@dataclass(frozen=True, eq=False)
+class _KeyedWeight:
+    """Element whose equality ignores the field the measure reads."""
+
+    key: str
+    weight: int
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _KeyedWeight) and self.key == other.key
+
+    def __hash__(self) -> int:
+        return hash(self.key)
+
+
+class _WeightMeasure:
+    identity = 0
+
+    def combine(self, left: int, right: int) -> int:
+        return left + right
+
+    def measure(self, element: _KeyedWeight) -> int:
+        return element.weight
+
+
+def test_generic_sequence_replacement_has_no_element_equality_shortcut() -> None:
+    """Replacement is unconditional; the deque and tree have no equality policy."""
+
+    tree = FingerTree.from_iterable([_KeyedWeight("a", 1), _KeyedWeight("b", 2)], _WeightMeasure())
+    replacement = _KeyedWeight("b", 100)
+
+    replaced = tree.set_item(1, replacement)
+    assert replaced is not None
+    assert replaced.get(1) is replacement
+    assert replaced.measure == 101
+    assert tree.measure == 3
+
+    through_cursor = tree.get_cursor_at_end().move_previous().replace_next(replacement).snapshot()
+    assert through_cursor.get(1) is replacement
+    assert through_cursor.measure == 101
+
+    deque = PersistentDeque.from_iterable([_KeyedWeight("a", 1), _KeyedWeight("b", 2)])
+    edited = deque.get_cursor(1).replace_next(replacement).snapshot()
+    assert edited.get(1) is replacement
+    assert deque.get(1) is not replacement
+
+
+def test_reversed_range_insert_shares_structure_in_physical_orientation() -> None:
+    """A reversed receiver inserts the range physically reversed and keeps sharing."""
+
+    forward = ReversibleDeque.from_iterable(range(64))
+    reversed_ = ReversibleDeque.from_iterable(reversed(range(64))).reverse()
+    assert reversed_.to_list() == list(range(64))
+
+    for basis in (forward, reversed_):
+        for position in (0, 17, 64):
+            cursor = basis.get_cursor(position).insert_range([100, 200, 300])
+            expected = list(range(64))
+            expected[position:position] = [100, 200, 300]
+            assert cursor.snapshot().to_list() == expected
+            assert cursor.position == position + 3
+            assert cursor.snapshot().shares_storage_with(basis)
+            assert basis.to_list() == list(range(64))
+
+    unchanged = reversed_.get_cursor(8)
+    assert unchanged.insert_range(()) is unchanged

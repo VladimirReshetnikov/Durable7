@@ -622,6 +622,11 @@ class PersistentOrderedMapCursor(Generic[K, V]):
             raise IndexError("The ordered-map cursor has no next entry.")
         return PersistentOrderedMapCursor(self.map.remove_at(self.position), self.position)
 
+    def snapshot(self) -> PersistentOrderedMap[K, V]:
+        """Return the retained map version; the cursor stays usable and unconsumed."""
+
+        return self.map
+
 
 __all__ = [
     "OrderedMapAddResult",

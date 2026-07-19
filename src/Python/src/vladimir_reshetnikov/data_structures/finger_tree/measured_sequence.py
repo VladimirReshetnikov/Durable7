@@ -269,8 +269,6 @@ class MeasuredSequence(Generic[T, M]):
     def set_at(self, index: int, value: T) -> MeasuredSequence[T, M] | None:
         if index < 0 or index >= len(self):
             return None
-        if self.at(index) == value:
-            return self
         split = self.split_at(index)
         if split is None:
             raise AssertionError("Validated split failed.")

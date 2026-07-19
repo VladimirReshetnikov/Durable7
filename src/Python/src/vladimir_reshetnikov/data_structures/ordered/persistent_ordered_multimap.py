@@ -377,6 +377,11 @@ class PersistentOrderedMultimapCursor(Generic[K, V]):
             raise IndexError("The ordered-multimap cursor has no next pair.")
         return PersistentOrderedMultimapCursor(self.map.remove(pair.key, pair.value), self.position)
 
+    def snapshot(self) -> PersistentOrderedMultimap[K, V]:
+        """Return the retained multimap version; the cursor stays usable and unconsumed."""
+
+        return self.map
+
 
 __all__ = [
     "OrderedMultimapAddResult",

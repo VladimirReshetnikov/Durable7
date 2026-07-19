@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
+
+import pytest
 
 from vladimir_reshetnikov.data_structures.finger_tree import (
     CanonicalSortedSet,
@@ -14,6 +17,9 @@ from vladimir_reshetnikov.data_structures.finger_tree import (
     SortedMap,
     SortedSet,
     ZipTreeRankPolicy,
+)
+from vladimir_reshetnikov.data_structures.finger_tree import (
+    canonical_sorted_set as _canonical_module,
 )
 
 
@@ -114,3 +120,94 @@ def test_chunked_bit_cursor_uses_population_rank_and_present_identity() -> None:
     assert list(added.snapshot()) == [1, 62, 63, 64, 130]
     assert list(added.delete_previous().snapshot()) == [1, 63, 64, 130]
     assert cursor.add(63) is cursor
+
+
+def test_canonical_cursor_peeks_descend_by_rank_without_materializing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy: ZipTreeRankPolicy[int] = ZipTreeRankPolicy.create(seed=0x0C0F_FEE0)
+    set_ = CanonicalSortedSet.from_iterable(range(1_024), policy)
+
+    def _refuse(_root: object) -> Iterator[int]:
+        raise AssertionError("A canonical cursor peek must not enumerate the whole set.")
+
+    monkeypatch.setattr(_canonical_module, "_iterate", _refuse)
+
+    for position in (0, 1, 511, 1_023, 1_024):
+        cursor = set_.cursor_at(position)
+        previous = cursor.peek_previous()
+        following = cursor.peek_next()
+        assert (previous.value if previous is not None else None) == (
+            position - 1 if position > 0 else None
+        )
+        assert (following.value if following is not None else None) == (
+            position if position < 1_024 else None
+        )
+
+    assert set_.cursor_at().peek_previous() is None
+    assert set_.cursor_at(1_024).peek_next() is None
+
+    located = set_.find_cursor(768)
+    assert located.found and located.cursor.position == 768
+    missing = set_.find_cursor(4_096)
+    assert not missing.found and missing.cursor.position == 1_024
+
+    assert not located.cursor.delete_next().snapshot().contains(768)
+    assert not located.cursor.delete_previous().snapshot().contains(767)
+
+
+def test_priority_search_replacement_compares_values_rather_than_identity() -> None:
+    queue: PrioritySearchQueue[str, float, str] = PrioritySearchQueue.empty()
+    queue = queue.set_item("k", 1.5, "value")
+
+    assert queue.set_item("k", 3.0 / 2, "value") is queue
+    assert queue.set_item("k", 1.5, "".join(["value"])) is queue
+    assert queue.set_item("k", 1.5, "other") is not queue
+
+    cursor = queue.find_cursor("k")
+    assert cursor.found
+    assert cursor.cursor.set_next(3.0 / 2, "".join(["value"])).snapshot() is queue
+
+
+def test_priority_search_cursor_peeks_descend_by_rank_without_materializing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    count = 1_024
+    queue: PrioritySearchQueue[int, int, str] = PrioritySearchQueue.from_iterable(
+        PrioritySearchEntry(key, count - key, str(key)) for key in range(count)
+    )
+
+    def _refuse(_queue: object) -> Iterator[PrioritySearchEntry[int, int, str]]:
+        raise AssertionError("A priority-search cursor peek must not enumerate the whole queue.")
+
+    monkeypatch.setattr(PrioritySearchQueue, "__iter__", _refuse)
+
+    for position in (0, 1, count - 1, count):
+        cursor = queue.cursor_at(position)
+        previous = cursor.peek_previous()
+        following = cursor.peek_next()
+        assert (previous.value.key if previous is not None else None) == (
+            position - 1 if position > 0 else None
+        )
+        assert (following.value.key if following is not None else None) == (
+            position if position < count else None
+        )
+
+    assert queue.cursor_at().peek_previous() is None
+    assert queue.cursor_at(count).peek_next() is None
+
+    located = queue.find_cursor(768)
+    assert located.found and located.cursor.position == 768
+    missing = queue.find_cursor(4_096)
+    assert not missing.found and missing.cursor.position == count
+
+    winner = queue.cursor_at_minimum_priority()
+    winner_entry = winner.peek_next()
+    assert winner_entry is not None and winner_entry.value.key == count - 1
+
+    focused = located.cursor
+    assert focused.set_next(0, "X").snapshot().get_entry(768) == PrioritySearchEntry(768, 0, "X")
+    assert not focused.delete_next().snapshot().contains_key(768)
+    assert not focused.delete_previous().snapshot().contains_key(767)
+    assert focused.delete_next().snapshot().count == count - 1
+    assert queue.count == count

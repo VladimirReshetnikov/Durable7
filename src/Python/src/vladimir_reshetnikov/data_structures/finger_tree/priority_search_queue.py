@@ -15,6 +15,10 @@ V = TypeVar("V")
 _MISSING = object()
 
 
+def _equal_value(left: object, right: object) -> bool:
+    return left is right or left == right
+
+
 @dataclass(frozen=True, slots=True)
 class PrioritySearchEntry(Generic[K, P, V]):
     key: K
@@ -269,8 +273,8 @@ class PrioritySearchQueue(Generic[K, P, V]):
         if comparison == 0:
             unchanged = not overwrite or (
                 self.priority_comparator(entry.priority, node.entry.priority) == 0
-                and entry.priority is node.entry.priority
-                and entry.value is node.entry.value
+                and _equal_value(entry.priority, node.entry.priority)
+                and _equal_value(entry.value, node.entry.value)
             )
             if unchanged:
                 return _SetResult(node, False, False)
@@ -465,6 +469,19 @@ class PrioritySearchQueue(Generic[K, P, V]):
                 node = node.left
         return rank
 
+    def _entry_at(self, rank: int) -> PrioritySearchEntry[K, P, V]:
+        node = self._root
+        while node is not None:
+            left_count = 0 if node.left is None else node.left.count
+            if rank < left_count:
+                node = node.left
+            elif rank == left_count:
+                return node.entry
+            else:
+                rank -= left_count + 1
+                node = node.right
+        raise IndexError("Rank is outside the priority-search queue.")
+
     def cursor_at(self, position: int = 0) -> PrioritySearchQueueCursor[K, P, V]:
         return PrioritySearchQueueCursor(self, position)
 
@@ -525,16 +542,14 @@ class PrioritySearchQueueCursor(Generic[K, P, V]):
         return self.position == self.count
 
     def peek_previous(self) -> PrioritySearchCursorPeek[K, P, V] | None:
-        return (
-            None
-            if self.is_at_start
-            else PrioritySearchCursorPeek(tuple(self.queue)[self.position - 1])
-        )
+        if self.is_at_start:
+            return None
+        return PrioritySearchCursorPeek(self.queue._entry_at(self.position - 1))
 
     def peek_next(self) -> PrioritySearchCursorPeek[K, P, V] | None:
-        return (
-            None if self.is_at_end else PrioritySearchCursorPeek(tuple(self.queue)[self.position])
-        )
+        if self.is_at_end:
+            return None
+        return PrioritySearchCursorPeek(self.queue._entry_at(self.position))
 
     def move_previous(self) -> PrioritySearchQueueCursor[K, P, V]:
         if self.is_at_start:

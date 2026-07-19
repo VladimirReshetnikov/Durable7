@@ -785,7 +785,7 @@ class TextRopeCursor:
 
     def snapshot(self) -> TextRope:
         if self._snapshot is None:
-            self._snapshot = TextRope.from_characters(self.cursor.snapshot())
+            self._snapshot = TextRope(self.cursor.snapshot())
         return self._snapshot
 
 

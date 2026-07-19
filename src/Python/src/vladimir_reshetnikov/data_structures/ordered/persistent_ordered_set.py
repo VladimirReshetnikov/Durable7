@@ -716,6 +716,11 @@ class PersistentOrderedSetCursor(Generic[T]):
             raise IndexError("The ordered-set cursor has no next representative.")
         return PersistentOrderedSetCursor(self.set.remove_at(self.position), self.position)
 
+    def snapshot(self) -> PersistentOrderedSet[T]:
+        """Return the retained set version; the cursor stays usable and unconsumed."""
+
+        return self.set
+
 
 __all__ = [
     "OrderedSetCursorPeek",

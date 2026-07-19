@@ -195,3 +195,26 @@ def test_cursor_insert_histories_agree_with_python_strings(
         position += len(inserted)
         assert "".join(cursor.snapshot()) == model
         assert cursor.position == position
+
+
+def test_text_cursor_snapshot_reuses_the_path_copied_measured_rope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = TextRope.from_text("alpha\nbeta\ngamma")
+    edited = source.get_cursor(6).insert("XY")
+
+    def _refuse(_characters: object) -> TextRope:
+        raise AssertionError("A text cursor snapshot must not rebuild from characters.")
+
+    monkeypatch.setattr(TextRope, "from_characters", _refuse)
+
+    snapshot = edited.snapshot()
+    assert snapshot is edited.snapshot()
+    assert snapshot._characters is edited.cursor.snapshot()
+    assert snapshot.as_string() == "alpha\nXYbeta\ngamma"
+    assert snapshot.line_count() == 3
+
+    assert (edited.line, edited.column) == (1, 2)
+    assert edited.seek_line_column(2, 3).position == 16
+    assert not edited.search_line_column(9, 0).found
+    assert source.as_string() == "alpha\nbeta\ngamma"

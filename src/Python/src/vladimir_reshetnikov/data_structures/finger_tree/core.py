@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Generic, TypeVar, cast
 
@@ -231,6 +231,18 @@ class ReversibleDeque(Generic[T]):
 
     def reverse(self) -> ReversibleDeque[T]:
         return ReversibleDeque(self._items, not self._reversed)
+
+    def _aligned_run(self, values: Sequence[T]) -> ReversibleDeque[T]:
+        """Builds ``values`` in logical order under this deque's physical orientation.
+
+        A reversed receiver stores the logical range ``[x0..xm-1]`` physically reversed, so a run
+        built this way concatenates with either side of a split of this deque through the
+        structure-sharing path instead of the orientation-mismatch materialization.
+        """
+
+        if not self._reversed:
+            return ReversibleDeque(PersistentDeque.from_iterable(values))
+        return ReversibleDeque(PersistentDeque.from_iterable(reversed(values)), True)
 
     def prepend(self, value: T) -> ReversibleDeque[T]:
         items = self._items.append(value) if self._reversed else self._items.prepend(value)
@@ -599,7 +611,7 @@ class ReversibleDequeCursor(Generic[T]):
         split = self._snapshot.split_at(self.position)
         if split is None:
             raise AssertionError("validated cursor split failed")
-        middle = ReversibleDeque.from_iterable(materialized)
+        middle = self._snapshot._aligned_run(materialized)
         snapshot = split[0].concat(middle).concat(split[1])
         return ReversibleDequeCursor(snapshot, self.position + len(materialized))
 

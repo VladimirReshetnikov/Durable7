@@ -72,3 +72,38 @@ def test_multimap_cursor_uses_flattened_grouped_pair_ranks() -> None:
     assert source.pair_count == 4
     group = source.find_group_cursor("a")
     assert group.found and group.cursor.position == 2
+
+
+def test_ordered_cursors_expose_non_consuming_snapshots() -> None:
+    """Every neutral Ordered cursor publishes its retained version without consuming itself."""
+
+    set_source = PersistentOrderedSet.from_values(["a", "b", "c"])
+    set_cursor = set_source.cursor_at(1)
+    assert set_cursor.snapshot() is set_source
+    edited_set = set_cursor.insert("x")
+    assert edited_set.snapshot() is edited_set.set
+    assert tuple(edited_set.snapshot()) == ("a", "x", "b", "c")
+    assert set_cursor.snapshot() is set_source
+    assert set_cursor.peek_next().value == "b"
+
+    map_source = PersistentOrderedMap.from_items([("a", 1), ("b", 2)])
+    map_cursor = map_source.cursor_at(1)
+    assert map_cursor.snapshot() is map_source
+    edited_map = map_cursor.insert("x", 9)
+    assert edited_map.snapshot() is edited_map.map
+    assert tuple(edited_map.snapshot().keys()) == ("a", "x", "b")
+    assert map_cursor.snapshot() is map_source
+    assert map_cursor.peek_next() == OrderedMapEntry("b", 2)
+
+    multimap_source = PersistentOrderedMultimap.from_items([("a", 1), ("b", 2)])
+    multimap_cursor = multimap_source.cursor_at(1)
+    assert multimap_cursor.snapshot() is multimap_source
+    edited_multimap = multimap_cursor.add("a", 3)
+    assert edited_multimap.snapshot() is edited_multimap.map
+    assert tuple(edited_multimap.snapshot()) == (
+        OrderedMultimapEntry("a", 1),
+        OrderedMultimapEntry("a", 3),
+        OrderedMultimapEntry("b", 2),
+    )
+    assert multimap_cursor.snapshot() is multimap_source
+    assert multimap_cursor.peek_next() == OrderedMultimapEntry("b", 2)
