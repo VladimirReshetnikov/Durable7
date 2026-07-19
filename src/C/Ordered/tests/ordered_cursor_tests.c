@@ -1,6 +1,7 @@
 #include <tools/data_structures/ordered/ordered_cursor.h>
 #include <tools/data_structures/test_support/headless_test_process.h>
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +46,46 @@ static void init_int_map_policy(tds_ordered_map_policy* policy)
     ft_value_type_init(&type, sizeof(int));
     tds_ordered_map_policy_init(
         policy, &type, &type, hash_int, equal_int, equal_int, NULL);
+}
+
+static uint32_t hash_double(const void* item, void* context)
+{
+    (void)context;
+    double value = *(const double*)item;
+    uint64_t bits = 0u;
+    (void)memcpy(&bits, &value, sizeof(bits));
+    return (uint32_t)(bits ^ (bits >> 32));
+}
+
+static bool equal_double(const void* left, const void* right, void* context)
+{
+    (void)context;
+    /* IEEE == semantics: a NaN compares unequal to itself, an idiomatic and
+     * legitimate value policy. */
+    return *(const double*)left == *(const double*)right;
+}
+
+static void init_double_policy(tds_ordered_policy* policy)
+{
+    ft_value_type type;
+    ft_value_type_init(&type, sizeof(double));
+    tds_ordered_policy_init(policy, &type, hash_double, equal_double, NULL);
+}
+
+typedef struct double_pair_buffer {
+    int keys[16];
+    double values[16];
+    size_t count;
+} double_pair_buffer;
+
+static void collect_double_pair(const void* key, const void* value, void* raw_buffer)
+{
+    double_pair_buffer* buffer = (double_pair_buffer*)raw_buffer;
+    if (buffer->count < 16u) {
+        buffer->keys[buffer->count] = *(const int*)key;
+        buffer->values[buffer->count] = *(const double*)value;
+        ++buffer->count;
+    }
 }
 
 static bool set_equals(const tds_ordered_set* set, const int* expected, size_t count)
@@ -318,6 +359,118 @@ static void test_ordered_multimap_cursor(void)
     tds_ordered_multimap_destroy(&source);
 }
 
+static void test_ordered_multimap_cursor_non_reflexive_value(void)
+{
+    tds_ordered_policy key_policy;
+    init_int_policy(&key_policy);
+    tds_ordered_policy value_policy;
+    init_double_policy(&value_policy);
+    tds_ordered_multimap source;
+    REQUIRE_STATUS(tds_ordered_multimap_init(&source, &key_policy, &value_policy));
+
+    const int build_keys[] = { 1, 1, 2 };
+    const double build_values[] = { 1.0, 2.0, 3.0 };
+    for (size_t index = 0u; index != 3u; ++index) {
+        tds_ordered_multimap next;
+        REQUIRE_STATUS(tds_ordered_multimap_add(
+            &source, &build_keys[index], &build_values[index], &next));
+        replace_multimap(&source, &next);
+    }
+    REQUIRE(tds_ordered_multimap_pair_count(&source) == 3);
+
+    tds_ordered_multimap_cursor cursor;
+    REQUIRE_STATUS(tds_ordered_multimap_get_cursor(&source, 0, &cursor));
+
+    /* Cursor-add a non-reflexive NaN into key group 1; must not spuriously fail,
+     * and the post-insert gap is derived from the group end, not a value scan. */
+    const int nan_key = 1;
+    const double nan_value = NAN;
+    tds_ordered_multimap_cursor added;
+    REQUIRE_STATUS(tds_ordered_multimap_cursor_add(
+        &cursor, &nan_key, &nan_value, &added));
+    /* Group 1 now spans ranks 0,1,2; the post-insert gap is the group end = 3. */
+    REQUIRE(tds_ordered_multimap_cursor_position(&added) == 3);
+    REQUIRE(tds_ordered_multimap_cursor_count(&added) == 4);
+
+    /* The NaN pair is stored and reachable by rank. */
+    tds_ordered_multimap_cursor at_gap;
+    REQUIRE_STATUS(tds_ordered_multimap_get_cursor(&added.map, 3, &at_gap));
+    bool found = false;
+    const void* peek_key = NULL;
+    const void* peek_value = NULL;
+    REQUIRE_STATUS(tds_ordered_multimap_cursor_try_peek_previous(
+        &at_gap, &found, &peek_key, &peek_value));
+    REQUIRE(found && *(const int*)peek_key == 1 && isnan(*(const double*)peek_value));
+
+    /* Deleting the peeked NaN pair (rank 2) must be a real success, never a false
+     * one. The C multimap locates the peeked value by its stored pointer, so the
+     * removal genuinely happens: the pair count drops by one and the NaN is gone.
+     * The delete guard rejects any remove that leaves the pair count unchanged, so
+     * a passing status here is proof that a pair was actually removed rather than a
+     * no-op published at a shifted gap. */
+    tds_ordered_multimap_cursor deleted;
+    REQUIRE_STATUS(tds_ordered_multimap_cursor_delete_previous(&at_gap, &deleted));
+    REQUIRE(tds_ordered_multimap_cursor_position(&deleted) == 2);
+    REQUIRE(tds_ordered_multimap_cursor_count(&deleted) == 3);
+
+    tds_ordered_multimap deleted_snapshot;
+    REQUIRE_STATUS(tds_ordered_multimap_cursor_snapshot(&deleted, &deleted_snapshot));
+    double_pair_buffer deleted_buffer;
+    (void)memset(&deleted_buffer, 0, sizeof(deleted_buffer));
+    REQUIRE_STATUS(tds_ordered_multimap_visit(
+        &deleted_snapshot, collect_double_pair, &deleted_buffer));
+    REQUIRE(deleted_buffer.count == 3u);
+    for (size_t index = 0u; index != deleted_buffer.count; ++index) {
+        REQUIRE(!isnan(deleted_buffer.values[index]));
+    }
+    const int post_delete_keys[] = { 1, 1, 2 };
+    const double post_delete_values[] = { 1.0, 2.0, 3.0 };
+    REQUIRE(memcmp(
+        deleted_buffer.keys, post_delete_keys, sizeof(post_delete_keys)) == 0);
+    for (size_t index = 0u; index != 3u; ++index) {
+        REQUIRE(deleted_buffer.values[index] == post_delete_values[index]);
+    }
+    tds_ordered_multimap_destroy(&deleted_snapshot);
+
+    /* A reflexive value still inserts at the group end and deletes with the right gap. */
+    const int reflexive_key = 2;
+    const double reflexive_value = 4.0;
+    tds_ordered_multimap_cursor reflexive_added;
+    REQUIRE_STATUS(tds_ordered_multimap_cursor_add(
+        &cursor, &reflexive_key, &reflexive_value, &reflexive_added));
+    REQUIRE(tds_ordered_multimap_cursor_position(&reflexive_added) == 4);
+    REQUIRE(tds_ordered_multimap_cursor_count(&reflexive_added) == 4);
+
+    tds_ordered_multimap_cursor reflexive_deleted;
+    REQUIRE_STATUS(tds_ordered_multimap_cursor_delete_previous(
+        &reflexive_added, &reflexive_deleted));
+    REQUIRE(tds_ordered_multimap_cursor_position(&reflexive_deleted) == 3);
+    REQUIRE(tds_ordered_multimap_cursor_count(&reflexive_deleted) == 3);
+
+    /* Contents after the reflexive delete match the original build order. */
+    tds_ordered_multimap snapshot;
+    REQUIRE_STATUS(tds_ordered_multimap_cursor_snapshot(&reflexive_deleted, &snapshot));
+    double_pair_buffer buffer;
+    (void)memset(&buffer, 0, sizeof(buffer));
+    REQUIRE_STATUS(tds_ordered_multimap_visit(&snapshot, collect_double_pair, &buffer));
+    REQUIRE(buffer.count == 3u);
+    const int expected_keys[] = { 1, 1, 2 };
+    const double expected_values[] = { 1.0, 2.0, 3.0 };
+    REQUIRE(memcmp(buffer.keys, expected_keys, sizeof(expected_keys)) == 0);
+    for (size_t index = 0u; index != 3u; ++index) {
+        REQUIRE(buffer.values[index] == expected_values[index]);
+    }
+    tds_ordered_multimap_destroy(&snapshot);
+
+    tds_ordered_multimap_cursor_destroy(&reflexive_deleted);
+    tds_ordered_multimap_cursor_destroy(&reflexive_added);
+    tds_ordered_multimap_cursor_destroy(&deleted);
+    tds_ordered_multimap_cursor_destroy(&at_gap);
+    tds_ordered_multimap_cursor_destroy(&added);
+    tds_ordered_multimap_cursor_destroy(&cursor);
+    tds_ordered_multimap_destroy(&source);
+}
+
 static void run_test(const char* name, void (*test)(void))
 {
     const int before = failures;
@@ -335,6 +488,8 @@ int main(void)
     run_test("ordered set cursor", test_ordered_set_cursor);
     run_test("ordered map cursor", test_ordered_map_cursor);
     run_test("ordered multimap cursor", test_ordered_multimap_cursor);
+    run_test("ordered multimap cursor non-reflexive value",
+        test_ordered_multimap_cursor_non_reflexive_value);
     if (failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", failures);
         return EXIT_FAILURE;

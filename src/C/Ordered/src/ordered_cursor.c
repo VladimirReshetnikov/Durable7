@@ -1107,6 +1107,63 @@ tds_ordered_status tds_ordered_multimap_cursor_move_next(
     return tds_ordered_multimap_cursor_seek(cursor, cursor->position + 1, result);
 }
 
+typedef struct tds_ordered_multimap_group_end_context {
+    const tds_ordered_map_policy* key_policy;
+    const void* key;
+    int64_t position;
+    int64_t group_end;
+    bool found;
+} tds_ordered_multimap_group_end_context;
+
+static void tds_ordered_multimap_group_end_visit(
+    const void* key,
+    const void* value,
+    void* raw_context)
+{
+    tds_ordered_multimap_group_end_context* context =
+        (tds_ordered_multimap_group_end_context*)raw_context;
+    (void)value;
+    if (tds_ordered_map_policy_keys_equal(context->key_policy, key, context->key)) {
+        context->found = true;
+        context->group_end =
+            context->position < INT64_MAX ? context->position + 1 : INT64_MAX;
+    }
+    if (context->position < INT64_MAX) {
+        ++context->position;
+    }
+}
+
+/* Pair rank of the gap immediately after the last pair of an equivalent key
+ * group, or the end gap when no such group is present. Key groups are contiguous
+ * in the flattened enumeration, so this walks the pairs once and consults only
+ * the key equality. Deriving the post-insert gap this way rather than re-scanning
+ * for the inserted pair by value keeps insertion total for a value that is not
+ * reflexive under the value policy, such as a NaN. */
+static tds_ordered_status tds_ordered_multimap_group_end(
+    const tds_ordered_multimap* map,
+    const void* key,
+    int64_t* group_end)
+{
+    if (map == NULL || map->context == NULL || key == NULL || group_end == NULL) {
+        return TDS_ORDERED_INVALID_ARGUMENT;
+    }
+    tds_ordered_multimap_group_end_context context = {
+        tds_ordered_map_policy_of(&map->groups),
+        key,
+        0,
+        0,
+        false };
+    const tds_ordered_status status = tds_ordered_multimap_visit(
+        map, tds_ordered_multimap_group_end_visit, &context);
+    if (status != TDS_ORDERED_OK) {
+        return status;
+    }
+    *group_end = context.found
+        ? context.group_end
+        : tds_ordered_multimap_pair_count(map);
+    return TDS_ORDERED_OK;
+}
+
 tds_ordered_status tds_ordered_multimap_cursor_try_add(
     const tds_ordered_multimap_cursor* cursor,
     const void* key,
@@ -1134,20 +1191,18 @@ tds_ordered_status tds_ordered_multimap_cursor_try_add(
     if (status != TDS_ORDERED_OK) {
         return status;
     }
-    int64_t position = -1;
-    status = tds_ordered_multimap_find_position(
-        &map, key, value, true, &position);
-    if (status != TDS_ORDERED_OK || position < 0) {
+    int64_t position = 0;
+    status = tds_ordered_multimap_group_end(&map, key, &position);
+    if (status != TDS_ORDERED_OK) {
         tds_ordered_multimap_destroy(&map);
-        return status == TDS_ORDERED_OK
-            ? TDS_ORDERED_INVARIANT_VIOLATION : status;
+        return status;
     }
-    if (position == INT64_MAX) {
+    if (position < 0 || position > tds_ordered_multimap_pair_count(&map)) {
         tds_ordered_multimap_destroy(&map);
-        return TDS_ORDERED_OVERFLOW;
+        return TDS_ORDERED_INVARIANT_VIOLATION;
     }
     (void)tds_ordered_multimap_cursor_publish_map(
-        cursor, &map, position + 1, result);
+        cursor, &map, position, result);
     *inserted = true;
     return TDS_ORDERED_OK;
 }
@@ -1182,9 +1237,20 @@ static tds_ordered_status tds_ordered_multimap_cursor_delete(
     }
     tds_ordered_multimap map;
     status = tds_ordered_multimap_remove(&cursor->map, key, value, &map);
-    return status == TDS_ORDERED_OK
-        ? tds_ordered_multimap_cursor_publish_map(cursor, &map, position, result)
-        : status;
+    if (status != TDS_ORDERED_OK) {
+        return status;
+    }
+    /* The pair was located by rank, but a value that is not reflexive under the
+     * value policy (such as a NaN) is one that content-based removal cannot find.
+     * Publishing the unchanged version at the shifted gap would report a deletion
+     * that removed nothing, so a no-op is a failure, not a false success. The
+     * staged version is discarded and *result is left untouched. */
+    if (tds_ordered_multimap_pair_count(&map)
+        == tds_ordered_multimap_pair_count(&cursor->map)) {
+        tds_ordered_multimap_destroy(&map);
+        return TDS_ORDERED_INVARIANT_VIOLATION;
+    }
+    return tds_ordered_multimap_cursor_publish_map(cursor, &map, position, result);
 }
 
 tds_ordered_status tds_ordered_multimap_cursor_delete_previous(
