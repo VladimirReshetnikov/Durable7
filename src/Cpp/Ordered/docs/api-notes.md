@@ -169,3 +169,78 @@ Let `w <= 7` be the 32-bit CHAMP depth and `c` an equal-full-hash collision scan
 
 These are asymptotic capability contracts, not benchmark claims. Private label spacing and relabel
 cadence are not public API.
+
+## Cursors
+
+`persistent_ordered_cursors.hpp` ships `persistent_ordered_set_cursor<T, Hash, KeyEqual>`,
+`persistent_ordered_map_cursor<Key, Value, Hash, KeyEqual, ValueEqual>`, and
+`persistent_ordered_multimap_cursor<Key, Value, KeyHash, KeyEqual, ValueHash, ValueEqual>` under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md).
+Each is an immutable value holding a retained snapshot plus an explicit-position gap. All three are
+Profile R checkpoints delegating every edit to the ordinary persistent operation, and none claims the
+C# rope tier's focused representation, memo cell, callback ceiling, allocation bound, or amortized
+locality. No stamp or label reaches the cursor surface; the two collection headers keep every label
+member private.
+
+Factories are **free functions found by ADL**, not members — the opposite of the HAMT port, whose
+Patricia and Merkle cursors use collection members:
+
+```cpp
+get_cursor(set, position = 0);          get_cursor_at_item(set, item);
+get_cursor(map, position = 0);          get_cursor_at_key(map, key);
+get_cursor(multimap, position = 0);     get_cursor_at_pair(multimap, key, value);
+                                        get_cursor_at_group(multimap, key);
+```
+
+There is deliberately no `get_cursor_lower_bound`, `get_cursor_upper_bound`, or `get_cursor_at_end`:
+these collections are insertion-ordered rather than key-sorted, so there is no ordered bound to seek.
+`get_cursor(collection, collection.size())` is the end gap. Searches return
+`ordered_cursor_search_result<Cursor> { Cursor cursor; bool found; }` and insertions return
+`ordered_cursor_insert_result<Cursor> { Cursor cursor; bool inserted; }`. A search miss yields a
+cursor **at the end**, not at a lower bound — another deliberate divergence from HAMT, where a miss
+yields the lower-bound gap.
+
+The set and map expose `size`, `position`, `is_at_start`, `is_at_end`, `try_peek_previous`,
+`try_peek_next`, `move_previous`, `move_next`, `seek`, `insert`, `try_insert`, `delete_previous`,
+`delete_next`, and `snapshot`; the map adds `set_next_value`, which retains the stored key, its
+label, and the gap. The multimap spells insertion `add`/`try_add`, has no value-update verb, and uses
+`std::int64_t` positions bounded by `pair_count()`. Set and map peeks return borrowed
+`const value_type*`/`const entry_type*` that are lvalue-only, with the `const&&` overloads
+`= delete`d so a reference cannot outlive a temporary cursor; multimap peeks instead return
+`std::optional<value_type>` **by value**, because a flattened pair is materialized rather than stored.
+
+Unlike the HAMT cursors there is no gap-agreement check, so no `std::invalid_argument` appears on
+this surface. Errors are `std::out_of_range` from the constructors for a position outside the
+collection, `std::logic_error` for movement past an end or an edit with no adjacent entry, and
+`std::overflow_error` when a position or label is exhausted.
+
+Default construction is unavailable because each class declares a two-argument constructor that
+suppresses the implicit default — but it is *not* explicitly deleted, and the header records no
+intent. Copy and move are implicitly defaulted, so **move is destructive**: a moved-from cursor holds
+a moved-from collection while retaining its scalar position, breaking the constructor's
+`position <= size` invariant. `size()` typically reports zero while `position()` reports the old rank,
+and `is_at_end()` can report `false` with nothing to peek. The multimap is the sharpest case, since
+its constructor rejects a negative position that a moved-from object bypasses entirely. Treat a
+moved-from ordered cursor as unusable for anything but destruction or assignment, and copy when both
+values must stay live. `merkle_search_tree_cursor` in the HAMT port has adopted a copy-on-move rule
+that removes this hazard; these three have not.
+
+`snapshot()` returns the retained collection by value, sharing its roots. A no-op edit returns
+`*this`, discriminated by **membership** rather than root identity: set `insert` and multimap `add`
+test `contains` first. Map `insert` has no such guard and always delegates. A same-position `seek`
+returns the receiver.
+
+Complexity. For the set and map, `size`, `position`, the two predicates, and `snapshot` are O(1);
+`move_previous`, `move_next`, and `seek` are O(1) struct rebuilds; peeks are one O(log n) deque
+descent; and edits are the delegated `insert`/`remove_at`/`set_item` cost. Because movement defers
+all work to the peek, a complete traversal by move-plus-peek is O(n log n) — use the collection's own
+iteration for a linear walk.
+
+The multimap cursor is the outlier and is **linear, not logarithmic**. It is a flat global pair rank
+over the grouped flattening with no prefix sum over group sizes, and the pair-visiting helper has no
+early exit, so resolving a rank always walks every pair. `try_peek_previous`, `try_peek_next`,
+`get_cursor_at_pair`, and `get_cursor_at_group` are each Θ(`pair_count`), and `add` pays a full scan
+to recover the inserted rank *on top of* the structural insert. A complete traversal by
+move-plus-peek is Θ(`pair_count`²). This flat shape is a recorded deviation from the design's nested
+group-focus multimap state, shared by all nine ports, and needs one contract decision rather than
+nine local patches.

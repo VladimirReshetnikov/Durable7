@@ -52,6 +52,14 @@ which can therefore abort under allocation pressure even though neighboring oper
 `FT_STATUS_NO_MEMORY`. Caller-supplied copy callbacks should either complete successfully or apply their own
 fatal/allocation policy consistently.
 
+The same boundary covers **write** paths, not only reads. `ft_sorted_map_entry_copy` is installed as the
+sorted map's `ft_copy_fn` and runs for every leaf cloned during path copying, so under memory pressure any
+sorted-map insert, replace, remove, or cursor edit terminates the process rather than returning
+`FT_STATUS_NO_MEMORY`. The canonical sorted set is the counter-example to follow: its value-copy callback is
+status-returning by design, so its allocation failures propagate cleanly. Making the sorted map behave the
+same requires a fallible `ft_copy_fn`, which is a deliberate future change rather than a local fix, because
+the signature is shared by every facade value type and by the tree core's leaf cloning.
+
 ## Current Scope
 
 Implemented in this checkpoint:
@@ -481,6 +489,145 @@ amortized locality, or benchmark evidence.
 `ft_text_rope` is based on `ft_measured_rope<char>` with a newline-count measure. Line count is O(1), while
 `line_of_offset`, `line_start_offset`, `line_column_of`, and the column-validated `offset_of` use measured
 descent plus at most one bounded chunk scan.
+
+## Sequence, Ordered-Search, And Augmented Cursors
+
+Beyond the three rope cursors, the workspace exports fourteen cursor families under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md).
+Every one is the same shape — a retained container handle plus a position scalar — so every one is a
+Profile R checkpoint. None retains a finger, path, or frame stack, and none claims the C# focused
+cursor representation, snapshot memo, callback or allocation ceiling, or amortized locality.
+
+| Group | Cursor type | Axis |
+| --- | --- | --- |
+| measured tree | `ft_tree_cursor` | ordered measures and neighbors; no index contract |
+| sequence | `ft_persistent_deque_cursor` (typedef of `ft_tree_cursor`) | positional gap |
+| sequence | `ft_reversible_deque_cursor` | positional gap in logical orientation |
+| sequence | `ft_rrb_vector_cursor` | positional gap |
+| sequence | `ft_range_update_sequence_cursor` | positional gap plus measures and range tags |
+| sorted | `ft_sorted_multiset_cursor` | comparator-order rank gap |
+| sorted | `ft_sorted_set_cursor` (typedef of the multiset cursor) | comparator-order rank gap |
+| sorted | `ft_sorted_map_cursor` | key-order rank gap |
+| canonical | `ft_canonical_sorted_set_cursor` | comparator-order rank gap |
+| augmented | `ft_priority_search_queue_cursor` | key order; priority is a query |
+| augmented | `ft_interval_tree_i64_cursor`, `ft_interval_tree_cursor` | nondecreasing low-endpoint order |
+| augmented | `ft_persistent_interval_map_cursor` | lexicographic `(low, high)` key order |
+| augmented | `ft_persistent_chunked_bit_set_cursor` | population-rank gap over set bits |
+
+Each family exports the same sixteen-function core: `_get_cursor`, `_cursor_copy`, `_cursor_move`,
+`_cursor_dispose`, `_cursor_valid`, `_cursor_empty`, `_cursor_size`, `_cursor_position`,
+`_cursor_is_at_start`, `_cursor_is_at_end`, `_cursor_try_peek_previous`, `_cursor_try_peek_next`,
+`_cursor_move_previous`, `_cursor_move_next`, `_cursor_seek` or `_cursor_seek_rank`, and
+`_cursor_snapshot`. Ordered families add `_get_cursor_lower_bound`, `_get_cursor_upper_bound`, and an
+exact `_get_cursor_at_item`/`_at_key`/`_at_interval` publishing a `bool *found`. The interval families
+add `_find_overlap_cursor`, `_find_containing_cursor`, and `_cursor_seek_next_overlap`; the
+priority-search queue adds `_get_cursor_at_minimum_priority`; the chunked bit set replaces the bound
+pair with `_get_cursor_at_or_after` and names its size accessor `_cursor_count` over `uint64_t`
+population ranks. Edit verbs are family-local: `_cursor_add` for bag/set/canonical/bit set,
+`_cursor_insert`/`_cursor_set`/`_cursor_set_next_value` for the map, `_cursor_set_item`/`_cursor_set_next`
+for the priority-search queue and interval map, and `_cursor_replace_next` only where the collection
+has no ordering or equality policy to violate.
+
+`ft_status` is the single result channel. `_cursor_valid` and `_cursor_empty` return `bool` and
+therefore conflate an invalid handle with a false answer; `_cursor_size` and `_cursor_position` return
+the scalar directly with no error channel; `_cursor_move` and `_cursor_dispose` return `void`;
+`_cursor_is_at_start` and `_cursor_is_at_end` return `ft_status` and publish through a `bool *`.
+
+### Explicit ownership and the documented C exceptions
+
+Cursors are owned handles. Use `_cursor_copy` for a second live owner, the consuming `_cursor_move` to
+relocate one, and `_cursor_dispose` exactly once per initialized cursor. A zeroed, moved-from, or
+disposed cursor is invalid but safely destructible. Three rules govern correct use, and each is a
+deliberate C-local departure that consumers must observe.
+
+**A result handle must be uninitialized, disposed, or the exact source.** Every cursor-producing
+operation builds a complete staged cursor and publishes through a per-family helper that disposes the
+result first when `result == cursor`, so exact source/result aliasing is supported and failure leaves
+both source and result untouched. Passing a *distinct live* handle is neither diagnosed nor rejected:
+`_cursor_move` zeroes its destination **without disposing it**, so the retained version that
+destination previously owned leaks silently.
+
+This precondition is **not stated in any header for any cursor function**. `fingertree.h` carries
+eleven of the fourteen families and roughly two hundred cursor declarations behind exactly two
+comments, neither of which describes the `result` parameter. The rule appears only for
+*container-level* operations, in `canonical_sorted_set.h`, `range_update_sequence.h`, and
+`priority_search_queue.h` — so the statement covering `ft_canonical_sorted_set_add` does not cover
+`ft_canonical_sorted_set_cursor_add`. The undocumented half is the leak-causing half. This section is
+the normative statement until the headers carry it.
+
+**Peeks split into borrowing and copying forms, and a borrow dangles after an aliased publish.** The
+canonical sorted set and the priority-search queue return borrowed references and mark it in the
+function name with a `_ref` suffix — `_cursor_try_peek_previous_ref` and `_cursor_try_peek_next_ref`,
+yielding `const void **` and a `ft_priority_search_entry_ref` of three `const void *` fields. Every
+other family copies into caller-provided storage, so the `ft_copy_fn` abort-on-failure boundary
+applies to those peeks. A borrowed reference is valid only while the cursor that produced it retains
+its snapshot, and a self-aliased publish through that same cursor destroys exactly that snapshot:
+
+```c
+const void *item = NULL;
+bool found = false;
+ft_canonical_sorted_set_cursor_try_peek_next_ref(&cursor, &found, &item);
+ft_canonical_sorted_set_cursor_delete_next(&cursor, &cursor); /* disposes the old snapshot */
+/* `item` now dangles. */
+```
+
+Copy the borrowed value, or retain an independent `_cursor_copy`, before any producing call through
+the same cursor. The two documented guarantees — borrow lifetime and exact-alias support — compose
+into a use-after-free that neither header warns about.
+
+**`*found` is indeterminate on error paths in the copying families.** The canonical and
+priority-search borrow peeks write `*found` unconditionally once their arguments validate, because no
+fallible step follows. The copying peeks instead write `*found` only on the success path: both
+interval-tree variants, the interval map, the sorted bag/set/map, the RRB vector, and the
+range-update sequence return the underlying status with `*found` untouched when the element copy
+fails. This is reachable in practice, since that copy invokes the caller's `ft_copy_fn` and can report
+`FT_STATUS_NO_MEMORY` or `FT_STATUS_CALLBACK_FAILURE`. The same hole exists in the cursor-producing
+searches, including `ft_interval_tree_i64_get_cursor_at_interval` and the overlap scans. Initialize
+`found` before the call and treat it as meaningful only on `FT_STATUS_OK`.
+
+Two smaller divergences: the interval **map** peek copies into any non-null component output, so a
+caller may pass `NULL` to skip a component, while the interval **tree** peek rejects any null output
+with `FT_STATUS_INVALID_ARGUMENT`. And self-aliased `_cursor_snapshot` is safe in every family, but
+the guarantee sits at two different layers — eight families carry an explicit `result == &cursor->x`
+guard because their container `_copy` has none, while six rely on a self-guard inside `_copy`. Both
+are correct; only the first group is covered by the aliasing test.
+
+### The sorted-set cursor is the multiset cursor
+
+`ft_sorted_set_cursor` is `typedef ft_sorted_multiset_cursor ft_sorted_set_cursor;`, and the whole set
+cursor surface is `#define` aliases onto the multiset functions. Exactly one real function exists,
+`ft_sorted_set_cursor_add`, because deduplication needs different semantics. The compiler therefore
+cannot distinguish the two: `ft_sorted_multiset_cursor_add` compiles against a set cursor handle with
+no diagnostic and inserts an unconditional duplicate, destroying the one-representative-per-class
+invariant. Prefer the named set functions and treat mixing the two families as a defect. The deque
+cursor is the same construction over `ft_tree_cursor`, but there the aliasing is harmless because the
+two surfaces agree semantically.
+
+### Complexity
+
+Cursor creation, `_cursor_copy`, movement, seek, and snapshot perform O(1) structural work but
+allocate a small self-owned policy context where the family owns one, so they can return
+`FT_STATUS_NO_MEMORY`. Peeks and point edits are O(log n) plus bounded per-element copying. Because
+the cursor retains no path, a move does not amortize the following peek: a complete traversal by
+move-plus-peek is O(n log n) rather than O(n). Use the ordinary visitation APIs for a linear walk.
+
+Cursor edits are **whole-container rebuilds, not finger-local repairs**. Each discards the cursor's
+position knowledge, calls the ordinary container operation from scratch, then re-derives the new rank
+and stages a fresh cursor. The ordered families additionally pay a bound search *on top of* the edit,
+so `ft_sorted_multiset_cursor_add`, `ft_interval_tree_cursor_insert`, and the priority-search
+`_cursor_set_item`/`_cursor_try_insert` each perform two independent O(log n) descents plus the
+publish. This is the honest cost of the checkpoint representation and is not a defect, but it should
+not be read as focused editing.
+
+Interval overlap navigation through a cursor is the one genuinely non-logarithmic path.
+`_find_overlap_cursor`, `_find_containing_cursor`, and `_cursor_seek_next_overlap` walk ranks forward
+from the start position calling the indexed accessor per step, breaking once low endpoints exceed the
+query high. One call is O(k log n) for k scanned occurrences, with k up to n, and the interval-map
+variant additionally constructs and destroys a key per iteration, invoking caller copy and destroy
+callbacks once per scanned element. The `MaxHigh` annotation is used by
+`ft_interval_tree_try_find_overlap` on the container but **not** by the cursor path, so
+`persistent_interval_map.h`'s claim that "the interval tree provides pruned overlap navigation" does
+not extend to these cursor functions.
 
 ## Intentional API Differences
 

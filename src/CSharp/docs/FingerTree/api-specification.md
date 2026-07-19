@@ -619,12 +619,201 @@ measured rope.
   expose partial arrays.
 - **Text specialization.** With `MeasuredRope<char, int, NewlineMeasure>`, the cursor works directly
   with the existing UTF-16 text helpers. `RopeText.LineColumnOf(cursor)` obtains zero-based line and
-  column coordinates without first materializing a snapshot.
+  column coordinates. It reads the line from `MeasureBefore` without a descent, but resolves the
+  column through `Snapshot().LineStartOffset(line)`, so a dirty cursor first normalizes its canonical
+  snapshot exactly as the method's own remarks state.
 
 The [C2 shipment decision](measured-rope-cursor-c2-decision.md) owns the exact 16/256 representation,
 callback ceilings, source-versus-prepared split policy, benchmark thresholds, and validation
-evidence. No deque, RRB, reversible-deque, raw-finger-tree, bookmark, or rebase cursor is implied by
-this surface. Tungsten collection cursors are excluded rather than implied or deferred.
+evidence. No bookmark or rebase cursor is implied by this surface, and Tungsten collection cursors
+are excluded rather than implied or deferred.
+
+The deque, RRB, reversible-deque, and raw-finger-tree cursors that later shipped under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md)
+are **not** governed by this section. They are Profile R snapshot-plus-gap checkpoints delegating to
+their collections' ordinary persistent operations, and they inherit none of the focused
+representation, memo cell, callback ceiling, allocation bound, or amortized-locality claims recorded
+here for the rope tier.
+
+## The Persistent Cursor Tier
+
+Beyond the two rope cursors, this workspace ships **thirteen** public cursor types under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md).
+Every one is a `public readonly struct`, and every one is a **Profile R checkpoint**: the value is a
+retained collection reference plus a validated position, rank, or split, and every edit delegates to
+an ordinary published persistent operation. None of them claims the rope tier's focused
+representation, memo cell, callback ceiling, allocation bound, or amortized locality.
+
+`Rope<T>` and `MeasuredRope<T, …>` remain the only focused cursors. There is no `TextRopeCursor`
+type: the text tier is extension methods over `MeasuredRopeCursor<char, int, NewlineMeasure>`.
+
+### Shipped cursor types
+
+| Group | Type | Axis |
+| --- | --- | --- |
+| sequence | `FingerTreeDequeCursor<T>` | positional gap in `0 .. Count` |
+| sequence | `ReversibleDequeCursor<T>` | positional gap in logical orientation |
+| sequence | `RrbVectorCursor<T>` | positional gap in `0 .. Count` |
+| sequence | `RangeUpdateSequenceCursor<TElement, TMeasure, TTag, TOps>` | positional gap plus measures and range tags |
+| sequence | `FingerTreeCursor<TElement, TMeasure, TMeasureOps>` | measure-and-neighbor split, **no count or position** |
+| sorted | `SortedBagCursor<T>` | comparator-order gap with duplicate occurrences |
+| sorted | `SortedSetCursor<T>` | comparator-order gap, one representative per class |
+| sorted | `SortedDictionaryCursor<TKey, TValue>` | key-order gap |
+| sorted | `CanonicalSortedSetCursor<T>` | comparator-order gap over the zip-zip set |
+| augmented | `PrioritySearchQueueCursor<TKey, TPriority, TValue>` | key order; priority is a query, not a second axis |
+| augmented | `IntervalTreeCursor<T>` | nondecreasing low-endpoint order with duplicate occurrences |
+| augmented | `PersistentIntervalMapCursor<TEndpoint, TValue>` | unique complete `(Low, High)` interval key order |
+| augmented | `PersistentChunkedBitSetCursor` | population-rank gap over set bits; `long` count and position |
+
+### Factories and the hit discriminator
+
+`GetCursor(int position = 0)` is universal for the countable families — `long` on
+`PersistentChunkedBitSetCursor` — and its default argument is the start gap; `GetCursor(Count)` is
+the end gap. There is no `GetCursorAtStart` or `GetCursorAtRank`.
+
+Ordered families add `GetCursorAtLowerBound(…)` and `GetCursorAtUpperBound(…)`. Exact search is
+always a `bool`-returning `TryGetCursor(…, out … cursor)` overload, distinguished by argument type;
+**no cursor type has a `Found` property and no factory returns a result struct**. A miss still
+publishes a usable lower-bound cursor, so it is a location rather than an invalid value.
+
+Family-specific factories worth naming exactly, because they are easy to guess wrong:
+
+```csharp
+// PrioritySearchQueue<TKey, TPriority, TValue>
+public PrioritySearchQueueCursor<TKey, TPriority, TValue> GetCursorAtMinimumPriority();
+
+// IntervalTree<T> and PersistentIntervalMap<TEndpoint, TValue>
+public bool TryGetOverlapCursor(Interval<T> query, out IntervalTreeCursor<T> cursor);
+public bool TryGetContainingCursor(T point, out IntervalTreeCursor<T> cursor);
+
+// PersistentChunkedBitSet
+public PersistentChunkedBitSetCursor GetCursorAtOrAfter(int bitIndex);
+
+// FingerTree<TElement, TMeasure, TMeasureOps>
+public FingerTreeCursor<TElement, TMeasure, TMeasureOps> GetCursorAtStart();
+public FingerTreeCursor<TElement, TMeasure, TMeasureOps> GetCursorAtEnd();
+public bool TryGetCursor<TPredicate>(TPredicate predicate, out FingerTreeCursor<…> cursor)
+    where TPredicate : struct, IMeasurePredicate<TMeasure>;
+```
+
+`GetCursorAtMinimumPriority` reads the root's cached winner and then performs an ordinary key seek;
+it does not walk a priority-ordered sequence, which does not exist.
+
+### Navigation and edit vocabulary
+
+The rank seek verb is **deliberately split** and must not be documented as one name: sequence cursors
+use `Seek(int)`, sorted and augmented cursors use `SeekRank(int)` — `SeekRank(long)` on the bit set —
+and the raw measured tree uses `SeekByMeasure<TPredicate>(TPredicate)`.
+
+- **Sequence cursors** expose `Count`, `Position`, `IsAtStart`, `IsAtEnd`, `TryPeekPrevious`,
+  `TryPeekNext`, `MovePrevious`, `MoveNext`, `Seek`, `Insert`, `DeletePrevious`, `DeleteNext`,
+  `ReplaceNext`, and `Snapshot`. `FingerTreeDequeCursor<T>` and `RrbVectorCursor<T>` add
+  `InsertRange(IEnumerable<T>)`; `RrbVectorCursor<T>` also overloads `InsertRange(RrbVector<T>)` for
+  a structural-sharing splice through `SplitAt`/`Concat`. `ReversibleDequeCursor<T>` adds
+  `Reverse()`, which maps gap `p` to `Count - p` and returns a cursor over the reversed logical
+  version.
+- **`RangeUpdateSequenceCursor`** adds the `MeasureBefore`/`MeasureAfter` properties and four range
+  members: `MeasurePrevious(int count)`, `MeasureNext(int count)`, `ApplyPrevious(int count, TTag tag)`,
+  and `ApplyNext(int count, TTag tag)`. Note the asymmetry — the whole-side measures are properties,
+  the counted forms are methods.
+- **`FingerTreeCursor`** has neither `Count` nor `Position`, by design: a maximum, interval, or
+  arbitrary application monoid cannot be interpreted as an index, so the type refuses to fabricate
+  one. Its state is `(snapshot, left, right)` — two whole subtrees — and its surface is `IsAtStart`,
+  `IsAtEnd`, `MeasureBefore`, `MeasureAfter`, the two peeks, `MovePrevious`/`MoveNext`,
+  `SeekByMeasure`, `Insert`, `DeletePrevious`, `DeleteNext`, `ReplaceNext`, and `Snapshot`.
+  `SeekByMeasure` returns the cursor directly; the `bool` discriminator lives on the collection-level
+  `TryGetCursor` factory.
+- **Sorted cursors** expose the ordered-gap protocol plus family-appropriate edits. `SortedBagCursor`,
+  `SortedSetCursor`, and `CanonicalSortedSetCursor` expose `Add(item)` and the two deletions and
+  deliberately have **no `ReplaceNext`**: changing an occurrence can change its sort position, so the
+  unambiguous operation is delete-plus-`Add`. `SortedDictionaryCursor` adds `Insert(key, value)`,
+  `TryInsert(key, value, out …)`, `SetItem(key, value)`, and `SetNextValue(value)`.
+- **Augmented cursors.** `PrioritySearchQueueCursor` exposes `Insert`, `TryInsert`, `SetItem`, and
+  `SetNext(priority, value)`. The interval families expose `TrySeekNextOverlap(query, out cursor)` —
+  the cursor-relative continuation, which searches strictly after the focused occurrence so a
+  factory's gap-before-hit result cannot rediscover the same occurrence indefinitely.
+  `PersistentIntervalMapCursor` adds `Insert`, `TryInsert`, and `SetNextValue`; endpoint replacement
+  is not a local edit and is expressed as remove-plus-insert. `PersistentChunkedBitSetCursor` exposes
+  `Add(int bitIndex)` and the two deletions, which clear the exact neighboring bit.
+
+### Identity, defaults, and the error channel
+
+`Snapshot()` returns the retained field with no reconstruction, so a cursor that has performed no
+edit returns the **exact source instance**, and identity survives arbitrary navigation because
+movement threads the same reference through. Several edit paths additionally preserve identity on a
+semantic no-op by forwarding the collection's own `ReferenceEquals` result — this covers RRB
+equal-value replacement, chunked-bit-set present-bit `Add`, and the range sequence's zero-length or
+identity-tag `ApplyPrevious`/`ApplyNext`.
+
+The default struct value of every cursor type is explicitly invalid, and **every** member throws
+`InvalidOperationException` with a type-specific message. This is enforced structurally: no cursor
+declares `Position` as an auto-property. Each routes through a private guarded accessor — named
+`Value` in twelve types and `SnapshotValue` in `FingerTreeCursor` — so `Position`, the derived
+`IsAtStart`/`IsAtEnd`, and the `Seek`/`SeekRank` identity shortcut all read the guard before
+returning, and none can silently report gap zero on a `default` value. `FingerTreeCursor` has no
+`Position` at all and guards transitively through its `Left`/`Right` accessors; its `SeekByMeasure`
+has no identity shortcut. Inherited `ValueType` members are not overridden and do not throw.
+
+Otherwise the channel is a clean split:
+
+- **`ArgumentOutOfRangeException`** for a bad argument. Every cursor constructor validates its
+  position, so every factory and every seek inherits the check; counted range arguments on the range
+  sequence validate through a shared negative-and-overflow helper.
+- **`InvalidOperationException`** for a boundary violation — moving past an end, deleting across an
+  absent neighbor, `SetNextValue` with no next entry.
+- **`ArgumentNullException`** from the `InsertRange` overloads.
+- **`OverflowException`** at `int.MaxValue`, because every position advance is `checked`.
+
+One exception to the split, worth calling out: `PrioritySearchQueueCursor.Insert` throws
+**`ArgumentException`** on a duplicate key, not `InvalidOperationException`. It is the only cursor in
+this workspace that throws `ArgumentException`.
+
+### Honest complexity
+
+These are checkpoints, and their costs are the owning collection's costs plus O(1) rank arithmetic.
+The gap-cursor shape invites the opposite assumption, so the following are stated explicitly.
+
+| Operation | Cost |
+| --- | --- |
+| creation at a position, `Seek`/`SeekRank`, `MovePrevious`/`MoveNext` | O(1) — allocates a struct and adjusts an integer; touches no tree |
+| `Count`, `Position`, `IsAtStart`, `IsAtEnd`, clean `Snapshot()` | O(1) |
+| peek on a positional or ordered cursor | O(log n) — a **full indexed descent from the root** |
+| bound and exact seek factories | O(log n) |
+| point edit | the delegated operation, normally O(log n) |
+
+**Movement does not amortize a peek.** `MoveNext(); TryPeekNext();` re-descends from the root every
+time, because the cursor retains no path. A complete traversal by move-plus-peek is therefore
+**O(n log n)**, not O(n). Use the collection's own enumerator for whole-collection walks.
+
+Family-specific costs that differ from the table:
+
+- **`FingerTreeCursor`** is the one family that beats the positional cursors on locality, because it
+  carries both subtrees rather than an index. `MeasureBefore` and `MeasureAfter` are **O(1)** cached
+  root-measure reads; peeks are O(1); and `MoveNext`/`MovePrevious` move a leaf with its cached
+  measure intact, so the user's `IMeasure` callback is **not** re-invoked by navigation. Edits are
+  O(log n) through `Concat`.
+- **`RangeUpdateSequenceCursor.MeasureBefore`/`MeasureAfter`** look like field reads at the call site
+  but are each an O(log n) `MeasureRange` call, and are not cached. `ApplyPrevious`/`ApplyNext`
+  delegate to `ApplyRange`, which stamps a single node-level tag, so a range apply is O(log n) rather
+  than O(count); zero length and an identity tag both short-circuit to the receiver without callbacks.
+  Measure reads thread inherited-tag state down the descent, so the tree is never eagerly pushed down
+  to answer a query.
+- **`ReversibleDequeCursor.InsertRange`** does not delegate to a bulk operation; it inserts one
+  element at a time, costing O(k log n) and producing k intermediate versions. The deque and RRB
+  cursors delegate to real bulk `InsertRange`.
+- **`PersistentChunkedBitSetCursor`** peeks through `Select`, which is an O(log c) descent over `c`
+  nonzero chunks **plus a bounded in-word loop of up to 63 clear-lowest-set-bit iterations**. It is
+  O(log c) asymptotically, but the constant is real and every peek pays it. `Rank` is a clean
+  O(log c) descent plus one population count.
+- **The interval cursors perform a genuine augmented descent.** `TryGetOverlapCursor` and
+  `TrySeekNextOverlap` locate through a `MaxHigh`-pruned structural descent with an allocation-free
+  predicate, not a rank scan, and stop once low endpoints exceed the query high. The honest caveat is
+  that each continuation step first splits off a suffix tree, so iterating all `k` overlaps is
+  O(k log n) with O(log n) allocation per step rather than a stateful O(log n + k) walk.
+- **`CanonicalSortedSetCursor`** derives bound ranks by an explicit zip-zip node descent over cached
+  child counts, so its factories are O(h). As elsewhere in the canonical set, `h` is expected
+  logarithmic under the documented coherent pseudorandom rank assumptions and is not unconditionally
+  O(log n).
 
 ## Relaxed Radix-Balanced Vector
 

@@ -55,8 +55,27 @@ visitation/counting, removal, invalid intervals, and dual-index validation.
   empty/start/end and chunk-seam gaps, copied peeks, navigation, exact-alias persistent edits, retained branches,
   unconditional replacement, array/rope insertion, failure-output preservation, a deterministic 750-command
   model, and concurrent copies/reads/branches over one retained cursor.
+- `sequence cursors` covers the deque, reversible-deque, RRB, and measured-tree gap contracts: empty/start/end
+  gaps, copied peeks, navigation, exact-alias persistent edits, retained branches, and ordered measures.
+- `ordered-search cursors` covers the sorted bag/set/map and interval bound, exact, and overlap-continuation
+  factories, their `found` discriminators, rank navigation, and persistent edits.
+- `exact source/result aliasing` covers self-aliased publication, including
+  `ft_sorted_multiset_cursor_snapshot` onto the cursor's own retained set and self-copy/insert/remove on the
+  `int64_t` interval tree.
 - `rope chunk boundaries` covers empty/singleton transitions, exact-maximum chunks, overflow splitting, removal
   re-coalescing, and exact-boundary concat for both positional and measured ropes.
+
+Non-rope cursor coverage is distributed across the focused binaries rather than collected into a cursor
+executable: `canonical_sorted_set_tests.c` registers `canonical cursor rank policy and persistent edits`,
+`priority_search_queue_tests.c` registers `cursor key order minimum and persistent edits`, and
+`range_update_sequence_tests.c`, `rrb_vector_tests.c`, `persistent_interval_map_tests.c`, and
+`persistent_chunked_bit_set_tests.c` each register a persistent-cursor case of their own.
+
+These are in-binary case labels dispatched by each runner, not CTest test names. CTest registers exactly one
+test per binary — `fingertree_c.core`, `fingertree_c.rrb_vector`, `fingertree_c.daba_lite`,
+`fingertree_c.canonical_sorted_set`, `fingertree_c.brodal_okasaki_heap`, `fingertree_c.priority_search_queue`,
+`fingertree_c.range_update_sequence`, `fingertree_c.persistent_interval_map`, and
+`fingertree_c.persistent_chunked_bit_set` — so an individual cursor case cannot be selected with `ctest -R`.
 - `measured rope` covers cached and prefix measures, cumulative-measure locate/split, chunk-local editing,
   coalescing, bounded chunk counts, append, and persistence.
 - `measured rope cursor`, `measured rope cursor ordered measure`, `measured rope cursor model`, and

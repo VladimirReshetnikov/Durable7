@@ -977,6 +977,23 @@ including from a destroy callback during disposal, is unsupported.
 | Chunked positional sequence and version-bound gap editing | `ft_rope`, `ft_rope_cursor` |
 | Chunked sequence with custom cumulative measure and gap editing | `ft_measured_rope`, `ft_measured_rope_cursor` |
 | Newline-aware character content and gap editing | `ft_text_rope`, `ft_text_rope_cursor` |
+| Positional gap editing over a deque, reversible deque, or RRB vector | `ft_persistent_deque_cursor`, `ft_reversible_deque_cursor`, `ft_rrb_vector_cursor` |
+| Measure-and-neighbor navigation over the raw measured tree | `ft_tree_get_cursor_at_start`, `ft_tree_get_cursor_by_measure`, `ft_tree_cursor` |
+| Positional gap editing with range measures and lazy tags | `ft_range_update_sequence_cursor` |
+| Ordered comparator search over sorted values, with or without duplicates | `ft_sorted_multiset_get_cursor_lower_bound`, `ft_sorted_multiset_get_cursor_at_item` |
+| Ordered comparator search over a sorted key/value map | `ft_sorted_map_get_cursor_lower_bound`, `ft_sorted_map_get_cursor_at_key` |
+| Ordered search with canonical topology and borrowed representative peeks | `ft_canonical_sorted_set_get_cursor_lower_bound`, `ft_canonical_sorted_set_get_cursor_at_item` |
+| Key-ordered search with a cached priority minimum | `ft_priority_search_queue_get_cursor_at_key`, `ft_priority_search_queue_get_cursor_at_minimum_priority` |
+| Low-endpoint-ordered interval navigation and overlap continuation | `ft_interval_tree_i64_get_cursor_lower_bound`, `ft_interval_tree_i64_cursor_seek_next_overlap` |
+| Complete-interval-key navigation with payload replacement | `ft_persistent_interval_map_get_cursor_at_key`, `ft_persistent_interval_map_cursor_set_next` |
+| Population-rank navigation over sparse set bits | `ft_persistent_chunked_bit_set_get_cursor_at_or_after`, `ft_persistent_chunked_bit_set_cursor_seek_rank` |
+
+Every non-rope cursor family follows the ownership, aliasing, borrowed-peek, `*found`, and complexity
+rules in [api-notes.md](api-notes.md#sequence-ordered-search-and-augmented-cursors). Note in
+particular that a `bool *found` from an exact search is meaningful only on `FT_STATUS_OK`, that the
+canonical set and priority-search queue peek by borrowed reference through their `_ref` functions
+while every other family copies, and that a distinct live `result` cursor leaks rather than being
+rejected.
 
 For coverage details, see [validation.md](validation.md). For cross-language contract alignment, see
 the repository [porting and semantic parity guide](../../../../docs/guides/porting-and-semantic-parity.md).

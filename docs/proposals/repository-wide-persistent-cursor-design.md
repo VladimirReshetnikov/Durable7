@@ -179,17 +179,33 @@ The disposition terms are:
 | Persistent interval map | shipped cursor | Unique complete interval key in deterministic interval order; exact-key and augmented-search state publish together. |
 | Persistent chunked bit set | shipped cursor | Population-rank gap whose next entry is an existing set bit; seek by bit index, rank, or select. Chunk boundaries stay private. |
 | Persistent ordered set and map | shipped cursor | Insertion/explicit-position gap; edits update sequence and hash index atomically without exposing sparse labels. |
-| Persistent ordered multimap | shipped cursor | Nested outer key-group and inner value-order gaps; flattened pair movement is derived, not the sole representation. |
+| Persistent ordered multimap | shipped cursor, reduced scope | Designed as nested outer key-group and inner value-order gaps. **All nine ports currently ship a flattened grouped-pair rank instead**; see the [ordered multimap](#persistent-ordered-multimap) deviation note. |
 | Tungsten `PersistentList` and `PersistentAssociation` | not applicable | These application-leaf collections have no cursor requirement; their existing persistent operations remain the complete surface. |
 | Builders, one-way edit sessions, block stores, proofs, packs, and DABA Lite | not applicable | These are mutable lifecycles, persistence support values, authenticated artifacts, or a mutable window—not persistent aggregate values needing cursors. |
 
 ## Implementation Status And Shipment Boundary
 
-The semantic checkpoint tier is complete in C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript,
-and Python. “Complete” means the applicable cursor can retain one immutable version, navigate its
-documented semantic axis, perform the family-appropriate persistent edits, return a snapshot, and
-preserve the source and every retained branch. It does not mean that all ports use the same node
-topology or have the same asymptotic constants.
+The semantic checkpoint tier ships in C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and
+Python: every applicable cursor can retain one immutable version, navigate its documented semantic
+axis, perform the family-appropriate persistent edits, return a snapshot, and preserve the source and
+every retained branch. That does not mean all ports use the same node topology or have the same
+asymptotic constants.
+
+Three surfaces specified below are **not yet shipped in any port**, so the tier is complete by family
+but not by operation:
+
+- `TrySeekValue` on the ordered set and `TrySeekKey` on the ordered map. Every port offers the
+  equality search only as a collection factory returning a usable end cursor on a miss, which the
+  [shared ordered context](#shared-ordered-context) permits; the instance form does not exist.
+- `InsertRange` on the neutral ordered set and on the range-update sequence. In most ports the
+  owning collection lacks the corresponding ordinary operation, so this needs a contract decision
+  before implementation.
+- The ordered multimap's nested group/value navigation. See the
+  [ordered multimap](#persistent-ordered-multimap) deviation note.
+
+The [2026-07-19 cross-language review](../reviews/persistent-cursor-cross-language-review-2026-07-19__3f7c1a9e4d02.md)
+records the current per-port state, including the operations that are honestly slower than this
+document's targets.
 
 | Shipment group | Public cursor capability | Implementation boundary |
 | --- | --- | --- |
@@ -197,7 +213,7 @@ topology or have the same asymptotic constants.
 | Measured sequence, deque, reversible deque, RRB vector, Range sequence | Validated positional or measured gaps, adjacent peeks/movement, family-local insert/replace/delete, measure/tag operations where owned, snapshot | Snapshot-plus-gap checkpoints over the existing substrate. Reversal, relaxed sizes, and lazy tags remain collection invariants rather than cursor state visible to callers. |
 | Rope, measured rope, text rope | Positional and measure-aware edit cursors, text-facade preservation, branching snapshots | Existing mature cursor tier; C# retains its focused implementation and siblings retain their documented checkpoints. |
 | Sorted bag/set/map, canonical set, priority-search queue, interval tree/map, chunked bit set | Comparator/order/rank factories, ordered neighbors, duplicate-aware or key-preserving edits, snapshot | The cursor delegates canonical ranks, winner caches, interval summaries, and sparse-word contraction to ordinary persistent operations. |
-| Neutral Ordered set/map/multimap | Explicit-position gaps, equality search where meaningful, group/value navigation for multimap, atomic persistent edits, snapshot | Sequence and CHAMP indexes publish as one facade; private sparse labels never enter the cursor contract. |
+| Neutral Ordered set/map/multimap | Explicit-position gaps, atomic persistent edits, snapshot; the multimap uses a flattened grouped-pair rank rather than the designed group/value navigation | Sequence and CHAMP indexes publish as one facade; private sparse labels never enter the cursor contract. `TrySeekValue`, `TrySeekKey`, and `InsertRange` are specified below but not yet shipped in any port. |
 | Merkle search tree | Rank, lower/upper/exact-key factories, ordered neighbors, strict insert/put/value update/delete, authenticated snapshot | Specialized snapshot-plus-rank cursor. Every edit uses the canonical tree operation, so `MST2` bytes, root digest, representative, callback, and failure rules remain unchanged. |
 
 The language surfaces are idiomatic rather than mechanically identical:
@@ -748,12 +764,19 @@ spliced with structural sharing, plus ordinary enumerable/span capture overloads
 The cursor is independent of `RrbVector.Builder`: the builder is append-oriented mutable staging,
 whereas the cursor is branchable local editing over an adopted persistent version.
 
-In a full RRB port, seek is O(log32 n). In-leaf movement and replacement copy at most one bounded
-leaf plus changed cursor state; boundary crossing and rebalancing are O(log32 n) worst. A linear
-scan after one seek targets O(k + log32 n). Insert-range work is at least Omega(m) for uncaptured
-input and otherwise follows the vector's concat/rebalance bound. Checkpoint ports retain their local
-balanced-sequence costs. The design does not claim a dedicated tail, transient RRB nodes, or
-constant-amortized arbitrary version-DAG editing.
+The radix-frame representation above is a **target, not a shipped one**: every current port,
+including C#, ships the Profile R checkpoint of `(root, position)` and delegates edits to the
+vector's ordinary indexed operations. Its bounds are the owning vector's, and a linear scan after
+one seek costs one lookup per step rather than O(k + log32 n).
+
+In a full RRB port with the frames described above, seek is O(log32 n). In-leaf movement and
+replacement copy at most one bounded leaf plus changed cursor state; boundary crossing and
+rebalancing are O(log32 n) worst. A linear scan after one seek targets O(k + log32 n). Insert-range
+work is at least Omega(m) for uncaptured input and otherwise follows the vector's concat/rebalance
+bound. Checkpoint ports retain their local balanced-sequence costs. The design does not claim a
+dedicated tail, transient RRB nodes, or constant-amortized arbitrary version-DAG editing, and no
+port may claim the frame bounds without clearing the evidence gate in
+[future focused-representation promotion gates](#future-focused-representation-promotion-gates).
 
 ### Range-Update Sequence
 
@@ -1257,6 +1280,25 @@ O(log v + log k) sequence closure; inner relabeling costs O(v (w_v + c_v)) and o
 O(k (w_k + c_k)) per produced version. A flattened seek without an outer pair-count measure is
 honestly O(k + log v).
 
+#### Shipped scope deviation
+
+The nested `Empty | FocusedGroup { … }` cursor above is the **design target**, not what ships today.
+All nine ports currently expose a single flattened grouped-pair rank: the cursor is
+`(collection, pairRank)` and every peek, group seek, and edit resolves the rank by walking the pair
+flattening, so those operations are O(total pairs) and a linear walk is O(P²) rather than the
+O(k + log v) targeted here. The sum-type state, per-group navigation, and group-index seek are not
+implemented, and the empty-group reanchor rule holds only implicitly because the rank is the prefix
+sum of group sizes.
+
+This is a reduced-scope shipment, not a completed one. Promoting a port to the nested representation
+first requires shipping the ordinary positional group operations (`InsertGroupBefore/After`,
+arbitrary-position `InsertValue`) that the surface above is gated on, then re-establishing
+cursor/ordinary-operation parity. Until then the flattened rank must not claim the nested design's
+complexity, and the reanchor rule should be modeled and tested explicitly rather than left to the
+encoding. The concrete per-port costs and the two OCaml/Haskell content-rescan defects that the flat
+encoding induced are recorded in the
+[2026-07-19 cross-language review](../reviews/persistent-cursor-cross-language-review-2026-07-19__3f7c1a9e4d02.md).
+
 ## Tungsten Exclusion
 
 Neither Tungsten `PersistentList` nor `PersistentAssociation` receives a cursor. Their existing
@@ -1556,10 +1598,18 @@ Unlike CHAMP promotion, these repairs never change the ascending relative order 
 gap continuity is semantic. Clean snapshot returns the exact source. A dirty cursor may memoize one
 canonical reconstructed root per edit version.
 
-With key width `W` equal to 32 or 64, seek, rank, edit, and first dirty snapshot are O(W) worst;
-context is O(W). One move is O(W) worst and O(1) amortized over a complete linear in-order traversal.
-`Count` and `Position` are O(1) when the port caches subtree counts. A port without that cache must
-either add it as an internal invariant or omit/qualify rank members rather than scan silently.
+With key width `W` equal to 32 or 64, seek, rank, edit, and first dirty snapshot are O(W) worst.
+`Count` and `Position` are O(1) when the port caches subtree counts; every shipped port does, so the
+rank members are honest. A port without that cache must either add it as an internal invariant or
+omit/qualify rank members rather than scan silently.
+
+All nine ports ship the snapshot-plus-rank checkpoint: the cursor is `(root, rank)` and retains no
+frames. Moving the gap is O(1) because it only rewrites an integer, but **reading** the neighbour
+after a move is an unconditional O(W) root descent, so a complete in-order traversal by
+move-plus-peek is O(n · W) and context is O(1). The O(W)-worst/O(1)-amortized move and the O(W)
+context described earlier in this section belong to the retained-frame representation, which no port
+implements; promoting a port to it requires the evidence gate in
+[future focused-representation promotion gates](#future-focused-representation-promotion-gates).
 
 Port-specific ownership remains explicit: C retains/releases the path; C++ and Rust frames retain
 shared nodes and introduce no payload-copy requirement beyond the owning Patricia implementation
@@ -1629,15 +1679,27 @@ and merge operate on the closed snapshot.
 - Root trust, authentication, confidentiality, replay, and peer identity remain outside the cursor
   exactly as they are outside the tree.
 
-Let `h` be block height, `e_i` the occupancy of visited block `i`, and `S` changed encoded bytes. Key
-seek retains O(sum log(e_i + 1)) comparisons. Existing nodes cache each child's total count rather
-than cumulative child-prefix ranks, so rank seek and initial `Position` accumulation cost
-O(sum (e_i + 1)) unless a validated cumulative-rank table is added. Within-block movement is O(1),
-boundary movement is O(h) worst, and a complete traversal is O(n). Edit plus first dirty snapshot is
-expected O(16 log16 n + S) under uniform layers and O(n + S) worst for a degenerate block. Context
-is O(h) only when frames retain original nodes plus indexes; copying left/right entry or child runs
-uses O(sum e_i) space. Clean and memoized repeated snapshots are O(1). These are the existing tree
-assumptions, not new cryptographic or adversarial guarantees.
+Let `h` be block height, `e_i` the occupancy of visited block `i`, and `S` changed encoded bytes.
+
+**Shipped snapshot-plus-rank checkpoint (all nine ports).** Every port stores `(tree, position)` and
+retains no frames, so each peek re-descends from the root. Key seek costs O(sum log(e_i + 1))
+comparisons; rank seek, initial `Position` accumulation, **and every peek** cost O(sum (e_i + 1))
+because existing nodes cache each child's total count rather than cumulative child-prefix ranks.
+Moving the gap is O(1) because it only rewrites an integer, but a complete traversal by
+move-plus-peek is therefore O(n · sum (e_i + 1)), not O(n). `Count` and `Position` are O(1) reads.
+Edit plus first dirty snapshot is expected O(16 log16 n + S) under uniform layers and O(n + S) worst
+for a degenerate block, because the edit delegates to the ordinary canonical operation. Clean and
+memoized repeated snapshots are O(1). Context space is O(1).
+
+**Focused frame-based tier (specified above, implemented nowhere).** Only an implementation whose
+frames actually retain the original nodes plus indexes described earlier may claim O(1) within-block
+movement, O(h) boundary movement, an O(n) complete traversal, or O(h) context; copying left/right
+entry or child runs instead costs O(sum e_i) space. A validated cumulative-rank table would
+additionally be required before claiming better than O(sum (e_i + 1)) rank seek. Promoting a port to
+this tier requires the evidence gate in
+[future focused-representation promotion gates](#future-focused-representation-promotion-gates).
+
+These are the existing tree assumptions, not new cryptographic or adversarial guarantees.
 
 Cross-language golden tests must apply the same cursor edit histories and require byte-identical root
 hashes and `MST2` block closures under the shared golden policy, comparer semantics, codecs, and

@@ -660,6 +660,68 @@ reference-equal roots. Combining overloads currently enumerate one side and ther
 O(m * W). Enumeration is O(n) in ascending order and currently allocates an iterator plus a traversal
 stack; unlike the CHAMP enumerator, it is not an allocation-free struct enumerator.
 
+### Patricia Ordered Cursors
+
+The four Patricia facades ship ascending signed-key gap cursors under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md):
+`PersistentIntMapCursor<TValue>`, `PersistentLongMapCursor<TValue>`, `PersistentIntSetCursor`, and
+`PersistentLongSetCursor`. Each is a `public readonly struct` holding exactly a source reference and
+an integer rank — a **Profile R snapshot-plus-rank checkpoint**, not a retained-frame zipper. CHAMP
+maps and sets deliberately have no cursor; the Patricia families qualify because ascending signed-key
+order is public semantics rather than private trie topology.
+
+A cursor position is a gap in `0 .. Count`, with `entries < boundary` before it and the candidate
+entry after it. The factories are:
+
+```csharp
+public PersistentIntMapCursor<TValue> GetCursor(int position = 0);
+public PersistentIntMapCursor<TValue> GetCursorAtEnd();
+public PersistentIntMapCursor<TValue> GetLowerBoundCursor(int key);
+public PersistentIntMapCursor<TValue> GetUpperBoundCursor(int key);
+public PersistentIntMapCursor<TValue> GetCursorAtKey(int key, out bool found);
+```
+
+The `long` map, and both set facades, mirror this exactly; the set key-seek factory is spelled
+`GetCursorAtItem(item, out bool found)` rather than `GetCursorAtKey`. There is no
+`GetCursorAtStart` — `GetCursor()` is the start gap through its default argument. `GetCursorAtKey`
+and `GetCursorAtItem` publish the hit discriminator as an `out bool` and **always return a usable
+lower-bound cursor**, so a miss is an insertion gap rather than an invalid value.
+
+Navigation is `MovePrevious`, `MoveNext`, and `Seek(int position)` — spelled `Seek`, not `SeekRank`.
+`Count`, `Position`, `IsAtStart`, and `IsAtEnd` are O(1) reads over cached subtree counts. Map cursors
+peek `KeyValuePair<TKey, TValue>` and edit through `Insert(key, value)`, `SetItem(key, value)`,
+`SetNextValue(value)`, `DeletePrevious()`, and `DeleteNext()`. Set cursors peek the bare item and
+expose only `Add(item)` plus the two deletions: there is no value to replace, and `Add` on a present
+item is an identity no-op returning the receiver cursor rather than an error.
+
+Every edit delegates to the ordinary published operation — `Add`/`SetItem`/`Remove` on the owning
+facade — so path compression, unary-parent collapse, no-op instance identity, and structural sharing
+are exactly the collection's. `Snapshot()` is O(1) and returns the **exact source instance** for a
+clean cursor; a no-op edit forwards the collection's own preserved reference.
+
+The error channel is:
+
+- `ArgumentOutOfRangeException` for a position outside `0 .. Count`, validated in `GetCursor` and
+  `Seek`;
+- `InvalidOperationException` for a boundary violation — moving past an end, or deleting or updating
+  across an absent neighbor — and for a strict insert whose key belongs at a different gap than the
+  current one;
+- `ArgumentException` with `paramName` `"key"` for a strict `Insert` of an already present key,
+  checked **before** the gap check, so a duplicate at the wrong gap reports the duplicate; and
+- `InvalidOperationException` from every member of the invalid `default` value.
+
+The default struct value is explicitly invalid. `Position`, `IsAtStart`, `IsAtEnd`, and the
+`Seek(Position)` identity shortcut all read a private guarded accessor before returning, so none of
+them can silently report gap zero on `default(PersistentIntSetCursor)`. Inherited `ValueType` members
+(`Equals`, `GetHashCode`, `ToString`) are not overridden and do not throw.
+
+Honest complexity: creation, `Seek`, and movement are O(1) — a move only rewrites an integer — while
+**every peek is an unconditional O(W) order-statistic descent from the root**, because the cursor
+retains no path. A complete in-order traversal by move-plus-peek is therefore O(n · W), not O(n).
+Bound and exact seeks are O(W). Edits are the owning operation's O(W) plus an O(1) rank adjustment.
+Context space is O(1). These cursors inherit none of the C# rope tier's focused representation, memo
+cell, callback ceiling, allocation bound, or amortized-locality claims.
+
 ## Merkle Search Tree Contract
 
 `MerkleSearchTree<TKey, TValue>` is an immutable ordered content-addressed map using the
@@ -750,6 +812,58 @@ versions, layer, cached subtree count, encoded entries, child order, and every d
   not permission to skip semantic traversal.
 - `Diff` reports comparer-ordered `Added`, `Removed`, and `Changed` values. Equal block digests are
   pruned; a separator change may require a merge scan of the whole divergent region.
+
+### Ordered Persistent Cursor
+
+`MerkleSearchTreeCursor<TKey, TValue>` is a `public readonly struct` holding one retained tree
+version plus a comparer-order rank gap. It is a **specialized Profile R snapshot-plus-rank
+checkpoint** over an already trusted in-memory tree, never a mutable editor for stored blocks.
+
+Factories mirror the Patricia family: `GetCursor(int position = 0)`, `GetCursorAtEnd()`,
+`GetLowerBoundCursor(TKey key)`, `GetUpperBoundCursor(TKey key)`, and
+`GetCursorAtKey(TKey key, out bool found)`. `GetCursorAtKey` publishes its hit discriminator as an
+`out bool` and always returns a usable lower-bound gap, so a miss is the insertion location.
+
+Navigation is `MovePrevious`, `MoveNext`, and `Seek(int position)`, with O(1) `Count`, `Position`,
+`IsAtStart`, and `IsAtEnd`. Peeks return `KeyValuePair<TKey, TValue>`. The edit vocabulary is
+`Insert(key, value)`, `SetItem(key, value)`, `SetNextValue(value)`, `DeletePrevious()`, and
+`DeleteNext()`.
+
+**Every cursor edit calls the canonical ordinary operation.** The tree exposes no `Add`, so even the
+strict `Insert` performs its own duplicate and gap precondition checks and then delegates to
+`SetItem`; `SetNextValue` resolves the focused entry and calls `SetItem` with the stored key;
+both deletions resolve the neighbor and call `Remove`. The cursor never constructs a node. Canonical
+encoding, key-layer derivation, block splitting and merging, subtree counts, `MST2` bytes, block
+digests, and the root digest are therefore byte-identical to the equivalent direct edit, and
+`SetItem`'s exact-canonical-value-byte no-op and `Remove`'s unchanged-result identity both propagate
+through the cursor unchanged.
+
+`Snapshot()` is O(1), returns the exact source instance for a clean cursor, retains the exact policy
+object, and never writes an `IMerkleBlockStore`. Cursor state is local navigation state: it is never
+part of `MST2`, `MSP2`, a pack, a proof, or a store, and it does not weaken codec round-trip checks
+or verification budgets. Create a cursor only from a tree built normally or obtained through a fully
+verified `Load`/`Import`.
+
+The error channel matches the Patricia cursors: `ArgumentOutOfRangeException` for a position outside
+`0 .. Count`; `ArgumentException` on `paramName` `"key"` for a strict `Insert` of a present key;
+`InvalidOperationException` for boundary violations, for a strict insert at the wrong gap, and from
+every member of the invalid `default` value.
+
+Honest complexity, with `h` the block height and `e_i` the entry occupancy of visited block `i`.
+Moving the gap is O(1) because it only rewrites an integer, but the cursor retains no frames, so
+**every peek re-descends from the root**. Because blocks cache each child's total subtree count
+rather than cumulative child-prefix ranks, the rank descent scans a block's entries linearly:
+a rank peek, a rank seek, and the initial `Position` accumulation each cost O(Σ (e_i + 1)). A key
+seek costs O(Σ log(e_i + 1)) comparisons for the in-block binary search plus the same linear rank
+accumulation. A complete traversal by move-plus-peek is therefore **O(n · Σ (e_i + 1))**, not O(n).
+`Count` and `Position` are O(1) reads. An edit plus its snapshot is the delegated canonical
+operation's cost — expected O(16 log16 n + S) for `S` changed encoded bytes under uniform layers, and
+O(n + S) worst case for a degenerate block shape. Context space is O(1).
+
+The frame-based tier described in the repository design — retaining original trusted node identity,
+entries, and complete in-memory child subtrees on both sides, and claiming O(1) within-block movement
+with an O(n) traversal — is **specified but implemented in no port, including this one**. Do not cite
+those bounds for this cursor.
 
 ### Blocks, Stores, Packs, And Verified Loading
 

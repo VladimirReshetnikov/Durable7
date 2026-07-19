@@ -140,7 +140,23 @@ The executable covers:
 - nominal text cursor ownership, newline partitions and absolute search, line/column interoperation, text edits,
   retained snapshots, miss-to-end behavior, and source persistence;
 - long text-rope edit scripts over retained snapshots, with model checks for indexing, traversal, line counts, and
-  line/column navigation.
+  line/column navigation;
+- non-rope cursor coverage, which lives inside the per-structure binaries rather than in dedicated cursor
+  executables. `fingertree_c_tests.c` registers `sequence cursors` for the deque, reversible-deque, RRB, and
+  measured-tree gap contracts, `ordered-search cursors` for the sorted bag/set/map and interval bound, exact,
+  and overlap-continuation factories, and `exact source/result aliasing` for self-aliased publication;
+  `canonical_sorted_set_tests.c` registers `canonical cursor rank policy and persistent edits`;
+  `priority_search_queue_tests.c` registers `cursor key order minimum and persistent edits`; and
+  `range_update_sequence_tests.c`, `rrb_vector_tests.c`, `persistent_interval_map_tests.c`, and
+  `persistent_chunked_bit_set_tests.c` each register their own persistent-cursor case.
+
+Two cursor coverage gaps are known and recorded rather than closed. Self-aliased `_cursor_snapshot` is
+exercised only for the sorted multiset, so the six families whose safety comes from a self-guard inside their
+container `_copy` rather than from an explicit guard in `_cursor_snapshot` are correct by delegation but
+unpinned by a test. And the FingerTree cursor suites perform no allocation-failure injection, so the
+`*found`-indeterminate-on-error paths and the `ft_copy_fn` abort boundary described in
+[api-notes.md](api-notes.md#sequence-ordered-search-and-augmented-cursors) are invisible to this gate, unlike
+the C HAMT workspace, which ships exhaustive failpoints.
 
 The independent RRB executable covers 0/1/31/32/33/1,023/1,024/1,025/100,000-element boundaries,
 unequal-height concatenation, exact leaf identity through aligned splits and updates, regular versus

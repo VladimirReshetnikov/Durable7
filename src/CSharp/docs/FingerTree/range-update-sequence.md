@@ -223,6 +223,59 @@ The collection itself is immutable and safe for concurrent reads. It has no muta
 cache. Algebra callbacks may run concurrently when callers read one or more snapshots concurrently;
 thread safety of callback-owned state is the policy author's responsibility.
 
+### Positional And Range Cursor
+
+`GetCursor(int position = 0)` returns `RangeUpdateSequenceCursor<TElement, TMeasure, TTag, TOps>`, a
+`public readonly struct` positional gap cursor over one sequence version. It is a **Profile R
+snapshot-plus-gap checkpoint** under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md):
+the value is a retained sequence reference plus a validated position, and every edit delegates to the
+ordinary operation above. It claims none of the C# rope tier's focused representation, memo cell,
+callback ceiling, allocation bound, or amortized-locality properties.
+
+The surface is the positional protocol — `Count`, `Position`, `IsAtStart`, `IsAtEnd`,
+`TryPeekPrevious`, `TryPeekNext`, `MovePrevious`, `MoveNext`, `Seek(int)`, `Insert(TElement)`,
+`DeletePrevious()`, `DeleteNext()`, `ReplaceNext(TElement)`, `Snapshot()` — plus the measure and
+range members this family owns:
+
+```csharp
+public TMeasure MeasureBefore { get; }
+public TMeasure MeasureAfter { get; }
+public TMeasure MeasurePrevious(int count);
+public TMeasure MeasureNext(int count);
+public RangeUpdateSequenceCursor<TElement, TMeasure, TTag, TOps> ApplyPrevious(int count, TTag tag);
+public RangeUpdateSequenceCursor<TElement, TMeasure, TTag, TOps> ApplyNext(int count, TTag tag);
+```
+
+`InsertRange` is deliberately absent, matching the collection, which also has no bulk positional
+insert. The design names it as an expected addition; it is a recorded substrate gap shared by all
+nine ports, not a local omission.
+
+`ApplyPrevious(k, tag)` targets `[Position - k, Position)` and `ApplyNext(k, tag)` targets
+`[Position, Position + k)`; both keep the gap fixed and both validate the complete range before any
+`IsIdentity` test or tag action, exactly as `ApplyRange` does. `MeasurePrevious` and `MeasureNext`
+use the same subtraction-safe validation. `Combine(MeasureBefore, MeasureAfter)` equals the version's
+whole measure in that order, assuming associativity only — no inverse, commutativity, identity value,
+or element equality.
+
+The lazy-tag invariant is preserved unchanged: reads thread inherited-tag state down the descent
+rather than pushing tags eagerly, so a navigating cursor neither mutates nor path-copies nodes, and a
+cursor that only moves keeps the clean source snapshot reference-identical. A replacement or
+inserted element never receives the old tags.
+
+Identity and failure follow the collection. A zero-length or identity-tag `ApplyPrevious`/`ApplyNext`
+returns the receiver cursor without callbacks. `Snapshot()` on a clean cursor returns the exact
+source instance. Positions outside `0 .. Count` and negative or oversized counts throw
+`ArgumentOutOfRangeException`; a boundary violation throws `InvalidOperationException`; and the
+invalid `default` value throws `InvalidOperationException` from every member, including `Position`,
+`IsAtStart`, and the `Seek(Position)` identity shortcut.
+
+Cursor costs are the collection's. Creation, `Seek`, and movement are O(1) integer work, but a peek
+is a full O(log n) indexed descent, so a complete traversal by move-plus-peek is O(n log n) rather
+than O(n). `MeasureBefore` and `MeasureAfter` are properties but each performs an O(log n)
+`MeasureRange` call and is not cached. `ApplyPrevious`/`ApplyNext` are O(log n), not O(count),
+because the range apply stamps one node-level tag.
+
 ## Complexity And Sharing
 
 Let n be the sequence length. These are worst-case structural bounds unless stated otherwise:

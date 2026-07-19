@@ -52,6 +52,66 @@ public sealed class PersistentChunkedBitSet : IEnumerable<int>
 }
 ```
 
+## Set-Bit Cursor
+
+`PersistentChunkedBitSetCursor` is a non-generic `public readonly struct` gap cursor over **present
+set bits**, not over a dense Boolean sequence extending to `int.MaxValue`. Its position is a
+population rank, so `Count` and `Position` are `long` while bit indexes remain `int`. It is a
+**Profile R snapshot-plus-rank checkpoint** under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md):
+the value is a retained set reference plus a validated rank, and every edit delegates to the ordinary
+`Add`/`Remove` operations. It claims none of the C# rope tier's focused representation, memo cell,
+callback ceiling, allocation bound, or amortized-locality properties, and chunk boundaries never
+enter the public contract.
+
+```csharp
+public PersistentChunkedBitSetCursor GetCursor(long position = 0);
+public PersistentChunkedBitSetCursor GetCursorAtOrAfter(int bitIndex);
+public bool TryGetCursor(int bitIndex, out PersistentChunkedBitSetCursor cursor);
+
+public readonly struct PersistentChunkedBitSetCursor
+{
+    public long Count { get; }
+    public long Position { get; }
+    public bool IsAtStart { get; }
+    public bool IsAtEnd { get; }
+    public bool TryPeekPrevious(out int bitIndex);
+    public bool TryPeekNext(out int bitIndex);
+    public PersistentChunkedBitSetCursor MovePrevious();
+    public PersistentChunkedBitSetCursor MoveNext();
+    public PersistentChunkedBitSetCursor SeekRank(long position);
+    public PersistentChunkedBitSetCursor Add(int bitIndex);
+    public PersistentChunkedBitSetCursor DeletePrevious();
+    public PersistentChunkedBitSetCursor DeleteNext();
+    public PersistentChunkedBitSet Snapshot();
+}
+```
+
+- Cursor rank accepts `0 .. Count`, where `Count` is the end gap. This deliberately differs from
+  `Select`, whose domain is `0 .. Count - 1`.
+- `GetCursorAtOrAfter(bitIndex)` places the gap before the first present bit at or after the given
+  index. `TryGetCursor(bitIndex, out cursor)` is the exact form: it reports the hit through its
+  `bool` return and still publishes a usable at-or-after gap on a miss.
+- `Add(bitIndex)` on a present bit is an identity no-op returning the receiver cursor; a missing bit
+  updates or inserts its word and returns the gap after the new bit. `DeleteNext` and
+  `DeletePrevious` clear the exact neighboring bit, and clearing a word's last bit removes the chunk
+  so no publishable version stores a zero word.
+- There is no cursor-level set algebra: `Union`, `Intersect`, `Except`, and `SymmetricExcept` remain
+  sparse word-stream operations on the collection.
+- `Snapshot()` on a clean cursor returns the exact source instance, and a present-bit `Add`
+  preserves that reference identity.
+- Positions outside `0 .. Count` throw `ArgumentOutOfRangeException`; boundary violations throw
+  `InvalidOperationException`; the invalid `default` value throws `InvalidOperationException` from
+  every member, including `Position`, `IsAtStart`, and the `SeekRank(Position)` identity shortcut.
+
+Honest cost: creation, `SeekRank`, and movement are O(1) integer work. A peek resolves through
+`Select`, which is an O(log `c`) measured descent **plus a bounded in-word loop of up to 63
+clear-lowest-set-bit iterations** — asymptotically O(log `c`), but every peek pays that constant, and
+it is a loop rather than a bit-deposit intrinsic. `GetCursorAtOrAfter` and `Add` resolve through
+`Rank`, a clean O(log `c`) descent plus one population count. Because the cursor retains no path, a
+complete ascending walk by move-plus-peek is O(`Count` · log `c`); use enumeration for whole-set
+traversal.
+
 ## Complexity And Allocation
 
 Let `c` be the number of nonzero chunks. Membership, point edits, inclusive rank, and select are

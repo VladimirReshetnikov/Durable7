@@ -71,6 +71,7 @@ API, nested ordering, representative, empty-group, failure, and complexity rules
 | Set algebra | Same-type and `IEnumerable<T>` overloads of `Union`, `Intersect`, `Except`, `SymmetricExcept` |
 | Relations | `IsSubsetOf`, `IsProperSubsetOf`, `IsSupersetOf`, `IsProperSupersetOf`, `Overlaps`, `SetEquals` |
 | Enumeration | struct `Enumerator`, `GetEnumerator`, `ToArray` |
+| Cursors | `GetCursor`, `TryGetCursor` (see [persistent cursors](#persistent-cursors)) |
 
 No sorted-set vocabulary is present. The positional indexer is `this[int index]`; equality lookup is
 never overloaded onto it.
@@ -244,6 +245,141 @@ enumerator yields no values. `IEnumerator.Reset` throws `NotSupportedException`.
 `ToArray` returns a fresh ordered representative array. The debugger proxy presents the same
 representatives and does not expose private stamps or duplicate index storage.
 
+## Persistent Cursors
+
+The three ordered collections ship immutable explicit-position gap cursors under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md).
+All three are **Profile R snapshot-plus-position checkpoints**: each cursor value is a retained
+collection reference plus one validated integer rank, and every edit delegates to the ordinary
+persistent operation named below. They inherit none of the C# rope tier's focused representation,
+memo cell, callback ceiling, allocation bound, or amortized-locality claims.
+
+| Type | Declaration | Axis |
+| --- | --- | --- |
+| `PersistentOrderedSetCursor<T>` | `public readonly struct` | explicit-position gap in `0 .. Count` |
+| `PersistentOrderedMapCursor<TKey, TValue>` | `public readonly struct` | explicit-position gap in `0 .. Count` |
+| `PersistentOrderedMultimapCursor<TKey, TValue>` | `public readonly struct` | flattened key-grouped pair gap in `0 .. PairCount` |
+
+### Factories
+
+```csharp
+// PersistentOrderedSet<T>
+public PersistentOrderedSetCursor<T> GetCursor(int position = 0);
+public bool TryGetCursor(T equalValue, out PersistentOrderedSetCursor<T> cursor);
+
+// PersistentOrderedMap<TKey, TValue>
+public PersistentOrderedMapCursor<TKey, TValue> GetCursor(int position = 0);
+public bool TryGetCursor(TKey key, out PersistentOrderedMapCursor<TKey, TValue> cursor);
+
+// PersistentOrderedMultimap<TKey, TValue>
+public PersistentOrderedMultimapCursor<TKey, TValue> GetCursor(long position = 0);
+public bool TryGetCursor(TKey key, TValue value, out PersistentOrderedMultimapCursor<TKey, TValue> cursor);
+public bool TryGetGroupCursor(TKey key, out PersistentOrderedMultimapCursor<TKey, TValue> cursor);
+```
+
+There is deliberately no `GetCursorAtStart`/`GetCursorAtEnd` pair. `GetCursor()` is the start gap and
+`GetCursor(Count)` — `GetCursor(PairCount)` for the multimap — is the end gap. The multimap uses
+`long` positions to match its `PairCount`; the set and map use `int`.
+
+Every `TryGetCursor` overload follows one miss rule: it returns `false` **and a usable cursor at the
+append position** (`Count`, or `PairCount`), never an invalid value. Because these collections are
+insertion-ordered rather than key-sorted, that append gap is a defined end location and not a
+lower-bound insertion point; there is no ordered predecessor to infer.
+
+### Navigation and edit vocabulary
+
+| Member | Set | Map | Multimap |
+| --- | --- | --- | --- |
+| size | `Count` | `Count` | `PairCount` (`long`) |
+| `Position`, `IsAtStart`, `IsAtEnd` | yes | yes | yes (`long` position) |
+| `TryPeekPrevious` / `TryPeekNext` | `out T` | `out KeyValuePair<TKey, TValue>` | `out KeyValuePair<TKey, TValue>` |
+| `MovePrevious` / `MoveNext` | yes | yes | yes |
+| positional seek | `Seek(int)` | `Seek(int)` | `Seek(long)` |
+| insertion | `Insert(T)`, `TryInsert(T, out …)` | `Insert(TKey, TValue)`, `TryInsert(TKey, TValue, out …)` | `Add(TKey, TValue)`, `TryAdd(TKey, TValue, out …)` |
+| value update | — | `SetNextValue(TValue)` | — |
+| deletion | `DeletePrevious`, `DeleteNext` | `DeletePrevious`, `DeleteNext` | `DeletePrevious`, `DeleteNext` |
+| materialization | `Snapshot()` | `Snapshot()` | `Snapshot()` |
+
+`TrySeekValue`, `TrySeekKey`, and `InsertRange` are **not** present on any of the three cursors.
+Value- and key-directed search is a collection factory (`TryGetCursor`), not a cursor instance
+method, and bulk insertion is only available on the collection. The design names these as intended
+additions to the positional protocol; they are a recorded gap in this port and in all eight siblings,
+not a local omission.
+
+The set has no `ReplaceNext` because replacement conflicts with first-representative retention. The
+map's focus-local update is `SetNextValue`, which preserves the stored key representative, its sparse
+stamp, and the gap, and applies the map's ordinary value-comparer no-op rule. The multimap exposes no
+value update: a distinct-value change is delete-plus-add.
+
+Insertion strictness differs by type and is inherited from the delegated operation. Set `Insert` of an
+equivalent class is a silent no-op returning the receiver cursor unchanged. Map `Insert` delegates to
+the strict `PersistentOrderedMap.Insert` and therefore throws `ArgumentException` on a duplicate key.
+The two `Try` forms also differ: set `TryInsert` and multimap `TryAdd` return the **unchanged** cursor
+on a duplicate, whereas map `TryInsert` returns `false` with the cursor **repositioned to the existing
+entry**.
+
+### Policy retention, identity, and failure
+
+A cursor retains the exact source collection, so it retains that collection's `Comparer`,
+`KeyComparer`, and `ValueComparer` objects, its stored representatives, and its empty-instance
+identity rules. `Snapshot()` on a clean cursor returns the **exact source instance**, and a no-op edit
+preserves that reference identity rather than publishing an equal successor.
+
+Private sparse labels never enter the cursor contract. The three cursor types carry exactly a nullable
+collection reference and a scalar position; no stamp, label, or index root is reachable from the
+public surface.
+
+The default struct value is explicitly invalid, and **every** member throws `InvalidOperationException`
+— including `Position`, `IsAtStart`, and the `Seek(Position)` identity shortcut, none of which may
+silently report gap zero. The error channel otherwise splits cleanly:
+
+- an out-of-range position argument throws `ArgumentOutOfRangeException`, validated in the cursor
+  constructor before any hashing or comparison;
+- a boundary violation on a no-argument navigation or deletion — `MoveNext` at the end,
+  `DeletePrevious` at the start, `SetNextValue` with no next entry — throws
+  `InvalidOperationException`; and
+- insertion count overflow throws `OverflowException` from a checked position increment.
+
+`Seek(-1)` and `MovePrevious()` at the start are therefore distinguishable: the first is an argument
+fault, the second a boundary fault.
+
+### Delegation and complexity
+
+Every edit calls an ordinary published operation, so duplicate, no-op, representative, relabel, and
+atomic dual-index publication semantics are exactly the collection's:
+
+| Cursor | Delegates to |
+| --- | --- |
+| set | `Insert(int, T)`, `RemoveAt(int)`, `GetAt(int)`, `IndexOf` |
+| map | `Insert(int, TKey, TValue)`, `SetItem`, `RemoveAt(int)`, `EntryAt(int)`, `IndexOfKey` |
+| multimap | `Add(TKey, TValue)`, `Remove(TKey, TValue)` |
+
+Let `w <= 7` be CHAMP depth and `c` an equal-hash collision scan.
+
+| Operation | Set and map | Multimap |
+| --- | --- | --- |
+| `Count`/`PairCount`, `Position`, `IsAtStart`, `IsAtEnd`, clean `Snapshot()` | O(1) | O(1) |
+| `MovePrevious`, `MoveNext`, `Seek` | O(1) — rebuilds the struct only | O(1) — rebuilds the struct only |
+| `TryPeekPrevious`, `TryPeekNext` | O(log n) worst; O(1) at the endpoints | **O(rank)**, up to O(`PairCount`) |
+| insertion / deletion | O(w + c + log n), plus O(n (w + c)) when the label gap is exhausted | **O(`PairCount`)** on a change |
+| `SetNextValue` | O(w + c + log n) | — |
+| `TryGetCursor` / `TryGetGroupCursor` | O(w + c + log n) | **O(`PairCount`)** |
+
+The multimap row is not a typo and is the honest cost of the shipped representation. The cursor is a
+**flat global pair rank** over the grouped flattening, with no prefix sum over group sizes, so a rank
+is resolved by walking the nested enumeration from the front. Consequences worth stating plainly:
+
+- a complete forward traversal by peek-then-move is O(`PairCount`²), not O(`PairCount`);
+- `Add` pays a full flattening scan to recover the new pair rank *after* the O(w + c + log k + log g)
+  persistent add succeeds; and
+- `TryGetGroupCursor` scans linearly even though the underlying group map could answer in O(w + c).
+
+Moving the gap is O(1) only because it rewrites an integer; the cost is deferred to the next peek.
+This flat encoding is a recorded deviation from the design's specified nested
+`Empty | FocusedGroup {…}` multimap state, which is shared by all nine ports and needs one contract
+decision rather than nine local patches. Until that decision lands, treat the multimap cursor as
+correct but linear, and prefer the collection's own grouped enumeration for whole-collection walks.
+
 ## Persistence, Concurrency, And Failure
 
 Every published instance is immutable. Changed operations return a new facade; unchanged operations
@@ -277,6 +413,7 @@ Let `w <= 7` be the 32-bit CHAMP depth and `c` an equal-full-hash collision-buck
 | set-producing algebra | O((n + m) (w + c + log(n + m + 1))) conservative worst case |
 | relations | O((n + m) (w + c)) after normalization |
 | enumeration / array copy | O(n) |
+| cursor navigation, edit, and snapshot | see [persistent cursors](#persistent-cursors); the multimap cursor is linear in `PairCount` |
 
 These are capability/asymptotic contracts, not benchmark claims. The private label spacing is not a
 public constant, and no amortization claim spans sibling branches that independently cross a relabel.

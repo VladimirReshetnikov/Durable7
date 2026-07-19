@@ -89,6 +89,70 @@ visits far fewer nodes. Structural algebra is O(v) for the prefix structure actu
 shared-root and disjoint-prefix pruning, with O(n + m) worst case. Result size is read in O(1) from
 cached node metadata.
 
+### Patricia Ordered Cursors
+
+Both Patricia templates expose ascending signed-key gap cursors under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md):
+`basic_patricia_map_cursor<Key, T>` and `basic_patricia_set_cursor<Key>`, with the public aliases
+`persistent_int_map_cursor<T>`, `persistent_long_map_cursor<T>`, `persistent_int_set_cursor`, and
+`persistent_long_set_cursor`. Each is an immutable value holding the exact map or set version plus a
+rank, and it is a Profile R checkpoint: every edit delegates to `set_item`, `add`, or `remove` on the
+owning collection, and no focused representation, memoization, callback ceiling, or amortized
+locality is claimed.
+
+Cursor constructors are private and the owning collection is a friend, so the five factories per
+collection are the only construction route:
+
+```cpp
+[[nodiscard]] cursor_type get_cursor(std::size_t position = 0) const;
+[[nodiscard]] cursor_type get_cursor_at_end() const;
+[[nodiscard]] cursor_type get_cursor_lower_bound(Key key) const;
+[[nodiscard]] cursor_type get_cursor_upper_bound(Key key) const;
+[[nodiscard]] cursor_search_result get_cursor_at_key(Key key) const;   // map
+[[nodiscard]] std::pair<cursor_type, bool> get_cursor_at_item(Key value) const;   // set
+```
+
+The exact-search discriminator is spelled differently on the two templates and that asymmetry is
+real: the map returns the named aggregate `basic_patricia_map_cursor_search_result<Key, T>` with
+`cursor` and `found` members, while the set returns a bare `std::pair<cursor_type, bool>`. In both
+cases a miss yields the **usable lower-bound cursor**, not an end or invalid sentinel.
+
+The map cursor exposes `count`, `position`, `is_at_start`, `is_at_end`, `peek_previous`, `peek_next`,
+`move_previous`, `move_next`, `seek`, `insert`, `put`, `set_next_value`, `delete_previous`,
+`delete_next`, and `snapshot`. The set cursor drops `put` and `set_next_value`, since there is no
+value to replace. Map peeks return `std::optional<entry_view>` over the nested
+`entry_view { const Key& key; const T& value; }`; set peeks return `const Key*`, null at a boundary.
+Both are lvalue-only — the `const&&` overloads are `= delete`d so a borrowed reference cannot outlive
+a temporary cursor that was its last root owner.
+
+Errors are standard-library types only. `std::out_of_range` reports a positional factory or `seek`
+outside `0 .. count()`; `std::logic_error` reports movement past an end or an edit with no adjacent
+entry; and `std::invalid_argument` reports both a duplicate strict `insert` and a key whose
+lower-bound rank does not agree with the current gap.
+
+Default construction is `= delete`d on both cursors: a cursor names a real gap in a real collection
+and has no valid empty state, so there is no invalid default whose members must throw.
+
+**Moved-from state differs from the Merkle cursor and must not be generalized.** Neither Patricia
+cursor declares copy or move operations, so both are implicitly defaulted and **move is destructive**.
+A moved-from Patricia cursor member-wise moves its collection while copying its `position_` scalar,
+so `count()` reports the moved-from collection's size while `position()` retains its previous value.
+The constructor's `position <= count` invariant does not hold in that object, and `is_at_end()` can
+report `false` with nothing to peek. Treat a moved-from Patricia cursor as unusable for anything but
+destruction or assignment, and copy rather than move when both values must stay live. The
+Merkle cursor documented below has already adopted the copy-on-move rule that removes this hazard;
+the Patricia pair has not.
+
+Identity is preserved through root sharing rather than reference identity. `snapshot()` returns the
+retained collection by value, and a no-op edit returns `*this`: the map cursor tests
+`shares_root_with` after `set_item`, the set cursor tests the search hit flag before calling `add`,
+and `seek` to the current position returns the receiver.
+
+Honest complexity: rank movement and `seek` are O(1) integer work, but the cursor retains no path, so
+**every peek re-descends from the root** through a cached-subtree-count walk costing O(W). Bound and
+exact seeks are O(W). Edits are the delegated operation's O(W) plus O(1) rank arithmetic. A complete
+in-order traversal by move-plus-peek is therefore O(n · W) rather than O(n).
+
 ## Merkle Search Tree
 
 The public encoding layer in `merkle_encoding.hpp` provides:
@@ -187,6 +251,68 @@ reuse survive across the added layer.
 
 See [Merkle persistence](merkle-persistence.md) for verification order, failure precedence,
 publication atomicity, `MSP2` bytes, sync protocol, and present-null merge semantics.
+
+### Ordered Persistent Cursor
+
+`merkle_search_tree_cursor<K, V>` is a comparer-ordered gap cursor over one already trusted in-memory
+tree version. It is a specialized Profile R snapshot-plus-rank checkpoint, never a mutable editor for
+stored blocks. The five factories mirror the Patricia family:
+
+```cpp
+[[nodiscard]] cursor_type get_cursor(size_type position = 0) const;
+[[nodiscard]] cursor_type get_cursor_at_end() const;
+[[nodiscard]] cursor_type get_cursor_lower_bound(const K& key) const;
+[[nodiscard]] cursor_type get_cursor_upper_bound(const K& key) const;
+[[nodiscard]] cursor_search_result get_cursor_at_key(const K& key) const;
+```
+
+`merkle_search_tree_cursor_search_result<K, V>` carries `cursor` and `found`; a miss returns the
+usable lower-bound gap. The members are `count`, `position`, `is_at_start`, `is_at_end`,
+`peek_previous`, `peek_next`, `move_previous`, `move_next`, `seek`, `insert`, `set_item`,
+`set_next_value`, `delete_previous`, `delete_next`, and `snapshot`. Peeks return
+`const entry_type*` and are lvalue-only, with the `const&&` overloads `= delete`d.
+
+Every edit delegates to the canonical ordinary operation — `set_item`, `set_value_at_key`, or
+`remove` — so a cursor edit produces the same topology, canonical `MST2` bytes, block digests, and
+root digest as the equivalent direct edit, and the policy object is retained exactly. `snapshot()`
+returns the retained tree by value and never writes a block store; cursor state is local navigation
+state and is never part of `MST2`, `MSP2`, a pack, a proof, or a store. Create a cursor only from a
+tree built normally or obtained through fully verified `load_merkle_tree`/`import_merkle_pack`.
+
+`std::out_of_range` reports a factory or `seek` position outside `0 .. count()`; `std::logic_error`
+reports movement past an end and edits with no adjacent entry; `std::invalid_argument` reports a
+duplicate strict `insert` and a key that does not belong at the current gap. The peeks are
+deliberately **not** `noexcept`: a rank that is in range but that the cached subtree counts cannot
+locate is a structural-integrity failure of the tree rather than an absent entry, and it is reported
+by throwing `std::logic_error` instead of returning null. `merkle_tree_invariant_error` from
+`set_value_at_key` propagates through `set_next_value` unchanged.
+
+Default construction is `= delete`d, and this cursor **defines move as a copy of the retained tree**:
+
+```cpp
+merkle_search_tree_cursor(merkle_search_tree_cursor&& other) noexcept(
+    std::is_nothrow_copy_constructible_v<tree_type>);
+```
+
+A moved-from Merkle cursor therefore remains a fully valid cursor on the same version and the same
+gap, with every member callable and observably unchanged. This matches the C++ sequence and rope
+cursors and avoids the split state a defaulted move produces. The Patricia cursors above have not yet
+adopted this rule, so the two HAMT cursor families currently differ and must be documented
+separately.
+
+A clean cursor's `snapshot()` is root-identical to its source, and `set_item` returns `*this` when
+the delegated operation shares the source root, so the tree's canonical-value-byte no-op propagates
+through the cursor.
+
+Honest complexity, with `h` the block height and `e_i` the occupancy of visited block `i`. Moving the
+gap and `seek` are O(1); `count()` and `position()` are O(1) reads. The cursor retains no frames, so
+**every peek re-descends from the root**, and because blocks cache each child's total subtree count
+rather than cumulative child-prefix ranks, a rank descent scans a block's entries linearly: a peek or
+rank seek costs O(Σ (e_i + 1)). A key seek adds an in-block binary search, O(Σ log(e_i + 1))
+comparisons, over the same rank accumulation. A complete traversal by move-plus-peek is
+O(n · Σ (e_i + 1)), not O(n). An edit plus snapshot is the delegated canonical operation's cost.
+The frame-based tier described in the repository design, which would claim O(1) within-block movement
+and an O(n) traversal, is implemented in no port including this one.
 
 ## Hash Trie Shape
 

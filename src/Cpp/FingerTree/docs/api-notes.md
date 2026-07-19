@@ -63,6 +63,8 @@ Primary C++ spellings:
 - sorted-sequence helpers: `sorted_lower_bound`, `sorted_upper_bound`, `sorted_binary_search`, `sorted_contains`,
   `split_at_sorted_lower_bound`, `split_at_sorted_upper_bound`, `split_at_sorted_equal_range`, `insert_sorted`,
   and `remove_all_sorted`;
+- persistent gap editing: `get_cursor`, returning `persistent_deque_cursor<T>` — see
+  [sequence, ordered-search, and augmented cursors](#sequence-ordered-search-and-augmented-cursors);
 - traversal/materialization: `begin`, `end`, `copy_to`, `to_vector`.
 
 Notable C++ differences from C#:
@@ -640,3 +642,147 @@ strict `add`, conditional `try_add`, representative-preserving `set_item`, remov
 single and all-overlap queries, ordered iteration, key/value materialization, and invariant
 diagnostics. Every public interval is validated. `ValueEqual` recognizes replacement no-ops, and
 the compile-time `Comparison` policy defines endpoint and exact-key equivalence.
+
+## Sequence, Ordered-Search, And Augmented Cursors
+
+Beyond `rope_cursor<T>` and `measured_rope_cursor<T, MeasurePolicy>`, this workspace ships twelve
+non-rope cursors under the
+[repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md).
+All twelve are Profile R semantic checkpoints: an immutable value holding a retained snapshot plus a
+validated gap or rank, delegating every edit to the ordinary persistent operation. None ports the C#
+focused cursor representation, its snapshot memo, its callback or allocation ceiling, or its
+amortized-locality evidence.
+
+Five sequence cursors live beside their containers: `persistent_deque_cursor<T>`,
+`reversible_deque_cursor<T>`, `rrb_vector_cursor<T>`,
+`finger_tree_cursor<Element, MeasurePolicy>`, and
+`range_update_sequence_cursor<Element, Algebra>`. The remaining seven live in
+`ordered_search_cursors.hpp`: `sorted_bag_cursor<T, Less>`, `sorted_set_cursor<T, Less>`,
+`sorted_map_cursor<Key, T, Less>`, `canonical_sorted_set_cursor<T>`,
+`priority_search_queue_cursor<Key, Priority, T, KeyLess, PriorityLess>`,
+`interval_tree_cursor<T, Comparison>`,
+`persistent_interval_map_cursor<Endpoint, T, Comparison, ValueEqual>`, and the non-template
+`persistent_chunked_bit_set_cursor`.
+
+Sequence cursors are produced by a container member `get_cursor(position = 0)`; `finger_tree` instead
+offers `get_cursor_at_start()`, `get_cursor_at_end()`, and a constrained
+`get_cursor_by_measure(Predicate)`. Ordered and augmented cursors are produced by free functions
+named `get_cursor`, `get_cursor_lower_bound`, `get_cursor_upper_bound`, and `get_cursor_at_item` —
+spelled `get_cursor_at_key` for the map, priority-search queue, and interval map, and
+`get_cursor_at_interval` for the interval tree. The interval families add `find_overlap_cursor`,
+`find_overlap_cursor_from`, and `find_containing_cursor`; the priority-search queue adds
+`get_cursor_at_minimum_priority`, which reads the cached winner and performs an ordinary key seek;
+and the bit set adds `get_cursor_at_or_after`.
+
+Search results are carriers, never exceptions. `ordered_cursor_search_result<Cursor>` is
+`{ cursor; bool found; }` and `ordered_cursor_insert_result<Cursor>` is `{ cursor; bool inserted; }`;
+`finger_tree_cursor_search_result` is the measured equivalent. A miss returns the usable lower-bound
+or end cursor, so a failed exact search still names the insertion point.
+
+Peeks split two ways, and both forms are deliberate. Deque, RRB, `finger_tree_cursor`, and all seven
+`ordered_search_cursors.hpp` types return a **borrowed** `const T*` that is null on miss, with the
+rvalue overload `= delete`d so a pointer cannot outlive a temporary cursor; the borrow follows the
+owning snapshot's lifetime. The reversible deque, the range-update sequence, and the chunked bit set
+instead return `std::optional<value_type>` **by value**, because a reversed or computed view
+materializes a temporary rather than exposing a stored object.
+
+### Default construction and moved-from state
+
+The design requires these to be documented per type rather than inferred from C's handle model. The
+two tiers currently differ, and the divergence is real rather than an oversight to gloss over.
+
+The five **sequence** cursors declare `= delete`d default construction and user-declared move
+operations that **copy** the shared root:
+
+```cpp
+persistent_deque_cursor() = delete;
+// Cursor values are immutable version handles. Moving deliberately copies the shared root so
+// the source remains usable, matching the repository's existing C++ rope cursor convention.
+persistent_deque_cursor(persistent_deque_cursor&& other) noexcept(…);
+```
+
+A moved-from sequence cursor is therefore fully valid and equal to its source; there is no degraded
+state to document, exactly as for `rope_cursor<T>`.
+
+The seven **ordered-search and augmented** cursors in `ordered_search_cursors.hpp` declare no special
+member functions at all — the only `= delete`s in that header are the sixteen rvalue peek overloads.
+Consequently:
+
+- there is no default constructor, because each type declares a `(collection, position)` constructor
+  that suppresses the implicit one, but it is absent rather than explicitly deleted; and
+- copy and move are implicitly defaulted, so **moving genuinely moves the snapshot while copying the
+  scalar position**.
+
+A moved-from ordered or augmented cursor is therefore *not* equivalent to its source. Its collection
+is a moved-from value, so `size()`/`count()` reports zero while `position()` still reports the
+pre-move rank, and `is_at_end()` — defined as `position_ == size()` — becomes false for any nonzero
+prior position, so the cursor claims a next element it cannot produce. For
+`canonical_sorted_set_cursor` this is worse than a wrong answer: the zip-tree rank policy holds its
+state in a `shared_ptr`, so an edit through a moved-from cursor dereferences a null policy rather
+than throwing. The other six hold their comparison policy by value or as a compile-time parameter and
+degrade only to the wrong-count behavior above.
+
+Treat a moved-from ordered or augmented cursor as unusable for anything but destruction or
+assignment until the two tiers are reconciled. Copy such a cursor when both values must stay live.
+
+### Errors
+
+Cursors add their own boundary channel; the delegated edit then propagates the owning operation's
+exceptions unchanged.
+
+- `std::out_of_range` for a factory or `seek`/`seek_rank` position outside the gap range, and for an
+  overlap search start outside the collection.
+- `std::logic_error` for impossible endpoint movement, deletion, replacement, or value update — for
+  example `"ordered cursor is already at the end"` and `"sorted map cursor has no next entry"`.
+- `std::invalid_argument` from exactly one member in the surface,
+  `priority_search_queue_cursor::insert`, on a duplicate key.
+- `std::overflow_error` from the shared checked-addition helper on position or size overflow.
+
+### Identity and no-ops
+
+`snapshot()` returns the collection by value. Because these are persistent structures the copy shares
+the root, so a clean cursor's snapshot is value-equal *and* root-identical to its source; the
+`shares_root_with` predicates are how a no-op result is distinguished from a rebuilt equal value. A
+same-position `seek`/`seek_rank` returns the receiver, an empty `insert_range` returns the receiver,
+a chunked-bit-set `add` of a present bit returns the receiver, and a range-update
+`apply_previous`/`apply_next` whose tag is recognized as the identity returns the receiver after a
+root-identity check.
+
+### Complexity
+
+Sequence cursors store `(snapshot, position)` and forward to `try_get`/`at`, `insert_at`,
+`remove_at`/`remove_range`, `set_item`, and split-concat range insertion. Construction, movement,
+`seek`, and `snapshot()` are O(1) root-sharing operations; peeks and point edits are O(log n); range
+insertion is O(m + log n).
+
+`finger_tree_cursor` is the one focused-shaped exception: it retains `left_` and `right_` split
+trees, so peeks are O(1), `move_previous`/`move_next` are amortized O(1) view-and-cons operations,
+and `measure_before()`/`measure_after()` are O(1) cached reads. Its edits concatenate the two sides
+and are O(log n).
+
+`range_update_sequence_cursor` measures through `measure_range`, so `measure_before()` and
+`measure_after()` are **O(log n) calls rather than cached reads**, and `apply_previous`/`apply_next`
+are O(log n) rather than O(count) because the range update stamps one node-level tag. Read-only
+descent carries inherited tags without forcing them.
+
+The ordered and augmented bound factories and peeks are logarithmic. Bound factories delegate to
+container-native rank counts — `count_less_than`/`count_at_most`,
+`count_keys_less_than`/`count_keys_at_most`, `count_low_less_than`/`count_low_at_most` — each of
+which folds a whole left subtree through its cached count per level, so the ordering policy is
+invoked once per level rather than once per stored element. Peeks delegate to `at`/`entry_at`,
+`try_select`, `try_entry_at_rank`, or `try_interval_at_rank`, all count-guided descents that invoke
+no comparison at all. Costs are O(log n), or O(h) for the canonical set and priority-search queue,
+where the canonical set's height is expected logarithmic under its documented rank assumptions and a
+colliding rank policy can force O(n).
+
+Movement is O(1), so a complete key-order traversal after one seek costs **O(n log n)** — one
+logarithmic peek per step. The cursor tier is a checkpoint and editing surface, not an enumeration
+surface; use each container's retained forward iterator for a genuinely linear traversal.
+
+One honest exception remains. `interval_tree_cursor::seek_next_overlap` and its interval-map
+equivalent do **not** use the maximum-high annotation, even though `try_find_overlap` on the same
+container does. `find_overlap_cursor_from` advances a forward iterator from `begin()` to the start
+rank and then scans forward, breaking once low endpoints exceed the query high. One call is
+O(start + scanned), so it is O(n), and enumerating k overlaps by repeated continuation is O(k·n).
+`get_cursor_at_interval` shares the same prefix-advance pattern. Use `find_all_overlaps` on the
+container when output-sensitive pruning matters.
