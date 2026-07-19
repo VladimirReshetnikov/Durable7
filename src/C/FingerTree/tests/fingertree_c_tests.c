@@ -2727,6 +2727,52 @@ static void test_measured_rope_cursor_concurrent_readers(void)
     ft_measured_rope_cursor_dispose(&cursor);
 }
 
+/* Every handle-producing operation documents exact source/result aliasing. These paths used to
+ * re-initialize or memset the destination before reading the source, so an aliased call leaked a
+ * retained version or destroyed the operand it was still reading. */
+static void test_exact_source_result_aliasing(void)
+{
+    ft_interval_tree_i64 tree;
+    REQUIRE_STATUS(ft_interval_tree_i64_init(&tree), FT_STATUS_OK);
+
+    const ft_interval_i64 seeds[] = {{5, 8}, {1, 3}, {4, 6}};
+    for (size_t index = 0; index != sizeof(seeds) / sizeof(seeds[0]); ++index) {
+        REQUIRE_STATUS(ft_interval_tree_i64_insert(&tree, seeds[index], &tree), FT_STATUS_OK);
+    }
+    REQUIRE(ft_interval_tree_i64_size(&tree) == 3);
+
+    REQUIRE_STATUS(ft_interval_tree_i64_copy(&tree, &tree), FT_STATUS_OK);
+    REQUIRE(ft_interval_tree_i64_size(&tree) == 3);
+
+    REQUIRE_STATUS(ft_interval_tree_i64_remove_one(&tree, seeds[1], &tree), FT_STATUS_OK);
+    REQUIRE(ft_interval_tree_i64_size(&tree) == 2);
+    REQUIRE(!ft_interval_tree_i64_contains(&tree, seeds[1]));
+    ft_interval_tree_i64_dispose(&tree);
+
+    ft_value_type tagged_type;
+    ft_value_type_init(&tagged_type, sizeof(tagged_int));
+    ft_tree_policy tagged_policy;
+    ft_tree_policy_init_size(&tagged_policy, &tagged_type);
+    ft_sorted_multiset bag;
+    REQUIRE_STATUS(
+        ft_sorted_multiset_init(&bag, &tagged_policy, compare_tagged_ints, NULL), FT_STATUS_OK);
+    const tagged_int items[] = {{1, 'a'}, {1, 'b'}, {2, 'c'}, {3, 'd'}};
+    for (size_t index = 0; index != 4; ++index) {
+        REQUIRE_STATUS(ft_sorted_multiset_add(&bag, &items[index], &bag), FT_STATUS_OK);
+    }
+
+    ft_sorted_multiset_cursor bag_cursor;
+    REQUIRE_STATUS(ft_sorted_multiset_get_cursor(&bag, 2, &bag_cursor), FT_STATUS_OK);
+    /* Snapshotting onto the cursor's own retained set must neither leak nor invalidate it. */
+    REQUIRE_STATUS(
+        ft_sorted_multiset_cursor_snapshot(&bag_cursor, &bag_cursor.set), FT_STATUS_OK);
+    REQUIRE(ft_sorted_multiset_cursor_valid(&bag_cursor));
+    REQUIRE(ft_sorted_multiset_cursor_size(&bag_cursor) == 4);
+    REQUIRE(ft_sorted_multiset_cursor_position(&bag_cursor) == 2);
+    ft_sorted_multiset_cursor_dispose(&bag_cursor);
+    ft_sorted_multiset_dispose(&bag);
+}
+
 static void test_interval_tree(void)
 {
     ft_interval_tree_i64 tree;
@@ -3271,6 +3317,7 @@ int main(void)
     run_test("text rope cursor", test_text_rope_cursor);
     run_test("text rope long edit script", test_text_rope_long_edit_script);
     run_test("persistent sequence cursors", test_sequence_cursors);
+    run_test("exact source/result aliasing", test_exact_source_result_aliasing);
 
     if (g_failures != 0) {
         (void)fprintf(stderr, "%d failure(s)\n", g_failures);

@@ -12080,6 +12080,19 @@ ft_status ft_interval_tree_i64_copy(const ft_interval_tree_i64* source, ft_inter
     return FT_STATUS_OK;
 }
 
+/* Producing operations stage a complete successor and publish it here so that exact
+ * source/result aliasing never destroys the operand they are still reading. */
+static void ft_interval_tree_i64_publish(
+    const ft_interval_tree_i64* source,
+    ft_interval_tree_i64* result,
+    ft_interval_tree_i64* candidate)
+{
+    if (result == source) {
+        ft_interval_tree_i64_dispose(result);
+    }
+    ft_interval_tree_i64_move(result, candidate);
+}
+
 void ft_interval_tree_i64_move(ft_interval_tree_i64* destination, ft_interval_tree_i64* source)
 {
     if (destination == NULL || source == NULL || destination == source) {
@@ -12182,20 +12195,24 @@ ft_status ft_interval_tree_i64_insert(
         return status;
     }
 
-    status = ft_interval_tree_i64_init(result);
+    ft_interval_tree_i64 candidate;
+    status = ft_interval_tree_i64_init(&candidate);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
-    ft_sorted_multiset_dispose(&result->intervals);
-    status = ft_tree_insert_at(&tree->intervals.tree, position, &interval, &result->intervals.tree);
+    ft_sorted_multiset_dispose(&candidate.intervals);
+    status =
+        ft_tree_insert_at(&tree->intervals.tree, position, &interval, &candidate.intervals.tree);
     if (status != FT_STATUS_OK) {
+        (void)memset(&candidate, 0, sizeof(candidate));
         return status;
     }
 
-    result->intervals.compare = tree->intervals.compare;
-    result->intervals.compare_context = tree->intervals.compare_context;
-    ft_interval_tree_i64_rebind(result);
+    candidate.intervals.compare = tree->intervals.compare;
+    candidate.intervals.compare_context = tree->intervals.compare_context;
+    ft_interval_tree_i64_rebind(&candidate);
+    ft_interval_tree_i64_publish(tree, result, &candidate);
     return FT_STATUS_OK;
 }
 
@@ -12215,25 +12232,28 @@ ft_status ft_interval_tree_i64_remove_one(
         return status;
     }
 
-    ft_status init_status = ft_interval_tree_i64_init(result);
+    ft_interval_tree_i64 candidate;
+    ft_status init_status = ft_interval_tree_i64_init(&candidate);
     if (init_status != FT_STATUS_OK) {
         return init_status;
     }
 
-    ft_sorted_multiset_dispose(&result->intervals);
+    ft_sorted_multiset_dispose(&candidate.intervals);
     if (!found) {
-        status = ft_sorted_multiset_copy(&tree->intervals, &result->intervals);
+        status = ft_sorted_multiset_copy(&tree->intervals, &candidate.intervals);
     } else {
-        status = ft_tree_remove_at(&tree->intervals.tree, position, &result->intervals.tree);
-        result->intervals.compare = tree->intervals.compare;
-        result->intervals.compare_context = tree->intervals.compare_context;
+        status = ft_tree_remove_at(&tree->intervals.tree, position, &candidate.intervals.tree);
+        candidate.intervals.compare = tree->intervals.compare;
+        candidate.intervals.compare_context = tree->intervals.compare_context;
     }
 
     if (status != FT_STATUS_OK) {
+        (void)memset(&candidate, 0, sizeof(candidate));
         return status;
     }
 
-    ft_interval_tree_i64_rebind(result);
+    ft_interval_tree_i64_rebind(&candidate);
+    ft_interval_tree_i64_publish(tree, result, &candidate);
     return FT_STATUS_OK;
 }
 
@@ -13081,6 +13101,19 @@ ft_status ft_interval_tree_copy(const ft_interval_tree* source, ft_interval_tree
     return FT_STATUS_OK;
 }
 
+/* Producing operations stage a complete successor and publish it here so that exact
+ * source/result aliasing never destroys the operand they are still reading. */
+static void ft_interval_tree_publish(
+    const ft_interval_tree* source,
+    ft_interval_tree* result,
+    ft_interval_tree* candidate)
+{
+    if (result == source) {
+        ft_interval_tree_dispose(result);
+    }
+    ft_interval_tree_move(result, candidate);
+}
+
 void ft_interval_tree_move(ft_interval_tree* destination, ft_interval_tree* source)
 {
     if (destination == NULL || source == NULL || destination == source) {
@@ -13197,22 +13230,24 @@ ft_status ft_interval_tree_insert(
         return status;
     }
 
-    status = ft_interval_tree_prepare_result(tree, result);
+    ft_interval_tree candidate;
+    status = ft_interval_tree_prepare_result(tree, &candidate);
     if (status != FT_STATUS_OK) {
         ft_interval_entry_destroy_value(tree->interval_context, &entry);
         return status;
     }
 
-    status = ft_tree_insert_at(&tree->intervals.tree, position, &entry, &result->intervals.tree);
+    status = ft_tree_insert_at(&tree->intervals.tree, position, &entry, &candidate.intervals.tree);
     ft_interval_entry_destroy_value(tree->interval_context, &entry);
     if (status != FT_STATUS_OK) {
-        ft_interval_tree_dispose(result);
+        ft_interval_tree_dispose(&candidate);
         return status;
     }
 
-    result->intervals.compare = tree->intervals.compare;
-    result->intervals.compare_context = tree->intervals.compare_context;
-    ft_interval_tree_rebind(result);
+    candidate.intervals.compare = tree->intervals.compare;
+    candidate.intervals.compare_context = tree->intervals.compare_context;
+    ft_interval_tree_rebind(&candidate);
+    ft_interval_tree_publish(tree, result, &candidate);
     return FT_STATUS_OK;
 }
 
@@ -13234,25 +13269,27 @@ ft_status ft_interval_tree_remove_one(
         return status;
     }
 
-    status = ft_interval_tree_prepare_result(tree, result);
+    ft_interval_tree candidate;
+    status = ft_interval_tree_prepare_result(tree, &candidate);
     if (status != FT_STATUS_OK) {
         return status;
     }
 
     if (!found) {
-        status = ft_sorted_multiset_copy(&tree->intervals, &result->intervals);
+        status = ft_sorted_multiset_copy(&tree->intervals, &candidate.intervals);
     } else {
-        status = ft_tree_remove_at(&tree->intervals.tree, position, &result->intervals.tree);
-        result->intervals.compare = tree->intervals.compare;
-        result->intervals.compare_context = tree->intervals.compare_context;
+        status = ft_tree_remove_at(&tree->intervals.tree, position, &candidate.intervals.tree);
+        candidate.intervals.compare = tree->intervals.compare;
+        candidate.intervals.compare_context = tree->intervals.compare_context;
     }
 
     if (status != FT_STATUS_OK) {
-        ft_interval_tree_dispose(result);
+        ft_interval_tree_dispose(&candidate);
         return status;
     }
 
-    ft_interval_tree_rebind(result);
+    ft_interval_tree_rebind(&candidate);
+    ft_interval_tree_publish(tree, result, &candidate);
     return FT_STATUS_OK;
 }
 
