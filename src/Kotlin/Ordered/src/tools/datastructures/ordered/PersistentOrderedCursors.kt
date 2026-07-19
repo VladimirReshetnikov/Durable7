@@ -229,13 +229,16 @@ public class PersistentOrderedMultimapCursor<K, V> private constructor(
     /**
      * Adds a pair using grouped collection semantics and returns its following pair gap. A present
      * equivalent pair preserves this exact cursor; insertion is not forced into another group gap.
+     *
+     * The following gap is derived from the key group's end using only the key policy rather than by
+     * re-scanning for the accepted pair by value equality: a value that is not reflexive under the
+     * value policy, such as a `NaN`, is one the collection accepts but a content re-scan can never
+     * find again, so re-scanning would throw on a pair the collection just stored.
      */
     public fun add(key: K, item: V): PersistentOrderedMultimapCursor<K, V> {
         val snapshot = value.add(key, item)
         if (snapshot === value) return this
-        val index = snapshot.cursorIndexOf(key, item)
-        check(index >= 0L) { "The inserted pair is missing from the ordered multimap." }
-        return create(snapshot, Math.addExact(index, 1L))
+        return create(snapshot, snapshot.cursorGroupEnd(key))
     }
 
     /** Attempts grouped pair insertion without disturbing this cursor on equivalence. */
@@ -244,16 +247,28 @@ public class PersistentOrderedMultimapCursor<K, V> private constructor(
         return OrderedCursorInsert(result !== this, result)
     }
 
-    /** Deletes the pair immediately before the gap, contracting an empty group. */
+    /**
+     * Deletes the pair immediately before the gap, contracting an empty group. Removal locates the
+     * pair by content and is a no-op when the stored value is not reflexive under the value policy
+     * (a `NaN`, for instance); the pair count validates the removal before a version is published, so
+     * a no-op signals `null` rather than a false success that removed nothing.
+     */
     public fun deletePrevious(): PersistentOrderedMultimapCursor<K, V>? {
         val previous = peekPrevious()?.value ?: return null
-        return create(value.remove(previous.key, previous.value), position - 1L)
+        val snapshot = value.remove(previous.key, previous.value)
+        return if (snapshot.pairCount == value.pairCount) null else create(snapshot, position - 1L)
     }
 
-    /** Deletes the pair immediately after the gap, contracting an empty group. */
+    /**
+     * Deletes the pair immediately after the gap, contracting an empty group. Removal locates the
+     * pair by content and is a no-op when the stored value is not reflexive under the value policy
+     * (a `NaN`, for instance); the pair count validates the removal before a version is published, so
+     * a no-op signals `null` rather than a false success that removed nothing.
+     */
     public fun deleteNext(): PersistentOrderedMultimapCursor<K, V>? {
         val next = peekNext()?.value ?: return null
-        return create(value.remove(next.key, next.value), position)
+        val snapshot = value.remove(next.key, next.value)
+        return if (snapshot.pairCount == value.pairCount) null else create(snapshot, position)
     }
 
     /** Returns the exact persistent ordered-multimap version represented by this cursor. */
@@ -310,4 +325,26 @@ private fun <K, V> PersistentOrderedMultimap<K, V>.cursorIndexOf(key: K, value: 
         index = Math.addExact(index, 1L)
     }
     return -1L
+}
+
+/**
+ * Pair rank of the gap immediately after the last pair of an equivalent key group, or the end gap
+ * when the key is absent. Key groups are contiguous in the flattened enumeration, so this walks the
+ * leading pairs once and consults only the key policy, never the value policy.
+ */
+private fun <K, V> PersistentOrderedMultimap<K, V>.cursorGroupEnd(key: K): Long {
+    var index = 0L
+    val entries = iterator()
+    while (entries.hasNext()) {
+        if (keyPolicy.equivalent(entries.next().key, key)) {
+            index = Math.addExact(index, 1L)
+            while (entries.hasNext()) {
+                if (!keyPolicy.equivalent(entries.next().key, key)) return index
+                index = Math.addExact(index, 1L)
+            }
+            return index
+        }
+        index = Math.addExact(index, 1L)
+    }
+    return index
 }

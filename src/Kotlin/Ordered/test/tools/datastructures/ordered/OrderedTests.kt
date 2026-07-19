@@ -82,6 +82,13 @@ private object IdentityRepresentativePolicy : HashPolicy<Representative> {
     override fun equivalent(left: Representative, right: Representative): Boolean = left === right
 }
 
+private class IeeeDoublePolicy : HashPolicy<Double> {
+    override fun hash(key: Double): Int = key.hashCode()
+
+    // Bare IEEE 754 equality: a legitimate strict policy under which NaN is not equivalent to itself.
+    override fun equivalent(left: Double, right: Double): Boolean = left == right
+}
+
 private fun rep(id: Int, name: String): Representative = Representative(id, name)
 
 private fun <T> assertOrdered(expected: List<T>, actual: PersistentOrderedSet<T>, message: String) {
@@ -740,6 +747,57 @@ private fun orderedCursorsPreserveGapsPoliciesAndSnapshots() {
     assertSame(multimapSource, pairFound.cursor.snapshot(), "ordered-multimap cursor source snapshot")
 }
 
+private fun orderedMultimapCursorToleratesNonReflexiveValues() {
+    val nan = Double.NaN
+    val values = IeeeDoublePolicy()
+    // The value policy must genuinely treat NaN as non-reflexive for this regression to bite.
+    assertThat(!values.equivalent(nan, nan), "non-reflexive value policy")
+
+    val source = PersistentOrderedMultimap.from(
+        listOf("a" to 1.0, "b" to 2.0, "a" to 3.0),
+        defaultHashPolicy<String>(),
+        values,
+    )
+    assertEquals(
+        listOf("a" to 1.0, "a" to 3.0, "b" to 2.0),
+        source.toList().map { it.key to it.value },
+        "non-reflexive grouped source",
+    )
+
+    // add() must derive the gap from the key group, not re-scan for the accepted pair by value.
+    val addedNan = checkNotNull(source.cursorAt(0L)).add("a", nan)
+    assertEquals(4L, addedNan.snapshot().pairCount, "NaN pair accepted")
+    assertEquals(3L, addedNan.position, "NaN insertion lands after the key group")
+    val stored = checkNotNull(addedNan.peekPrevious()).value
+    assertThat(stored.key == "a" && stored.value.isNaN(), "a stored NaN precedes the gap")
+    assertEquals(
+        listOf("a" to 1.0, "a" to 3.0, "b" to 2.0),
+        source.toList().map { it.key to it.value },
+        "add persists source",
+    )
+
+    // A normal reflexive value still lands at the same group boundary.
+    val addedReal = checkNotNull(source.cursorAt(0L)).add("a", 7.0)
+    assertEquals(3L, addedReal.position, "reflexive insertion lands after the key group")
+    assertEquals(
+        "a" to 7.0,
+        checkNotNull(addedReal.peekPrevious()).value.let { it.key to it.value },
+        "reflexive pair precedes the gap",
+    )
+
+    // delete() must not report a false success when remove-by-content is a no-op for a stored NaN.
+    val withNan = PersistentOrderedMultimap.empty(defaultHashPolicy<String>(), values).add("a", nan)
+    assertEquals(1L, withNan.pairCount, "single NaN pair stored")
+    assertThat(checkNotNull(withNan.cursorAt(1L)).deletePrevious() == null, "no-op delete-previous signals null")
+    assertThat(checkNotNull(withNan.cursorAt(0L)).deleteNext() == null, "no-op delete-next signals null")
+
+    // A reflexive value deletes normally through the same guarded path.
+    val withReal = PersistentOrderedMultimap.empty(defaultHashPolicy<String>(), values).add("a", 5.0)
+    val deleted = checkNotNull(checkNotNull(withReal.cursorAt(1L)).deletePrevious())
+    assertThat(deleted.snapshot().isEmpty, "reflexive delete removes the pair")
+    assertEquals(0L, deleted.position, "reflexive delete decrements the gap")
+}
+
 public fun main() {
     val tests = listOf(
         "constructionRetainsPoliciesAndFirstRepresentatives" to ::constructionRetainsPoliciesAndFirstRepresentatives,
@@ -757,6 +815,8 @@ public fun main() {
             ::orderedMultimapPreservesGroupedOrderAndRepresentatives,
         "orderedCursorsPreserveGapsPoliciesAndSnapshots" to
             ::orderedCursorsPreserveGapsPoliciesAndSnapshots,
+        "orderedMultimapCursorToleratesNonReflexiveValues" to
+            ::orderedMultimapCursorToleratesNonReflexiveValues,
     )
 
     for ((name, test) in tests) {
