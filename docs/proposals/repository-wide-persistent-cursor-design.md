@@ -535,10 +535,16 @@ CHAMP depth, and `c` an equal-hash collision scan.
 | Dirty snapshot | Already O(1) for root checkpoints | O(h) or bounded packing plus O(h); memoization may make repeats O(1) |
 | Traverse k neighbors after seek | O(k log n) in the conservative checkpoint | O(h + k) on one lineage |
 
-These are vocabulary and design targets, not blanket guarantees. A family implementation must
-publish the effect of balancing, relabeling, lazy-tag pushes, collision scans, codec bytes,
-allocation/copying, callbacks, and version-DAG fan-out. Work deferred in one branch cannot be paid
-for by a sibling branch.
+These are vocabulary and design targets, not blanket guarantees. Every "focused target", "may
+target", "targets O(1) amortized", or similar phrase in the family sections below describes the
+**right-hand column** — the unshipped focused representation — and no currently shipped port has
+cleared the evidence gate that would turn it into a delivered bound. All shipped cursors are the
+left-hand Profile R semantic checkpoints; read every amortized-locality target as aspirational until
+a named port publishes the proof required by the
+[future focused-representation promotion gates](#future-focused-representation-promotion-gates). A
+family implementation must publish the effect of balancing, relabeling, lazy-tag pushes, collision
+scans, codec bytes, allocation/copying, callbacks, and version-DAG fan-out. Work deferred in one
+branch cannot be paid for by a sibling branch.
 
 ## Sequence-Family Designs
 
@@ -1139,9 +1145,14 @@ before the word plus the popcount below the active offset.
   retains the collection's negative-index validation; and
 - set algebra remains a sparse word-stream operation, not a cursor primitive.
 
-Seek/edit is logarithmic in represented word count plus constant 64-bit work in measured-tree
-ports. Movement within a word is O(1); a cross-word step has the underlying context's boundary bound.
-Enumeration, rank, select, count width, and overflow remain language-local.
+Seek/edit is logarithmic in represented word count plus constant 64-bit work **in the measured-tree
+ports**, where movement within a word is O(1) and a cross-word step has the underlying context's
+boundary bound. A port that backs the set with a general integer set rather than a chunked word
+stream does not deliver these bounds: OCaml's `Persistent_chunked_bit_set` is a `Set.Make(Int)` with
+no cached population, so rank and select are O(n) and every cursor step is O(n). That port keeps the
+public set-bit cursor semantics but makes no word-local complexity claim; its deviation is recorded
+in [its api notes](../../src/OCaml/docs/api-notes.md). Enumeration, rank, select, count width, and
+overflow remain language-local.
 
 ## Neutral Ordered Composite Designs
 
