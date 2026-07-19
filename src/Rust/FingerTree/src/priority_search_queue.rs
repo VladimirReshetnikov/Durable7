@@ -1039,6 +1039,25 @@ impl<K, P, V> PrioritySearchQueue<K, P, V> {
         }
         rank
     }
+    /// Selects the key-order entry at `rank` in O(h) using the cached subtree counts.
+    ///
+    /// Returns `None` when `rank` addresses the end gap or lies beyond it.
+    fn cursor_entry_at(&self, rank: usize) -> Option<&PrioritySearchEntry<K, P, V>> {
+        let mut node = self.root.as_deref();
+        let mut remaining = rank;
+        while let Some(current) = node {
+            let left_count = current.left.as_ref().map_or(0, |child| child.count);
+            match remaining.cmp(&left_count) {
+                Ordering::Less => node = current.left.as_deref(),
+                Ordering::Equal => return Some(&current.entry),
+                Ordering::Greater => {
+                    remaining -= left_count + 1;
+                    node = current.right.as_deref();
+                }
+            }
+        }
+        None
+    }
     pub fn cursor_at(&self, position: usize) -> Option<PrioritySearchQueueCursor<K, P, V>> {
         (position <= self.len()).then(|| PrioritySearchQueueCursor {
             queue: self.clone(),
@@ -1089,10 +1108,10 @@ impl<K, P, V> PrioritySearchQueueCursor<K, P, V> {
     pub fn peek_previous(&self) -> Option<&PrioritySearchEntry<K, P, V>> {
         self.position
             .checked_sub(1)
-            .and_then(|rank| self.queue.iter().nth(rank))
+            .and_then(|rank| self.queue.cursor_entry_at(rank))
     }
     pub fn peek_next(&self) -> Option<&PrioritySearchEntry<K, P, V>> {
-        self.queue.iter().nth(self.position)
+        self.queue.cursor_entry_at(self.position)
     }
     pub fn move_previous(&self) -> Option<Self> {
         self.position
@@ -1114,6 +1133,29 @@ impl<K, P, V> PrioritySearchQueueCursor<K, P, V> {
     }
     pub fn snapshot(&self) -> &PrioritySearchQueue<K, P, V> {
         &self.queue
+    }
+    /// Removes the entry before the focused gap, leaving the gap where that entry was.
+    ///
+    /// Deletion only has to name a key, so it borrows the retained [`PrioritySearchEntry`] key
+    /// handle rather than cloning `K`; the family's non-`Clone` payload support therefore extends
+    /// to cursor deletion.
+    pub fn delete_previous(&self) -> Option<Self> {
+        let position = self.position.checked_sub(1)?;
+        let key = self.queue.cursor_entry_at(position)?.key_handle();
+        Some(Self {
+            queue: self.queue.remove(&key),
+            position,
+        })
+    }
+    /// Removes the entry after the focused gap, leaving the gap where that entry was.
+    ///
+    /// Like [`Self::delete_previous`], this requires no `Clone` bound on `K`, `P`, or `V`.
+    pub fn delete_next(&self) -> Option<Self> {
+        let key = self.queue.cursor_entry_at(self.position)?.key_handle();
+        Some(Self {
+            queue: self.queue.remove(&key),
+            position: self.position,
+        })
     }
 }
 
@@ -1150,21 +1192,6 @@ impl<K: Clone, P: Clone + PartialEq, V: Clone + PartialEq> PrioritySearchQueueCu
         let key = self.peek_next()?.key().clone();
         Some(Self {
             queue: self.queue.set_item(key, priority, value),
-            position: self.position,
-        })
-    }
-    pub fn delete_previous(&self) -> Option<Self> {
-        let position = self.position.checked_sub(1)?;
-        let key = self.queue.iter().nth(position)?.key().clone();
-        Some(Self {
-            queue: self.queue.remove(&key),
-            position,
-        })
-    }
-    pub fn delete_next(&self) -> Option<Self> {
-        let key = self.queue.iter().nth(self.position)?.key().clone();
-        Some(Self {
-            queue: self.queue.remove(&key),
             position: self.position,
         })
     }

@@ -66,8 +66,8 @@ pub use rrb_vector::{
     RrbVectorIter, RrbVectorPop, RrbVectorSplit, RrbVectorStatistics,
 };
 pub use sorted::{
-    DuplicateKeyError, OrderedCursorSearch, SortedBag, SortedBagCursor, SortedMap, SortedMapCursor,
-    SortedSet, SortedSetCursor,
+    DuplicateKeyError, OrderedCursorInsert, OrderedCursorSearch, SortedBag, SortedBagCursor,
+    SortedMap, SortedMapCursor, SortedSet, SortedSetCursor,
 };
 pub use text_extras::NewlineStyle;
 

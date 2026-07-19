@@ -1,4 +1,5 @@
 use crate::measured::{FingerTree, MeasurePolicy};
+use std::cmp::Ordering;
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -178,14 +179,18 @@ where
     /// Rank of the first stored interval matching both endpoints: a measured
     /// lower-bound descent on the low endpoint plus a scan over the equal-low run,
     /// mirroring the C# `Contains`/`TryRemove` complexity contract.
+    ///
+    /// Endpoints match by [`Ord::cmp`], not by [`PartialEq`]. Ordering is the sole notion of
+    /// endpoint identity in this family, so a `T` whose `Eq` disagrees with its `Ord` cannot make
+    /// a stored interval both order-equal and unmatchable.
     fn index_of(&self, interval: &Interval<T>) -> Option<usize> {
         let mut index = lower_bound_by_low(&self.intervals, &interval.low);
         while let Some(stored) = self.intervals.get(index) {
-            if stored.low != interval.low {
+            if stored.low.cmp(&interval.low) != Ordering::Equal {
                 return None;
             }
 
-            if stored.high == interval.high {
+            if stored.high.cmp(&interval.high) == Ordering::Equal {
                 return Some(index);
             }
 
@@ -347,6 +352,10 @@ impl<T: Ord + Clone> IntervalTree<T> {
         self.cursor_at(self.upper_low_bound_index(low))
             .expect("upper bound is valid")
     }
+    /// Locates the first stored interval matching both endpoints by [`Ord::cmp`], not by
+    /// [`PartialEq`], agreeing with [`IntervalTree::index_of`] and the sibling ports.
+    ///
+    /// A miss returns a cursor at the low-endpoint lower bound.
     pub fn find_cursor(&self, interval: &Interval<T>) -> IntervalCursorSearch<T> {
         let position = lower_bound_by_low(&self.intervals, &interval.low);
         let found = self
@@ -354,8 +363,8 @@ impl<T: Ord + Clone> IntervalTree<T> {
             .iter()
             .enumerate()
             .skip(position)
-            .take_while(|(_, item)| item.low == interval.low)
-            .find(|(_, item)| item.high == interval.high)
+            .take_while(|(_, item)| item.low.cmp(&interval.low) == Ordering::Equal)
+            .find(|(_, item)| item.high.cmp(&interval.high) == Ordering::Equal)
             .map(|(rank, _)| rank);
         IntervalCursorSearch {
             found: found.is_some(),

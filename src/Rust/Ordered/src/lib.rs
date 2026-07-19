@@ -5,8 +5,8 @@ mod cursors;
 mod ordered_map;
 mod ordered_multimap;
 pub use cursors::{
-    OrderedCursorSearch, PersistentOrderedMapCursor, PersistentOrderedMultimapCursor,
-    PersistentOrderedSetCursor,
+    OrderedCursorInsert, OrderedCursorSearch, PersistentOrderedMapCursor,
+    PersistentOrderedMultimapCursor, PersistentOrderedSetCursor,
 };
 pub use ordered_map::{
     OrderedMapMoveError, OrderedMapRemoveResult, PersistentOrderedMap,

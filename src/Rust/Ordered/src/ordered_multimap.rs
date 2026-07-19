@@ -276,7 +276,10 @@ where
         Self {
             groups,
             value_hasher: self.value_hasher.clone(),
-            pair_count: self.pair_count - 1,
+            pair_count: self
+                .pair_count
+                .checked_sub(1)
+                .expect("ordered multimap pair count underflow"),
         }
     }
 
@@ -288,7 +291,10 @@ where
             Self {
                 groups: removed.map,
                 value_hasher: self.value_hasher.clone(),
-                pair_count: self.pair_count - group.0.len(),
+                pair_count: self
+                    .pair_count
+                    .checked_sub(group.0.len())
+                    .expect("ordered multimap pair count underflow"),
             },
             actual_key,
             group.0,

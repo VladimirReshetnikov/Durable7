@@ -5,9 +5,24 @@ use tools_data_structures_hamt::DuplicateKey;
 use crate::{PersistentOrderedMap, PersistentOrderedMultimap, PersistentOrderedSet};
 
 /// Presence-discriminated focused lookup result.
+///
+/// `found` reports whether an equivalent entry is already present. It never reports whether an
+/// edit occurred; insertion results use [`OrderedCursorInsert`] so the two discriminators cannot
+/// be confused by generic code written over either type.
 #[derive(Clone)]
 pub struct OrderedCursorSearch<C> {
     pub found: bool,
+    pub cursor: C,
+}
+
+/// Insertion-discriminated focused edit result.
+///
+/// `added` reports whether the attempt published a new entry. A rejected attempt reports `false`
+/// and returns a cursor focused on the retained equivalent entry, leaving the receiver's version
+/// unchanged.
+#[derive(Clone)]
+pub struct OrderedCursorInsert<C> {
+    pub added: bool,
     pub cursor: C,
 }
 
@@ -149,10 +164,16 @@ where
         }
     }
 
+    /// Inserts an absent equality class at the focused gap.
+    ///
+    /// A duplicate reports `added: false` and returns a root-sharing cursor at the same gap.
     #[must_use]
-    pub fn try_insert(&self, value: T) -> (bool, Self) {
+    pub fn try_insert(&self, value: T) -> OrderedCursorInsert<Self> {
         let cursor = self.insert(value);
-        (!cursor.set.shares_roots_with(&self.set), cursor)
+        OrderedCursorInsert {
+            added: !cursor.set.shares_roots_with(&self.set),
+            cursor,
+        }
     }
 
     #[must_use]
@@ -306,19 +327,23 @@ where
         })
     }
 
+    /// Inserts an absent key at the focused gap.
+    ///
+    /// A duplicate reports `added: false`, leaves the receiver's version unchanged, and returns a
+    /// cursor focused before the retained entry.
     #[must_use]
-    pub fn try_insert(&self, key: K, value: V) -> OrderedCursorSearch<Self> {
+    pub fn try_insert(&self, key: K, value: V) -> OrderedCursorInsert<Self> {
         if let Some(position) = self.map.index_of(&key) {
-            return OrderedCursorSearch {
-                found: false,
+            return OrderedCursorInsert {
+                added: false,
                 cursor: Self {
                     map: self.map.clone(),
                     position,
                 },
             };
         }
-        OrderedCursorSearch {
-            found: true,
+        OrderedCursorInsert {
+            added: true,
             cursor: self.insert(key, value).expect("prechecked key is absent"),
         }
     }
@@ -516,10 +541,16 @@ where
         }
     }
 
+    /// Inserts an absent pair into the focused key's group.
+    ///
+    /// A duplicate pair reports `added: false` and returns a root-sharing cursor at the same rank.
     #[must_use]
-    pub fn try_insert(&self, key: K, value: V) -> (bool, Self) {
+    pub fn try_insert(&self, key: K, value: V) -> OrderedCursorInsert<Self> {
         let cursor = self.insert(key, value);
-        (!cursor.map.shares_groups_root_with(&self.map), cursor)
+        OrderedCursorInsert {
+            added: !cursor.map.shares_groups_root_with(&self.map),
+            cursor,
+        }
     }
 
     #[must_use]

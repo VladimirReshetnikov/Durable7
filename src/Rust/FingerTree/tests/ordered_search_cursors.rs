@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use tools_data_structures_fingertree::{
     CanonicalSortedSet, Interval, IntervalTree, PersistentChunkedBitSet, PersistentIntervalMap,
-    PrioritySearchQueue, SortedBag, SortedMap, SortedSet, ZipTreeRankPolicy,
+    PrioritySearchEntry, PrioritySearchQueue, SortedBag, SortedMap, SortedSet, ZipTreeRankPolicy,
 };
 
 #[derive(Clone, Debug)]
@@ -226,4 +226,216 @@ fn interval_map_and_chunked_bit_set_cursors_keep_snapshot_edits_local() {
     let deleted = inserted.delete_previous().unwrap();
     assert_eq!(deleted.snapshot().iter().collect::<Vec<_>>(), [1, 64, 130]);
     assert_eq!(bits.iter().collect::<Vec<_>>(), [1, 64, 130]);
+}
+
+/// `found` means "already present" and `added` means "this attempt published an entry", so a
+/// duplicate insert must report the opposite of the search that located the same key.
+#[test]
+fn sorted_map_cursor_try_insert_reports_addition_not_presence() {
+    let map = SortedMap::new()
+        .set_item(1, "one")
+        .set_item(3, "three")
+        .set_item(5, "five");
+    let cursor = map.cursor_at(0).unwrap();
+
+    let duplicate = cursor.try_insert(3, "THREE");
+    assert!(
+        !duplicate.added,
+        "an existing key must not report an addition"
+    );
+    assert!(
+        map.find_cursor(&3).found,
+        "the same key must report presence through the search discriminator"
+    );
+    assert_eq!(duplicate.cursor.position(), 1);
+    assert_eq!(duplicate.cursor.peek_next(), Some((&3, &"three")));
+    assert_eq!(duplicate.cursor.snapshot().to_vec(), map.to_vec());
+
+    let fresh = cursor.try_insert(4, "four");
+    assert!(fresh.added, "an absent key must report an addition");
+    assert!(
+        !map.find_cursor(&4).found,
+        "the same key must report absence through the search discriminator"
+    );
+    assert_eq!(fresh.cursor.position(), 3);
+    assert_eq!(fresh.cursor.peek_previous(), Some((&4, &"four")));
+    assert_eq!(map.len(), 3);
+}
+
+/// The canonical set and the priority-search queue resolve a rank through the cached subtree
+/// counts, so every rank must agree with in-order enumeration at both gap sides.
+#[test]
+fn canonical_and_priority_search_rank_selection_matches_enumeration() {
+    let policy = ZipTreeRankPolicy::<i32>::seeded_natural(0x5a17);
+    let items: Vec<i32> = (0..64).map(|value| value * 3).collect();
+    let set = CanonicalSortedSet::from_items(policy, items.clone()).unwrap();
+    for rank in 0..=set.len() {
+        let cursor = set.cursor_at(rank).unwrap();
+        assert_eq!(cursor.peek_next(), items.get(rank));
+        assert_eq!(
+            cursor.peek_previous(),
+            rank.checked_sub(1).map(|previous| &items[previous])
+        );
+    }
+
+    let queue: PrioritySearchQueue<i32, i32, i32> = (0..64)
+        .map(|value| PrioritySearchEntry::new(value * 3, 100 - value, value))
+        .collect();
+    for rank in 0..=queue.len() {
+        let cursor = queue.cursor_at(rank).unwrap();
+        assert_eq!(
+            cursor.peek_next().map(|entry| *entry.key()),
+            items.get(rank).copied()
+        );
+        assert_eq!(
+            cursor.peek_previous().map(|entry| *entry.key()),
+            rank.checked_sub(1).map(|previous| items[previous])
+        );
+    }
+}
+
+/// Rank-guided deletion must remove the focused occurrence, not merely something order-equal to
+/// it, at every position in the collection.
+#[test]
+fn canonical_and_priority_search_cursor_deletes_the_focused_rank() {
+    let policy = ZipTreeRankPolicy::<i32>::seeded_natural(0x5a17);
+    let items: Vec<i32> = (0..24).map(|value| value * 3).collect();
+    let set = CanonicalSortedSet::from_items(policy, items.clone()).unwrap();
+    for rank in 0..set.len() {
+        let deleted = set.cursor_at(rank).unwrap().delete_next().unwrap();
+        let mut expected = items.clone();
+        expected.remove(rank);
+        assert_eq!(
+            deleted.snapshot().iter().copied().collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(deleted.position(), rank);
+    }
+
+    let queue: PrioritySearchQueue<i32, i32, i32> = (0..24)
+        .map(|value| PrioritySearchEntry::new(value * 3, 100 - value, value))
+        .collect();
+    for rank in 1..=queue.len() {
+        let deleted = queue.cursor_at(rank).unwrap().delete_previous().unwrap();
+        let mut expected = items.clone();
+        expected.remove(rank - 1);
+        assert_eq!(
+            deleted
+                .snapshot()
+                .iter()
+                .map(|entry| *entry.key())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(deleted.position(), rank - 1);
+    }
+}
+
+/// Deletion only has to name a key, and `PrioritySearchEntry` retains one behind an `Arc`, so the
+/// cursor's delete operations must not require `Clone` on `K`, `P`, or `V`.
+///
+/// This is primarily a compile-level assertion: none of the three payload types is `Clone`, so the
+/// test would not build if the delete operations regained those bounds.
+#[test]
+fn priority_search_cursor_deletes_without_clone_payloads() {
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+    struct Key(i32);
+
+    #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
+    struct Priority(i32);
+
+    #[derive(Debug)]
+    struct Payload(&'static str);
+
+    let queue = PrioritySearchQueue::new()
+        .try_add(Key(1), Priority(30), Payload("one"))
+        .queue
+        .try_add(Key(3), Priority(10), Payload("three"))
+        .queue
+        .try_add(Key(5), Priority(20), Payload("five"))
+        .queue;
+
+    let cursor = queue.cursor_at_lower_bound(&Key(3));
+    assert_eq!(cursor.position(), 1);
+    assert_eq!(cursor.peek_next().unwrap().value().0, "three");
+
+    let deleted = cursor.delete_next().unwrap();
+    assert_eq!(deleted.position(), 1);
+    assert_eq!(deleted.peek_next().unwrap().value().0, "five");
+    assert_eq!(
+        deleted
+            .snapshot()
+            .iter()
+            .map(|entry| entry.value().0)
+            .collect::<Vec<_>>(),
+        ["one", "five"]
+    );
+
+    let deleted = deleted.delete_previous().unwrap();
+    assert_eq!(deleted.position(), 0);
+    assert_eq!(
+        deleted
+            .snapshot()
+            .iter()
+            .map(|entry| entry.value().0)
+            .collect::<Vec<_>>(),
+        ["five"]
+    );
+    assert_eq!(queue.len(), 3);
+}
+
+/// Interval endpoints identify a stored interval by comparison, not by `PartialEq`. `Tagged`
+/// orders on `rank` alone while its `Eq` also inspects `tag`, so an equality-based match would
+/// fail to locate an order-equal stored interval carrying a different tag.
+#[test]
+fn interval_tree_matches_endpoints_by_comparison_not_equality() {
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Tagged {
+        rank: i32,
+        tag: &'static str,
+    }
+
+    impl PartialOrd for Tagged {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    impl Ord for Tagged {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.rank.cmp(&other.rank)
+        }
+    }
+
+    fn tagged(rank: i32, tag: &'static str) -> Tagged {
+        Tagged { rank, tag }
+    }
+
+    let stored = Interval::new(tagged(1, "stored-low"), tagged(5, "stored-high"));
+    let tree = IntervalTree::new()
+        .insert(stored.clone())
+        .insert(Interval::new(tagged(7, "late-low"), tagged(9, "late-high")));
+
+    // Order-equal endpoints, different tags: `==` on the endpoints is false, `cmp` is `Equal`.
+    let probe = Interval::new(tagged(1, "probe-low"), tagged(5, "probe-high"));
+    assert_ne!(probe.low, stored.low);
+    assert_eq!(probe.low.cmp(&stored.low), Ordering::Equal);
+
+    assert!(
+        tree.contains(&probe),
+        "an order-equal interval must be found"
+    );
+    let located = tree.find_cursor(&probe);
+    assert!(located.found, "the cursor search must agree with contains");
+    assert_eq!(located.cursor.position(), 0);
+    assert_eq!(located.cursor.peek_next().unwrap().low.tag, "stored-low");
+
+    let removed = tree.remove(&probe);
+    assert_eq!(removed.len(), 1);
+    assert_eq!(removed.to_vec()[0].low.tag, "late-low");
+
+    // A genuinely absent interval still misses and lands on the low-endpoint lower bound.
+    let absent = tree.find_cursor(&Interval::new(tagged(1, "x"), tagged(6, "y")));
+    assert!(!absent.found);
+    assert_eq!(absent.cursor.position(), 0);
 }

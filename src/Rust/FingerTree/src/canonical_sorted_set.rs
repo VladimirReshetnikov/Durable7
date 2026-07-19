@@ -973,6 +973,25 @@ impl<T> CanonicalSortedSet<T> {
         }
         rank
     }
+    /// Selects the item at `rank` in O(h) using the cached subtree counts.
+    ///
+    /// Returns `None` when `rank` addresses the end gap or lies beyond it.
+    fn cursor_item_at(&self, rank: usize) -> Option<&T> {
+        let mut node = self.root.as_deref();
+        let mut remaining = rank;
+        while let Some(current) = node {
+            let left_count = current.left.as_ref().map_or(0, |child| child.count);
+            match remaining.cmp(&left_count) {
+                Ordering::Less => node = current.left.as_deref(),
+                Ordering::Equal => return Some(&current.item),
+                Ordering::Greater => {
+                    remaining -= left_count + 1;
+                    node = current.right.as_deref();
+                }
+            }
+        }
+        None
+    }
     pub fn cursor_at(&self, position: usize) -> Option<CanonicalSortedSetCursor<T>> {
         (position <= self.len()).then(|| CanonicalSortedSetCursor {
             set: self.clone(),
@@ -1017,10 +1036,10 @@ impl<T> CanonicalSortedSetCursor<T> {
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
             .checked_sub(1)
-            .and_then(|rank| self.set.iter().nth(rank))
+            .and_then(|rank| self.set.cursor_item_at(rank))
     }
     pub fn peek_next(&self) -> Option<&T> {
-        self.set.iter().nth(self.position)
+        self.set.cursor_item_at(self.position)
     }
     pub fn move_previous(&self) -> Option<Self> {
         self.position
@@ -1055,14 +1074,14 @@ impl<T: Clone> CanonicalSortedSetCursor<T> {
     }
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
-        let item = self.set.iter().nth(position)?.clone();
+        let item = self.set.cursor_item_at(position)?.clone();
         Some(Self {
             set: self.set.remove(&item),
             position,
         })
     }
     pub fn delete_next(&self) -> Option<Self> {
-        let item = self.set.iter().nth(self.position)?.clone();
+        let item = self.set.cursor_item_at(self.position)?.clone();
         Some(Self {
             set: self.set.remove(&item),
             position: self.position,

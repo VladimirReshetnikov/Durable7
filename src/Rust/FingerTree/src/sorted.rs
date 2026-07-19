@@ -717,8 +717,22 @@ where
 }
 
 /// Presence-discriminated ordered cursor search.
+///
+/// `found` reports whether an equivalent entry is already present. It never reports whether an
+/// edit occurred; insertion results use [`OrderedCursorInsert`] so the two discriminators cannot
+/// be confused by generic code written over either type.
 pub struct OrderedCursorSearch<C> {
     pub found: bool,
+    pub cursor: C,
+}
+
+/// Insertion-discriminated ordered cursor edit result.
+///
+/// `added` reports whether the attempt published a new entry. A rejected attempt reports `false`
+/// and returns a cursor focused on the retained equivalent entry, leaving the receiver's version
+/// unchanged.
+pub struct OrderedCursorInsert<C> {
+    pub added: bool,
     pub cursor: C,
 }
 
@@ -1011,14 +1025,18 @@ impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
             position: position + 1,
         })
     }
-    pub fn try_insert(&self, key: K, value: V) -> OrderedCursorSearch<Self> {
+    /// Inserts an absent key at its key-ordered position.
+    ///
+    /// A duplicate reports `added: false`, leaves the receiver's version unchanged, and returns a
+    /// cursor focused before the retained entry.
+    pub fn try_insert(&self, key: K, value: V) -> OrderedCursorInsert<Self> {
         let position = lower_bound_by_key(&self.map.entries, &key);
-        let (map, found) = self.map.try_insert(key, value);
-        OrderedCursorSearch {
-            found,
+        let (map, added) = self.map.try_insert(key, value);
+        OrderedCursorInsert {
+            added,
             cursor: Self {
                 map,
-                position: if found { position + 1 } else { position },
+                position: if added { position + 1 } else { position },
             },
         }
     }
