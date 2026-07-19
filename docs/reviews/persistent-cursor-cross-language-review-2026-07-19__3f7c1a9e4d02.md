@@ -8,6 +8,38 @@
 - Normative baseline:
   [repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md)
 
+## Second-Round Addendum (2026-07-19, HEAD 29f8f73)
+
+A follow-up adversarial review (eight cross-cutting dimensions, each candidate finding verified
+against committed source) found one **systematic defect the family-grouped first pass under-scoped**,
+plus two smaller items:
+
+- **Ordered-multimap cursor NaN / non-reflexive-value hazard, in all nine ports.** The first pass
+  found this in OCaml and Haskell (as reachable crashes) and fixed those two. But the flat grouped-
+  pair-rank multimap cursor is the same shape in every port, and every port's `add` re-derived its
+  post-insert gap by scanning the new snapshot for the pair **by value equality**, while `delete`
+  removed by content **without a removed-flag guard**. Any value non-reflexive under the value
+  policy — `NaN` under an ordinary IEEE `a==b`/`===`/`std::equal_to<double>`/`operator.eq` comparer —
+  made `add` throw/error on a pair the collection had just accepted and `delete` report false success
+  while removing nothing. **C++ was high-severity** (reachable under the *default*
+  `std::equal_to<double>`, no custom comparer). Fixed in C++, C#, C, Kotlin, TypeScript, Python, and
+  Rust by deriving the insert gap from the key group's end (key policy only, mirroring Haskell's
+  `orderedMultimapGroupEnd`) and guarding delete with a pair-count comparison; OCaml's first-round
+  fallback was upgraded from the whole-map end to the group end. Each port carries a new
+  non-reflexive-value regression test; Python and TypeScript were additionally confirmed by direct
+  execution (`add(NaN)` lands the group-end gap, `delete(NaN)` signals a no-op).
+- **A latent MSVC-only `C4702`** at `persistent_ordered_map.hpp:559` (`if constexpr` returning
+  followed by an unreachable trailing `return`, promoted to an error by `/WX`) that had been silently
+  breaking the entire C++ Ordered MSVC test binary — the C++ Ordered MSVC gate had never actually run
+  this session. Fixed with an explicit `else`, matching the sibling set header.
+- **A doc-vs-code contradiction** the C++ `put`→`set_item` rename introduced (the Patricia map cursor
+  doc still listed `put`).
+
+The lesson recorded: when a finding stems from a shared design shape present in every port (here the
+flat-rank multimap cursor), check every port, not only the ones the finding names. The eight dimensions
+that returned zero findings (helper boundaries, C/C++ regressions, concurrency/atomicity, edge cases)
+were independently corroborated — the new count-guided selects were execution-tested at every rank.
+
 ## Executive Summary
 
 The cursor tier is in far better shape than a shipment of this size would suggest. **Twenty-two
