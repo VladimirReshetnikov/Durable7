@@ -1121,7 +1121,7 @@ internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
             return source;
 
         RopeCursorDiagnostics.RecordNodeVisits();
-        return CreateContext(version.Snapshot(), position, source.Configuration);
+        return CreateContext(version.Snapshot(), position, source.Configuration, source.FragmentCache);
     }
 
     internal static (bool Found, MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> Context)

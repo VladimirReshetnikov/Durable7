@@ -76,6 +76,14 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
         Assert.Equal(0, InstrumentedCountMeasure.MeasureCalls);
         Assert.Equal(2042, moved.Position);
 
+        // Positional Seek shares the lineage fragment cache exactly as measure seek and movement do,
+        // so re-entering an already prepared chunk remeasures nothing.
+        InstrumentedCountMeasure.Reset();
+        var soughtPositionally = located.Seek(2041);
+        Assert.Equal(0, InstrumentedCountMeasure.MeasureCalls);
+        Assert.Equal(2041, soughtPositionally.Position);
+        Assert.Equal(2041, soughtPositionally.MeasureBefore);
+
         InstrumentedCountMeasure.Reset();
         var edited = located.Insert(-1);
         Assert.Equal(1, InstrumentedCountMeasure.MeasureCalls);

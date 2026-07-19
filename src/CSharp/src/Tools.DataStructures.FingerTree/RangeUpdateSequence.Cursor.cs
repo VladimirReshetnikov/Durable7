@@ -14,6 +14,7 @@ public readonly struct RangeUpdateSequenceCursor<TElement, TMeasure, TTag, TOps>
     where TOps : IRangeUpdateAlgebra<TElement, TMeasure, TTag>
 {
     private readonly RangeUpdateSequence<TElement, TMeasure, TTag, TOps>? _snapshot;
+    private readonly int _position;
 
     internal RangeUpdateSequenceCursor(
         RangeUpdateSequence<TElement, TMeasure, TTag, TOps> snapshot,
@@ -22,7 +23,7 @@ public readonly struct RangeUpdateSequenceCursor<TElement, TMeasure, TTag, TOps>
         if ((uint)position > (uint)snapshot.Count)
             throw new ArgumentOutOfRangeException(nameof(position));
         _snapshot = snapshot;
-        Position = position;
+        _position = position;
     }
 
     private RangeUpdateSequence<TElement, TMeasure, TTag, TOps> Value =>
@@ -31,7 +32,14 @@ public readonly struct RangeUpdateSequenceCursor<TElement, TMeasure, TTag, TOps>
     /// <summary>Gets the number of logical elements in this cursor version.</summary>
     public int Count => Value.Count;
     /// <summary>Gets the logical gap position in <c>0..Count</c>.</summary>
-    public int Position { get; }
+    public int Position
+    {
+        get
+        {
+            _ = Value;
+            return _position;
+        }
+    }
     /// <summary>Gets whether the gap is at the start.</summary>
     public bool IsAtStart => Position == 0;
     /// <summary>Gets whether the gap is at the end.</summary>

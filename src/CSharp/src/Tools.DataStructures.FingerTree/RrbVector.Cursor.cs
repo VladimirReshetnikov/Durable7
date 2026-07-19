@@ -12,20 +12,28 @@ public sealed partial class RrbVector<T>
 public readonly struct RrbVectorCursor<T>
 {
     private readonly RrbVector<T>? _snapshot;
+    private readonly int _position;
 
     internal RrbVectorCursor(RrbVector<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)
             throw new ArgumentOutOfRangeException(nameof(position));
         _snapshot = snapshot;
-        Position = position;
+        _position = position;
     }
 
     private RrbVector<T> Value => _snapshot ?? throw UninitializedError();
     /// <summary>Gets the number of elements in this cursor version.</summary>
     public int Count => Value.Count;
     /// <summary>Gets the gap position in <c>0..Count</c>.</summary>
-    public int Position { get; }
+    public int Position
+    {
+        get
+        {
+            _ = Value;
+            return _position;
+        }
+    }
     /// <summary>Gets whether the gap is at the start.</summary>
     public bool IsAtStart => Position == 0;
     /// <summary>Gets whether the gap is at the end.</summary>

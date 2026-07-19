@@ -198,8 +198,10 @@ let locate predicate tree =
         if predicate through_left then descend index prefix left
         else descend (index + node_length left) through_left right
   in
-  if predicate (Measures.empty tree.tree_policy) then None
-  else descend 0 (Measures.empty tree.tree_policy) tree.root
+  (* A monotone predicate that already holds at the identity selects index zero on a nonempty
+     tree, matching every sibling port and this module's own interface. An empty tree still
+     misses because [descend] returns [None] for [Empty]. *)
+  descend 0 (Measures.empty tree.tree_policy) tree.root
 
 let validate tree =
   let rec loop = function

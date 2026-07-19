@@ -38,6 +38,11 @@ static void tds_ordered_multimap_group_copy(
     void* raw_context)
 {
     (void)raw_context;
+    /* The ft_copy_fn signature has no failure channel, and tds_ordered_set_clone writes the
+     * destination only on success. Zero it first so a failed clone leaves a wholly
+     * uninitialized group that tds_ordered_set_destroy rejects, rather than raw heap bytes
+     * whose non-NULL field patterns would be released as live pointers. */
+    (void)memset(destination, 0, sizeof(tds_ordered_set));
     (void)tds_ordered_set_clone(
         (const tds_ordered_set*)source,
         (tds_ordered_set*)destination);

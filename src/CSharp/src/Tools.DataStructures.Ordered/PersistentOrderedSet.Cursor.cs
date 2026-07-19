@@ -18,13 +18,14 @@ public sealed partial class PersistentOrderedSet<T>
 public readonly struct PersistentOrderedSetCursor<T>
 {
     private readonly PersistentOrderedSet<T>? _snapshot;
+    private readonly int _position;
 
     internal PersistentOrderedSetCursor(PersistentOrderedSet<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)
             throw new ArgumentOutOfRangeException(nameof(position));
         _snapshot = snapshot;
-        Position = position;
+        _position = position;
     }
 
     private PersistentOrderedSet<T> Value => _snapshot ?? throw UninitializedError();
@@ -32,7 +33,14 @@ public readonly struct PersistentOrderedSetCursor<T>
     /// <summary>Gets the representative count in this cursor version.</summary>
     public int Count => Value.Count;
     /// <summary>Gets the number of representatives before the gap.</summary>
-    public int Position { get; }
+    public int Position
+    {
+        get
+        {
+            _ = Value;
+            return _position;
+        }
+    }
     /// <summary>Gets whether the gap precedes every representative.</summary>
     public bool IsAtStart => Position == 0;
     /// <summary>Gets whether the gap follows every representative.</summary>

@@ -26,13 +26,14 @@ public sealed partial class PersistentChunkedBitSet
 public readonly struct PersistentChunkedBitSetCursor
 {
     private readonly PersistentChunkedBitSet? _snapshot;
+    private readonly long _position;
 
     internal PersistentChunkedBitSetCursor(PersistentChunkedBitSet snapshot, long position)
     {
         if (position < 0 || position > snapshot.Count)
             throw new ArgumentOutOfRangeException(nameof(position));
         _snapshot = snapshot;
-        Position = position;
+        _position = position;
     }
 
     private PersistentChunkedBitSet Value => _snapshot ?? throw UninitializedError();
@@ -40,7 +41,14 @@ public readonly struct PersistentChunkedBitSetCursor
     /// <summary>Gets the set-bit count in this cursor version.</summary>
     public long Count => Value.Count;
     /// <summary>Gets the number of set bits before the gap.</summary>
-    public long Position { get; }
+    public long Position
+    {
+        get
+        {
+            _ = Value;
+            return _position;
+        }
+    }
     /// <summary>Gets whether the gap is before every set bit.</summary>
     public bool IsAtStart => Position == 0;
     /// <summary>Gets whether the gap is after every set bit.</summary>

@@ -18,13 +18,14 @@ public sealed partial class PersistentOrderedMap<TKey, TValue>
 public readonly struct PersistentOrderedMapCursor<TKey, TValue>
 {
     private readonly PersistentOrderedMap<TKey, TValue>? _snapshot;
+    private readonly int _position;
 
     internal PersistentOrderedMapCursor(PersistentOrderedMap<TKey, TValue> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)
             throw new ArgumentOutOfRangeException(nameof(position));
         _snapshot = snapshot;
-        Position = position;
+        _position = position;
     }
 
     private PersistentOrderedMap<TKey, TValue> Value => _snapshot ?? throw UninitializedError();
@@ -32,7 +33,14 @@ public readonly struct PersistentOrderedMapCursor<TKey, TValue>
     /// <summary>Gets the entry count in this cursor version.</summary>
     public int Count => Value.Count;
     /// <summary>Gets the number of entries before the gap.</summary>
-    public int Position { get; }
+    public int Position
+    {
+        get
+        {
+            _ = Value;
+            return _position;
+        }
+    }
     /// <summary>Gets whether the gap precedes every entry.</summary>
     public bool IsAtStart => Position == 0;
     /// <summary>Gets whether the gap follows every entry.</summary>

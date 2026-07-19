@@ -228,6 +228,29 @@ let test_sequence_cursors () =
     (Measured_tree.to_list (Measured_tree.cursor_snapshot measured));
   check_int_list "measured source retained" [ 2; 3; 5; 7 ] (Measured_tree.to_list measured_source);
 
+  (* A monotone predicate already true at the identity selects the start gap on a nonempty tree,
+     while an empty tree remains a miss with a usable end cursor. *)
+  let identity_found, identity_cursor =
+    Measured_tree.cursor_by_measure (fun total -> total >= 0) measured_source
+  in
+  Alcotest.(check bool) "identity predicate found" true identity_found;
+  Alcotest.(check bool)
+    "identity predicate at start" true
+    (Measured_tree.cursor_is_at_start identity_cursor);
+  Alcotest.(check int) "identity predicate measure before" 0
+    (Measured_tree.cursor_measure_before identity_cursor);
+  Alcotest.(check int) "identity predicate measure after" 17
+    (Measured_tree.cursor_measure_after identity_cursor);
+  let empty_found, empty_cursor =
+    Measured_tree.cursor_by_measure
+      (fun total -> total >= 0)
+      (Measured_tree.empty Measures.int_sum)
+  in
+  Alcotest.(check bool) "identity predicate empty miss" false empty_found;
+  Alcotest.(check bool)
+    "identity predicate empty end" true
+    (Measured_tree.cursor_is_at_end empty_cursor);
+
   let vector_source = Rrb_vector.of_list (List.init 96 Fun.id) in
   let vector = Option.get (Rrb_vector.cursor_at 32 vector_source) in
   let vector = Rrb_vector.cursor_insert_vector (Rrb_vector.of_list [ 500; 501; 502 ]) vector in

@@ -66,6 +66,7 @@ public sealed partial class PersistentOrderedMultimap<TKey, TValue>
 public readonly struct PersistentOrderedMultimapCursor<TKey, TValue>
 {
     private readonly PersistentOrderedMultimap<TKey, TValue>? _snapshot;
+    private readonly long _position;
 
     internal PersistentOrderedMultimapCursor(
         PersistentOrderedMultimap<TKey, TValue> snapshot,
@@ -74,7 +75,7 @@ public readonly struct PersistentOrderedMultimapCursor<TKey, TValue>
         if (position < 0 || position > snapshot.PairCount)
             throw new ArgumentOutOfRangeException(nameof(position));
         _snapshot = snapshot;
-        Position = position;
+        _position = position;
     }
 
     private PersistentOrderedMultimap<TKey, TValue> Value =>
@@ -83,7 +84,14 @@ public readonly struct PersistentOrderedMultimapCursor<TKey, TValue>
     /// <summary>Gets the flattened key-grouped pair count in this cursor version.</summary>
     public long PairCount => Value.PairCount;
     /// <summary>Gets the number of key-grouped pairs before the gap.</summary>
-    public long Position { get; }
+    public long Position
+    {
+        get
+        {
+            _ = Value;
+            return _position;
+        }
+    }
     /// <summary>Gets whether the gap precedes every pair.</summary>
     public bool IsAtStart => Position == 0;
     /// <summary>Gets whether the gap follows every pair.</summary>

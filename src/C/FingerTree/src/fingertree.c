@@ -6753,9 +6753,13 @@ ft_status ft_sorted_multiset_cursor_snapshot(
     const ft_sorted_multiset_cursor* cursor,
     ft_sorted_multiset* result)
 {
-    return !ft_sorted_multiset_cursor_is_valid(cursor) || result == NULL
-        ? FT_STATUS_INVALID_ARGUMENT
-        : ft_sorted_multiset_copy(&cursor->set, result);
+    if (!ft_sorted_multiset_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->set) {
+        return FT_STATUS_OK;
+    }
+    return ft_sorted_multiset_copy(&cursor->set, result);
 }
 
 ft_status ft_sorted_set_init(
@@ -6914,7 +6918,13 @@ static ft_status ft_sorted_map_entry_init(
     entry->key = ft_allocate(map->key_type.size);
     entry->value = ft_allocate(map->value_type.size);
     if (entry->key == NULL || entry->value == NULL) {
-        ft_sorted_map_entry_destroy_value(map->entry_context, entry);
+        /* Neither buffer has been value-initialized yet, so release the raw storage directly.
+         * Routing through ft_sorted_map_entry_destroy_value would invoke the caller's destroy
+         * hook on uninitialized memory whenever only one of the two allocations succeeded. */
+        free(entry->key);
+        free(entry->value);
+        entry->key = NULL;
+        entry->value = NULL;
         return FT_STATUS_NO_MEMORY;
     }
 
@@ -7832,9 +7842,13 @@ ft_status ft_sorted_map_cursor_snapshot(
     const ft_sorted_map_cursor* cursor,
     ft_sorted_map* result)
 {
-    return !ft_sorted_map_cursor_is_valid(cursor) || result == NULL
-        ? FT_STATUS_INVALID_ARGUMENT
-        : ft_sorted_map_copy(&cursor->map, result);
+    if (!ft_sorted_map_cursor_is_valid(cursor) || result == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (result == &cursor->map) {
+        return FT_STATUS_OK;
+    }
+    return ft_sorted_map_copy(&cursor->map, result);
 }
 
 #define FT_ROPE_DEFAULT_MAX_CHUNK_LENGTH 2048u
@@ -12047,6 +12061,9 @@ ft_status ft_interval_tree_i64_copy(const ft_interval_tree_i64* source, ft_inter
     if (source == NULL || destination == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
     }
+    if (source == destination) {
+        return FT_STATUS_OK;
+    }
 
     ft_status status = ft_interval_tree_i64_init(destination);
     if (status != FT_STATUS_OK) {
@@ -13043,6 +13060,9 @@ ft_status ft_interval_tree_copy(const ft_interval_tree* source, ft_interval_tree
 {
     if (source == NULL || destination == NULL) {
         return FT_STATUS_INVALID_ARGUMENT;
+    }
+    if (source == destination) {
+        return FT_STATUS_OK;
     }
 
     ft_status status = ft_interval_tree_prepare_result(source, destination);
