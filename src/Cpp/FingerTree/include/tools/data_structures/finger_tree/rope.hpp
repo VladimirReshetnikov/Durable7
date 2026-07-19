@@ -206,6 +206,7 @@ public:
     [[nodiscard]] rope insert_at(size_type index, value_type value) const
     {
         throw_if_insert_index_out_of_range(index, size());
+        (void)checked_add(size(), size_type{1});
 
         if (empty()) {
             return wrap(tree_.append(single_chunk(std::move(value))));
@@ -238,6 +239,7 @@ public:
     [[nodiscard]] rope insert_range(const size_type index, const rope& values) const
     {
         throw_if_insert_index_out_of_range(index, size());
+        (void)checked_add(size(), values.size());
         if (values.empty()) {
             return *this;
         }
@@ -314,6 +316,7 @@ public:
 
     [[nodiscard]] rope concat(const rope& other) const
     {
+        (void)checked_add(size(), other.size());
         if (other.empty()) {
             return *this;
         }

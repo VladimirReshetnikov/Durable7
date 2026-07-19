@@ -164,6 +164,42 @@ public:
         return try_get_entry(key) != nullptr;
     }
 
+    /// Returns the number of entries whose interval keys order strictly before `key`, which is
+    /// also the rank of its lower-bound gap. Keys order lexicographically by low endpoint then
+    /// high endpoint, matching the iteration order. One O(log n) measured descent.
+    [[nodiscard]] size_type count_keys_less_than(const interval_type& key) const
+    {
+        return tree_
+            .try_locate([&key](const auto& annotation) {
+                return annotation.last_interval.has_value()
+                    && compare_intervals(annotation.last_interval.value(), key) >= 0;
+            })
+            .measure_before.count;
+    }
+
+    /// Returns the number of entries whose interval keys do not order after `key`, which is
+    /// also the rank of its upper-bound gap. One O(log n) measured descent.
+    [[nodiscard]] size_type count_keys_at_most(const interval_type& key) const
+    {
+        return tree_
+            .try_locate([&key](const auto& annotation) {
+                return annotation.last_interval.has_value()
+                    && compare_intervals(annotation.last_interval.value(), key) > 0;
+            })
+            .measure_before.count;
+    }
+
+    /// Returns the entry at a key-order rank, or nullptr when the rank is at or past the end.
+    /// One O(log n) measured descent; no endpoint comparisons are made. The reference follows
+    /// this snapshot's lifetime or that of storage sharing the located node.
+    [[nodiscard]] const value_type* try_entry_at_rank(const size_type rank) const
+    {
+        const auto located = tree_.try_locate_reference([rank](const auto& annotation) {
+            return annotation.count > rank;
+        });
+        return located.has_value() ? located.item : nullptr;
+    }
+
     [[nodiscard]] const Value& at(const interval_type& key) const
     {
         const auto* value = try_get(key);

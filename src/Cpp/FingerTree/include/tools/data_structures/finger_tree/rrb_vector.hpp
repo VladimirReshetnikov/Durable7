@@ -409,6 +409,20 @@ public:
         return insert_range(index, from_range(std::forward<Range>(items)));
     }
 
+    /// Inserts one element before `index` through a single split, append, and concatenation.
+    /// This is the single-element form of insert_range and never materializes an intermediate
+    /// one-element vector.
+    [[nodiscard]] rrb_vector insert_at(const size_type index, value_type value) const
+    {
+        throw_if_insert_index_out_of_range(index, size());
+        (void)checked_add(size(), size_type{1});
+
+        auto [left_root, right_root] = split_node(root_, index);
+        return from_root(std::move(left_root))
+            .add_last(std::move(value))
+            .concat(from_root(std::move(right_root)));
+    }
+
     [[nodiscard]] rrb_vector insert_range(const size_type index, const rrb_vector& items) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -1025,12 +1039,13 @@ public:
         return position == position_ ? *this : rrb_vector_cursor{snapshot_, position};
     }
 
+    /// Inserts one element at the gap. The element goes straight through the vector's own
+    /// single-element insertion, without materializing an intermediate range or vector.
     [[nodiscard]] rrb_vector_cursor insert(value_type value) const
     {
-        auto values = std::vector<value_type>{};
-        values.reserve(1);
-        values.push_back(std::move(value));
-        return insert_range(values);
+        return rrb_vector_cursor{
+            snapshot_.insert_at(position_, std::move(value)),
+            checked_add(position_, size_type{1})};
     }
 
     template <std::ranges::input_range Range>

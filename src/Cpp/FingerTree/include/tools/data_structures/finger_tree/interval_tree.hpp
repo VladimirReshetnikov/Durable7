@@ -88,6 +88,31 @@ public:
         return insert(interval_type{std::move(low), std::move(high)});
     }
 
+    /// Returns the number of stored intervals whose low endpoint orders strictly before `low`,
+    /// which is also the rank of its lower-bound gap. One O(log n) measured descent.
+    [[nodiscard]] size_type count_low_less_than(const value_type& low) const
+    {
+        return tree_.try_locate(last_low_at_least{low}).measure_before.count;
+    }
+
+    /// Returns the number of stored intervals whose low endpoint does not order after `low`,
+    /// which is also the rank of its upper-bound gap. One O(log n) measured descent.
+    [[nodiscard]] size_type count_low_at_most(const value_type& low) const
+    {
+        return tree_.try_locate(last_low_above{low}).measure_before.count;
+    }
+
+    /// Returns the interval at a low-endpoint-order rank, or nullptr when the rank is at or
+    /// past the end. One O(log n) measured descent; no endpoint comparisons are made. The
+    /// reference follows this snapshot's lifetime or that of storage sharing the located node.
+    [[nodiscard]] const interval_type* try_interval_at_rank(const size_type rank) const
+    {
+        auto located = tree_.try_locate_reference([rank](const annotation_type& annotation) {
+            return annotation.count > rank;
+        });
+        return located.has_value() ? located.item : nullptr;
+    }
+
     [[nodiscard]] std::optional<interval_type> try_find_overlap(const interval_type& query) const
     {
         auto located = tree_.try_locate(max_high_at_least{query.low});

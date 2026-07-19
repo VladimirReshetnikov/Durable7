@@ -156,6 +156,20 @@ public:
         return root_.is_empty();
     }
 
+    [[nodiscard]] const void* root_identity() const noexcept
+    {
+        return root_.identity();
+    }
+
+    /// Reports whether both snapshots name the very same root, which is how a clean operation
+    /// that returned the receiver unchanged is distinguished from one that rebuilt an equal
+    /// value. Structural sharing below the root is not observed here, and a lazily pending
+    /// spine is not forced.
+    [[nodiscard]] bool shares_root_with(const finger_tree& other) const noexcept
+    {
+        return root_.identity() == other.root_.identity();
+    }
+
     /// Returns the monoidal annotation of the whole sequence.
     /// Structural cost is amortized O(1); this call may force a pending spine.
     [[nodiscard]] measure_type measure() const
@@ -171,8 +185,11 @@ public:
 
     /// Locates the gap before the first element whose inclusive prefix satisfies a monotone
     /// predicate. A miss retains a usable end cursor.
+    // The constraint spells the measure type through MeasurePolicy rather than the member
+    // alias so that it is token-identical to the out-of-line definition below; constraint
+    // equivalence is syntactic, and an alias here makes the two declarations distinct.
     template <class Predicate>
-        requires std::predicate<Predicate&, const measure_type&>
+        requires std::predicate<Predicate&, const typename MeasurePolicy::measure_type&>
     [[nodiscard]] finger_tree_cursor_search_result<value_type, measure_policy>
     get_cursor_by_measure(Predicate predicate) const;
 
@@ -654,8 +671,10 @@ public:
             finger_tree<value_type, measure_policy>::wrap(view->rest)};
     }
 
+    // As with finger_tree::get_cursor_by_measure, the constraint is spelled through
+    // MeasurePolicy so that it is token-identical to the out-of-line definition below.
     template <class Predicate>
-        requires std::predicate<Predicate&, const measure_type&>
+        requires std::predicate<Predicate&, const typename MeasurePolicy::measure_type&>
     [[nodiscard]] finger_tree_cursor_search_result<value_type, measure_policy>
     seek_by_measure(Predicate predicate) const;
 

@@ -320,6 +320,41 @@ public:
         return find_node(key) != nullptr;
     }
 
+    /// Returns the number of entries whose keys order strictly before `key`, which is also the
+    /// rank of its lower-bound gap. One O(h) descent guided by the cached subtree counts.
+    [[nodiscard]] size_type count_keys_less_than(const key_type& key) const
+    {
+        return count_keys_before(key, false);
+    }
+
+    /// Returns the number of entries whose keys do not order after `key`, which is also the
+    /// rank of its upper-bound gap. One O(h) descent guided by the cached subtree counts.
+    [[nodiscard]] size_type count_keys_at_most(const key_type& key) const
+    {
+        return count_keys_before(key, true);
+    }
+
+    /// Returns the entry at a key-order rank, or nullptr when the rank is at or past the end.
+    /// One O(h) descent guided by the cached subtree counts; no comparisons are made, so the
+    /// key comparer is never invoked. The reference follows this snapshot's lifetime.
+    [[nodiscard]] const entry_type* try_entry_at_rank(size_type rank) const noexcept
+    {
+        const auto* current = root_.get();
+        while (current != nullptr) {
+            const auto left_count = count_of(current->left);
+            if (rank < left_count) {
+                current = current->left.get();
+                continue;
+            }
+            if (rank == left_count) {
+                return &current->entry;
+            }
+            rank -= left_count + 1;
+            current = current->right.get();
+        }
+        return nullptr;
+    }
+
     [[nodiscard]] const entry_type* try_get_entry(const key_type& key) const
     {
         const auto* found = find_node(key);
@@ -901,6 +936,31 @@ private:
         return node_removal{
             balance(make_node(current->entry, current->left, result.node)),
             result.entry};
+    }
+
+    /// Counts the entries whose keys order before `key`, optionally including an equal key.
+    /// Each descent step folds in the whole left subtree through its cached count, so the key
+    /// comparer is invoked once per level rather than once per stored entry.
+    [[nodiscard]] size_type count_keys_before(
+        const key_type& key,
+        const bool include_equal) const
+    {
+        auto rank = size_type{0};
+        const auto* current = root_.get();
+        while (current != nullptr) {
+            const auto comparison = compare_key(key, current->entry.key());
+            if (comparison < 0) {
+                current = current->left.get();
+                continue;
+            }
+            const auto left_count = count_of(current->left);
+            if (comparison == 0) {
+                return include_equal ? rank + left_count + 1 : rank + left_count;
+            }
+            rank += left_count + 1;
+            current = current->right.get();
+        }
+        return rank;
     }
 
     [[nodiscard]] const node* find_node(const key_type& key) const

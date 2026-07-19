@@ -73,6 +73,20 @@ public:
         return root_.size();
     }
 
+    [[nodiscard]] const void* root_identity() const noexcept
+    {
+        return root_.identity();
+    }
+
+    /// Reports whether both snapshots name the very same root, which is how a clean operation
+    /// that returned the receiver unchanged is distinguished from one that rebuilt an equal
+    /// value. Two snapshots holding opposite orientations of the same elements do not share a
+    /// root, because reversal installs a new root carrying the mirrored orientation.
+    [[nodiscard]] bool shares_root_with(const reversible_deque& other) const noexcept
+    {
+        return root_.identity() == other.root_.identity();
+    }
+
     /// Creates an immutable cursor at a logical gap in `0..size()`.
     [[nodiscard]] reversible_deque_cursor<value_type> get_cursor(size_type position = 0) const;
 

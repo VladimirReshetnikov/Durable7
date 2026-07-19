@@ -101,6 +101,19 @@ public:
         return root_.size();
     }
 
+    [[nodiscard]] const void* root_identity() const noexcept
+    {
+        return root_.identity();
+    }
+
+    /// Reports whether both snapshots name the very same root, which is how a clean operation
+    /// that returned the receiver unchanged is distinguished from one that rebuilt an equal
+    /// value. Structural sharing below the root is not observed here.
+    [[nodiscard]] bool shares_root_with(const persistent_deque& other) const noexcept
+    {
+        return root_.identity() == other.root_.identity();
+    }
+
     /// Creates an immutable cursor at a logical gap in `0..size()`.
     [[nodiscard]] persistent_deque_cursor<value_type> get_cursor(size_type position = 0) const;
 
@@ -855,7 +868,7 @@ public:
         if (is_at_end()) {
             throw std::logic_error("deque cursor has no next element");
         }
-        return persistent_deque_cursor{snapshot_.set_item(position_, value), position_};
+        return persistent_deque_cursor{snapshot_.set_item(position_, std::move(value)), position_};
     }
 
     [[nodiscard]] persistent_deque<value_type> snapshot() const { return snapshot_; }

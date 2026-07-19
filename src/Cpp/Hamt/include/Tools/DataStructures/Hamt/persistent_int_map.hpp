@@ -502,8 +502,9 @@ public:
         return basic_patricia_map_cursor{map_.set_item(key, value), position_ + 1};
     }
 
-    /// Updates an exact next entry or inserts at a missing lower-bound gap.
-    [[nodiscard]] basic_patricia_map_cursor put(Key key, const T& value) const {
+    /// Updates an exact next entry or inserts at a missing lower-bound gap. Named for the map
+    /// operation it delegates to, matching the other C++ cursors that expose set_item.
+    [[nodiscard]] basic_patricia_map_cursor set_item(Key key, const T& value) const {
         const auto [expected, found] = map_.lower_bound_rank(key);
         ensure_current_gap(expected);
         auto map = map_.set_item(key, value);
@@ -605,6 +606,10 @@ public:
 
     basic_patricia_set() = default;
     [[nodiscard]] std::size_t size() const noexcept { return map_.size(); }
+    [[nodiscard]] bool empty() const noexcept { return map_.empty(); }
+    /// Reports whether both snapshots name the very same root, which is how an add or remove
+    /// that was an exact no-op is distinguished from one that rebuilt an equal set.
+    [[nodiscard]] bool shares_root_with(const basic_patricia_set& other) const noexcept { return map_.shares_root_with(other.map_); }
     [[nodiscard]] bool contains(Key value) const noexcept { return map_.contains_key(value); }
     [[nodiscard]] cursor_type get_cursor(std::size_t position = 0) const;
     [[nodiscard]] cursor_type get_cursor_at_end() const;

@@ -733,6 +733,41 @@ public:
 
     [[nodiscard]] bool contains(const T& value) const { return find_node(value) != nullptr; }
 
+    /// Returns the number of stored items ordered strictly before `value`, which is also the
+    /// rank of its lower-bound gap. One O(h) descent guided by the cached subtree counts.
+    [[nodiscard]] size_type count_less_than(const T& value) const
+    {
+        return count_before(value, false);
+    }
+
+    /// Returns the number of stored items not ordered after `value`, which is also the rank of
+    /// its upper-bound gap. One O(h) descent guided by the cached subtree counts.
+    [[nodiscard]] size_type count_at_most(const T& value) const
+    {
+        return count_before(value, true);
+    }
+
+    /// Returns the representative at an in-order rank, or nullptr when the rank is at or past
+    /// the end. One O(h) descent guided by the cached subtree counts; no comparisons are made,
+    /// so the ordering policy is never invoked. The reference follows this snapshot's lifetime.
+    [[nodiscard]] const T* try_select(size_type rank) const noexcept
+    {
+        const auto* current = root_.get();
+        while (current != nullptr) {
+            const auto left_count = current->left == nullptr ? size_type{0} : current->left->count;
+            if (rank < left_count) {
+                current = current->left.get();
+                continue;
+            }
+            if (rank == left_count) {
+                return current->item.get();
+            }
+            rank -= left_count + 1;
+            current = current->right.get();
+        }
+        return nullptr;
+    }
+
     [[nodiscard]] const T* try_get(const T& equivalent_value) const
     {
         const auto* found = find_node(equivalent_value);
@@ -1244,6 +1279,29 @@ private:
             }
         }
         return canonical_sorted_set{nodes[root_index].frozen, std::move(policy)};
+    }
+
+    /// Counts the items ordered before `value`, optionally including an equivalent item.
+    /// Each descent step folds in the whole left subtree through its cached count, so the
+    /// ordering policy is invoked once per level rather than once per stored item.
+    [[nodiscard]] size_type count_before(const T& value, const bool include_equivalent) const
+    {
+        auto rank = size_type{0};
+        const auto* current = root_.get();
+        while (current != nullptr) {
+            const auto comparison = policy_.compare(value, *current->item);
+            if (comparison < 0) {
+                current = current->left.get();
+                continue;
+            }
+            const auto left_count = current->left == nullptr ? size_type{0} : current->left->count;
+            if (comparison == 0) {
+                return include_equivalent ? rank + left_count + 1 : rank + left_count;
+            }
+            rank += left_count + 1;
+            current = current->right.get();
+        }
+        return rank;
     }
 
     [[nodiscard]] const node* find_node(const T& value) const

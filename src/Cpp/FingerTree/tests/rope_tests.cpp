@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <ranges>
 #include <source_location>
@@ -744,6 +745,39 @@ void add_rope_tests_impl(suite& tests)
         const auto split = rope.split_at(0);
         FT_REQUIRE(split.left.empty());
         require_sequence_equal(split.right, {1, 2, 3});
+    });
+
+    tests.add("rope growth is preflighted against size overflow", [] {
+        // Doubling by concatenation shares structure, so a rope of the maximum representable
+        // size costs a bounded number of operations to build and no proportional storage.
+        const auto seed = ft::rope<int>{0};
+        auto power = seed;
+        auto expanded = ft::rope<int>{};
+        for (auto bit = 0; bit != std::numeric_limits<std::size_t>::digits; ++bit) {
+            expanded = expanded.concat(power);
+            if (bit + 1 != std::numeric_limits<std::size_t>::digits) {
+                power = power.concat(power);
+            }
+        }
+
+        FT_REQUIRE_EQUAL(expanded.size(), (std::numeric_limits<std::size_t>::max)());
+
+        // Each growth path must reject the overflow up front. insert_at is checked away from
+        // the end as well, because the cursor's own position-based check cannot see an overflow
+        // when the gap sits before the final element.
+        FT_REQUIRE_THROWS(std::overflow_error, expanded.insert_at(expanded.size(), 1));
+        FT_REQUIRE_THROWS(std::overflow_error, expanded.insert_at(0, 1));
+        FT_REQUIRE_THROWS(std::overflow_error, expanded.insert_range(0, seed));
+        FT_REQUIRE_THROWS(std::overflow_error, expanded.concat(seed));
+        FT_REQUIRE_THROWS(std::overflow_error, expanded.get_cursor(0).insert(1));
+
+        // The rejected operations leave both operands untouched.
+        FT_REQUIRE_EQUAL(expanded.size(), (std::numeric_limits<std::size_t>::max)());
+        FT_REQUIRE_EQUAL(seed.size(), std::size_t{1});
+        FT_REQUIRE_EQUAL(*expanded.try_get(0), 0);
+
+        // An empty addition is not growth and must still be accepted.
+        FT_REQUIRE_EQUAL(expanded.concat(ft::rope<int>{}).size(), expanded.size());
     });
 }
 

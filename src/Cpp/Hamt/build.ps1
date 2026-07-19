@@ -64,7 +64,10 @@ $commonArgs = @(
     '/permissive-',
     '/W4',
     '/WX',
-    '/Zc:__cplusplus'
+    '/Zc:__cplusplus',
+    # The header-only tests instantiate enough templates in a single translation unit to exceed
+    # the default COFF section count; /bigobj lifts that limit and has no runtime effect.
+    '/bigobj'
 )
 
 if ($Configuration -eq 'Debug') {

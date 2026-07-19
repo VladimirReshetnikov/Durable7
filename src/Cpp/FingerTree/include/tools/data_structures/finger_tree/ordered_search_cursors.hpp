@@ -57,19 +57,6 @@ struct access final {
     }
 };
 
-template <class Range>
-[[nodiscard]] const std::ranges::range_value_t<Range>* item_at(
-    const Range& values,
-    const std::size_t rank)
-{
-    auto iterator = values.begin();
-    const auto end = values.end();
-    for (auto index = std::size_t{0}; index != rank && iterator != end; ++index) {
-        ++iterator;
-    }
-    return iterator == end ? nullptr : std::addressof(*iterator);
-}
-
 template <class Derived, class Collection>
 class rank_cursor_base {
 public:
@@ -121,19 +108,6 @@ protected:
     Collection snapshot_;
     size_type position_;
 };
-
-template <class Range, class Predicate>
-[[nodiscard]] std::size_t bound_rank(const Range& values, Predicate before_bound)
-{
-    auto rank = std::size_t{0};
-    for (const auto& value : values) {
-        if (!std::invoke(before_bound, value)) {
-            break;
-        }
-        ++rank;
-    }
-    return rank;
-}
 
 } // namespace ordered_search_cursor_detail
 
@@ -304,10 +278,7 @@ template <class T, class Less>
     const sorted_set<T, Less>& set,
     const T& item) -> sorted_set_cursor<T, Less>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(set, [&](const T& stored) {
-        return std::invoke(set.comparison(), stored, item);
-    });
-    return {set, rank};
+    return {set, set.count_less_than(item)};
 }
 
 template <class T, class Less>
@@ -315,10 +286,7 @@ template <class T, class Less>
     const sorted_set<T, Less>& set,
     const T& item) -> sorted_set_cursor<T, Less>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(set, [&](const T& stored) {
-        return !std::invoke(set.comparison(), item, stored);
-    });
-    return {set, rank};
+    return {set, set.count_at_most(item)};
 }
 
 template <class T, class Less>
@@ -442,10 +410,7 @@ template <class Key, class T, class Less>
     const sorted_map<Key, T, Less>& map,
     const Key& key) -> sorted_map_cursor<Key, T, Less>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(map, [&](const auto& entry) {
-        return std::invoke(map.comparison(), entry.first, key);
-    });
-    return {map, rank};
+    return {map, map.count_keys_less_than(key)};
 }
 
 template <class Key, class T, class Less>
@@ -453,10 +418,7 @@ template <class Key, class T, class Less>
     const sorted_map<Key, T, Less>& map,
     const Key& key) -> sorted_map_cursor<Key, T, Less>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(map, [&](const auto& entry) {
-        return !std::invoke(map.comparison(), key, entry.first);
-    });
-    return {map, rank};
+    return {map, map.count_keys_at_most(key)};
 }
 
 template <class Key, class T, class Less>
@@ -490,15 +452,13 @@ public:
 
     [[nodiscard]] const value_type* try_peek_previous() const &
     {
-        return this->is_at_start()
-            ? nullptr
-            : ordered_search_cursor_detail::item_at(this->snapshot_, this->position_ - 1);
+        return this->is_at_start() ? nullptr : this->snapshot_.try_select(this->position_ - 1);
     }
     const value_type* try_peek_previous() const && = delete;
 
     [[nodiscard]] const value_type* try_peek_next() const &
     {
-        return ordered_search_cursor_detail::item_at(this->snapshot_, this->position_);
+        return this->snapshot_.try_select(this->position_);
     }
     const value_type* try_peek_next() const && = delete;
 
@@ -542,10 +502,7 @@ template <class T>
     const canonical_sorted_set<T>& set,
     const T& item) -> canonical_sorted_set_cursor<T>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(set, [&](const T& stored) {
-        return set.policy().compare(stored, item) < 0;
-    });
-    return {set, rank};
+    return {set, set.count_less_than(item)};
 }
 
 template <class T>
@@ -553,10 +510,7 @@ template <class T>
     const canonical_sorted_set<T>& set,
     const T& item) -> canonical_sorted_set_cursor<T>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(set, [&](const T& stored) {
-        return set.policy().compare(stored, item) <= 0;
-    });
-    return {set, rank};
+    return {set, set.count_at_most(item)};
 }
 
 template <class T>
@@ -605,13 +559,13 @@ public:
     {
         return this->is_at_start()
             ? nullptr
-            : ordered_search_cursor_detail::item_at(this->snapshot_, this->position_ - 1);
+            : this->snapshot_.try_entry_at_rank(this->position_ - 1);
     }
     const entry_type* try_peek_previous() const && = delete;
 
     [[nodiscard]] const entry_type* try_peek_next() const &
     {
-        return ordered_search_cursor_detail::item_at(this->snapshot_, this->position_);
+        return this->snapshot_.try_entry_at_rank(this->position_);
     }
     const entry_type* try_peek_next() const && = delete;
 
@@ -715,10 +669,7 @@ template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
     const Key& key)
     -> priority_search_queue_cursor<Key, Priority, T, KeyLess, PriorityLess>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(queue, [&](const auto& entry) {
-        return std::invoke(queue.key_comparer(), entry.key(), key);
-    });
-    return {queue, rank};
+    return {queue, queue.count_keys_less_than(key)};
 }
 
 template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
@@ -727,10 +678,7 @@ template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
     const Key& key)
     -> priority_search_queue_cursor<Key, Priority, T, KeyLess, PriorityLess>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(queue, [&](const auto& entry) {
-        return !std::invoke(queue.key_comparer(), key, entry.key());
-    });
-    return {queue, rank};
+    return {queue, queue.count_keys_at_most(key)};
 }
 
 template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
@@ -781,13 +729,13 @@ public:
     {
         return this->is_at_start()
             ? nullptr
-            : ordered_search_cursor_detail::item_at(this->snapshot_, this->position_ - 1);
+            : this->snapshot_.try_interval_at_rank(this->position_ - 1);
     }
     const interval_type* try_peek_previous() const && = delete;
 
     [[nodiscard]] const interval_type* try_peek_next() const &
     {
-        return ordered_search_cursor_detail::item_at(this->snapshot_, this->position_);
+        return this->snapshot_.try_interval_at_rank(this->position_);
     }
     const interval_type* try_peek_next() const && = delete;
 
@@ -844,10 +792,7 @@ template <class T, class Comparison>
     const interval_tree<T, Comparison>& tree,
     const T& low) -> interval_tree_cursor<T, Comparison>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(tree, [&](const auto& stored) {
-        return Comparison::compare(stored.low, low) < 0;
-    });
-    return {tree, rank};
+    return {tree, tree.count_low_less_than(low)};
 }
 
 template <class T, class Comparison>
@@ -855,10 +800,7 @@ template <class T, class Comparison>
     const interval_tree<T, Comparison>& tree,
     const T& low) -> interval_tree_cursor<T, Comparison>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(tree, [&](const auto& stored) {
-        return Comparison::compare(stored.low, low) <= 0;
-    });
-    return {tree, rank};
+    return {tree, tree.count_low_at_most(low)};
 }
 
 template <class T, class Comparison>
@@ -964,13 +906,13 @@ public:
     {
         return this->is_at_start()
             ? nullptr
-            : ordered_search_cursor_detail::item_at(this->snapshot_, this->position_ - 1);
+            : this->snapshot_.try_entry_at_rank(this->position_ - 1);
     }
     const entry_type* try_peek_previous() const && = delete;
 
     [[nodiscard]] const entry_type* try_peek_next() const &
     {
-        return ordered_search_cursor_detail::item_at(this->snapshot_, this->position_);
+        return this->snapshot_.try_entry_at_rank(this->position_);
     }
     const entry_type* try_peek_next() const && = delete;
 
@@ -1052,11 +994,7 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     const interval<Endpoint>& key)
     -> persistent_interval_map_cursor<Endpoint, T, Comparison, ValueEqual>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(map, [&](const auto& entry) {
-        const auto low = Comparison::compare(entry.key.low, key.low);
-        return low < 0 || (low == 0 && Comparison::compare(entry.key.high, key.high) < 0);
-    });
-    return {map, rank};
+    return {map, map.count_keys_less_than(key)};
 }
 
 template <class Endpoint, class T, class Comparison, class ValueEqual>
@@ -1065,11 +1003,7 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     const interval<Endpoint>& key)
     -> persistent_interval_map_cursor<Endpoint, T, Comparison, ValueEqual>
 {
-    const auto rank = ordered_search_cursor_detail::bound_rank(map, [&](const auto& entry) {
-        const auto low = Comparison::compare(entry.key.low, key.low);
-        return low < 0 || (low == 0 && Comparison::compare(entry.key.high, key.high) <= 0);
-    });
-    return {map, rank};
+    return {map, map.count_keys_at_most(key)};
 }
 
 template <class Endpoint, class T, class Comparison, class ValueEqual>

@@ -4,7 +4,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace ft = tools::data_structures::finger_tree;
@@ -45,6 +47,60 @@ struct additive_range_algebra final {
     {
         return measure_value + tag * static_cast<std::int64_t>(count);
     }
+};
+
+/// Value that tallies its own copies and moves through shared state, so a test can assert that
+/// an operation forwarded an rvalue rather than silently copying it.
+struct copy_probe final {
+    std::shared_ptr<std::size_t> copies;
+    std::shared_ptr<std::size_t> moves;
+    int value = 0;
+
+    copy_probe(
+        std::shared_ptr<std::size_t> copy_counter,
+        std::shared_ptr<std::size_t> move_counter,
+        const int probe_value)
+        : copies(std::move(copy_counter))
+        , moves(std::move(move_counter))
+        , value(probe_value)
+    {
+    }
+
+    copy_probe(const copy_probe& other)
+        : copies(other.copies), moves(other.moves), value(other.value)
+    {
+        ++*copies;
+    }
+
+    copy_probe(copy_probe&& other) noexcept
+        : copies(other.copies), moves(other.moves), value(other.value)
+    {
+        ++*moves;
+    }
+
+    copy_probe& operator=(const copy_probe& other)
+    {
+        if (this != &other) {
+            copies = other.copies;
+            moves = other.moves;
+            value = other.value;
+            ++*copies;
+        }
+        return *this;
+    }
+
+    copy_probe& operator=(copy_probe&& other) noexcept
+    {
+        if (this != &other) {
+            copies = other.copies;
+            moves = other.moves;
+            value = other.value;
+            ++*moves;
+        }
+        return *this;
+    }
+
+    ~copy_probe() = default;
 };
 
 void add_sequence_cursor_tests_impl(suite& tests)
@@ -99,6 +155,75 @@ void add_sequence_cursor_tests_impl(suite& tests)
         const auto miss = tree.get_cursor_by_measure([](const int total) { return total > 100; });
         FT_REQUIRE(!miss.found);
         FT_REQUIRE(miss.cursor.is_at_end());
+    });
+
+    tests.add("deque cursor replace_next forwards the caller's rvalue", [] {
+        auto copies = std::make_shared<std::size_t>(0);
+        auto moves = std::make_shared<std::size_t>(0);
+        const auto basis = ft::persistent_deque<copy_probe>{
+            copy_probe{copies, moves, 1},
+            copy_probe{copies, moves, 2}};
+        const auto cursor = basis.get_cursor(0);
+
+        // The two calls differ only in the value category of the argument, so comparing their
+        // copy counts isolates whether the move survives the cursor layer. Passing the rvalue
+        // through as an lvalue made both paths identical.
+        *copies = 0;
+        const auto from_lvalue_source = copy_probe{copies, moves, 7};
+        *copies = 0;
+        const auto from_lvalue = cursor.replace_next(from_lvalue_source);
+        const auto lvalue_copies = *copies;
+
+        auto rvalue_source = copy_probe{copies, moves, 7};
+        *copies = 0;
+        const auto from_rvalue = cursor.replace_next(std::move(rvalue_source));
+        const auto rvalue_copies = *copies;
+
+        FT_REQUIRE(rvalue_copies < lvalue_copies);
+        FT_REQUIRE_EQUAL(from_lvalue.snapshot().at(0).value, 7);
+        FT_REQUIRE_EQUAL(from_rvalue.snapshot().at(0).value, 7);
+        FT_REQUIRE_EQUAL(basis.at(0).value, 1);
+    });
+
+    tests.add("RRB cursor inserts one element without an intermediate vector", [] {
+        auto source_values = std::vector<int>{};
+        for (auto value = 0; value != 96; ++value) {
+            source_values.push_back(value);
+        }
+        const auto basis = ft::rrb_vector<int>::from_range(source_values);
+
+        for (const auto position : {std::size_t{0}, std::size_t{47}, std::size_t{96}}) {
+            const auto cursor = basis.get_cursor(position).insert(999);
+            FT_REQUIRE_EQUAL(cursor.position(), position + 1);
+            FT_REQUIRE_EQUAL(cursor.snapshot().size(), source_values.size() + 1);
+
+            auto expected = source_values;
+            expected.insert(expected.begin() + static_cast<std::ptrdiff_t>(position), 999);
+            FT_REQUIRE((cursor.snapshot().to_vector() == expected));
+            FT_REQUIRE(basis.to_vector() == source_values);
+        }
+
+        // The single-element path and the range path must agree exactly.
+        FT_REQUIRE((basis.get_cursor(10).insert(999).snapshot().to_vector()
+            == basis.get_cursor(10).insert_vector(ft::rrb_vector<int>{999}).snapshot().to_vector()));
+    });
+
+    tests.add("sequence cursors expose clean-snapshot root identity", [] {
+        // Without shares_root_with the clean-snapshot clause could only be checked by comparing
+        // values, which cannot tell a retained version from a rebuilt equal one.
+        const auto deque = ft::persistent_deque<int>{1, 2, 3};
+        FT_REQUIRE(deque.get_cursor(1).snapshot().shares_root_with(deque));
+        FT_REQUIRE(!deque.get_cursor(1).insert(9).snapshot().shares_root_with(deque));
+        FT_REQUIRE(deque.shares_root_with(deque));
+
+        const auto reversible = ft::reversible_deque<int>{1, 2, 3};
+        FT_REQUIRE(reversible.get_cursor(1).snapshot().shares_root_with(reversible));
+        FT_REQUIRE(!reversible.get_cursor(1).insert(9).snapshot().shares_root_with(reversible));
+
+        const auto tree = ft::finger_tree<int, ft::sum_measure<int>>{2, 3, 5};
+        const auto located = tree.get_cursor_by_measure([](const int total) { return total >= 5; });
+        FT_REQUIRE(located.cursor.snapshot().shares_root_with(tree));
+        FT_REQUIRE(!located.cursor.insert(9).snapshot().shares_root_with(tree));
     });
 
     tests.add("RRB cursor splices an existing persistent vector", [] {

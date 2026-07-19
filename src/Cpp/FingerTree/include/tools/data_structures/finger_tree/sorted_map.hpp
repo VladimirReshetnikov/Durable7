@@ -152,6 +152,20 @@ public:
         return entry_at_rank(index);
     }
 
+    /// Returns the number of entries whose keys order strictly before `key`, which is also the
+    /// rank of its lower-bound gap. One O(log n) descent with O(log n) comparisons.
+    [[nodiscard]] size_type count_keys_less_than(const key_type& key) const
+    {
+        return count_before(key_at_least_predicate<key_type, Less>{key, less_});
+    }
+
+    /// Returns the number of entries whose keys do not order after `key`, which is also the
+    /// rank of its upper-bound gap. One O(log n) descent with O(log n) comparisons.
+    [[nodiscard]] size_type count_keys_at_most(const key_type& key) const
+    {
+        return count_before(key_above_predicate<key_type, Less>{key, less_});
+    }
+
     [[nodiscard]] std::optional<size_type> index_of_key(const key_type& key) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<key_type, Less>{key, less_});

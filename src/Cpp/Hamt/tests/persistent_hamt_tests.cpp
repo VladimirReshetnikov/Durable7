@@ -993,11 +993,11 @@ TEST(PatriciaCursor_OrderedFactoriesBranchingEditsAndPresenceSafety) {
     CHECK_EQ(std::size_t{2}, updated.position());
     CHECK_EQ(std::optional<int>{25}, updated.peek_next()->value);
     CHECK(!exact.cursor.peek_next()->value.has_value());
-    const auto put_existing = exact.cursor.put(0, 26);
-    CHECK_EQ(std::size_t{2}, put_existing.position());
-    CHECK_EQ(std::optional<int>{26}, put_existing.peek_next()->value);
-    const auto put_missing = miss.cursor.put(3, 31);
-    CHECK_EQ(std::size_t{4}, put_missing.position());
+    const auto set_existing = exact.cursor.set_item(0, 26);
+    CHECK_EQ(std::size_t{2}, set_existing.position());
+    CHECK_EQ(std::optional<int>{26}, set_existing.peek_next()->value);
+    const auto set_missing = miss.cursor.set_item(3, 31);
+    CHECK_EQ(std::size_t{4}, set_missing.position());
 
     const auto without_next = exact.cursor.delete_next();
     CHECK_EQ(std::size_t{2}, without_next.position());
@@ -1021,7 +1021,16 @@ TEST(PatriciaCursor_OrderedFactoriesBranchingEditsAndPresenceSafety) {
     CHECK_EQ(std::size_t{1}, set_exact.first.position());
     CHECK_EQ(std::int64_t{0}, *set_exact.first.peek_next());
     const auto duplicate = set_exact.first.insert(0);
+    // Comparing vectors only shows the values agree. Root identity is what distinguishes a
+    // duplicate add that was an exact no-op from one that rebuilt an equal set.
+    CHECK(duplicate.snapshot().shares_root_with(set));
     CHECK(duplicate.snapshot().to_vector() == set.to_vector());
+    CHECK(set.get_cursor().snapshot().shares_root_with(set));
+    CHECK(!set.add(7).shares_root_with(set));
+    CHECK(!set.empty());
+    CHECK(tools::data_structures::hamt::persistent_long_set{}.empty());
+    CHECK(tools::data_structures::hamt::persistent_long_set{}
+        .shares_root_with(tools::data_structures::hamt::persistent_long_set{}));
     const auto set_inserted = set.get_cursor_lower_bound(-1).insert(-1);
     CHECK_EQ(std::int64_t{-1}, *set_inserted.peek_previous());
     CHECK_EQ(std::int64_t{0}, *set_inserted.peek_next());

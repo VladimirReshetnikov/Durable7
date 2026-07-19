@@ -692,7 +692,15 @@ private:
         return {low, low != entries.size() && policy_.compare(entries[low].key(), key) == 0};
     }
 
-    [[nodiscard]] const entry_type* entry_at_rank_for_cursor(size_type rank) const noexcept
+    /// Returns the entry at an in-order rank, or nullptr when the rank is at or past the end.
+    ///
+    /// A rank that is in range but that the cached subtree counts cannot locate is a
+    /// structural-integrity failure of the tree, not an absent entry, so it is reported by
+    /// throwing rather than by returning nullptr. Degrading a broken count invariant into
+    /// "there is no next entry" would let an authenticated collection silently answer
+    /// navigation queries from an inconsistent index; this matches the reference C#
+    /// implementation, which throws on the same condition.
+    [[nodiscard]] const entry_type* entry_at_rank_for_cursor(size_type rank) const
     {
         if (rank >= size()) {
             return nullptr;
@@ -719,7 +727,7 @@ private:
                 current = current->children.back().get();
             }
         }
-        return nullptr;
+        throw std::logic_error("Merkle subtree counts do not contain the requested rank");
     }
 
     [[nodiscard]] std::pair<size_type, bool> lower_bound_rank_for_cursor(const K& key) const
@@ -1408,22 +1416,51 @@ public:
     using entry_type = typename tree_type::entry_type;
     using size_type = typename tree_type::size_type;
 
+    /// A cursor names a real gap in a real tree, so it has no valid empty state and no default
+    /// constructor. There is consequently no "invalid default" whose members must all throw.
     merkle_search_tree_cursor() = delete;
+
+    merkle_search_tree_cursor(const merkle_search_tree_cursor&) = default;
+    merkle_search_tree_cursor& operator=(const merkle_search_tree_cursor&) = default;
+
+    /// Cursor values are immutable version handles, so moving deliberately copies the retained
+    /// tree instead of stealing it. A moved-from cursor therefore remains a fully valid cursor
+    /// on the same version and the same gap: every member stays callable and observably
+    /// unchanged. This matches the C++ sequence and rope cursors and keeps the class free of
+    /// the split state a defaulted move would produce, where the retained tree is emptied while
+    /// the position is copied, leaving count() and position() disagreeing and the policy null.
+    merkle_search_tree_cursor(merkle_search_tree_cursor&& other) noexcept(
+        std::is_nothrow_copy_constructible_v<tree_type>)
+        : tree_(other.tree_), position_(other.position_)
+    {
+    }
+
+    merkle_search_tree_cursor& operator=(merkle_search_tree_cursor&& other) noexcept(
+        std::is_nothrow_copy_assignable_v<tree_type>)
+    {
+        if (this != &other) {
+            tree_ = other.tree_;
+            position_ = other.position_;
+        }
+        return *this;
+    }
 
     [[nodiscard]] size_type count() const noexcept { return tree_.size(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == count(); }
 
-    /// Returns the retained entry immediately before the gap.
-    [[nodiscard]] const entry_type* peek_previous() const & noexcept
+    /// Returns the retained entry immediately before the gap, or nullptr at the start.
+    /// Throws if the retained tree's cached subtree counts cannot locate an in-range rank.
+    [[nodiscard]] const entry_type* peek_previous() const &
     {
         return position_ == 0 ? nullptr : tree_.entry_at_rank_for_cursor(position_ - 1);
     }
     [[nodiscard]] const entry_type* peek_previous() const && = delete;
 
-    /// Returns the retained entry immediately after the gap.
-    [[nodiscard]] const entry_type* peek_next() const & noexcept
+    /// Returns the retained entry immediately after the gap, or nullptr at the end.
+    /// Throws if the retained tree's cached subtree counts cannot locate an in-range rank.
+    [[nodiscard]] const entry_type* peek_next() const &
     {
         return tree_.entry_at_rank_for_cursor(position_);
     }
@@ -1466,8 +1503,9 @@ public:
             position_ + 1};
     }
 
-    /// Updates an exact next entry or inserts at a missing lower-bound gap.
-    [[nodiscard]] merkle_search_tree_cursor put(K key, V value) const
+    /// Updates an exact next entry or inserts at a missing lower-bound gap. Named for the
+    /// tree operation it delegates to, matching the other C++ cursors that expose set_item.
+    [[nodiscard]] merkle_search_tree_cursor set_item(K key, V value) const
     {
         const auto [expected, found] = tree_.lower_bound_rank_for_cursor(key);
         ensure_current_gap(expected);

@@ -244,6 +244,109 @@ TEST(MerkleCursorNavigatesRanksAndPublishesCanonicalEdits)
     CHECK_THROWS_AS(source.get_cursor().insert(5, std::optional<std::string>{"wrong gap"}), std::invalid_argument);
 }
 
+TEST(MerkleCursorMovedFromRemainsAValidVersionHandle)
+{
+    const auto source = string_tree::create_range(
+        {
+            {-10, std::optional<std::string>{"a"}},
+            {0, std::optional<std::string>{"b"}},
+            {10, std::optional<std::string>{"c"}},
+        },
+        make_string_policy("cpp-cursor-moved-from-v1"));
+
+    // A cursor is an immutable version handle, so a move copies the retained tree rather than
+    // stealing it. A defaulted move would empty the tree while copying the position, leaving
+    // count() at 0 with position() still 2 and the policy null, which an edit would dereference.
+    auto original = source.get_cursor(2);
+    const auto moved_to = std::move(original);
+
+    CHECK_EQ(std::size_t{3}, original.count());
+    CHECK_EQ(std::size_t{2}, original.position());
+    CHECK(!original.is_at_end());
+    CHECK_EQ(10, original.peek_next()->key());
+    CHECK_EQ(0, original.peek_previous()->key());
+    CHECK(original.snapshot().shares_root_with(source));
+
+    CHECK_EQ(original.count(), moved_to.count());
+    CHECK_EQ(original.position(), moved_to.position());
+    CHECK(moved_to.snapshot().shares_root_with(source));
+
+    // Editing through the moved-from cursor still reaches a live policy and tree.
+    const auto edited = original.set_next_value(std::optional<std::string>{"C"});
+    CHECK_EQ(std::optional<std::string>{"C"}, edited.snapshot().at(10));
+
+    auto assign_source = source.get_cursor(1);
+    auto assign_target = source.get_cursor_at_end();
+    assign_target = std::move(assign_source);
+    CHECK_EQ(std::size_t{1}, assign_source.position());
+    CHECK_EQ(std::size_t{3}, assign_source.count());
+    CHECK_EQ(0, assign_source.peek_next()->key());
+    CHECK_EQ(std::size_t{1}, assign_target.position());
+}
+
+TEST(MerkleCursorResolvesEveryInRangeRankRatherThanReportingNoEntry)
+{
+    // A rank the cached subtree counts cannot locate is a structural-integrity failure, not an
+    // absent entry. Reporting it as "no next entry" would let an authenticated collection answer
+    // navigation from a broken index, so every in-range rank must resolve to a real entry and
+    // only the end gap may report absence.
+    auto entries = std::vector<std::pair<std::int32_t, std::optional<std::string>>>{};
+    for (auto key = std::int32_t{0}; key != 256; ++key) {
+        entries.emplace_back(key, std::optional<std::string>{std::to_string(key)});
+    }
+
+    const auto tree = string_tree::create_range(entries, make_string_policy("cpp-cursor-rank-v1"));
+    CHECK_EQ(std::size_t{256}, tree.size());
+
+    for (auto position = std::size_t{0}; position != tree.size(); ++position) {
+        const auto cursor = tree.get_cursor(position);
+        const auto* next = cursor.peek_next();
+        CHECK(next != nullptr);
+        CHECK_EQ(static_cast<std::int32_t>(position), next->key());
+    }
+
+    const auto end = tree.get_cursor_at_end();
+    CHECK(end.peek_next() == nullptr);
+    CHECK_EQ(std::int32_t{255}, end.peek_previous()->key());
+}
+
+TEST(MerkleCursorSetItemUpdatesExistingAndInsertsMissing)
+{
+    const auto source = string_tree::create_range(
+        {
+            {-10, std::optional<std::string>{"a"}},
+            {0, std::optional<std::string>{"b"}},
+            {10, std::optional<std::string>{"c"}},
+        },
+        make_string_policy("cpp-cursor-set-item-v1"));
+
+    // Updating the exact next key keeps its rank; the edit is byte-identical to the ordinary
+    // set_item on the tree, so the published root digest must match.
+    const auto exact = source.get_cursor_at_key(0);
+    CHECK(exact.found);
+    const auto updated = exact.cursor.set_item(0, std::optional<std::string>{"B"});
+    CHECK_EQ(std::size_t{1}, updated.position());
+    CHECK_EQ(std::optional<std::string>{"B"}, updated.snapshot().at(0));
+    CHECK_EQ(
+        source.set_item(0, std::optional<std::string>{"B"}).root_hash(),
+        updated.snapshot().root_hash());
+
+    // Setting a missing key at its lower-bound gap advances past the inserted entry.
+    const auto miss = source.get_cursor_at_key(5);
+    CHECK(!miss.found);
+    const auto inserted = miss.cursor.set_item(5, std::optional<std::string>{"five"});
+    CHECK_EQ(std::size_t{3}, inserted.position());
+    CHECK_EQ(std::optional<std::string>{"five"}, inserted.snapshot().at(5));
+    CHECK_EQ(
+        source.set_item(5, std::optional<std::string>{"five"}).root_hash(),
+        inserted.snapshot().root_hash());
+
+    // Setting the exact next key to its current value is an observable no-op that retains the
+    // version.
+    const auto no_op = exact.cursor.set_item(0, std::optional<std::string>{"b"});
+    CHECK(no_op.snapshot().shares_root_with(source));
+}
+
 TEST(MerkleCursorCachedRanksAndBoundsMatchSortedModel)
 {
     auto items = std::vector<std::pair<std::int32_t, std::int32_t>>{};

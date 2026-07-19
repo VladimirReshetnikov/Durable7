@@ -143,6 +143,20 @@ public:
         return index_of(item).has_value();
     }
 
+    /// Returns the number of stored items ordered strictly before `item`, which is also the
+    /// rank of its lower-bound gap. One O(log n) descent with O(log n) comparisons.
+    [[nodiscard]] size_type count_less_than(const value_type& item) const
+    {
+        return count_before(key_at_least_predicate<value_type, Less>{item, less_});
+    }
+
+    /// Returns the number of stored items not ordered after `item`, which is also the rank of
+    /// its upper-bound gap. One O(log n) descent with O(log n) comparisons.
+    [[nodiscard]] size_type count_at_most(const value_type& item) const
+    {
+        return count_before(key_above_predicate<value_type, Less>{item, less_});
+    }
+
     [[nodiscard]] std::optional<sorted_set> try_remove(const value_type& item) const
     {
         auto split = tree_.split(key_at_least_predicate<value_type, Less>{item, less_});
