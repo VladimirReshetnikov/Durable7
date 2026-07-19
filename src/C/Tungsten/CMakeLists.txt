@@ -60,12 +60,14 @@ function(tungsten_c_configure_target target)
     set_property(TARGET ${target} PROPERTY C_EXTENSIONS OFF)
 
     if(MSVC)
+        # <stdatomic.h> is gated behind /experimental:c11atomics in MSVC's C11/C17 modes.
         target_compile_options(
             ${target}
             PRIVATE
                 /permissive-
                 /W4
                 /WX
+                /experimental:c11atomics
                 /external:anglebrackets
                 /external:W0
         )

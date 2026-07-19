@@ -442,7 +442,10 @@ tds_hamt_status tds_hamt_indexed_map_set(
     if (status != TDS_HAMT_OK) {
         return status;
     }
+    /* Every path that reads index first checks status, but MSVC cannot see that through the
+     * two-branch assignment, so start from a wholly zeroed, safely destructible value. */
     tds_hamt_multimap index;
+    (void)memset(&index, 0, sizeof(index));
     const void* actual_index = current->index_key;
     if (map->context->index_policy.equal(
             current->index_key, selected, map->context->index_policy.context)) {

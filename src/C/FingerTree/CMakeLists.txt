@@ -54,12 +54,17 @@ function(fingertree_c_configure_target target)
     set_property(TARGET ${target} PROPERTY C_EXTENSIONS OFF)
 
     if(MSVC)
+        # <stdatomic.h> is gated behind /experimental:c11atomics in MSVC's C11/C17 modes.
+        # Without it every translation unit that includes it fails with C1189.
         target_compile_options(
             ${target}
             PRIVATE
                 /permissive-
                 /W4
                 /WX
+                /experimental:c11atomics
+                # C99 flexible array members are standard but draw C4200 at /W4.
+                /wd4200
                 /external:anglebrackets
                 /external:W0
         )

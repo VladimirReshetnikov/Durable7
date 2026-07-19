@@ -1,13 +1,23 @@
 #include <tools/data_structures/finger_tree/persistent_interval_map.h>
 
 #include <stdatomic.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_MSC_VER) && !defined(__clang__)
+/* The UCRT C <stddef.h> does not declare max_align_t even in /std:c11 mode.
+ * The Windows ABI gives long double the maximum fundamental alignment that
+ * malloc must support. Other C11 implementations use the standard type. */
+typedef long double ft_interval_map_max_align_t;
+#else
+typedef max_align_t ft_interval_map_max_align_t;
+#endif
+
 typedef struct ft_interval_map_key_object {
     atomic_size_t references;
-    max_align_t alignment;
+    ft_interval_map_max_align_t alignment;
     unsigned char data[];
 } ft_interval_map_key_object;
 

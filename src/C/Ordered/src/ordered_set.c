@@ -1,6 +1,7 @@
 #include <tools/data_structures/ordered/ordered_set.h>
 
 #include <limits.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 

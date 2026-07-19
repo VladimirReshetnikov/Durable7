@@ -65,6 +65,8 @@ $commonArgs = @(
     '/permissive-',
     '/W4',
     '/WX',
+    # <stdatomic.h> is gated behind this switch in MSVC's C11/C17 modes.
+    '/experimental:c11atomics',
     '/wd4200',
     '/DTDS_HAMT_TESTING',
     "/I$includeDir",
