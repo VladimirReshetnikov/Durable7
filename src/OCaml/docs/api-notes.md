@@ -335,14 +335,16 @@ consequences are:
 
 - `ordered_multimap_peek_previous`/`_peek_next` call `List.nth_opt` over a freshly materialized pair
   flattening, so **each peek is O(P) in the total pair count** and a complete traversal is O(P²).
-- `ordered_multimap_insert` recovers the new gap by a content re-scan and calls `Option.get` on the
-  result. **A value that is not reflexive under the value hash policy — `Float.nan` is the reachable
-  case — raises `Invalid_argument` on a pair the multimap itself has just accepted.**
-- `ordered_multimap_delete_previous`/`_delete_next` peek, remove by content re-lookup, and **discard
-  the removed flag**. For the same non-reflexive values the deletion reports success, leaves the
-  multimap unchanged, and leaves `peek_next` returning the same pair.
+- `ordered_multimap_insert` derives the published gap from the inserted key's group end, walking the
+  flattened pairs with the key policy alone and never re-scanning for the value. A value that is not
+  reflexive under the value hash policy — `Float.nan` is the reachable case — is therefore handled
+  like any other and never raises.
+- `ordered_multimap_delete_previous`/`_delete_next` peek, remove by content re-lookup, and **thread
+  the removed flag**: a delete that changes nothing returns `None` rather than publishing an
+  unchanged version as a success, so the same non-reflexive values do not report a false deletion.
 
-These are recorded as known limitations of the shipped tier. They are properties of the flat pair
+The O(P) peek cost is a known limitation of the flat pair encoding; the insert and delete
+derivations above are its correctness-preserving consequences. All are properties of the flat pair
 encoding, not of the surrounding immutability model.
 
 ## Language-Local Semantics

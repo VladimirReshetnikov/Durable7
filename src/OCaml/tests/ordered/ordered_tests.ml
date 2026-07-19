@@ -253,7 +253,27 @@ let test_ordered_multimap_cursor_nan () =
   in
   Alcotest.(check bool)
     "nan delete does not falsely succeed" true
-    (Option.is_none (Persistent_ordered_cursor.ordered_multimap_delete_next at_pair))
+    (Option.is_none (Persistent_ordered_cursor.ordered_multimap_delete_next at_pair));
+  (* Inserting into a NON-last key's group must land the gap at that group's end, never the whole
+     collection's end. Here [nan] joins the leading "a" group, so the flattened enumeration becomes
+     [("a", 1.); ("a", nan); ("b", 2.)] and the gap is the group boundary (rank 2), not
+     [pair_count] (rank 3), which the discarded value re-scan fallback would have produced. *)
+  let grouped =
+    Persistent_ordered_multimap.of_list ~key_policy:case_insensitive_policy
+      ~value_policy:float_policy
+      [ ("a", 1.); ("b", 2.) ]
+  in
+  let grouped_cursor = Option.get (Persistent_ordered_cursor.ordered_multimap_at 0 grouped) in
+  let grouped_inserted =
+    Persistent_ordered_cursor.ordered_multimap_insert "a" Float.nan grouped_cursor
+  in
+  Alcotest.(check int)
+    "nan joins non-last group" 3
+    (Persistent_ordered_multimap.pair_count
+       (Persistent_ordered_cursor.ordered_multimap_snapshot grouped_inserted));
+  Alcotest.(check int)
+    "nan gap lands at non-last group end, not pair_count" 2
+    (Persistent_ordered_cursor.ordered_multimap_position grouped_inserted)
 
 let ordered_set_model =
   QCheck.Test.make ~count:200 ~name:"ordered set retains first representatives"

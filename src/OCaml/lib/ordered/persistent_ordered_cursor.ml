@@ -263,18 +263,36 @@ let ordered_multimap_find_group key ordered_multimap =
           };
       }
 
+(* Flattened pair rank of the gap immediately after the last pair of an equivalent key group, or
+   the end gap when no such group is present. Key groups are contiguous in the flattened
+   enumeration, so this walks the leading pairs once and consults only the key policy — never the
+   value policy — which keeps it total for a value that is non-reflexive under its policy (e.g.
+   [Float.nan]), a pair the collection accepts but a content re-scan can never find again. *)
+let ordered_multimap_group_end key ordered_multimap =
+  let equal_key =
+    Common.Hash_policy.equal (Persistent_ordered_multimap.key_policy ordered_multimap)
+  in
+  let same_key entry = equal_key (Persistent_ordered_multimap.entry_key entry) key in
+  let rec before_group index = function
+    | [] -> index
+    | entry :: rest ->
+        if same_key entry then within_group (index + 1) rest else before_group (index + 1) rest
+  and within_group index = function
+    | [] -> index
+    | entry :: rest -> if same_key entry then within_group (index + 1) rest else index
+  in
+  before_group 0 (Persistent_ordered_multimap.entries ordered_multimap)
+
 let ordered_multimap_insert_with_flag key value cursor =
   let added, ordered_multimap = Persistent_ordered_multimap.add key value cursor.ordered_multimap in
   if not added then (false, cursor)
   else
-    (* Derive the published gap from the accepted pair's flattened rank. A value that is
-       non-reflexive under the value policy (e.g. [Float.nan]) is invisible to the content
-       re-scan, so fall back to the total pair count rather than raising on [Option.get]. *)
-    let ordered_multimap_position_value =
-      match ordered_multimap_index_of key value ordered_multimap with
-      | Some index -> index + 1
-      | None -> Persistent_ordered_multimap.pair_count ordered_multimap
-    in
+    (* [add] appends the value at the end of the key's group, or as a fresh last group when the
+       key is absent, so the published gap is that group's boundary. Deriving it from the group
+       end with the key policy alone keeps the function total for a value that is non-reflexive
+       under the value policy (e.g. [Float.nan]): such a pair is accepted but is invisible to a
+       content re-scan, so no re-scan is performed. *)
+    let ordered_multimap_position_value = ordered_multimap_group_end key ordered_multimap in
     (true, { ordered_multimap; ordered_multimap_position_value })
 
 let ordered_multimap_insert key value cursor =
