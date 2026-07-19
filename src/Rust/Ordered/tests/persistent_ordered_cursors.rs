@@ -87,6 +87,32 @@ fn multimap_cursor_uses_flattened_grouped_pair_ranks() {
     assert_eq!(source.find_group_cursor(&"a").cursor.position(), 2);
 }
 
+/// Inserting into a NON-last key's group must land the following gap at that group's end, never at
+/// the whole-map end. The gap is derived by walking key groups with the key equality alone; it is
+/// never recovered by re-scanning for the inserted value, so this holds regardless of the value's
+/// `Eq` reflexivity.
+#[test]
+fn multimap_cursor_insert_lands_gap_at_non_last_group_end() {
+    let source = PersistentOrderedMultimap::from_pairs([("b", 2), ("a", 9), ("b", 1), ("c", 7)]);
+    // Flattened grouped order: [("b", 2), ("b", 1), ("a", 9), ("c", 7)]; the "a" group is not last.
+    let inserted = source.cursor_at(0).unwrap().insert("a", 5);
+    assert_eq!(
+        inserted
+            .snapshot()
+            .iter()
+            .map(|(key, value)| (*key, *value))
+            .collect::<Vec<_>>(),
+        [("b", 2), ("b", 1), ("a", 9), ("a", 5), ("c", 7)]
+    );
+    // The gap follows the "a" group's end (rank 4), not the whole-map end (pair_count 5).
+    assert_eq!(inserted.position(), 4);
+    assert_eq!(inserted.pair_count(), 5);
+    assert!(
+        inserted.position() < inserted.pair_count(),
+        "a non-last group's end gap must precede the whole-map end"
+    );
+}
+
 /// `found` means "already present" and `added` means "this attempt published an entry", so a
 /// duplicate insert must report the opposite of the search that located the same entry.
 #[test]

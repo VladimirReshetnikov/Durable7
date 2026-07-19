@@ -524,21 +524,37 @@ where
     #[must_use]
     pub fn insert(&self, key: K, value: V) -> Self {
         let key_probe = key.clone();
-        let value_probe = value.clone();
         let map = self.map.insert(key, value);
         if map.shares_groups_root_with(&self.map) {
             return self.clone();
         }
-        let position = map
-            .iter()
-            .position(|(stored_key, stored_value)| {
-                stored_key == &key_probe && stored_value == &value_probe
-            })
-            .expect("inserted ordered-multimap pair must be present");
         Self {
+            position: Self::group_end(&map, &key_probe),
             map,
-            position: position + 1,
         }
+    }
+
+    /// Flattened pair rank of the gap immediately after the last pair of `key`'s group, or the end
+    /// gap when `key` is absent. `insert` appends the value to the end of the key's existing group
+    /// (or as a fresh last group), so the following gap is always a group boundary. Key groups are
+    /// contiguous in the flattened enumeration, so this walks the leading pairs once and consults
+    /// only the key equality — never the value equality — which keeps it total for a value whose
+    /// `Eq` is not reflexive (a `NaN`-carrying wrapper, say), a pair the map accepts but a value
+    /// re-scan could never find again.
+    fn group_end(map: &PersistentOrderedMultimap<K, V, SK, SV>, key: &K) -> usize {
+        let mut rank = 0;
+        let mut in_group = false;
+        for (stored_key, _) in map.iter() {
+            if stored_key == key {
+                in_group = true;
+                rank += 1;
+            } else if in_group {
+                return rank;
+            } else {
+                rank += 1;
+            }
+        }
+        rank
     }
 
     /// Inserts an absent pair into the focused key's group.
@@ -556,19 +572,25 @@ where
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
-        let (key, value) = self.map.iter().nth(position)?;
-        Some(Self {
-            map: self.map.remove(key, value),
-            position,
-        })
+        self.deleted_pair(position)
     }
 
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
-        let (key, value) = self.map.iter().nth(self.position)?;
-        Some(Self {
-            map: self.map.remove(key, value),
-            position: self.position,
+        self.deleted_pair(self.position)
+    }
+
+    /// Removes the pair at flattened `rank` and refocuses the gap there, or returns `None` when
+    /// the removal changes nothing. `remove` locates the pair by content and returns its receiver
+    /// on a miss, which a peeked pair still triggers when its value is not reflexive under `Eq`;
+    /// comparing the pair count before publishing keeps a no-op delete from reporting false
+    /// success.
+    fn deleted_pair(&self, rank: usize) -> Option<Self> {
+        let (key, value) = self.map.iter().nth(rank)?;
+        let map = self.map.remove(key, value);
+        (map.pair_count() != self.map.pair_count()).then_some(Self {
+            map,
+            position: rank,
         })
     }
 }
