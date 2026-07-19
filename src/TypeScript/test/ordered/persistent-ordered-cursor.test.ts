@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+    createHashPolicy,
+    defaultHash,
+    defaultHashPolicy,
     PersistentOrderedMap,
     PersistentOrderedMultimap,
     PersistentOrderedSet,
@@ -63,5 +66,58 @@ describe("neutral ordered collection cursors", () => {
         ]);
         expect(source.pairCount).toBe(4);
         expect(source.getCursorAtGroup("a")).toMatchObject({ found: true, cursor: { position: 2 } });
+    });
+
+    it("tolerates values non-reflexive under the value policy in multimap cursors", () => {
+        // A bare === policy is a legitimate strict policy under which NaN is non-reflexive.
+        const values = createHashPolicy<number>(defaultHash, (left, right) => left === right);
+        expect(values.equivalent(NaN, NaN)).toBe(false);
+
+        const source = PersistentOrderedMultimap.from<string, number>(
+            [["a", 1], ["b", 2], ["a", 3]],
+            defaultHashPolicy<string>(),
+            values,
+        );
+        expect([...source]).toEqual([
+            { key: "a", value: 1 },
+            { key: "a", value: 3 },
+            { key: "b", value: 2 },
+        ]);
+
+        // add() derives the gap from the key group, not by re-scanning for the accepted pair.
+        const addedNaN = source.getCursor(0).add("a", NaN);
+        expect(addedNaN.snapshot.pairCount).toBe(4);
+        expect(addedNaN.position).toBe(3);
+        const stored = addedNaN.snapshot.cursorEntryAt(2);
+        expect(stored.key).toBe("a");
+        expect(Number.isNaN(stored.value)).toBe(true);
+        expect([...source]).toEqual([
+            { key: "a", value: 1 },
+            { key: "a", value: 3 },
+            { key: "b", value: 2 },
+        ]);
+
+        // A normal reflexive value still lands at the same group boundary.
+        const addedReal = source.getCursor(0).add("a", 7);
+        expect(addedReal.position).toBe(3);
+        expect(addedReal.tryPeekPrevious()).toEqual({ key: "a", value: 7 });
+
+        // delete() must not report a false success when remove-by-content is a no-op for a stored NaN.
+        const withNaN = PersistentOrderedMultimap
+            .empty<string, number>(defaultHashPolicy<string>(), values)
+            .add("a", NaN);
+        expect(withNaN.pairCount).toBe(1);
+        const afterNaN = withNaN.getCursor(1);
+        expect(afterNaN.deletePrevious()).toBe(afterNaN);
+        const beforeNaN = withNaN.getCursor(0);
+        expect(beforeNaN.deleteNext()).toBe(beforeNaN);
+
+        // A reflexive value deletes normally through the same guarded path.
+        const withReal = PersistentOrderedMultimap
+            .empty<string, number>(defaultHashPolicy<string>(), values)
+            .add("a", 5);
+        const deleted = withReal.getCursor(1).deletePrevious();
+        expect(deleted.snapshot.pairCount).toBe(0);
+        expect(deleted.position).toBe(0);
     });
 });

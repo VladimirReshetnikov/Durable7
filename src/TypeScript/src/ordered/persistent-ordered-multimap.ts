@@ -288,13 +288,18 @@ export class PersistentOrderedMultimapCursor<K, V> {
             : new PersistentOrderedMultimapCursor(this.snapshot, position);
     }
 
-    /** Adds under grouped semantics and returns the inserted pair's following gap. */
+    /**
+     * Adds under grouped semantics and returns the inserted pair's following gap.
+     *
+     * The gap is derived from the key group's end using only the key policy rather than by re-scanning
+     * for the accepted pair by value equality. A value that is not reflexive under the value policy,
+     * such as `NaN` under a bare `===` policy, is one the collection accepts but a content re-scan can
+     * never find again, so re-scanning would throw on a pair the collection just stored.
+     */
     public add(key: K, value: V): PersistentOrderedMultimapCursor<K, V> {
         const snapshot = this.snapshot.add(key, value);
         if (snapshot === this.snapshot) return this;
-        const location = snapshot.getCursorAtPair(key, value);
-        if (!location.found) throw new Error("The inserted pair is missing from the ordered multimap.");
-        return new PersistentOrderedMultimapCursor(snapshot, location.cursor.position + 1);
+        return new PersistentOrderedMultimapCursor(snapshot, groupEndPosition(snapshot, key));
     }
 
     public tryAdd(key: K, value: V): {
@@ -305,21 +310,55 @@ export class PersistentOrderedMultimapCursor<K, V> {
         return { added: cursor !== this, cursor };
     }
 
+    /**
+     * Deletes the pair immediately before the gap. Removal locates the pair by content and is a no-op
+     * when the stored value is not reflexive under the value policy (a `NaN`, for instance); the pair
+     * count validates the removal, so a no-op returns this receiver rather than a false success that
+     * removed nothing.
+     */
     public deletePrevious(): PersistentOrderedMultimapCursor<K, V> {
         const pair = this.tryPeekPrevious();
         if (pair === undefined) throw new RangeError("The ordered-multimap cursor has no previous pair.");
-        return new PersistentOrderedMultimapCursor(
-            this.snapshot.remove(pair.key, pair.value),
-            this.position - 1,
-        );
+        const snapshot = this.snapshot.remove(pair.key, pair.value);
+        if (snapshot.pairCount === this.snapshot.pairCount) return this;
+        return new PersistentOrderedMultimapCursor(snapshot, this.position - 1);
     }
 
+    /**
+     * Deletes the pair immediately after the gap. Removal locates the pair by content and is a no-op
+     * when the stored value is not reflexive under the value policy (a `NaN`, for instance); the pair
+     * count validates the removal, so a no-op returns this receiver rather than a false success that
+     * removed nothing.
+     */
     public deleteNext(): PersistentOrderedMultimapCursor<K, V> {
         const pair = this.tryPeekNext();
         if (pair === undefined) throw new RangeError("The ordered-multimap cursor has no next pair.");
-        return new PersistentOrderedMultimapCursor(
-            this.snapshot.remove(pair.key, pair.value),
-            this.position,
-        );
+        const snapshot = this.snapshot.remove(pair.key, pair.value);
+        if (snapshot.pairCount === this.snapshot.pairCount) return this;
+        return new PersistentOrderedMultimapCursor(snapshot, this.position);
     }
+}
+
+/**
+ * Pair rank of the gap immediately after the last pair of an equivalent key group, or the pair-end
+ * gap when the key is absent. Key groups are contiguous in the flattened enumeration, so this walks
+ * the leading pairs once and consults only the key policy, never the value policy.
+ */
+function groupEndPosition<K, V>(snapshot: PersistentOrderedMultimap<K, V>, key: K): number {
+    const keyPolicy = snapshot.keyPolicy;
+    let position = 0;
+    let groupEnd = 0;
+    let seenGroup = false;
+    for (const pair of snapshot) {
+        if (keyPolicy.equivalent(pair.key, key)) {
+            position += 1;
+            seenGroup = true;
+            groupEnd = position;
+        } else if (seenGroup) {
+            return groupEnd;
+        } else {
+            position += 1;
+        }
+    }
+    return seenGroup ? groupEnd : position;
 }
