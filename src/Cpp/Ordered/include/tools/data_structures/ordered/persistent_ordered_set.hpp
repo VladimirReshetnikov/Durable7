@@ -444,6 +444,19 @@ public:
         // Stamps increase in the collection's current explicit order. They
         // therefore provide the stable tie-break without relying on older
         // libstdc++ std::stable_sort internals deprecated by newer Clang.
+        //
+        // MSVC's /O2 back end inlines std::sort and then spuriously reports the
+        // stable three-way comparator body below as unreachable code (C4702)
+        // whenever the supplied Compare is fully transparent to the optimizer,
+        // such as the std::less<> default that the parameterless sort() uses;
+        // /WX would promote that false positive to a hard error. The comparator
+        // is an ordinary strict weak ordering with a stamp tie-break and has no
+        // genuinely unreachable statement, so suppress only C4702 and only for
+        // MSVC; GCC and Clang analyze the same source without complaint.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
         std::sort(entries.begin(), entries.end(), [&](const entry& left, const entry& right) {
             if (std::invoke(compare, item_of(left), item_of(right))) {
                 return true;
@@ -453,6 +466,9 @@ public:
             }
             return left.stamp < right.stamp;
         });
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
         auto unchanged = true;
         for (auto index = size_type{0}; index != entries.size(); ++index) {

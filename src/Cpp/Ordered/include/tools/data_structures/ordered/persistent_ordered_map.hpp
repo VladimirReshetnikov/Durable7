@@ -432,6 +432,19 @@ public:
         // decoration for stable ties. Using it with std::sort also avoids old
         // libstdc++ implementations whose std::stable_sort instantiates the
         // deprecated get_temporary_buffer API under newer Clang versions.
+        //
+        // MSVC's /O2 back end inlines std::sort and can spuriously report the
+        // stable three-way comparator body below as unreachable code (C4702)
+        // when the supplied Compare is fully transparent to the optimizer; /WX
+        // would promote that false positive to a hard error. The comparator is
+        // an ordinary strict weak ordering with a stamp tie-break and has no
+        // genuinely unreachable statement, so suppress only C4702 and only for
+        // MSVC, mirroring persistent_ordered_set::sort. GCC and Clang analyze
+        // the same source without complaint.
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4702)
+#endif
         std::sort(entries.begin(), entries.end(), [&](const entry& left, const entry& right) {
             if (std::invoke(compare, item_of(left), item_of(right))) {
                 return true;
@@ -441,6 +454,9 @@ public:
             }
             return left.stamp < right.stamp;
         });
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
         for (auto index = size_type{0}; index != entries.size(); ++index) {
             if (entries[index].stamp != order_[index].stamp) {
                 return rebuild_entries(std::move(entries));
