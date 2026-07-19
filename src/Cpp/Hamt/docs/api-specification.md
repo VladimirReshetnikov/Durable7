@@ -118,9 +118,10 @@ real: the map returns the named aggregate `basic_patricia_map_cursor_search_resu
 cases a miss yields the **usable lower-bound cursor**, not an end or invalid sentinel.
 
 The map cursor exposes `count`, `position`, `is_at_start`, `is_at_end`, `peek_previous`, `peek_next`,
-`move_previous`, `move_next`, `seek`, `insert`, `put`, `set_next_value`, `delete_previous`,
-`delete_next`, and `snapshot`. The set cursor drops `put` and `set_next_value`, since there is no
-value to replace. Map peeks return `std::optional<entry_view>` over the nested
+`move_previous`, `move_next`, `seek`, `insert`, `set_item`, `set_next_value`, `delete_previous`,
+`delete_next`, and `snapshot`. `set_item` is the upsert (its `put` name was retired so every C++
+cursor and collection spells the operation identically). The set cursor drops `set_item` and
+`set_next_value`, since there is no value to replace. Map peeks return `std::optional<entry_view>` over the nested
 `entry_view { const Key& key; const T& value; }`; set peeks return `const Key*`, null at a boundary.
 Both are lvalue-only — the `const&&` overloads are `= delete`d so a borrowed reference cannot outlive
 a temporary cursor that was its last root owner.
