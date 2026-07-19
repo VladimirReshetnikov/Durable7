@@ -840,6 +840,12 @@ public class FingerTree<T, M> private constructor(
 
     internal fun debugIsBalanced(): Boolean = items.isBalanced()
 
+    /** Returns the ordered measure of the first [count] elements for a validated boundary. */
+    internal fun measurePrefix(count: Int): M = items.measurePrefix(count)
+
+    /** Returns the ordered measure of the elements at and after [startIndex] for a validated boundary. */
+    internal fun measureSuffix(startIndex: Int): M = items.measureSuffix(startIndex)
+
     override fun iterator(): Iterator<T> = items.iterator()
 
     @Suppress("UNCHECKED_CAST")

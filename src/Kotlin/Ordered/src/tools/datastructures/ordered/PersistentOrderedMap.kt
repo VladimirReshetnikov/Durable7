@@ -77,10 +77,16 @@ public class PersistentOrderedMap<K, V> private constructor(
         return PersistentOrderedMap(keys.insert(index, key), values.add(key, value))
     }
 
-    /** Adds an absent key at the end; an existing key retains representative and position. */
-    public fun set(key: K, value: V): PersistentOrderedMap<K, V> =
-        if (containsKey(key)) PersistentOrderedMap(keys, values.put(key, value))
-        else PersistentOrderedMap(keys.add(key), values.add(key, value))
+    /**
+     * Adds an absent key at the end; an existing key retains representative and position. A payload
+     * the value policy already considers equivalent is a no-op that returns this exact map, so the
+     * receiver-preserving rule the underlying CHAMP applies is not lost at this layer.
+     */
+    public fun set(key: K, value: V): PersistentOrderedMap<K, V> {
+        if (!containsKey(key)) return PersistentOrderedMap(keys.add(key), values.add(key, value))
+        val nextValues = values.put(key, value)
+        return if (nextValues === values) this else PersistentOrderedMap(keys, nextValues)
+    }
 
     public fun moveToFirst(key: K): PersistentOrderedMap<K, V> = PersistentOrderedMap(keys.moveToFirst(key), values)
     public fun moveToLast(key: K): PersistentOrderedMap<K, V> = PersistentOrderedMap(keys.moveToLast(key), values)

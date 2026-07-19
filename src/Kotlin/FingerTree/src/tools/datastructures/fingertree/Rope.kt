@@ -350,6 +350,14 @@ public data class MeasuredRopeLocate<T, M>(
 )
 
 /**
+ * The result of [MeasuredRope.prefixMeasure] for an in-range boundary. The wrapper keeps an invalid
+ * count distinguishable from a legitimate aggregate, because a measure policy may make the monoid
+ * identity itself null (as [MaxMeasure] and [MinMeasure] do); this mirrors [RopeCursorPeek], which
+ * separates absence from a stored null in the same way.
+ */
+public data class MeasuredRopePrefix<M>(public val measure: M)
+
+/**
  * A persistent measured sequence backed by the shared immutable measured AVL tree.
  *
  * Every growth operation uses checked [Int] arithmetic. If a result would exceed [Int.MAX_VALUE],
@@ -406,12 +414,17 @@ public class MeasuredRope<T, M> private constructor(
 
     public operator fun get(index: Int): T? = items[index]
 
-    public fun prefixMeasure(count: Int): M? {
+    /**
+     * Returns the ordered measure of the first [count] elements, or `null` when [count] lies outside
+     * `0..size`. The present result is wrapped so an invalid count stays distinguishable from an
+     * aggregate that is itself null under the policy's monoid identity.
+     */
+    public fun prefixMeasure(count: Int): MeasuredRopePrefix<M>? {
         if (count < 0 || count > size) {
             return null
         }
 
-        return items.prefixMeasure(count)
+        return MeasuredRopePrefix(items.measurePrefix(count))
     }
 
     public fun copyTo(index: Int, destination: MutableList<in T>): Boolean {
@@ -600,14 +613,21 @@ public class TextRope private constructor(
 
     public fun asString(): String = characters.toList().joinToString("")
 
-    public fun lineCount(): Int = characters.measure() + 1
+    /**
+     * Returns the number of lines, which is one more than the stored newline count.
+     *
+     * @throws ArithmeticException if the count cannot be represented by [Int]. A wrapped count would
+     *   make every line helper report a miss and [lines] return an empty list, which is a consistent
+     *   but wrong answer rather than a detectable failure.
+     */
+    public fun lineCount(): Int = Math.addExact(characters.measure(), 1)
 
     public fun lineOfOffset(offset: Int): Int? {
         if (offset < 0 || offset > size) {
             return null
         }
 
-        return characters.prefixMeasure(offset)
+        return characters.prefixMeasure(offset)?.measure
     }
 
     public fun lineStartOffset(line: Int): Int? {
@@ -619,8 +639,10 @@ public class TextRope private constructor(
             return 0
         }
 
+        // [found] is the discriminator the locate contract names; [value] is null both for a stored
+        // null and for a predicate that never became true.
         val newline = characters.locateByMeasure { it >= line }
-        return if (newline.value == null) null else newline.index + 1
+        return if (!newline.found) null else newline.index + 1
     }
 
     public fun lineColumnOf(offset: Int): LineColumn? {

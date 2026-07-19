@@ -99,6 +99,59 @@ private fun rangeCursorPreservesMeasuresAndDirectionalTags() {
     cursorCheckEquals(listOf(1, 2, 3, 4), basis.toList(), "Range source")
 }
 
+private fun generalCursorReportsNullIdentityBoundaryMeasures() {
+    // MaxMeasure and MinMeasure are shipped policies whose monoid identity is itself null, so the
+    // boundary gaps must report that identity rather than treating it as an out-of-range signal.
+    val tree = FingerTree.from(listOf(2, 7, 5), MaxMeasure<Int>())
+    val start = tree.cursorAtStart()
+    val end = tree.cursorAtEnd()
+    cursorCheckEquals(null, start.measureBefore, "max-measure identity before the start gap")
+    cursorCheckEquals(7, start.measureAfter, "max-measure suffix at the start gap")
+    cursorCheckEquals(7, end.measureBefore, "max-measure prefix at the end gap")
+    cursorCheckEquals(null, end.measureAfter, "max-measure identity after the end gap")
+
+    val minimum = FingerTree.from(listOf(2, 7, 5), MinMeasure<Int>())
+    cursorCheckEquals(null, minimum.cursorAtStart().measureBefore, "min-measure identity before the start gap")
+
+    val empty = FingerTree.empty(MaxMeasure<Int>())
+    cursorCheckEquals(null, empty.cursorAtStart().measureBefore, "empty max-measure prefix")
+    cursorCheckEquals(null, empty.cursorAtStart().measureAfter, "empty max-measure suffix")
+
+    // combine(before, after) reconstructs the whole measure at every gap, which is unsatisfiable
+    // when one side conflates the identity with a range failure.
+    var gap = tree.cursorAtStart()
+    for (position in 0..tree.size) {
+        cursorCheckEquals(
+            tree.measure(),
+            tree.policy.combine(gap.measureBefore, gap.measureAfter),
+            "max-measure combine law at gap $position",
+        )
+        gap = gap.moveNext() ?: break
+    }
+}
+
+private fun sequenceCursorSeekToCurrentPositionRetainsIdentity() {
+    val deque = checkNotNull(PersistentDeque.from(listOf(1, 2, 3)).cursorAt(1))
+    cursorCheck(deque.seek(1) === deque, "deque seek to the current position retains identity")
+    cursorCheck(deque.seek(2) !== deque, "deque seek elsewhere moves the gap")
+
+    val reversible = checkNotNull(ReversibleDeque.from(listOf(1, 2, 3)).cursorAt(1))
+    cursorCheck(reversible.seek(1) === reversible, "reversible seek to the current position retains identity")
+
+    val vector = checkNotNull(RrbVector.from(listOf(1, 2, 3)).cursorAt(1))
+    cursorCheck(vector.seek(1) === vector, "RRB seek to the current position retains identity")
+
+    val range = checkNotNull(RangeUpdateSequence.from(listOf(1, 2, 3), CursorAdditiveAlgebra).cursorAt(1))
+    cursorCheck(range.seek(1) === range, "Range seek to the current position retains identity")
+
+    val tree = FingerTree.from(listOf(2, 3, 5, 7), IntSumMeasure)
+    val located = tree.cursorByMeasure { it >= 6 }.cursor
+    cursorCheck(
+        located.seekByMeasure { it >= 6 }.cursor === located,
+        "measured seek to the current gap retains identity",
+    )
+}
+
 internal fun sequenceCursorTestCases(): List<Pair<String, () -> Unit>> =
     listOf(
         "dequeCursorRetainsVersionsAndDistinguishesStoredNull" to
@@ -106,6 +159,10 @@ internal fun sequenceCursorTestCases(): List<Pair<String, () -> Unit>> =
         "reversibleCursorUsesLogicalOrderAndMapsReverseGap" to
             ::reversibleCursorUsesLogicalOrderAndMapsReverseGap,
         "generalCursorExposesMeasuresAndRetainsSource" to ::generalCursorExposesMeasuresAndRetainsSource,
+        "generalCursorReportsNullIdentityBoundaryMeasures" to
+            ::generalCursorReportsNullIdentityBoundaryMeasures,
+        "sequenceCursorSeekToCurrentPositionRetainsIdentity" to
+            ::sequenceCursorSeekToCurrentPositionRetainsIdentity,
         "rrbCursorSplicesVectorsAndKeepsSource" to ::rrbCursorSplicesVectorsAndKeepsSource,
         "rangeCursorPreservesMeasuresAndDirectionalTags" to ::rangeCursorPreservesMeasuresAndDirectionalTags,
     )

@@ -417,7 +417,7 @@ private fun ropesEditAndNavigateText() {
 
     val measured = MeasuredRope.from(listOf(2, 3, 5, 7), IntSumMeasure)
     checkEquals(17, measured.measure(), "measured rope sum")
-    checkEquals(5, measured.prefixMeasure(2), "measured prefix")
+    checkEquals(5, measured.prefixMeasure(2)?.measure, "measured prefix")
     checkEquals(2, measured.locateByMeasure { it >= 6 }.index, "measured locate")
 
     val text = TextRope.fromText("alpha\nbeta\ngamma")
@@ -775,7 +775,7 @@ private fun measuredRopeSupportsThePositionalEditingSurface() {
     checkEquals(model.sum(), edited.measure(), "measured editing total")
     checkEquals(model.first(), edited.front(), "measured front")
     checkEquals(model.last(), edited.back(), "measured back")
-    checkEquals(model.take(40).sum(), edited.prefixMeasure(40), "measured editing prefix")
+    checkEquals(model.take(40).sum(), edited.prefixMeasure(40)?.measure, "measured editing prefix")
     checkEquals(originalValues, original.toList(), "measured original snapshot")
     check(original.sharesStorageWith(edited), "measured edits retain untouched storage")
 

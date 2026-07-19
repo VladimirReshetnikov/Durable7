@@ -40,7 +40,9 @@ public class PersistentDequeCursor<T> private constructor(
     public fun moveNext(): PersistentDequeCursor<T>? =
         if (isAtEnd) null else create(value, position + 1)
 
-    public fun seek(newPosition: Int): PersistentDequeCursor<T>? = value.cursorAt(newPosition)
+    /** Moves the gap to [newPosition]; seeking to the current position returns this cursor by identity. */
+    public fun seek(newPosition: Int): PersistentDequeCursor<T>? =
+        if (newPosition == position) this else value.cursorAt(newPosition)
 
     public fun insert(item: T): PersistentDequeCursor<T> =
         create(value.insertAt(position, item)!!, Math.addExact(position, 1))
@@ -104,7 +106,9 @@ public class ReversibleDequeCursor<T> private constructor(
     public fun moveNext(): ReversibleDequeCursor<T>? =
         if (isAtEnd) null else create(value, position + 1)
 
-    public fun seek(newPosition: Int): ReversibleDequeCursor<T>? = value.cursorAt(newPosition)
+    /** Moves the gap to [newPosition]; seeking to the current position returns this cursor by identity. */
+    public fun seek(newPosition: Int): ReversibleDequeCursor<T>? =
+        if (newPosition == position) this else value.cursorAt(newPosition)
 
     public fun insert(item: T): ReversibleDequeCursor<T> {
         val split = value.splitAt(position)!!
@@ -168,11 +172,22 @@ public class FingerTreeCursor<T, M> private constructor(
     public val isAtEnd: Boolean
         get() = position == value.size
 
+    /**
+     * The ordered measure of `[0, position)`. The boundary is already validated by construction, so
+     * the read never conflates an out-of-range count with the monoid identity: a policy whose identity
+     * is itself `null`, such as [MaxMeasure] or [MinMeasure], reports that identity at the start gap.
+     * This read descends one root-to-leaf path and allocates nothing.
+     */
     public val measureBefore: M
-        get() = value.prefixMeasure(position)!!
+        get() = value.measurePrefix(position)
 
+    /**
+     * The ordered measure of `[position, size)`, so that `combine(measureBefore, measureAfter)` is the
+     * whole snapshot measure. Like [measureBefore] this is a read-only descent rather than a
+     * structural split, so it allocates no discarded nodes.
+     */
     public val measureAfter: M
-        get() = value.splitAtIndex(position)!!.right.measure()
+        get() = value.measureSuffix(position)
 
     public fun peekPrevious(): SequenceCursorPeek<T>? =
         if (isAtStart) null else SequenceCursorPeek(itemAt(position - 1))
@@ -186,8 +201,14 @@ public class FingerTreeCursor<T, M> private constructor(
     public fun moveNext(): FingerTreeCursor<T, M>? =
         if (isAtEnd) null else create(value, position + 1)
 
-    public fun seekByMeasure(predicate: (M) -> Boolean): FingerTreeCursorSearch<T, M> =
-        value.cursorByMeasure(predicate)
+    /**
+     * Performs an absolute inclusive-prefix measure seek over the retained snapshot; a miss selects the
+     * end gap. If the selected gap is already current, the result retains this cursor by identity.
+     */
+    public fun seekByMeasure(predicate: (M) -> Boolean): FingerTreeCursorSearch<T, M> {
+        val located = value.cursorByMeasure(predicate)
+        return if (located.cursor.position == position) FingerTreeCursorSearch(this, located.found) else located
+    }
 
     public fun insert(item: T): FingerTreeCursor<T, M> =
         create(value.insertAt(position, item)!!, Math.addExact(position, 1))
@@ -238,7 +259,9 @@ public class RrbVectorCursor<T> private constructor(
     public fun moveNext(): RrbVectorCursor<T>? =
         if (isAtEnd) null else create(value, position + 1)
 
-    public fun seek(newPosition: Int): RrbVectorCursor<T>? = value.cursorAt(newPosition)
+    /** Moves the gap to [newPosition]; seeking to the current position returns this cursor by identity. */
+    public fun seek(newPosition: Int): RrbVectorCursor<T>? =
+        if (newPosition == position) this else value.cursorAt(newPosition)
 
     public fun insert(item: T): RrbVectorCursor<T> =
         create(value.insertAt(position, item)!!, Math.addExact(position, 1))
@@ -314,7 +337,9 @@ public class RangeUpdateSequenceCursor<T, M, Tag> private constructor(
     public fun moveNext(): RangeUpdateSequenceCursor<T, M, Tag>? =
         if (isAtEnd) null else create(value, position + 1)
 
-    public fun seek(newPosition: Int): RangeUpdateSequenceCursor<T, M, Tag>? = value.cursorAt(newPosition)
+    /** Moves the gap to [newPosition]; seeking to the current position returns this cursor by identity. */
+    public fun seek(newPosition: Int): RangeUpdateSequenceCursor<T, M, Tag>? =
+        if (newPosition == position) this else value.cursorAt(newPosition)
 
     public fun insert(item: T): RangeUpdateSequenceCursor<T, M, Tag> =
         create(value.insertAt(position, item)!!, Math.addExact(position, 1))

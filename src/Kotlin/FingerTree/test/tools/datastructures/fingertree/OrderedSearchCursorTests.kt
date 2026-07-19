@@ -153,7 +153,55 @@ private fun intervalMapAndBitSetCursorsKeepSourceSnapshots() {
     orderedCursorCheckEquals(listOf(1, 64, 130), bits.toList(), "bit-set source retained")
 }
 
+private fun intervalMapOverlapSurfacesAgreeOnDeclaredOrder() {
+    // The augmented tree orders by low endpoint only and places a new equal-low interval first, while
+    // the payload index is lexicographic on (low, high). Both public surfaces must report the map's
+    // declared order, so the query and cursor answers cannot disagree about the first overlap.
+    val map = PersistentIntervalMap.empty<Int, String>()
+        .add(Interval(1, 3), "a")
+        .add(Interval(1, 9), "b")
+    val probe = Interval(1, 1)
+    orderedCursorCheckEquals(Interval(1, 3), map.findOverlap(probe)?.interval, "declared-order first overlap")
+    orderedCursorCheckEquals("a", map.findOverlap(probe)?.value, "declared-order first overlap payload")
+    orderedCursorCheckEquals(
+        map.findOverlap(probe),
+        map.findOverlapCursor(probe).cursor.peekNext(),
+        "query and cursor overlap surfaces agree",
+    )
+    orderedCursorCheckEquals(
+        listOf(Interval(1, 3), Interval(1, 9)),
+        map.findOverlaps(probe).map { it.interval },
+        "declared-order overlap enumeration",
+    )
+
+    // A wider equal-low run, inserted so the tree order is the reverse of the declared order.
+    val wide = PersistentIntervalMap.empty<Int, String>()
+        .add(Interval(2, 20), "widest")
+        .add(Interval(2, 10), "middle")
+        .add(Interval(2, 4), "narrowest")
+        .add(Interval(0, 0), "disjoint")
+    orderedCursorCheckEquals(
+        Interval(2, 4),
+        wide.findOverlap(Interval(3, 3))?.interval,
+        "declared-order first overlap in an equal-low run",
+    )
+    orderedCursorCheckEquals(
+        wide.findOverlap(Interval(3, 3)),
+        wide.findOverlapCursor(Interval(3, 3)).cursor.peekNext(),
+        "equal-low run surfaces agree",
+    )
+    orderedCursorCheckEquals(
+        listOf(Interval(2, 10), Interval(2, 20)),
+        wide.findOverlaps(Interval(8, 8)).map { it.interval },
+        "declared-order overlap enumeration in an equal-low run",
+    )
+    orderedCursorCheckEquals(4, wide.validateStructure().count, "ordered index validation")
+    orderedCursorCheckEquals(null, wide.findOverlap(Interval(21, 30))?.interval, "no overlap")
+    orderedCursorCheck(!wide.findOverlapCursor(Interval(21, 30)).found, "no overlap cursor")
+}
+
 internal fun orderedSearchCursorTestCases(): List<Pair<String, () -> Unit>> = listOf(
+    "intervalMapOverlapSurfacesAgreeOnDeclaredOrder" to ::intervalMapOverlapSurfacesAgreeOnDeclaredOrder,
     "sortedCursorsPreserveGapsNullsAndSelectedOccurrences" to
         ::sortedCursorsPreserveGapsNullsAndSelectedOccurrences,
     "canonicalAndPrioritySearchCursorsRetainPolicies" to ::canonicalAndPrioritySearchCursorsRetainPolicies,

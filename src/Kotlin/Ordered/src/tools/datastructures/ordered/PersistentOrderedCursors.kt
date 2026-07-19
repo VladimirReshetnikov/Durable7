@@ -149,10 +149,14 @@ public class PersistentOrderedMapCursor<K, V> private constructor(
         return OrderedCursorInsert(true, insert(key, item))
     }
 
-    /** Updates the next entry's payload while retaining its key representative and this gap. */
+    /**
+     * Updates the next entry's payload while retaining its key representative and this gap. A payload
+     * the value policy already considers equivalent is a no-op that returns this exact cursor.
+     */
     public fun setNextValue(item: V): PersistentOrderedMapCursor<K, V>? {
         val next = peekNext()?.value ?: return null
-        return create(value.set(next.key, item), position)
+        val snapshot = value.set(next.key, item)
+        return if (snapshot === value) this else create(snapshot, position)
     }
 
     /** Deletes the entry immediately before the gap. */

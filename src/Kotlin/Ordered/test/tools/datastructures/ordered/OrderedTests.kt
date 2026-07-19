@@ -688,6 +688,18 @@ private fun orderedCursorsPreserveGapsPoliciesAndSnapshots() {
         mapUpdated.snapshot().toList().map { it.key to it.value },
         "ordered-map cursor edits",
     )
+    // The CHAMP payload index is no-op aware, so a value-equivalent update must propagate that rule
+    // through the map and the cursor rather than publishing a fresh version.
+    assertSame(mapUpdated, mapUpdated.setNextValue(20), "ordered-map cursor value no-op identity")
+    assertSame(
+        mapUpdated.snapshot(),
+        mapUpdated.snapshot().set("b", 20),
+        "ordered-map value no-op identity",
+    )
+    assertThat(
+        mapUpdated.snapshot() !== mapUpdated.snapshot().set("b", 21),
+        "a changed payload still publishes a new version",
+    )
     val mapDuplicate = mapUpdated.tryInsert("b", 200)
     assertThat(!mapDuplicate.added, "ordered-map cursor duplicate flag")
     assertEquals(2, mapDuplicate.cursor.position, "ordered-map duplicate focuses stored key")

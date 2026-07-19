@@ -576,7 +576,39 @@ private fun textCursorPreservesUtf16CoordinatesAndTextFacade() {
     }
 }
 
+private fun measuredRopePrefixMeasureSeparatesRangeFromNullAggregates() {
+    // MaxMeasure's monoid identity is null, so an unwrapped aggregate cannot be told apart from an
+    // out-of-range count. The wrapper is the discriminator, exactly as [found] is for locate results.
+    val rope = MeasuredRope.from(listOf(2, 7, 5), MaxMeasure<Int>())
+    val identity = rope.prefixMeasure(0)
+    measuredCursorCheck(identity != null, "an in-range prefix is present")
+    measuredCursorCheckEquals(null, identity?.measure, "the empty prefix reports the null identity")
+    measuredCursorCheckEquals(7, rope.prefixMeasure(2)?.measure, "an interior prefix aggregate")
+    measuredCursorCheckEquals(7, rope.prefixMeasure(rope.size)?.measure, "the whole prefix aggregate")
+    measuredCursorCheckEquals(null, rope.prefixMeasure(-1), "a negative count is out of range")
+    measuredCursorCheckEquals(null, rope.prefixMeasure(rope.size + 1), "an oversized count is out of range")
+
+    val empty = MeasuredRope.empty(MaxMeasure<Int>())
+    measuredCursorCheck(empty.prefixMeasure(0) != null, "the empty rope has an in-range empty prefix")
+    measuredCursorCheckEquals(null, empty.prefixMeasure(0)?.measure, "the empty rope reports the null identity")
+
+    // The text facade consumes the same call and still reports newline counts.
+    val text = TextRope.fromText("alpha\nbeta\ngamma")
+    measuredCursorCheckEquals(0, text.lineOfOffset(0), "line of the first offset")
+    measuredCursorCheckEquals(2, text.lineOfOffset(text.size), "line of the final offset")
+    measuredCursorCheckEquals(null, text.lineOfOffset(text.size + 1), "an out-of-range offset")
+    measuredCursorCheckEquals(3, text.lineCount(), "line count")
+    measuredCursorCheckEquals(
+        listOf<Int?>(0, 6, 11),
+        (0 until text.lineCount()).map { text.lineStartOffset(it) },
+        "line start offsets",
+    )
+    measuredCursorCheckEquals(null, text.lineStartOffset(text.lineCount()), "line start past the last line")
+}
+
 internal fun measuredRopeCursorTestCases(): List<Pair<String, () -> Unit>> = listOf(
+    "measuredRopePrefixMeasureSeparatesRangeFromNullAggregates" to
+        ::measuredRopePrefixMeasureSeparatesRangeFromNullAggregates,
     "measuredCursorHandlesBoundariesNullsIdentityAndBranches" to
         ::measuredCursorHandlesBoundariesNullsIdentityAndBranches,
     "measuredCursorPreservesOrderedNoncommutativeMeasures" to

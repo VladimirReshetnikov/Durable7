@@ -64,19 +64,35 @@ public class PersistentIntervalMap<T : Comparable<T>, V> private constructor(
 
     public fun clear(): PersistentIntervalMap<T, V> = if (isEmpty) this else empty()
 
+    /**
+     * Returns the first entry overlapping [probe] in this map's declared `(low, high)` order, or
+     * `null` when nothing overlaps.
+     *
+     * The augmented tree orders by low endpoint only, so its own first overlap is not necessarily the
+     * declared-order first one. The tree still supplies the smallest overlapping low endpoint through
+     * a pruned descent; the equal-low run in the payload index, which is sorted by high endpoint,
+     * then selects the declared-order minimum. This makes the result agree with `findOverlapCursor`
+     * by construction. The cost is O(log n) plus the length of that equal-low run.
+     */
     public fun findOverlap(probe: Interval<T>): IntervalMapEntry<T, V>? {
-        val interval = intervals.findOverlap(probe) ?: return null
-        val index = values.indexOfKey(interval) ?: throw indexDisagreement()
-        val entry = requireNotNull(values.entryAt(index))
-        return IntervalMapEntry(entry.key, entry.value)
+        val candidate = intervals.findOverlap(probe) ?: return null
+        var rank = values.cursorLowerBound(Interval(candidate.low, candidate.low))
+        while (rank < size) {
+            val entry = entryAt(rank)
+            if (entry.interval.low.compareTo(candidate.low) != 0) break
+            if (entry.interval.overlaps(probe)) return entry
+            rank += 1
+        }
+
+        throw indexDisagreement()
     }
 
+    /** Returns every entry overlapping [probe] in this map's declared `(low, high)` order. */
     public fun findOverlaps(probe: Interval<T>): List<IntervalMapEntry<T, V>> =
-        intervals.findOverlaps(probe).map { interval ->
-            val index = values.indexOfKey(interval) ?: throw indexDisagreement()
-            val entry = requireNotNull(values.entryAt(index))
-            IntervalMapEntry(entry.key, entry.value)
-        }
+        intervals.findOverlaps(probe)
+            .map { interval -> values.indexOfKey(interval) ?: throw indexDisagreement() }
+            .sorted()
+            .map { rank -> entryAt(rank) }
 
     public fun countOverlaps(probe: Interval<T>): Int = intervals.countOverlaps(probe)
 
@@ -88,10 +104,23 @@ public class PersistentIntervalMap<T : Comparable<T>, V> private constructor(
     public fun sharesValueStorageWith(other: PersistentIntervalMap<T, V>): Boolean =
         values.sharesStorageWith(other.values)
 
+    /**
+     * Checks that both indexes describe the same entries as an ordered sequence under the declared
+     * `(low, high)` order. A set comparison alone cannot see an ordering disagreement between the
+     * low-only augmented tree and the lexicographic payload index, which is exactly what would make
+     * the overlap and cursor surfaces report different first overlaps.
+     */
     public fun validateStructure(): PersistentIntervalMapStatistics {
         check(intervals.size == values.size) { "PersistentIntervalMap indexes have different counts." }
         for (interval in intervals) check(values.containsKey(interval)) { "An interval has no payload." }
         for (entry in values) check(intervals.contains(entry.key)) { "A payload has no interval." }
+
+        val declared = intervals.toList().sortedWith(intervalComparator<T>())
+        val payloads = values.keys()
+        for (rank in declared.indices) {
+            check(declared[rank] == payloads[rank]) { "PersistentIntervalMap indexes disagree in declared order." }
+        }
+
         return PersistentIntervalMapStatistics(size)
     }
 
