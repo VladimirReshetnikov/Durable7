@@ -157,15 +157,18 @@ tryRemove item setValue@(PersistentOrderedSet order stamps) = do
   nextOrder <- Deque.deleteAt index order
   pure (wrap nextOrder nextStamps)
 
+-- The positional removal is prepared before the stamp index is consulted, so a
+-- positional deletion is driven by the order index it names rather than by a
+-- content re-lookup that a value not reflexive under the hash policy can miss.
+-- This is the order the sibling ports use.
 deleteAt :: Int -> PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 deleteAt index (PersistentOrderedSet order stamps) = do
   entry <- Deque.index index order
+  nextOrder <- Deque.deleteAt index order
   (stamp, nextStamps) <- HashMap.tryRemove (entryItem entry) stamps
   if stamp /= entryStamp entry
     then invariantFailure
-    else do
-      nextOrder <- Deque.deleteAt index order
-      pure (wrap nextOrder nextStamps)
+    else pure (wrap nextOrder nextStamps)
 
 removeFirst :: PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 removeFirst = deleteAt 0

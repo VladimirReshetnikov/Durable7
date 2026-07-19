@@ -246,11 +246,16 @@ mirrorReversed :: [Elem a] -> [Elem a]
 mirrorReversed = map elemMirror . List.reverse
 
 makeNode :: [Elem a] -> Elem a
-makeNode children = Node False (sum (map elemSize children)) children
+makeNode children = Node False (checkedSum (map elemSize children)) children
 
 makeDeep :: [Elem a] -> Tree a -> [Elem a] -> Tree a
 makeDeep prefix middle suffix =
-  Deep False (sum (map elemSize prefix) + treeSize middle + sum (map elemSize suffix)) prefix middle suffix
+  Deep
+    False
+    (checkedAdd (checkedSum (map elemSize prefix)) (checkedAdd (treeSize middle) (checkedSum (map elemSize suffix))))
+    prefix
+    middle
+    suffix
 
 fromDigit :: [Elem a] -> Tree a
 fromDigit [] = Empty
@@ -416,6 +421,20 @@ buildElem element rest = foldBuild buildElem (logicalChildren element) rest
 
 foldBuild :: (b -> [a] -> [a]) -> [b] -> [a] -> [a]
 foldBuild builder values rest = foldr builder rest values
+
+-- | Adds two element counts, refusing to publish a wrapped count.  A wrapped
+-- count is worse than a failure here: it produces a negative 'count', so a
+-- cursor built from it is never at its end and every bound check is nonsense.
+checkedAdd :: Int -> Int -> Int
+checkedAdd left right
+  | left < 0 || right < 0 =
+      error "Data.Structures.FingerTree.ReversibleDeque: internal negative count"
+  | right > maxBound - left =
+      error "Data.Structures.FingerTree.ReversibleDeque: length overflow"
+  | otherwise = left + right
+
+checkedSum :: [Int] -> Int
+checkedSum = List.foldl' checkedAdd 0
 
 splitLast :: [a] -> ([a], a)
 splitLast [] = error "Data.Structures.FingerTree.ReversibleDeque.splitLast: empty list"

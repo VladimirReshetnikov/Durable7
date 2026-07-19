@@ -10,7 +10,7 @@ import qualified Data.List as List
 import Data.Maybe (fromMaybe)
 
 import Data.Structures.Hamt.Hashable (hash)
-import Data.Structures.Hamt.HashMap (HashPolicy(..))
+import Data.Structures.Hamt.HashMap (HashPolicy(..), defaultPolicy)
 import qualified Data.Structures.Ordered.Cursor as Cursor
 import qualified Data.Structures.Ordered.PersistentOrderedSet as Ordered
 import qualified Data.Structures.Ordered.PersistentOrderedMap as OrderedMap
@@ -28,7 +28,51 @@ main = do
   testOrderedMap
   testOrderedMultimap
   testOrderedCursors
+  testOrderedMultimapNonReflexiveValues
   putStrLn "tools-data-structures-ordered tests passed"
+
+-- | A @NaN@ payload is one the collection accepts but a content re-lookup can
+-- never find again, because it is not equal to itself.  Neither the multimap
+-- cursor's delete nor its insert may depend on such a re-lookup: the delete
+-- would otherwise report success while changing nothing, and the insert would
+-- reach an @error@ from a pure signature that gives callers no failure channel.
+testOrderedMultimapNonReflexiveValues :: IO ()
+testOrderedMultimapNonReflexiveValues = do
+  let nan = 0 / 0 :: Double
+      single = OrderedMultimap.fromListWith defaultPolicy nanPolicy [("k", nan)]
+      singleCursor = expectJust "non-reflexive cursor" (Cursor.orderedMultimapCursorAt 0 single)
+      singleEnd = expectJust "non-reflexive end cursor" (Cursor.orderedMultimapCursorAt 1 single)
+  assertEqual "non-reflexive pair count" 1 (OrderedMultimap.size single)
+  assertEqual "non-reflexive peek key" (Just "k")
+    (fmap fst (Cursor.orderedMultimapCursorPeekNext singleCursor))
+  assertEqual "non-reflexive delete next reports failure" Nothing
+    (fmap (OrderedMultimap.size . Cursor.orderedMultimapCursorSnapshot)
+      (Cursor.orderedMultimapCursorDeleteNext singleCursor))
+  assertEqual "non-reflexive delete previous reports failure" Nothing
+    (fmap (OrderedMultimap.size . Cursor.orderedMultimapCursorSnapshot)
+      (Cursor.orderedMultimapCursorDeletePrevious singleEnd))
+
+  let inserted = Cursor.orderedMultimapCursorInsert "k" nan singleCursor
+  assertEqual "non-reflexive insert pair count" 2
+    (OrderedMultimap.size (Cursor.orderedMultimapCursorSnapshot inserted))
+  assertEqual "non-reflexive insert gap" 2 (Cursor.orderedMultimapCursorPosition inserted)
+
+  let mixed = OrderedMultimap.fromListWith defaultPolicy nanPolicy
+        [("a", 1), ("k", nan), ("z", 2)]
+      mixedCursor = expectJust "interior cursor" (Cursor.orderedMultimapCursorAt 0 mixed)
+      mixedInserted = Cursor.orderedMultimapCursorInsert "k" nan mixedCursor
+  assertEqual "interior group insert gap" 3 (Cursor.orderedMultimapCursorPosition mixedInserted)
+  assertEqual "interior group insert order" ["a", "k", "k", "z"]
+    (map fst (OrderedMultimap.toList (Cursor.orderedMultimapCursorSnapshot mixedInserted)))
+
+  -- A value that is reflexive under the policy still deletes through the same path.
+  let deleted = expectJust "reflexive delete" (Cursor.orderedMultimapCursorDeleteNext mixedCursor)
+  assertEqual "reflexive delete order" ["k", "z"]
+    (map fst (OrderedMultimap.toList (Cursor.orderedMultimapCursorSnapshot deleted)))
+  assertEqual "reflexive delete gap" 0 (Cursor.orderedMultimapCursorPosition deleted)
+
+nanPolicy :: HashPolicy Double
+nanPolicy = HashPolicy (\value -> if isNaN value then 0 else truncate value) (==)
 
 testOrderedCursors :: IO ()
 testOrderedCursors = do

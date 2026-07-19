@@ -311,15 +311,20 @@ orderedMultimapCursorSeek :: Int -> PersistentOrderedMultimapCursor k v -> Maybe
 orderedMultimapCursorSeek position (PersistentOrderedMultimapCursor value _) = orderedMultimapCursorAt position value
 
 -- | Inserts according to grouped semantics; an equivalent pair preserves this gap.
+--
+-- 'OrderedMultimap.insert' appends the value to the end of the key's group, or
+-- appends a fresh last group when the key is absent, so the following gap is a
+-- group boundary.  Deriving it from the group boundaries rather than re-scanning
+-- for the pair keeps the function total: a value that is not reflexive under the
+-- value policy, such as a @NaN@, is one the collection accepts but a content
+-- re-scan can never find again, and the pure signature offers callers no failure
+-- channel for that.
 orderedMultimapCursorInsert :: k -> v -> PersistentOrderedMultimapCursor k v -> PersistentOrderedMultimapCursor k v
 orderedMultimapCursorInsert key item cursor@(PersistentOrderedMultimapCursor value _)
   | OrderedMultimap.member key item value = cursor
   | otherwise =
       let next = OrderedMultimap.insert key item value
-          index = orderedMultimapIndexOf key item next
-       in if index < 0
-            then error "inserted pair is absent from ordered multimap"
-            else PersistentOrderedMultimapCursor next (checkedSuccessor index)
+       in PersistentOrderedMultimapCursor next (orderedMultimapGroupEnd key next)
 
 orderedMultimapCursorTryInsert :: k -> v -> PersistentOrderedMultimapCursor k v -> OrderedCursorInsert (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorTryInsert key item cursor@(PersistentOrderedMultimapCursor value _)
@@ -329,15 +334,50 @@ orderedMultimapCursorTryInsert key item cursor@(PersistentOrderedMultimapCursor 
 orderedMultimapCursorDeletePrevious :: PersistentOrderedMultimapCursor k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorDeletePrevious cursor@(PersistentOrderedMultimapCursor value position) = do
   (key, item) <- orderedMultimapCursorPeekPrevious cursor
-  pure (PersistentOrderedMultimapCursor (OrderedMultimap.delete key item value) (position - 1))
+  next <- orderedMultimapDeletedPair key item value
+  pure (PersistentOrderedMultimapCursor next (position - 1))
 
 orderedMultimapCursorDeleteNext :: PersistentOrderedMultimapCursor k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorDeleteNext cursor@(PersistentOrderedMultimapCursor value position) = do
   (key, item) <- orderedMultimapCursorPeekNext cursor
-  pure (PersistentOrderedMultimapCursor (OrderedMultimap.delete key item value) position)
+  next <- orderedMultimapDeletedPair key item value
+  pure (PersistentOrderedMultimapCursor next position)
 
 orderedMultimapCursorSnapshot :: PersistentOrderedMultimapCursor k v -> PersistentOrderedMultimap k v
 orderedMultimapCursorSnapshot (PersistentOrderedMultimapCursor value _) = value
+
+-- | Removes one pair and reports the successor version, or 'Nothing' when the
+-- collection did not change.
+--
+-- 'OrderedMultimap.delete' locates the pair by content and returns its receiver
+-- on a miss, which a peeked pair still hits whenever the stored value is not
+-- reflexive under the value policy (a @NaN@, for instance).  Publishing that
+-- receiver would report a successful deletion that removed nothing and leave
+-- 'orderedMultimapCursorPeekNext' returning the same pair forever, so the pair
+-- count validates the correspondence before a version is published.
+orderedMultimapDeletedPair :: k -> v -> PersistentOrderedMultimap k v -> Maybe (PersistentOrderedMultimap k v)
+orderedMultimapDeletedPair key item value
+  | OrderedMultimap.size next == OrderedMultimap.size value = Nothing
+  | otherwise = Just next
+  where
+    next = OrderedMultimap.delete key item value
+
+-- | Pair rank of the gap immediately after the last pair of an equivalent key
+-- group, or the end gap when no such group is present.  Key groups are
+-- contiguous in the flattened enumeration, so this walks the leading pairs once
+-- and consults only the key policy.
+orderedMultimapGroupEnd :: k -> PersistentOrderedMultimap k v -> Int
+orderedMultimapGroupEnd key value = beforeGroup 0 (OrderedMultimap.toList value)
+  where
+    sameKey = equalKeys (OrderedMultimap.keyPolicy value)
+    beforeGroup index [] = index
+    beforeGroup index ((storedKey, _) : rest)
+      | sameKey storedKey key = withinGroup (checkedSuccessor index) rest
+      | otherwise = beforeGroup (checkedSuccessor index) rest
+    withinGroup index [] = index
+    withinGroup index ((storedKey, _) : rest)
+      | sameKey storedKey key = withinGroup (checkedSuccessor index) rest
+      | otherwise = index
 
 orderedMultimapIndexOf :: k -> v -> PersistentOrderedMultimap k v -> Int
 orderedMultimapIndexOf key item value = search 0 (OrderedMultimap.toList value)

@@ -92,18 +92,24 @@ infixl 5 :>
 -- | Immutable split cursor over one exact general measured-tree snapshot.
 -- The interface is measure- and neighbor-oriented and does not invent a
 -- positional count for an arbitrary monoid.
+--
+-- Only 'Show' is derived, matching the sibling cursors.  A derived 'Read' would
+-- fabricate a value whose retained snapshot is unrelated to its two sides,
+-- violating the invariant that the snapshot equals the appended halves, and a
+-- derived structural 'Eq' would contradict the extensional equality the deque
+-- and reversible-deque snapshots use.
 data Cursor v a = Cursor
   !(FingerTree v a)
   !(FingerTree v a)
   !(FingerTree v a)
-  deriving (Eq, Ord, Read, Show)
+  deriving (Show)
 
 -- | Result of an inclusive-prefix cursor search.  A miss carries an end cursor.
 data CursorSearch v a = CursorSearch
   { cursorSearchCursor :: !(Cursor v a)
   , cursorSearchFound :: !Bool
   }
-  deriving (Eq, Ord, Read, Show)
+  deriving (Show)
 
 instance Measured v a => Measured v (Node v a) where
   measure (Node2 value _ _) = value

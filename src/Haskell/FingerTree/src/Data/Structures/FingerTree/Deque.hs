@@ -66,7 +66,7 @@ data DequeMeasure a = DequeMeasure !Int !(Maybe a)
 
 instance Semigroup (DequeMeasure a) where
   DequeMeasure leftCount leftLast <> DequeMeasure rightCount rightLast =
-    DequeMeasure (leftCount + rightCount) (case rightLast of Just _ -> rightLast; Nothing -> leftLast)
+    DequeMeasure (checkedAdd leftCount rightCount) (case rightLast of Just _ -> rightLast; Nothing -> leftLast)
 
 instance Monoid (DequeMeasure a) where
   mempty = DequeMeasure 0 Nothing
@@ -331,3 +331,14 @@ sortedBoundBy accepts comparison value deque@(Deque tree) =
 
 measureCount :: DequeMeasure a -> Int
 measureCount (DequeMeasure value _) = value
+
+-- | Adds two element counts, refusing to publish a wrapped count.  A wrapped
+-- count is worse than a failure here: it produces a negative 'count', so a
+-- cursor built from it is never at its end and every bound check is nonsense.
+checkedAdd :: Int -> Int -> Int
+checkedAdd left right
+  | left < 0 || right < 0 =
+      error "Data.Structures.FingerTree.Deque: internal negative count"
+  | right > maxBound - left =
+      error "Data.Structures.FingerTree.Deque: length overflow"
+  | otherwise = left + right
