@@ -82,6 +82,24 @@ describe("persistent sequence cursors", () => {
         expect(edited.reverse().snapshot().toArray()).toEqual([4, 3, 9, 8, 2, 1]);
     });
 
+    it("splices reversed ranges in physical orientation without losing sharing", () => {
+        const forward = ReversibleDeque.from([1, 2, 3, 4]);
+        const reversed = ReversibleDeque.from([4, 3, 2, 1]).reverse();
+        expect(reversed.toArray()).toEqual(forward.toArray());
+        for (const source of [forward, reversed]) {
+            for (let gap = 0; gap <= source.size; gap++) {
+                const edited = source.getCursor(gap).insertRange([8, 9]);
+                expect(edited.snapshot().toArray()).toEqual([1, 2, 3, 4].toSpliced(gap, 0, 8, 9));
+                expect(edited.position).toBe(gap + 2);
+                expect(edited.snapshot().sharesStorageWith(source)).toBe(true);
+                expect(source.toArray()).toEqual([1, 2, 3, 4]);
+            }
+        }
+        expect(reversed.getCursor(2).insert(7).snapshot().toArray()).toEqual([1, 2, 7, 3, 4]);
+        const clean = reversed.getCursor(2);
+        expect(clean.insertRange([])).toBe(clean);
+    });
+
     it("splices RRB vectors across radix-leaf boundaries", () => {
         const vector = RrbVector.from(Array.from({ length: 70 }, (_, index) => index));
         const cursor = vector.getCursor(32);

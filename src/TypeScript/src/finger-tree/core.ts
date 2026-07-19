@@ -117,6 +117,23 @@ export class ReversibleDeque<T> implements Iterable<T> {
         if (this.isEmpty) return undefined;
         return [this.back()!, this.splitAt(this.size - 1)![0]];
     }
+    /**
+     * Builds a deque whose logical order is `values` in *this* deque's physical orientation.
+     *
+     * {@link from} always produces forward-oriented storage. Splicing such a range into a reversed
+     * receiver would make both {@link concat} calls see mismatched orientations and fall back to
+     * re-materializing every element, discarding all structural sharing. Aligning the middle first
+     * keeps the splice on the sharing path in both orientations: when this deque is reversed the
+     * range is stored physically reversed, which is exactly the design's statement that inserting
+     * the logical range inserts the reversed range physically. `values` is enumerated once.
+     *
+     * @internal Ownership detail of the cursor splice path; not part of the published surface.
+     */
+    public alignedRange(values: Iterable<T>): ReversibleDeque<T> {
+        const materialized = Array.from(values);
+        if (this.#reversed) materialized.reverse();
+        return new ReversibleDeque(PersistentDeque.from(materialized), this.#reversed);
+    }
     public toArray(): T[] { return Array.from(this); }
     public sharesStorageWith(other: ReversibleDeque<T>): boolean { return this.#items.sharesStorageWith(other.#items); }
     public *[Symbol.iterator](): IterableIterator<T> {
@@ -276,7 +293,7 @@ export class ReversibleDequeCursor<T> {
     }
     public insert(value: T): ReversibleDequeCursor<T> { return this.insertRange([value]); }
     public insertRange(values: Iterable<T>): ReversibleDequeCursor<T> {
-        const middle = ReversibleDeque.from(values);
+        const middle = this.deque.alignedRange(values);
         if (middle.isEmpty) return this;
         const split = this.deque.splitAt(this.position)!;
         return new ReversibleDequeCursor(split[0].concat(middle).concat(split[1]), this.position + middle.size);

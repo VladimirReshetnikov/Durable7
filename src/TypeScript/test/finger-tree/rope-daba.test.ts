@@ -6,6 +6,7 @@ import {
     Rope,
     RopeBuilder,
     TextRope,
+    TextRopeCursor,
     type Monoid,
 } from "../../src/finger-tree/index.js";
 
@@ -45,7 +46,7 @@ describe("rope family", () => {
         const clean = source.getCursor(3);
         expect(clean.snapshot()).toBe(source);
         expect([clean.peekPrevious(), clean.peekNext()]).toEqual(["c", "d"]);
-        const left = clean.insertRange("XY").deleteNext();
+        const left = clean.insertRange("XY".split("")).deleteNext();
         const right = clean.deletePrevious().replaceNext("Z");
         expect(left.snapshot().toArray().join("")).toBe("abcXYef");
         expect(right.snapshot().toArray().join("")).toBe("abZef");
@@ -109,6 +110,68 @@ describe("rope family", () => {
         const edited = cursor.insert("new\n").seekLineColumn(2, 2).insert("!");
         expect(edited.snapshot().asString()).toBe("alpha\nnew\nbe!ta");
         expect(source.asString()).toBe("alpha\nbeta");
+    });
+
+    test("text cursor snapshots wrap the edited version instead of rebuilding it", () => {
+        const source = TextRope.fromText("alpha\nbeta\ngamma");
+        const cursor = source.getCursor(3);
+        expect(cursor.snapshot()).toBe(source);
+        expect(cursor.insert("")).toBe(cursor);
+        expect(cursor.insert("").snapshot()).toBe(source);
+
+        const edited = cursor.insert("XY");
+        expect(edited.snapshot().asString()).toBe("alpXYha\nbeta\ngamma");
+        expect(edited.snapshot()).toBe(edited.snapshot());
+        expect(edited.snapshot().toMeasuredRope()).toBe(edited.cursor.snapshot());
+        expect(edited.snapshot().toMeasuredRope().sharesStorageWith(source.toMeasuredRope())).toBe(true);
+        expect(source.asString()).toBe("alpha\nbeta\ngamma");
+    });
+
+    test("text rope wrapping requires the shared newline measure policy", () => {
+        const equivalent = {
+            identity: 0,
+            combine: (left: number, right: number): number => left + right,
+            measure: (character: string): number => (character === "\n" ? 1 : 0),
+        };
+        expect(() => TextRope.fromMeasuredRope(MeasuredRope.from(["a", "\n"], equivalent))).toThrow(TypeError);
+        const native = TextRope.fromText("a\n").toMeasuredRope();
+        expect(TextRope.fromMeasuredRope(native).toMeasuredRope()).toBe(native);
+    });
+
+    test("text cursor rejects a snapshot taken from a different document", () => {
+        const first = TextRope.fromText("alpha");
+        const second = TextRope.fromText("gamma");
+        expect(() => new TextRopeCursor(second.toMeasuredRope().getCursor(1), first)).toThrow(TypeError);
+        expect(new TextRopeCursor(first.toMeasuredRope().getCursor(1), first).snapshot()).toBe(first);
+        expect(new TextRopeCursor(second.toMeasuredRope().getCursor(1)).snapshot().asString()).toBe("gamma");
+    });
+
+    test("rope ranges refuse a bare string so astral text cannot enter as one element", () => {
+        const clef = "\u{1D11E}";
+        const rope = Rope.fromText("ab");
+        expect(() => rope.getCursor(1).insertRange(clef)).toThrow(TypeError);
+        expect(() => rope.insertRange(1, clef)).toThrow(TypeError);
+
+        const inserted = rope.getCursor(1).insertRange(clef.split(""));
+        expect(inserted.snapshot().size).toBe(4);
+        expect(inserted.position).toBe(3);
+        expect(inserted.snapshot().toArray().join("")).toBe(`a${clef}b`);
+
+        const policy = { identity: 0, combine: (left: number, right: number): number => left + right, measure: (_value: string): number => 1 };
+        expect(() => MeasuredRope.from(["a", "b"], policy).getCursor(1).insertRange(clef)).toThrow(TypeError);
+
+        const text = TextRope.fromText("ab").getCursor(1).insert(clef);
+        expect(text.snapshot().size).toBe(4);
+        expect(text.snapshot().asString()).toBe(`a${clef}b`);
+    });
+
+    test("rope cursors spell length size and retain count as an alias", () => {
+        const positional = Rope.fromText("abc").getCursor(1);
+        expect([positional.size, positional.count]).toEqual([3, 3]);
+        const measured = MeasuredRope.from([2, 3, 5], new NumberSumMeasure()).getCursor(1);
+        expect([measured.size, measured.count]).toEqual([3, 3]);
+        const text = TextRope.fromText("abc").getCursor(1);
+        expect([text.size, text.count]).toEqual([3, 3]);
     });
 });
 

@@ -1,6 +1,23 @@
 import { FingerTree, PersistentDeque } from "./core.js";
 import type { MeasurePolicy } from "./measures.js";
 
+/**
+ * Materializes a rope range argument exactly once, rejecting a bare `string`.
+ *
+ * `Rope.fromText` and `TextRope.fromText` split on `""`, so a text rope element is one UTF-16 code
+ * unit. Spreading a `string` instead yields code points, which would store an astral character as a
+ * single two-unit element and desynchronize every position, size, measure, and line/column derived
+ * from the rope. The generic signature cannot split on the caller's behalf because `T` is arbitrary
+ * and a rope of whole strings is a legitimate instantiation, so the ambiguous argument is refused
+ * rather than guessed: callers pass `text.split("")`, or use `TextRopeCursor.insert`, which splits.
+ */
+function materializeRopeRange<T>(values: Iterable<T>): T[] {
+    if (typeof values === "string") {
+        throw new TypeError("Rope ranges are UTF-16 code units; pass text.split(\"\") or use TextRopeCursor.insert.");
+    }
+    return [...values];
+}
+
 /** Persistent positional rope. */
 export class Rope<T> implements Iterable<T> {
     readonly #items: PersistentDeque<T>;
@@ -24,8 +41,9 @@ export class Rope<T> implements Iterable<T> {
     public setItem(index: number, value: T): Rope<T> | undefined { const next = this.#items.setItem(index, value); return next === undefined ? undefined : next === this.#items ? this : new Rope(next); }
     public insertAt(index: number, value: T): Rope<T> | undefined { const next = this.#items.insertAt(index, value); return next === undefined ? undefined : new Rope(next); }
     public insertRange(index: number, values: Iterable<T>): Rope<T> | undefined {
+        const materialized = materializeRopeRange(values);
         const split = this.#items.splitAt(index); if (split === undefined) return undefined;
-        return new Rope(split.left.concat(PersistentDeque.from(values)).concat(split.right));
+        return new Rope(split.left.concat(PersistentDeque.from(materialized)).concat(split.right));
     }
     public removeAt(index: number): Rope<T> | undefined { const next = this.#items.removeAt(index); return next === undefined ? undefined : new Rope(next); }
     public removeRange(index: number, count: number): Rope<T> | undefined {
@@ -76,8 +94,9 @@ export class MeasuredRope<T, M> implements Iterable<T> {
     public setItem(index: number, value: T): MeasuredRope<T, M> | undefined { const next = this.#items.setItem(index, value); return next === undefined ? undefined : new MeasuredRope(next, this.policy); }
     public insertAt(index: number, value: T): MeasuredRope<T, M> | undefined { const next = this.#items.insertAt(index, value); return next === undefined ? undefined : new MeasuredRope(next, this.policy); }
     public insertRange(index: number, values: Iterable<T>): MeasuredRope<T, M> | undefined {
+        const materialized = materializeRopeRange(values);
         const split = this.splitAt(index); if (split === undefined) return undefined;
-        return split.left.concat(MeasuredRope.from(values, this.policy)).concat(split.right);
+        return split.left.concat(MeasuredRope.from(materialized, this.policy)).concat(split.right);
     }
     public removeAt(index: number): MeasuredRope<T, M> | undefined { const next = this.#items.removeAt(index); return next === undefined ? undefined : new MeasuredRope(next, this.policy); }
     public removeRange(index: number, count: number): MeasuredRope<T, M> | undefined {
@@ -117,6 +136,18 @@ export class TextRope implements Iterable<string> {
     public static empty(): TextRope { return new TextRope(MeasuredRope.empty(newlineMeasure)); }
     public static fromText(text: string): TextRope { return new TextRope(MeasuredRope.from(text.split(""), newlineMeasure)); }
     public static fromCharacters(characters: Iterable<string>): TextRope { return new TextRope(MeasuredRope.from(characters, newlineMeasure)); }
+    /**
+     * Wraps an existing newline-measured rope in O(1) without rebuilding it.
+     *
+     * Unlike {@link fromCharacters}, this allocates no nodes and invokes no measure callbacks, so a
+     * cursor edit keeps the structural sharing its underlying persistent edit already established.
+     * The argument must carry the shared newline measure policy, which is the only policy under
+     * which the cached line counts this facade reads are meaningful.
+     */
+    public static fromMeasuredRope(characters: MeasuredRope<string, number>): TextRope {
+        if (characters.policy !== newlineMeasure) throw new TypeError("TextRope requires the shared newline measure policy.");
+        return new TextRope(characters);
+    }
     public getCursor(position = 0): TextRopeCursor { return new TextRopeCursor(this.#characters.getCursor(position), this); }
     public get size(): number { return this.#characters.size; }
     public get isEmpty(): boolean { return this.#characters.isEmpty; }
@@ -170,19 +201,21 @@ export class RopeCursor<T> {
     public constructor(readonly rope: Rope<T>, readonly position: number = 0) {
         if (!Number.isInteger(position) || position < 0 || position > rope.size) throw new RangeError("Cursor position is outside the rope.");
     }
-    public get count(): number { return this.rope.size; }
+    public get size(): number { return this.rope.size; }
+    /** Retained alias for {@link size}, which is how every other cursor in this package spells length. */
+    public get count(): number { return this.size; }
     public get isAtStart(): boolean { return this.position === 0; }
-    public get isAtEnd(): boolean { return this.position === this.count; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
     public peekPrevious(): T | undefined { return this.position === 0 ? undefined : this.rope.get(this.position - 1); }
-    public peekNext(): T | undefined { return this.position === this.count ? undefined : this.rope.get(this.position); }
+    public peekNext(): T | undefined { return this.position === this.size ? undefined : this.rope.get(this.position); }
     public peekPreviousEntry(): RopeCursorPeek<T> | undefined { return this.position === 0 ? undefined : { value: this.rope.get(this.position - 1)! }; }
-    public peekNextEntry(): RopeCursorPeek<T> | undefined { return this.position === this.count ? undefined : { value: this.rope.get(this.position)! }; }
+    public peekNextEntry(): RopeCursorPeek<T> | undefined { return this.position === this.size ? undefined : { value: this.rope.get(this.position)! }; }
     public movePrevious(): RopeCursor<T> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new RopeCursor(this.rope, this.position - 1); }
     public moveNext(): RopeCursor<T> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new RopeCursor(this.rope, this.position + 1); }
     public seek(position: number): RopeCursor<T> { return position === this.position ? this : new RopeCursor(this.rope, position); }
     public insert(value: T): RopeCursor<T> { return new RopeCursor(this.rope.insertAt(this.position, value)!, this.position + 1); }
     public insertRange(values: Iterable<T>): RopeCursor<T> {
-        const materialized = [...values]; if (materialized.length === 0) return this;
+        const materialized = materializeRopeRange(values); if (materialized.length === 0) return this;
         return new RopeCursor(this.rope.insertRange(this.position, materialized)!, this.position + materialized.length);
     }
     public deletePrevious(): RopeCursor<T> { if (this.isAtStart) throw new RangeError("No element precedes the cursor."); return new RopeCursor(this.rope.removeAt(this.position - 1)!, this.position - 1); }
@@ -200,15 +233,17 @@ export class MeasuredRopeCursor<T, M> {
     public constructor(readonly rope: MeasuredRope<T, M>, readonly position: number = 0) {
         if (!Number.isInteger(position) || position < 0 || position > rope.size) throw new RangeError("Cursor position is outside the rope.");
     }
-    public get count(): number { return this.rope.size; }
+    public get size(): number { return this.rope.size; }
+    /** Retained alias for {@link size}, which is how every other cursor in this package spells length. */
+    public get count(): number { return this.size; }
     public get isAtStart(): boolean { return this.position === 0; }
-    public get isAtEnd(): boolean { return this.position === this.count; }
+    public get isAtEnd(): boolean { return this.position === this.size; }
     public get measureBefore(): M { return this.rope.prefixMeasure(this.position)!; }
-    public get measureAfter(): M { return this.rope.slice(this.position, this.count - this.position)!.measure(); }
+    public get measureAfter(): M { return this.rope.slice(this.position, this.size - this.position)!.measure(); }
     public peekPrevious(): T | undefined { return this.position === 0 ? undefined : this.rope.get(this.position - 1); }
-    public peekNext(): T | undefined { return this.position === this.count ? undefined : this.rope.get(this.position); }
+    public peekNext(): T | undefined { return this.position === this.size ? undefined : this.rope.get(this.position); }
     public peekPreviousEntry(): RopeCursorPeek<T> | undefined { return this.position === 0 ? undefined : { value: this.rope.get(this.position - 1)! }; }
-    public peekNextEntry(): RopeCursorPeek<T> | undefined { return this.position === this.count ? undefined : { value: this.rope.get(this.position)! }; }
+    public peekNextEntry(): RopeCursorPeek<T> | undefined { return this.position === this.size ? undefined : { value: this.rope.get(this.position)! }; }
     public movePrevious(): MeasuredRopeCursor<T, M> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new MeasuredRopeCursor(this.rope, this.position - 1); }
     public moveNext(): MeasuredRopeCursor<T, M> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new MeasuredRopeCursor(this.rope, this.position + 1); }
     public seek(position: number): MeasuredRopeCursor<T, M> { return position === this.position ? this : new MeasuredRopeCursor(this.rope, position); }
@@ -217,11 +252,11 @@ export class MeasuredRopeCursor<T, M> {
     }
     public searchByMeasure(predicate: (measure: M) => boolean): MeasuredRopeCursorSearch<T, M> {
         const located = this.rope.locateByMeasure(predicate);
-        return { cursor: this.seek(located.found ? located.index : this.count), found: located.found };
+        return { cursor: this.seek(located.found ? located.index : this.size), found: located.found };
     }
     public insert(value: T): MeasuredRopeCursor<T, M> { return new MeasuredRopeCursor(this.rope.insertAt(this.position, value)!, this.position + 1); }
     public insertRange(values: Iterable<T>): MeasuredRopeCursor<T, M> {
-        const materialized = [...values]; if (materialized.length === 0) return this;
+        const materialized = materializeRopeRange(values); if (materialized.length === 0) return this;
         return new MeasuredRopeCursor(this.rope.insertRange(this.position, materialized)!, this.position + materialized.length);
     }
     public deletePrevious(): MeasuredRopeCursor<T, M> { if (this.isAtStart) throw new RangeError("No element precedes the cursor."); return new MeasuredRopeCursor(this.rope.removeAt(this.position - 1)!, this.position - 1); }
@@ -237,8 +272,24 @@ export class MeasuredRopeCursor<T, M> {
 /** Text-specialized measured cursor with UTF-16 line/column navigation. */
 export class TextRopeCursor {
     #snapshot: TextRope | undefined;
-    public constructor(readonly cursor: MeasuredRopeCursor<string, number>, snapshot?: TextRope) { this.#snapshot = snapshot; }
-    public get count(): number { return this.cursor.count; }
+    /**
+     * Binds a measured character cursor to its own text version.
+     *
+     * A supplied `snapshot` must be the very version the cursor is anchored to. Both parameters are
+     * public, so without this check a caller could pair a cursor with an unrelated document and have
+     * {@link snapshot}, {@link column}, {@link seekLineColumn}, and {@link searchLineColumn} answer
+     * against text the cursor does not describe. Omitting the argument is always safe: the text
+     * facade is then derived on demand.
+     */
+    public constructor(readonly cursor: MeasuredRopeCursor<string, number>, snapshot?: TextRope) {
+        if (snapshot !== undefined && snapshot.toMeasuredRope() !== cursor.snapshot()) {
+            throw new TypeError("Text cursor snapshot must be the version the measured cursor is anchored to.");
+        }
+        this.#snapshot = snapshot;
+    }
+    public get size(): number { return this.cursor.size; }
+    /** Retained alias for {@link size}, which is how every other cursor in this package spells length. */
+    public get count(): number { return this.size; }
     public get position(): number { return this.cursor.position; }
     public get line(): number { return this.cursor.measureBefore; }
     public get column(): number { return this.position - this.snapshot().lineStartOffset(this.line)!; }
@@ -252,7 +303,11 @@ export class TextRopeCursor {
     public seekLineColumn(line: number, column: number): TextRopeCursor {
         const offset = this.snapshot().offsetOf(line, column); if (offset === undefined) throw new RangeError("Invalid line/column."); return this.seek(offset);
     }
-    public insert(text: string): TextRopeCursor { return new TextRopeCursor(this.cursor.insertRange(text.split(""))); }
+    /** Inserts `text` as UTF-16 code units; empty text is a no-op that preserves cursor and snapshot identity. */
+    public insert(text: string): TextRopeCursor {
+        const edited = this.cursor.insertRange(text.split(""));
+        return edited === this.cursor ? this : new TextRopeCursor(edited);
+    }
     public deletePrevious(): TextRopeCursor { return new TextRopeCursor(this.cursor.deletePrevious()); }
     public deleteNext(): TextRopeCursor { return new TextRopeCursor(this.cursor.deleteNext()); }
     public replaceNext(value: string): TextRopeCursor {
@@ -261,5 +316,6 @@ export class TextRopeCursor {
     public searchLineColumn(line: number, column: number): TextRopeCursorSearch {
         const offset = this.snapshot().offsetOf(line, column); return offset === undefined ? { cursor: this, found: false } : { cursor: this.seek(offset), found: true };
     }
-    public snapshot(): TextRope { return this.#snapshot ??= TextRope.fromCharacters(this.cursor.snapshot()); }
+    /** Returns the retained text version, wrapping the measured rope in O(1) rather than rebuilding it. */
+    public snapshot(): TextRope { return this.#snapshot ??= TextRope.fromMeasuredRope(this.cursor.snapshot()); }
 }

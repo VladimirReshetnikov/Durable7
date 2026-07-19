@@ -125,6 +125,17 @@ export class IntervalTree<T> implements Iterable<Interval<T>> {
         const index = this.#indexOf(interval); if (index < 0) return undefined;
         return { tree: new IntervalTree(this.#intervals.removeAt(index)!, this.comparator, this.#measure), interval: this.#intervals.at(index)! };
     }
+    /**
+     * Removes the interval occupying `rank` in low-endpoint order.
+     *
+     * Deleting by rank preserves the surrounding order, so the result is produced by one logarithmic
+     * path-copying removal that shares the untouched structure rather than by reinserting the
+     * remaining intervals. Returns `undefined` when `rank` is not an occupied position.
+     */
+    public removeAt(rank: number): IntervalTree<T> | undefined {
+        const next = this.#intervals.removeAt(rank);
+        return next === undefined ? undefined : new IntervalTree(next, this.comparator, this.#measure);
+    }
     #nextOverlap(probe: Interval<T>, source: MeasuredSequence<Interval<T>, IntervalSummary<T>>): readonly [Interval<T>, MeasuredSequence<Interval<T>, IntervalSummary<T>>] | undefined {
         const located = source.locate((summary) => summary.maximumHigh !== undefined && this.comparator(summary.maximumHigh, probe.low) >= 0);
         if (!located.found || this.comparator(located.value!.low, probe.high) > 0) return undefined;
@@ -198,9 +209,7 @@ export class IntervalTreeCursor<T> {
     public deletePrevious(): IntervalTreeCursor<T> { if (this.isAtStart) throw new RangeError("No occurrence precedes the cursor."); return this.deleteAt(this.position - 1); }
     public deleteNext(): IntervalTreeCursor<T> { if (this.isAtEnd) throw new RangeError("No occurrence follows the cursor."); return this.deleteAt(this.position); }
     private deleteAt(rank: number): IntervalTreeCursor<T> {
-        const values = this.tree.toArray(); values.splice(rank, 1); values.reverse();
-        const tree = IntervalTree.from(values, this.tree.comparator);
-        return new IntervalTreeCursor(tree, rank < this.position ? this.position - 1 : this.position);
+        return new IntervalTreeCursor(this.tree.removeAt(rank)!, rank < this.position ? this.position - 1 : this.position);
     }
     public snapshot(): IntervalTree<T> { return this.tree; }
 }

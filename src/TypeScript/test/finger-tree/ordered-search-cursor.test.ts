@@ -91,6 +91,37 @@ describe("ordered search cursors", () => {
         expect(mapOverlap.cursor.seekNextOverlap(new Interval(4, 9)).found).toBe(true);
     });
 
+    test("bag and interval cursor deletion shares structure instead of rebuilding", () => {
+        const ordinals = Array.from({ length: 200 }, (_, index) => index);
+        const bag = SortedBag.from(ordinals);
+        const deleted = bag.cursorAt(100).deleteNext();
+        expect(deleted.snapshot().toArray()).toEqual(ordinals.filter((value) => value !== 100));
+        expect(deleted.snapshot().sharesStorageWith(bag)).toBe(true);
+        expect(deleted.snapshot().comparator).toBe(bag.comparator);
+        expect(deleted.position).toBe(100);
+        expect(bag.cursorAt(100).deletePrevious().position).toBe(99);
+
+        const spans = ordinals.slice(0, 100).map((low) => new Interval(low, low + 5));
+        const tree = IntervalTree.from(spans);
+        const trimmed = tree.cursorAt(50).deleteNext();
+        expect(trimmed.snapshot().toArray()).toEqual(spans.filter((span) => span.low !== 50));
+        expect(trimmed.snapshot().sharesStorageWith(tree)).toBe(true);
+        expect(trimmed.snapshot().comparator).toBe(tree.comparator);
+        expect(trimmed.position).toBe(50);
+    });
+
+    test("interval cursor deletion keeps front-of-equal-low placement among an equal run", () => {
+        const first = new Interval(1, 5);
+        const middle = new Interval(1, 9);
+        const last = new Interval(1, 5);
+        const tree = IntervalTree.empty<number>().insert(first).insert(middle).insert(last);
+        expect(tree.toArray()).toEqual([last, middle, first]);
+        expect(tree.cursorAt(0).deleteNext().snapshot().toArray()).toEqual([middle, first]);
+        expect(tree.cursorAt(1).deleteNext().snapshot().toArray()).toEqual([last, first]);
+        expect(tree.cursorAt(3).deletePrevious().snapshot().toArray()).toEqual([last, middle]);
+        expect(tree.removeAt(3)).toBeUndefined();
+    });
+
     test("chunked bit cursor uses population ranks and identity-preserving present adds", () => {
         const bits = PersistentChunkedBitSet.from([1, 63, 64, 130]);
         const cursor = bits.cursorAtOrAfter(62);

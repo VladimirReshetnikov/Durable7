@@ -57,6 +57,18 @@ export class SortedBag<T> implements Iterable<T> {
         if (this.comparator(low, high) > 0) return SortedBag.empty(this.comparator);
         return this.getRange(this.countLessThan(low), this.countAtMost(high) - this.countLessThan(low))!;
     }
+    /**
+     * Removes the occurrence at `rank` through the ordinary measured-sequence primitive.
+     *
+     * @internal Exists so `SortedBagCursor` can delete by rank in O(log n) with path copying; the
+     * private element sequence is otherwise unreachable from the cursor class. Element order is
+     * already sorted, so no re-sort or rebuild is implied. Returns `undefined` for an out-of-range
+     * rank, exactly as the underlying sequence does.
+     */
+    public cursorRemoveAt(rank: number): SortedBag<T> | undefined {
+        const next = this.#items.removeAt(rank);
+        return next === undefined ? undefined : new SortedBag(next, this.comparator);
+    }
     public cursorAt(position = 0): SortedBagCursor<T> { return new SortedBagCursor(this, position); }
     public cursorAtLowerBound(value: T): SortedBagCursor<T> { return this.cursorAt(this.countLessThan(value)); }
     public cursorAtUpperBound(value: T): SortedBagCursor<T> { return this.cursorAt(this.countAtMost(value)); }
@@ -222,8 +234,7 @@ export class SortedBagCursor<T> {
     public deletePrevious(): SortedBagCursor<T> { if (this.isAtStart) throw new RangeError("No occurrence precedes the cursor."); return this.deleteAt(this.position - 1); }
     public deleteNext(): SortedBagCursor<T> { if (this.isAtEnd) throw new RangeError("No occurrence follows the cursor."); return this.deleteAt(this.position); }
     private deleteAt(rank: number): SortedBagCursor<T> {
-        const values = this.bag.toArray(); values.splice(rank, 1);
-        return new SortedBagCursor(SortedBag.from(values, this.bag.comparator), rank < this.position ? this.position - 1 : this.position);
+        return new SortedBagCursor(this.bag.cursorRemoveAt(rank)!, rank < this.position ? this.position - 1 : this.position);
     }
     public snapshot(): SortedBag<T> { return this.bag; }
 }
