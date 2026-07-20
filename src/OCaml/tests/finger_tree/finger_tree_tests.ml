@@ -29,6 +29,44 @@ let test_measured_sequence () =
       Alcotest.(check int) "located value" 5 value
   | None -> Alcotest.fail "measure search missed a satisfying prefix"
 
+let test_measured_tree_stays_balanced () =
+  (* Repeated end-insertion must keep the weight-balance invariant, so every descent stays
+     logarithmic. Before [join] rebalanced on the way up, snoc/cons built a tree of depth ~n/5;
+     [validate] now enforces the balance invariant, so an unbalanced spine fails here. *)
+  let n = 5000 in
+  let snoc_built =
+    let tree = ref (Measured_tree.empty Measures.int_sum) in
+    for index = 0 to n - 1 do
+      tree := Measured_tree.snoc !tree index
+    done;
+    !tree
+  in
+  Alcotest.(check int) "snoc length" n (Measured_tree.length snoc_built);
+  check_int_list "snoc order" (List.init n (fun index -> index)) (Measured_tree.to_list snoc_built);
+  Alcotest.(check (result unit string))
+    "snoc balanced" (Ok ()) (Measured_tree.validate snoc_built);
+  let cons_built =
+    let tree = ref (Measured_tree.empty Measures.int_sum) in
+    for index = n - 1 downto 0 do
+      tree := Measured_tree.cons index !tree
+    done;
+    !tree
+  in
+  check_int_list "cons order" (List.init n (fun index -> index)) (Measured_tree.to_list cons_built);
+  Alcotest.(check (result unit string))
+    "cons balanced" (Ok ()) (Measured_tree.validate cons_built);
+  (* Front insertion repeatedly stresses split + join; it too must stay balanced. *)
+  let front_inserted =
+    let tree = ref (Measured_tree.of_list Measures.int_sum [ -1 ]) in
+    for index = 0 to n - 2 do
+      tree := Result.get_ok (Measured_tree.insert_at 1 index !tree)
+    done;
+    !tree
+  in
+  Alcotest.(check int) "front-insert length" n (Measured_tree.length front_inserted);
+  Alcotest.(check (result unit string))
+    "front-insert balanced" (Ok ()) (Measured_tree.validate front_inserted)
+
 let test_reversible_deque () =
   let forward = Reversible_deque.of_list [ 1; 2; 3; 4 ] in
   let reversed = Reversible_deque.reverse forward in
@@ -620,6 +658,8 @@ let () =
         [
           Alcotest.test_case "deque persistence" `Quick test_deque_persistence;
           Alcotest.test_case "measured search" `Quick test_measured_sequence;
+          Alcotest.test_case "measured tree stays balanced" `Quick
+            test_measured_tree_stays_balanced;
           Alcotest.test_case "reversible facade" `Quick test_reversible_deque;
           Alcotest.test_case "deque list model" `Quick test_deque_model;
           Alcotest.test_case "sorted collections" `Quick test_sorted_collections;

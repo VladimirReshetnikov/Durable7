@@ -26,20 +26,66 @@ let make_node policy left right =
         left,
         right )
 
+(* Weight-balanced reconstruction parameters (Hirai and Yamamoto, "Balancing
+   weight-balanced trees", JFP 2011; the delta = 3, gamma = 2 pair Haskell's
+   containers library uses for its proven [link]/[link2]). [join] descends the
+   heavier spine and this constructor restores balance on the way back up with a
+   single or double rotation. Rotations preserve in-order, and the measure monoid
+   is associative, so regrouping through [make_node] recomputes the identical
+   cached measure and length. Without this step [make_node] alone never rebalances,
+   so repeated end-insertion builds a tree of depth proportional to its length. *)
+let balance_delta = 3
+let balance_gamma = 2
+
+let balance policy left right =
+  let left_length = node_length left in
+  let right_length = node_length right in
+  if right_length > balance_delta * left_length then
+    match right with
+    | Node (_, _, right_left, right_right) ->
+        if node_length right_left < balance_gamma * node_length right_right then
+          (* single left rotation *)
+          make_node policy (make_node policy left right_left) right_right
+        else (
+          (* double left rotation *)
+          match right_left with
+          | Node (_, _, right_left_left, right_left_right) ->
+              make_node policy
+                (make_node policy left right_left_left)
+                (make_node policy right_left_right right_right)
+          | Empty | Leaf _ -> make_node policy (make_node policy left right_left) right_right)
+    | Empty | Leaf _ -> make_node policy left right
+  else if left_length > balance_delta * right_length then
+    match left with
+    | Node (_, _, left_left, left_right) ->
+        if node_length left_right < balance_gamma * node_length left_left then
+          (* single right rotation *)
+          make_node policy left_left (make_node policy left_right right)
+        else (
+          (* double right rotation *)
+          match left_right with
+          | Node (_, _, left_right_left, left_right_right) ->
+              make_node policy
+                (make_node policy left_left left_right_left)
+                (make_node policy left_right_right right)
+          | Empty | Leaf _ -> make_node policy left_left (make_node policy left_right right))
+    | Empty | Leaf _ -> make_node policy left right
+  else make_node policy left right
+
 let rec join policy left right =
   let left_length = node_length left in
   let right_length = node_length right in
   if left_length = 0 then right
   else if right_length = 0 then left
-  else if left_length > (4 * right_length) + 1 then
+  else if left_length > balance_delta * right_length then
     match left with
     | Node (_, _, left_left, left_right) ->
-        make_node policy left_left (join policy left_right right)
+        balance policy left_left (join policy left_right right)
     | Empty | Leaf _ -> make_node policy left right
-  else if right_length > (4 * left_length) + 1 then
+  else if right_length > balance_delta * left_length then
     match right with
     | Node (_, _, right_left, right_right) ->
-        make_node policy (join policy left right_left) right_right
+        balance policy (join policy left right_left) right_right
     | Empty | Leaf _ -> make_node policy left right
   else make_node policy left right
 
@@ -213,6 +259,15 @@ let validate tree =
         | Ok left_length, Ok right_length ->
             if cached_length <> left_length + right_length then
               Error "cached sequence length is invalid"
+            else if
+              left_length > (balance_delta * right_length) + 1
+              || right_length > (balance_delta * left_length) + 1
+            then
+              (* A weight-balanced node keeps its two subtree lengths within [balance_delta]
+                 (plus one unit of slack for the smallest trees). This guards logarithmic depth:
+                 without it, repeated end-insertion through a non-rotating join degrades every
+                 descent to linear time. *)
+              Error "weight-balance invariant is violated"
             else Ok cached_length)
   in
   (* Generic measures need not support equality, so validation recomputes shape and length while
