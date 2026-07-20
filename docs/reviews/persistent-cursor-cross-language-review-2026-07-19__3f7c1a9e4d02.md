@@ -487,6 +487,17 @@ test uses the balanced `of_list` builder, so the suite cannot see it.
 before acting. If confirmed, the repair is an Adams-style rotation-based `balance` smart constructor
 plus a weight-invariant assertion in `validate` — not a one-line change.
 
+**Resolved (HEAD e558fe4).** Reproduced against the shipped module: repeated `snoc`/`cons` produced
+depth ≈ n/5 (n=16384 → depth 3281) while balanced `of_list` gave log₂(n)+1. Fixed exactly as
+predicted: `join` now restores balance on the way back up through a weight-balanced constructor with
+single/double rotations (Hirai–Yamamoto δ=3, γ=2), and `validate` now enforces the weight-balance
+invariant. Verified before landing with a standalone driver (depth falls to ≈1.5·log₂(n) across
+snoc/cons/alternating/concat/front-insert/left-deep-concat; 200 000 random mixed operations match a
+list model on contents, length, and measure while staying balanced), and in-tree by a new
+"measured tree stays balanced" test plus the full 59-test suite — every derived collection now builds
+balanced trees, which retroactively validates the `weight-balanced measured-tree substrate` /
+O(log n) claims the OCaml api-notes already made.
+
 ### 5.2 The C FingerTree and Ordered workspaces do not build with the local MSVC toolchain
 
 `.\build.ps1 -Workspace FingerTree -RunTests`, the command documented in `CLAUDE.md`, fails:
@@ -575,9 +586,9 @@ so the review is not read as an open backlog.
   deliberate future change; the write-path abort is now documented.
 - **Haskell ordered-map value-equality field.** Adding it is a breaking API change; the missing
   `SetNextValue` no-op is recorded as a documented deviation.
-- **OCaml `join` rebalancing (§5.1).** Still unverified in-tree; the measured-depth figures came from
-  a mirrored reimplementation and were not reproduced against the shipped module, so no change was
-  made.
+- **OCaml `join` rebalancing (§5.1).** ~~Still unverified in-tree.~~ **Now reproduced against the
+  shipped module and fixed** (HEAD e558fe4) — see §5.1. This was the one deferred *correctness* item;
+  it is closed.
 
 ## Validation Performed
 
