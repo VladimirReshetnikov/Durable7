@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Xml.Linq;
 using Xunit;
@@ -278,16 +280,65 @@ public sealed class OrderedDependencyBoundaryTests
                 yield return item;
     }
 
+    /// <summary>
+    /// Resolves the repository root by asking git for the work-tree top level.
+    /// </summary>
+    /// <remarks>
+    /// Probing for a marker file is brittle: a root document can be deleted, and in a linked
+    /// worktree <c>.git</c> is a file rather than a directory, so a directory probe would miss it.
+    /// <c>git rev-parse --show-toplevel</c> resolves both layouts. The query is anchored with
+    /// <c>-C</c> to the test binary's location because the process working directory is not
+    /// guaranteed to sit inside the work tree. If git is unavailable the solution file, which these
+    /// assertions read anyway, still identifies the root.
+    /// </remarks>
     private static string RepositoryRoot()
     {
+        var gitRoot = GitTopLevel();
+        if (gitRoot is not null)
+            return gitRoot;
+
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "README.md"))
-                && File.Exists(Path.Combine(directory.FullName, "src", "CSharp", "Durable7.sln")))
-            {
+            if (File.Exists(Path.Combine(directory.FullName, "src", "CSharp", "Durable7.sln")))
                 return directory.FullName;
-            }
         }
         throw new InvalidOperationException("Could not locate the Durable7 repository root.");
+    }
+
+    /// <summary>Returns the git work-tree root, or <see langword="null"/> when git cannot answer.</summary>
+    private static string? GitTopLevel()
+    {
+        var startInfo = new ProcessStartInfo("git")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        startInfo.ArgumentList.Add("-C");
+        startInfo.ArgumentList.Add(AppContext.BaseDirectory);
+        startInfo.ArgumentList.Add("rev-parse");
+        startInfo.ArgumentList.Add("--show-toplevel");
+
+        try
+        {
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return null;
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                return null;
+
+            output = output.Trim();
+            // git reports POSIX separators even on Windows; GetFullPath normalizes them.
+            return output.Length == 0 ? null : Path.GetFullPath(output);
+        }
+        catch (Win32Exception)
+        {
+            // git is not installed or not on PATH.
+            return null;
+        }
     }
 }
