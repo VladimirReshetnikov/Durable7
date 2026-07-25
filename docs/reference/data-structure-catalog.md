@@ -201,7 +201,7 @@ proper subrange updates and queries perform logarithmic boundary work.
 
 At the Range shipment checkpoint, both full serialized C# Debug and Release solution builds
 completed with zero warnings and zero errors and passed 1,417/1,417 tests. The current derived-
-structure checkpoint passes 1,503/1,503 in both configurations. No benchmark was run; measurement
+structure checkpoint passes 1,530/1,530 in both configurations. No benchmark was run; measurement
 remains postponed until an isolated session. The single-pass HAMT updates, hash bag, ordered set,
 and range-update sequence ship across all nine languages; the detailed earlier evidence is in the
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
@@ -355,7 +355,7 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 All nine ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
 the historical pre-Range Ordered shipment checkpoint, the full
 serialized C# Release build had zero warnings and zero errors and the complete gate passed
-1,355/1,355 tests; current full-workspace evidence is the 1,503/1,503 Debug and Release derived-
+1,355/1,355 tests; current full-workspace evidence is the 1,530/1,530 Debug and Release derived-
 structure gate recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 

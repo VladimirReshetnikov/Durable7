@@ -51,8 +51,8 @@ The ordered-set shipment's serialized Debug and Release lanes each discovered an
 warnings or errors. The complete serialized C# Release solution built with zero warnings or errors
 and passed all 1,355 tests: Numerics 319, HAMT 292, FingerTree 630, Ordered 62, and Tungsten 52.
 
-The subsequent ordered-map and ordered-multimap development lanes pass 76 of 76 tests in Debug and
-Release. The complete serialized C# gates pass 1,503/1,503 tests after zero-warning, zero-error
+The subsequent ordered-map and ordered-multimap development lanes pass 81 of 81 tests in Debug and
+Release. The complete serialized C# gates pass 1,530/1,530 tests after zero-warning, zero-error
 builds.
 
 Benchmarks are deliberately outside this suite and remain postponed to an isolated machine run.

@@ -122,8 +122,8 @@ The focused lane currently passes 23/23 tests: 8 patch, 7 graph, and 8 indexed-m
 On 2026-07-17 UTC, the complete HAMT project passed 347/347 tests in both the full serialized Debug
 and Release solution gates. The focused new lanes pass 7/7 `PersistentHashMultimapTests`, 9/9
 `PersistentRelationTests`, and 23/23 derived-structure tests. Both complete solution builds finish
-with zero warnings and zero errors, and both full C# gates pass 1,503/1,503 tests. Benchmarks were
-not run.
+with zero warnings and zero errors, and both full C# gates currently pass 1,530/1,530 tests, of
+which the HAMT project contributes 354. Benchmarks were not run.
 
 `PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
 policy retention, configured-value-comparer replacement, first representatives, inverse identity,

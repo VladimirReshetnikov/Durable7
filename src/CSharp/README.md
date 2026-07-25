@@ -74,8 +74,8 @@ CPU, memory, and I/O contention.
 The current C# derived-structure tranche additionally ships `PersistentOrderedMultimap`,
 `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, and
 `PersistentChunkedBitSet`. Complete serialized Debug and Release solution builds both finish with
-zero warnings and zero errors, and both full gates pass 1,503/1,503 tests: 319 Numerics + 347 HAMT
-+ 709 FingerTree + 76 Ordered + 52 Tungsten. The five focused new-structure lanes pass 38/38 tests.
+zero warnings and zero errors, and both full gates pass 1,530/1,530 tests: 319 Numerics + 354 HAMT
++ 724 FingerTree + 81 Ordered + 52 Tungsten. The five focused new-structure lanes pass 38/38 tests.
 Benchmarks were not run.
 
 Cross-language follow-through is complete: the one-descent HAMT operations, hash bag, strict bimap,
