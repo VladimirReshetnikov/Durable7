@@ -48,6 +48,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "durable7-fingertree"
+version = "0.1.0"
+dependencies = [
+ "getrandom",
+ "hmac",
+ "sha2",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "durable7-hamt"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+]
+
+[[package]]
+name = "durable7-ordered"
+version = "0.1.0"
+dependencies = [
+ "durable7-fingertree",
+ "durable7-hamt",
+]
+
+[[package]]
+name = "durable7-range-update"
+version = "0.1.0"
+dependencies = [
+ "durable7-fingertree",
+]
+
+[[package]]
+name = "durable7-tungsten"
+version = "0.1.0"
+dependencies = [
+ "durable7-fingertree",
+ "durable7-hamt",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -106,46 +146,6 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
-
-[[package]]
-name = "durable7-fingertree"
-version = "0.1.0"
-dependencies = [
- "getrandom",
- "hmac",
- "sha2",
- "unicode-segmentation",
-]
-
-[[package]]
-name = "durable7-hamt"
-version = "0.1.0"
-dependencies = [
- "sha2",
-]
-
-[[package]]
-name = "durable7-ordered"
-version = "0.1.0"
-dependencies = [
- "durable7-fingertree",
- "durable7-hamt",
-]
-
-[[package]]
-name = "durable7-range-update"
-version = "0.1.0"
-dependencies = [
- "durable7-fingertree",
-]
-
-[[package]]
-name = "durable7-tungsten"
-version = "0.1.0"
-dependencies = [
- "durable7-fingertree",
- "durable7-hamt",
-]
 
 [[package]]
 name = "typenum"
