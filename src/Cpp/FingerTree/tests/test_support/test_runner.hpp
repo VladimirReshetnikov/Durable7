@@ -14,7 +14,7 @@
 #include <utility>
 #include <vector>
 
-namespace tools::data_structures::finger_tree::tests {
+namespace durable7::finger_tree::tests {
 
 class test_failure final : public std::runtime_error {
 public:
@@ -268,13 +268,13 @@ private:
     std::string current_group_;
 };
 
-} // namespace tools::data_structures::finger_tree::tests
+} // namespace durable7::finger_tree::tests
 
 #define FT_REQUIRE(expression) \
-    ::tools::data_structures::finger_tree::tests::require((expression), #expression)
+    ::durable7::finger_tree::tests::require((expression), #expression)
 
 #define FT_REQUIRE_EQUAL(actual, expected) \
-    ::tools::data_structures::finger_tree::tests::require_equal((actual), (expected), #actual, #expected)
+    ::durable7::finger_tree::tests::require_equal((actual), (expected), #actual, #expected)
 
 #define FT_REQUIRE_THROWS(exception_type, expression) \
-    ::tools::data_structures::finger_tree::tests::require_throws<exception_type>([&] { (void)(expression); }, #expression)
+    ::durable7::finger_tree::tests::require_throws<exception_type>([&] { (void)(expression); }, #expression)

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::thread;
-use tools_data_structures_fingertree::{
+use durable7_fingertree::{
     BrodalOkasakiHeap, NaturalOrderComparer, OrderComparer, OrderPolicy,
 };
 

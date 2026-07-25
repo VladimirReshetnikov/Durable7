@@ -1,5 +1,5 @@
-#include <tools/data_structures/finger_tree/daba_lite.h>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/finger_tree/daba_lite.h>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <stdio.h>
 #include <stdint.h>
@@ -909,7 +909,7 @@ static void run_test(const char* name, void (*test)(void))
 
 int main(void)
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
     run_test("DABA Lite basic FIFO window", test_basic_window);

@@ -16,15 +16,15 @@ import Data.Maybe (listToMaybe)
 import Data.Word (Word8)
 import System.IO.Unsafe (unsafePerformIO)
 
-import Data.Structures.Hamt.Hashable (hash)
-import qualified Data.Structures.Hamt.HashBag as HashBag
-import Data.Structures.Hamt.HashMap (HashPolicy(..))
-import qualified Data.Structures.Hamt.HashMap as HashMap
-import qualified Data.Structures.Hamt.HashMultimap as HashMultimap
-import qualified Data.Structures.Hamt.HashSet as HashSet
-import qualified Data.Structures.Hamt.Relation as Relation
-import qualified Data.Structures.Hamt.Transient as Transient
-import Data.Structures.Hamt.MerkleEncoding
+import Durable7.Hamt.Hashable (hash)
+import qualified Durable7.Hamt.HashBag as HashBag
+import Durable7.Hamt.HashMap (HashPolicy(..))
+import qualified Durable7.Hamt.HashMap as HashMap
+import qualified Durable7.Hamt.HashMultimap as HashMultimap
+import qualified Durable7.Hamt.HashSet as HashSet
+import qualified Durable7.Hamt.Relation as Relation
+import qualified Durable7.Hamt.Transient as Transient
+import Durable7.Hamt.MerkleEncoding
   ( MerkleCodec(..)
   , digestHex
   , hashBytes
@@ -37,11 +37,11 @@ import Data.Structures.Hamt.MerkleEncoding
   , nullableUtf8MerkleCodec
   , parseDigestHex
   )
-import qualified Data.Structures.Hamt.MerkleSearchTree as Merkle
-import qualified Data.Structures.Hamt.Patricia as Patricia
-import qualified Data.Structures.Hamt.PersistentDirectedGraph as DirectedGraph
-import qualified Data.Structures.Hamt.PersistentIndexedMap as IndexedMap
-import qualified Data.Structures.Hamt.PersistentMapPatch as MapPatch
+import qualified Durable7.Hamt.MerkleSearchTree as Merkle
+import qualified Durable7.Hamt.Patricia as Patricia
+import qualified Durable7.Hamt.PersistentDirectedGraph as DirectedGraph
+import qualified Durable7.Hamt.PersistentIndexedMap as IndexedMap
+import qualified Durable7.Hamt.PersistentMapPatch as MapPatch
 import PersistenceTests (runPersistenceTests)
 import BiMapTests (runBiMapTests)
 
@@ -101,7 +101,7 @@ main = do
   testMerkleEncodingAndCore
   runPersistenceTests
   testConcurrentReads
-  putStrLn "tools-data-structures-hamt tests passed"
+  putStrLn "durable7-hamt tests passed"
 
 testPersistentMapPatch :: IO ()
 testPersistentMapPatch = do

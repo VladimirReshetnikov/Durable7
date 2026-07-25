@@ -5,7 +5,7 @@
 - Audience: Maintainers and reviewers of the Rust FingerTree-family port
 - Scope: Public crate shape, checkpoint semantics, and validation entry point
 
-`tools-data-structures-fingertree` is the Rust checkpoint port for the repository's FingerTree
+`durable7-fingertree` is the Rust checkpoint port for the repository's FingerTree
 family. It exposes Rust-native names for the same public families:
 
 - `PersistentDeque<T>`;

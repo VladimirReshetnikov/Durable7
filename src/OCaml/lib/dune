@@ -1,8 +1,8 @@
 (include_subdirs qualified)
 
 (library
- (name tools_data_structures)
- (public_name tools-data-structures)
+ (name durable7)
+ (public_name durable7)
  (libraries zarith digestif threads uutf)
  (flags
   (:standard

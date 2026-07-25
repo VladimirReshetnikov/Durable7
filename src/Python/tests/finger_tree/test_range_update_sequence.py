@@ -10,16 +10,16 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures import (
+from durable7 import (
     RangeUpdateAlgebra,
     RangeUpdateSequence,
     RangeUpdateSplit,
     create_range_update_algebra,
 )
-from vladimir_reshetnikov.data_structures.finger_tree import (
+from durable7.finger_tree import (
     range_update_sequence as _range_update_module,
 )
-from vladimir_reshetnikov.data_structures.finger_tree._range_update_diagnostics import (
+from durable7.finger_tree._range_update_diagnostics import (
     _observe_range_update_operations,
 )
 

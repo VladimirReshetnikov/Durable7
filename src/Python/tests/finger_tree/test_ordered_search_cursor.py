@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from vladimir_reshetnikov.data_structures.finger_tree import (
+from durable7.finger_tree import (
     CanonicalSortedSet,
     Interval,
     IntervalTree,
@@ -18,7 +18,7 @@ from vladimir_reshetnikov.data_structures.finger_tree import (
     SortedSet,
     ZipTreeRankPolicy,
 )
-from vladimir_reshetnikov.data_structures.finger_tree import (
+from durable7.finger_tree import (
     canonical_sorted_set as _canonical_module,
 )
 

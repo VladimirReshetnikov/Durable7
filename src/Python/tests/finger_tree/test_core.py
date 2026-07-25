@@ -5,28 +5,28 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.finger_tree.core import (
+from durable7.finger_tree.core import (
     FingerTree,
     MeasuredItemSplit,
     MeasuredSplit,
     PersistentDeque,
     ReversibleDeque,
 )
-from vladimir_reshetnikov.data_structures.finger_tree.measured_sequence import (
+from durable7.finger_tree.measured_sequence import (
     MeasuredSequence,
     SequenceSplit,
 )
-from vladimir_reshetnikov.data_structures.finger_tree.measures import (
+from durable7.finger_tree.measures import (
     MaxMeasure,
     MinMeasure,
     NumberSumMeasure,
 )
-from vladimir_reshetnikov.data_structures.finger_tree.priority_interval import (
+from durable7.finger_tree.priority_interval import (
     Interval,
     IntervalTree,
     PriorityQueue,
 )
-from vladimir_reshetnikov.data_structures.finger_tree.sorted import (
+from durable7.finger_tree.sorted import (
     SortedBag,
     SortedMap,
     SortedSet,

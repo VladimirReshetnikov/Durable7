@@ -10,7 +10,7 @@
 > implemented and validated as recorded in the [resolution addendum](#resolution-addendum--2026-07-10).
 > Representative implementation evidence is the C measured-search and facade work in
 > [`fingertree.c`](../../src/C/FingerTree/src/fingertree.c) (`e374c12`, `ca5041d`) and the C++
-> iterator/cost work in [`reversible_deque.hpp`](../../src/Cpp/FingerTree/include/tools/data_structures/finger_tree/reversible_deque.hpp)
+> iterator/cost work in [`reversible_deque.hpp`](../../src/Cpp/FingerTree/include/durable7/finger_tree/reversible_deque.hpp)
 > (`29f1130`, `6120df1`). None of this report's “deferred” labels denotes current pending work.
 
 ## Summary
@@ -30,7 +30,7 @@ Headline results:
   C Tungsten AVL refcount discipline were each traced path-by-path — no leak, double-free,
   use-after-free, or torn publication was found in normal operation.
 - **The real memory-safety bugs lived on error paths and policy boundaries:** the C Tungsten
-  Append/Prepend/Insert error paths destroyed an uninitialized `tds_hamt_map` and double-released
+  Append/Prepend/Insert error paths destroyed an uninitialized `d7_hamt_map` and double-released
   an AVL root; the C HAMT silently stored NULL from failed allocating retain callbacks (exactly how
   the C Tungsten policy drives it) and leaked the whole previous version on aliased in-place
   updates; C++ HAMT iterators dangled when obtained from temporaries.
@@ -60,8 +60,8 @@ Headline results:
 ### High severity
 
 **H-1. C Tungsten error-path double-free and wild destroy** (`src/C/Tungsten/src/tungsten.c`).
-`append`/`prepend`/`insert_at` declared an uninitialized `tds_hamt_map` and ran
-`tds_tungsten_node_release(root); tds_hamt_map_destroy(&index);` unconditionally, but the
+`append`/`prepend`/`insert_at` declared an uninitialized `d7_hamt_map` and ran
+`d7_tungsten_node_release(root); d7_hamt_map_destroy(&index);` unconditionally, but the
 remove-existing helper's failure paths (stamp mismatch, delete OOM, HAMT-remove OOM) returned
 without writing the map — destroying garbage stack memory — and the HAMT-remove failure path
 released the freshly built post-delete AVL root without nulling it, so the caller released it a
@@ -70,13 +70,13 @@ the maps.
 
 **H-2. C HAMT stored NULL from failed allocating retains** (`src/C/Hamt/src/hamt.c`). Allocating
 retain callbacks (the C Tungsten policy is one) report failure by returning NULL; the HAMT stored
-that NULL with `TDS_HAMT_OK`, and a later lookup passed the NULL key to the user hash callback or
+that NULL with `D7_HAMT_OK`, and a later lookup passed the NULL key to the user hash callback or
 memcpy'd from a NULL value — a crash long after the failed operation. Every retain site now maps a
-NULL result for a non-NULL input to `TDS_HAMT_OUT_OF_MEMORY` and unwinds cleanly (the
+NULL result for a non-NULL input to `D7_HAMT_OUT_OF_MEMORY` and unwinds cleanly (the
 api-specification paragraph that documented NULL-as-payload was rewritten to the new contract).
 
 **H-3. C HAMT aliased in-place updates leaked the previous version** (`src/C/Hamt/src/hamt.c`).
-`tds_hamt_map_set(&map, k, v, &map)` — the natural in-place idiom for a value-struct API —
+`d7_hamt_map_set(&map, k, v, &map)` — the natural in-place idiom for a value-struct API —
 compiled and worked but overwrote the source's root reference without releasing it, leaking the
 entire previous version (and all policy-owned payloads) on every call. All map and set mutators
 now release the overwritten version's root when the result aliases the source; the behavior is

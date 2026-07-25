@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-03T18:26:53Z
 - Repository HEAD: 315d9f19500953c69c2b60ccb430e779f1c4226d
 - Audience: Maintainers and reviewers of the Kotlin FingerTree-family port
-- Scope: `tools.datastructures.fingertree` package
+- Scope: `durable7.fingertree` package
 
 This workspace ports the repository FingerTree collection family to Kotlin/JVM. It exposes Kotlin
 names for the public families:

@@ -5,7 +5,7 @@
 - Audience: Maintainers and AI agents working on the Haskell Tungsten-collections port
 - Scope: Cabal package under `src/Haskell/Tungsten`
 
-`tools-data-structures-tungsten` ports the Tungsten `List` and `Association` collection family to
+`durable7-tungsten` ports the Tungsten `List` and `Association` collection family to
 dependency-light Haskell modules:
 
 This is an application-specific leaf port. It may consume the Haskell HAMT and FingerTree packages,
@@ -14,11 +14,11 @@ baseline. Fork reusable mechanics into an independently owned implementation; C#
 only for the sibling Tungsten ports. See the normative
 [application-leaf boundary](../../../docs/reference/tungsten-application-leaf-boundary.md).
 
-- `Data.Structures.Tungsten.List` wraps the Haskell FingerTree deque for persistent list operations.
-- `Data.Structures.Tungsten.Association` composes the Haskell HAMT with an internal balanced
+- `Durable7.Tungsten.List` wraps the Haskell FingerTree deque for persistent list operations.
+- `Durable7.Tungsten.Association` composes the Haskell HAMT with an internal balanced
   stamp-ordered sequence for Tungsten Association ordering, keyed lookup, positional access, slicing,
   relabeling, and sorting.
-- `Data.Structures.Tungsten` re-exports the public collection types.
+- `Durable7.Tungsten` re-exports the public collection types.
 
 Build and test from `src/Haskell`:
 

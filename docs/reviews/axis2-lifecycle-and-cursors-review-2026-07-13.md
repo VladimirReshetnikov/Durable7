@@ -47,15 +47,15 @@ Every load-bearing feasibility claim checks out against the shipped C#:
   retained token is a real per-edited-node memory cost and refuses to hide an O(n) tag-clearing pass
   inside "publication" — the correct discipline.
 - **The transient is genuinely distinct from the shipped `BulkBuilder`.** `CreateBulkBuilder` /
-  `ToImmutable` ([PersistentHashMap.cs:1498](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs))
+  `ToImmutable` ([PersistentHashMap.cs:1498](../../src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs))
   is list/bucket staging that rebuilds canonically — not owner-token copy-on-write over adopted
   persistent nodes. The plan's vocabulary table draws this line correctly.
 - **L4 is grounded.** `SnapshotView.ToPersistentHashMap()` already exists
-  ([ConcurrentHashTrie.cs:777](../../src/CSharp/src/Tools.DataStructures.Hamt/ConcurrentHashTrie.cs)),
+  ([ConcurrentHashTrie.cs:777](../../src/CSharp/src/Durable7.Hamt/ConcurrentHashTrie.cs)),
   so "retain it and add `SnapshotView.Freeze()`" is a small, well-scoped addition.
 - **The Rope chunk model supports the cursor.** `Rope<T>` already maintains `MinChunkSize`/
   `MaxChunkSize`, a chunk-count ≈ n/Target invariant, boundary coalescing, and `TryViewLeft`/
-  `TryViewRight` endpoint views ([Rope.cs](../../src/CSharp/src/Tools.DataStructures.FingerTree/Rope.cs)).
+  `TryViewRight` endpoint views ([Rope.cs](../../src/CSharp/src/Durable7.FingerTree/Rope.cs)).
   The cursor's carry/flush model (at most one partial carry per side, flush only target-sized chunks,
   pull via endpoint views, pack carries at `Snapshot()`) maps directly onto that invariant, and its
   motivating inefficiency is real: `AddFirst`/`AddLast` are documented as "copies the boundary chunk

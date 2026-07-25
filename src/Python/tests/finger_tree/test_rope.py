@@ -6,12 +6,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.finger_tree.measures import (
+from durable7.finger_tree.measures import (
     IntegerSumMeasure,
     NumberSumMeasure,
     SizeMeasure,
 )
-from vladimir_reshetnikov.data_structures.finger_tree.rope import (
+from durable7.finger_tree.rope import (
     LineColumn,
     MeasuredRope,
     MeasuredRopeCursorSearch,

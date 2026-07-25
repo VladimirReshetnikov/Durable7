@@ -9,7 +9,7 @@
 Import the neutral namespace:
 
 ```csharp
-using Tools.DataStructures.Ordered;
+using Durable7.Ordered;
 ```
 
 ## Ordered Maps

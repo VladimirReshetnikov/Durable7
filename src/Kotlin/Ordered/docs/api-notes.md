@@ -23,7 +23,7 @@ iteration is grouped, pair addition is idempotent, final-value removal contracts
 `pairCount` is a checked `Long` distinct from `keyCount`.
 
 The type is a general-purpose Ordered-owned collection. Production code imports only public
-`tools.datastructures.hamt` and `tools.datastructures.fingertree` APIs. It has no Tungsten
+`durable7.hamt` and `durable7.fingertree` APIs. It has no Tungsten
 dependency, source inclusion, wrapper, subtype, oracle, or semantic coupling.
 
 The type does not override `equals` or `hashCode`. Set equality is explicit through `setEquals`;

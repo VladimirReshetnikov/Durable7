@@ -3,11 +3,11 @@
 - Created (UTC): 2026-07-07T15:05:40Z
 - Repository HEAD: 754f2e474caf2419bfabd5f88565341ddadbf449
 - Audience: Maintainers, consumers, and porters of the C# Tungsten-collections library
-- Scope: Purpose, composition, semantics, and design decisions for `Tools.DataStructures.Tungsten`
+- Scope: Purpose, composition, semantics, and design decisions for `Durable7.Tungsten`
 
 ## What This Library Is
 
-`Tools.DataStructures.Tungsten` ships two immutable, persistent collections whose operation
+`Durable7.Tungsten` ships two immutable, persistent collections whose operation
 surfaces and ordering semantics match Tungsten Language `List` and `Association`:
 
 - `PersistentList<T>` - an ordered sequence facade over the FingerTree family's

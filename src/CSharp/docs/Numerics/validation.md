@@ -4,18 +4,18 @@
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Audience: Maintainers validating the C# Numerics workspace
-- Scope: Local restore, build, test, warning-policy, and coverage guidance for `src/CSharp/src/Tools.Numerics`
+- Scope: Local restore, build, test, warning-policy, and coverage guidance for `src/CSharp/src/Durable7.Numerics`
 
-Use this guide when changing `Tools.Numerics` source, tests, documentation, or project configuration. Pair it with
+Use this guide when changing `Durable7.Numerics` source, tests, documentation, or project configuration. Pair it with
 the [API and behavior reference](api-and-behavior-reference.md) for public semantics and the
 [wide-integer maintainer guidance](wide-integer-maintainer-guidance.md) for cross-width implementation checks.
 
 ## Build Model
 
-`DataStructures.sln` contains:
+`Durable7.sln` contains:
 
-- `src/Tools.Numerics/Tools.Numerics.csproj`, the public library.
-- `tests/Tools.Numerics.Tests/Tools.Numerics.Tests.csproj`, the xUnit test project.
+- `src/Durable7.Numerics/Durable7.Numerics.csproj`, the public library.
+- `tests/Durable7.Numerics.Tests/Durable7.Numerics.Tests.csproj`, the xUnit test project.
 
 `Directory.Build.props` applies the workspace defaults:
 
@@ -34,9 +34,9 @@ The test project references the library project and uses `xunit`, `xunit.runner.
 From `src/CSharp`:
 
 ```powershell
-dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+dotnet restore .\Durable7.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build .\DataStructures.sln --no-restore --disable-build-servers -m:1 -nr:false `
+dotnet build .\Durable7.sln --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1
 ```
@@ -48,8 +48,8 @@ All three phases are serialized; do not overlap them with another workspace buil
 
 ## Test Coverage
 
-`tests/Tools.Numerics.Tests/` covers the xUnit suite. See the
-[tests README](../../tests/Tools.Numerics.Tests/README.md) for source-file grouping and structure.
+`tests/Durable7.Numerics.Tests/` covers the xUnit suite. See the
+[tests README](../../tests/Durable7.Numerics.Tests/README.md) for source-file grouping and structure.
 
 The suite covers:
 

@@ -2,7 +2,7 @@
 
 - Created (UTC): 2026-07-03T00:00:00Z
 - Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
-- Audience: Maintainers and reviewers of `tools-data-structures-hamt`
+- Audience: Maintainers and reviewers of `durable7-hamt`
 - Scope: Documentation index for the Rust HAMT workspace
 
 The Rust HAMT crate ports the repository persistent HAMT map/set/bag/bimap contract to safe Rust values

@@ -17,25 +17,25 @@ import Data.Word (Word32)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName (eqStableName, makeStableName)
 
-import qualified Data.Structures.FingerTree.Deque as Deque
-import qualified Data.Structures.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
-import qualified Data.Structures.FingerTree.IntervalTree as IntervalTree
-import qualified Data.Structures.FingerTree.IntervalMap as IntervalMap
-import qualified Data.Structures.FingerTree.Measured as FT
-import Data.Structures.FingerTree.Measured (ViewL(..), ViewR(..))
-import Data.Structures.FingerTree.Measures (Elem(..), Size(..))
-import qualified Data.Structures.FingerTree.MeasuredRope as MeasuredRope
-import qualified Data.Structures.FingerTree.PriorityQueue as PriorityQueue
-import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearchQueue
-import qualified Data.Structures.FingerTree.PersistentChunkedBitSet as ChunkedBitSet
-import qualified Data.Structures.FingerTree.ReversibleDeque as ReversibleDeque
-import qualified Data.Structures.FingerTree.Rope as Rope
-import qualified Data.Structures.FingerTree.Rope.Text as RopeText
-import qualified Data.Structures.FingerTree.RrbVector as RrbVector
-import qualified Data.Structures.FingerTree.RangeUpdateSequence as RangeUpdate
-import qualified Data.Structures.FingerTree.SortedBag as SortedBag
-import qualified Data.Structures.FingerTree.SortedMap as SortedMap
-import qualified Data.Structures.FingerTree.SortedSet as SortedSet
+import qualified Durable7.FingerTree.Deque as Deque
+import qualified Durable7.FingerTree.BrodalOkasakiHeap as BrodalOkasakiHeap
+import qualified Durable7.FingerTree.IntervalTree as IntervalTree
+import qualified Durable7.FingerTree.IntervalMap as IntervalMap
+import qualified Durable7.FingerTree.Measured as FT
+import Durable7.FingerTree.Measured (ViewL(..), ViewR(..))
+import Durable7.FingerTree.Measures (Elem(..), Size(..))
+import qualified Durable7.FingerTree.MeasuredRope as MeasuredRope
+import qualified Durable7.FingerTree.PriorityQueue as PriorityQueue
+import qualified Durable7.FingerTree.PrioritySearchQueue as PrioritySearchQueue
+import qualified Durable7.FingerTree.PersistentChunkedBitSet as ChunkedBitSet
+import qualified Durable7.FingerTree.ReversibleDeque as ReversibleDeque
+import qualified Durable7.FingerTree.Rope as Rope
+import qualified Durable7.FingerTree.Rope.Text as RopeText
+import qualified Durable7.FingerTree.RrbVector as RrbVector
+import qualified Durable7.FingerTree.RangeUpdateSequence as RangeUpdate
+import qualified Durable7.FingerTree.SortedBag as SortedBag
+import qualified Durable7.FingerTree.SortedMap as SortedMap
+import qualified Durable7.FingerTree.SortedSet as SortedSet
 import qualified CanonicalSortedSetTests
 import qualified RangeUpdateSequenceTests
 import qualified OrderedSearchCursorTests
@@ -66,7 +66,7 @@ main = do
   testMeasuredRopeCursor
   testTextRope
   testConcurrentReads
-  putStrLn "tools-data-structures-fingertree tests passed"
+  putStrLn "durable7-fingertree tests passed"
 
 testSequenceCursors :: IO ()
 testSequenceCursors = do
@@ -1597,7 +1597,7 @@ testTextLineCountOverflow = do
   result <- try (evaluate (RopeText.lineCount maximumText))
   assertErrorCallPrefix
     "maximum newline text line count is checked"
-    "Data.Structures.FingerTree.Rope.Text: line count overflow"
+    "Durable7.FingerTree.Rope.Text: line count overflow"
     result
 
 testConcurrentReads :: IO ()
@@ -1760,7 +1760,7 @@ assertMeasuredLengthOverflowNoCallbacks state label action = do
   setMeasureProbeArming state False False
   elementCalls <- readIORef (probeElementCalls state)
   combineCalls <- readIORef (probeCombineCalls state)
-  assertErrorCallPrefix label "Data.Structures.FingerTree.MeasuredRope: length overflow" result
+  assertErrorCallPrefix label "Durable7.FingerTree.MeasuredRope: length overflow" result
   assertEqual (label ++ " element callback count") 0 elementCalls
   assertEqual (label ++ " combine callback count") 0 combineCalls
 
@@ -1812,5 +1812,5 @@ assertLengthOverflow label action = do
     Left exception ->
       assertBool
         (label ++ ": expected the rope length-overflow exception")
-        ("Data.Structures.FingerTree.Rope: length overflow" `List.isPrefixOf` displayException exception)
+        ("Durable7.FingerTree.Rope: length overflow" `List.isPrefixOf` displayException exception)
     Right () -> fail (label ++ ": expected an exception")

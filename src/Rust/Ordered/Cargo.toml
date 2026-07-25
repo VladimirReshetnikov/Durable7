@@ -1,5 +1,5 @@
 [package]
-name = "tools-data-structures-ordered"
+name = "durable7-ordered"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -8,9 +8,9 @@ rust-version.workspace = true
 description = "Neutral persistent insertion-ordered collections for Rust."
 
 [lib]
-name = "tools_data_structures_ordered"
+name = "durable7_ordered"
 path = "src/lib.rs"
 
 [dependencies]
-tools-data-structures-fingertree = { path = "../FingerTree" }
-tools-data-structures-hamt = { path = "../Hamt" }
+durable7-fingertree = { path = "../FingerTree" }
+durable7-hamt = { path = "../Hamt" }

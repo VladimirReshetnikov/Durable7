@@ -1,5 +1,5 @@
-#include <tools/data_structures/finger_tree/persistent_interval_map.h>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/finger_tree/persistent_interval_map.h>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -49,7 +49,7 @@ static void visit_overlap(
 
 int main(void)
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
     ft_value_type int_type;

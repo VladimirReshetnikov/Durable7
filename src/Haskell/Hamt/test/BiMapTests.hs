@@ -6,9 +6,9 @@ import Control.Monad (replicateM)
 import Data.Char (toLower)
 import Data.List (sort)
 
-import qualified Data.Structures.Hamt.BiMap as BiMap
-import Data.Structures.Hamt.HashMap (HashPolicy(..))
-import Data.Structures.Hamt.Hashable (hash)
+import qualified Durable7.Hamt.BiMap as BiMap
+import Durable7.Hamt.HashMap (HashPolicy(..))
+import Durable7.Hamt.Hashable (hash)
 
 runBiMapTests :: IO ()
 runBiMapTests = do

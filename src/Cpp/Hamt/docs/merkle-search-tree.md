@@ -9,9 +9,9 @@
 The C++20 Merkle search tree is an immutable ordered content-addressed map. It is the header-first
 C++ port of the C# reference core and implements the same `mst-sha256-b16-v2` hashing and `MST2`
 block contract. Include
-[`merkle_search_tree.hpp`](../include/Tools/DataStructures/Hamt/merkle_search_tree.hpp); it includes
+[`merkle_search_tree.hpp`](../include/durable7/hamt/merkle_search_tree.hpp); it includes
 the public policy and codec layer from
-[`merkle_encoding.hpp`](../include/Tools/DataStructures/Hamt/merkle_encoding.hpp).
+[`merkle_encoding.hpp`](../include/durable7/hamt/merkle_encoding.hpp).
 
 This document covers the in-memory core and exact wire output. The completed persistence, proof,
 synchronization, and merge layer is specified separately in

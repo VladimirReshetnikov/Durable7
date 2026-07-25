@@ -9,31 +9,31 @@
 `src/C/Hamt` is the C17 port of the persistent HAMT collection family. It provides a type-erased C API
 for immutable unordered collections backed by a hash-array mapped trie:
 
-- `tds_hamt_map`, a persistent map from `void *` keys to `void *` values, including one-descent
+- `d7_hamt_map`, a persistent map from `void *` keys to `void *` values, including one-descent
   `get_or_add` / `add_or_update` factory operations that return the concrete retained value.
-- `tds_hamt_set`, a persistent set wrapper over the map core.
-- `tds_hamt_bag`, a persistent unordered multiset over the map core. Each receiver-policy item
+- `d7_hamt_set`, a persistent set wrapper over the map core.
+- `d7_hamt_bag`, a persistent unordered multiset over the map core. Each receiver-policy item
   class retains its first representative and a positive `int32_t` multiplicity, while the expanded
   total is a checked `int64_t`. The bag exposes expanded, distinct, and entry iteration plus
   receiver-policy union/intersection/difference/sum.
-- `tds_hamt_bi_map`, a strict persistent bijection over independent forward and inverse CHAMP
+- `d7_hamt_bi_map`, a strict persistent bijection over independent forward and inverse CHAMP
   maps. A reference-counted bridge retains separate key/value callback sets and contexts;
   insertion rejects either occupied domain, replacement never displaces another key, and inverse
   construction swaps retained roots in O(1).
-- `tds_hamt_multimap`, a persistent set-valued multimap with independent key/value policies,
+- `d7_hamt_multimap`, a persistent set-valued multimap with independent key/value policies,
   nonempty groups, checked pair counts, and receiver-policy union/intersection/difference.
-- `tds_hamt_relation`, a persistent bidirectional relation maintaining exact forward and inverse
+- `d7_hamt_relation`, a persistent bidirectional relation maintaining exact forward and inverse
   multimaps under failure-atomic pair edits.
-- `tds_hamt_map_patch`, a presence-safe strict patch with preflight application, inversion, and
-  compatible composition; `tds_hamt_directed_graph`, an explicit-vertex graph over a relation; and
-  `tds_hamt_indexed_map`, a primary map with one maintained nonunique secondary index.
-- `tds_hamt_map_transient` / `tds_hamt_set_transient`, explicit one-way edit-session handles over
+- `d7_hamt_map_patch`, a presence-safe strict patch with preflight application, inversion, and
+  compatible composition; `d7_hamt_directed_graph`, an explicit-vertex graph over a relation; and
+  `d7_hamt_indexed_map`, a primary map with one maintained nonunique secondary index.
+- `d7_hamt_map_transient` / `d7_hamt_set_transient`, explicit one-way edit-session handles over
   the persistent CHAMP values. Adoption and terminal publication are O(1) handle operations; point
   edits deliberately reuse the persistent path-copy engine rather than claiming owner-token
   in-place-update performance.
-- `tds_int_map` / `tds_long_map`, explicit-width persistent maps backed by a big-endian Patricia
-  trie, plus `tds_int_set` / `tds_long_set` wrappers.
-- `tds_merkle_search_tree`, a persistent ordered content-addressed map implementing the exact
+- `d7_int_map` / `d7_long_map`, explicit-width persistent maps backed by a big-endian Patricia
+  trie, plus `d7_int_set` / `d7_long_set` wrappers.
+- `d7_merkle_search_tree`, a persistent ordered content-addressed map implementing the exact
   cross-language `mst-sha256-b16-v2` policy and canonical `MST2` block wire contract, with verified
   persistence, bounded import/load, `MSP2` proofs, synchronization planning, and typed three-way
   merge.
@@ -78,13 +78,13 @@ callbacks and callback-owned contexts remain responsible for their own synchroni
 
 ## Layout
 
-- `include/Tools/DataStructures/Hamt/hamt.h` contains the public C API.
-- `include/Tools/DataStructures/Hamt/persistent_hash_bag.h` contains the persistent hash-bag API.
-- `include/Tools/DataStructures/Hamt/persistent_bi_map.h` contains the strict bimap API.
-- `include/Tools/DataStructures/Hamt/persistent_hash_multimap.h` and `persistent_relation.h`
+- `include/durable7/hamt/hamt.h` contains the public C API.
+- `include/durable7/hamt/persistent_hash_bag.h` contains the persistent hash-bag API.
+- `include/durable7/hamt/persistent_bi_map.h` contains the strict bimap API.
+- `include/durable7/hamt/persistent_hash_multimap.h` and `persistent_relation.h`
   contain the set-valued multimap and bidirectional relation APIs.
-- `include/Tools/DataStructures/Hamt/patricia.h` contains the integer Patricia map/set API.
-- `include/Tools/DataStructures/Hamt/merkle_search_tree.h` contains the Merkle policy, codec, tree,
+- `include/durable7/hamt/patricia.h` contains the integer Patricia map/set API.
+- `include/durable7/hamt/merkle_search_tree.h` contains the Merkle policy, codec, tree,
   traversal, diff, wire-block, store, persistence, proof, sync, merge, and validation API.
 - `src/hamt.c` contains the HAMT implementation.
 - `src/persistent_hash_bag.c` contains the map-backed hash-bag implementation.

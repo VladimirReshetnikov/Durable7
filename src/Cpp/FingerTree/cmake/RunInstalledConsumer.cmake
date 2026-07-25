@@ -39,7 +39,7 @@ if(NOT install_result EQUAL 0)
 endif()
 if(
     NOT EXISTS
-    "${install_prefix}/${FINGERTREE_INSTALL_DATAROOTDIR}/licenses/ToolsDataStructuresFingerTree/LICENSE"
+    "${install_prefix}/${FINGERTREE_INSTALL_DATAROOTDIR}/licenses/Durable7FingerTree/LICENSE"
 )
     message(FATAL_ERROR "FingerTree package installation omitted the repository license.")
 endif()

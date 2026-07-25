@@ -1,0 +1,61 @@
+cabal-version: 3.0
+name: durable7-fingertree
+version: 0.1.0.0
+synopsis: Persistent finger-tree data structures and derived collections
+description: Haskell port of the DataStructures repository finger-tree family.
+category: Data
+license: MIT-0
+author: Vladimir Reshetnikov
+maintainer: Vladimir Reshetnikov
+build-type: Simple
+
+library
+  exposed-modules:
+    Durable7.FingerTree
+    Durable7.FingerTree.BrodalOkasakiHeap
+    Durable7.FingerTree.CanonicalSortedSet
+    Durable7.FingerTree.Deque
+    Durable7.FingerTree.IntervalTree
+    Durable7.FingerTree.IntervalMap
+    Durable7.FingerTree.Measured
+    Durable7.FingerTree.MeasuredRope
+    Durable7.FingerTree.Measures
+    Durable7.FingerTree.OrderedSearchCursor
+    Durable7.FingerTree.PriorityQueue
+    Durable7.FingerTree.PrioritySearchQueue
+    Durable7.FingerTree.PersistentChunkedBitSet
+    Durable7.FingerTree.RangeUpdateSequence
+    Durable7.FingerTree.ReversibleDeque
+    Durable7.FingerTree.Rope
+    Durable7.FingerTree.Rope.Text
+    Durable7.FingerTree.RrbVector
+    Durable7.FingerTree.SortedBag
+    Durable7.FingerTree.SortedMap
+    Durable7.FingerTree.SortedSet
+  hs-source-dirs: src
+  build-depends:
+    base >=4.21 && <4.22,
+    array >=0.5 && <0.6,
+    bytestring >=0.12 && <0.13,
+    containers >=0.7 && <0.8,
+    crypton >=1.0.6 && <1.1,
+    memory >=0.18 && <0.19,
+    text >=2.1 && <2.2
+  default-language: Haskell2010
+
+test-suite ft-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test
+  other-modules:
+    CanonicalSortedSetTests
+    OrderedSearchCursorTests
+    RangeUpdateSequenceTests
+  build-depends:
+    base >=4.21 && <4.22,
+    array >=0.5 && <0.6,
+    bytestring >=0.12 && <0.13,
+    containers >=0.7 && <0.8,
+    text >=2.1 && <2.2,
+    durable7-fingertree
+  default-language: Haskell2010

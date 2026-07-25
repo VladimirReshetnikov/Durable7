@@ -6,7 +6,7 @@ import Data.Bits (xor)
 import Data.Int (Int32)
 import Data.Word (Word64)
 
-import Data.Structures.Hamt.MerkleEncoding
+import Durable7.Hamt.MerkleEncoding
   ( MerkleCodec(..)
   , MerkleDigest
   , MerkleSearchTreePolicy
@@ -20,8 +20,8 @@ import Data.Structures.Hamt.MerkleEncoding
   , merkleEmptyDigest
   , nullableUtf8MerkleCodec
   )
-import Data.Structures.Hamt.MerklePersistence
-import qualified Data.Structures.Hamt.MerkleSearchTree as Tree
+import Durable7.Hamt.MerklePersistence
+import qualified Durable7.Hamt.MerkleSearchTree as Tree
 
 type Value = Maybe String
 type TestTree = Tree.MerkleSearchTree Int32 Value

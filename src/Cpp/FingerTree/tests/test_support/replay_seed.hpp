@@ -13,7 +13,7 @@
 #include <system_error>
 #include <vector>
 
-namespace tools::data_structures::finger_tree::tests {
+namespace durable7::finger_tree::tests {
 
 inline constexpr std::string_view replay_seed_environment_variable = "FINGERTREE_REPLAY_SEED";
 
@@ -144,4 +144,4 @@ inline void capture_replay_seed(const std::uint64_t seed)
     return selected;
 }
 
-} // namespace tools::data_structures::finger_tree::tests
+} // namespace durable7::finger_tree::tests

@@ -8,7 +8,7 @@
 This workspace owns the Kotlin/JVM `PersistentOrderedSet<T>`, `PersistentOrderedMap<K, V>`, and
 `PersistentOrderedMultimap<K, V>` ports. They combine equality-class
 membership with durable insertion and explicit-position order while preserving immutable snapshots.
-The public type lives in `tools.datastructures.ordered`.
+The public type lives in `durable7.ordered`.
 
 The workspace is deliberately neutral. Its build consumes only the public Kotlin Hamt and
 FingerTree source roots:

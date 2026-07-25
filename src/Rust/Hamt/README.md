@@ -5,7 +5,7 @@
 - Audience: Maintainers and reviewers of the Rust HAMT port
 - Scope: Public crate shape, semantic parity notes, and validation entry point
 
-`tools-data-structures-hamt` ports the repository HAMT, integer Patricia, and canonical Merkle
+`durable7-hamt` ports the repository HAMT, integer Patricia, and canonical Merkle
 search-tree families to safe Rust. It exposes `PersistentHashMap<K, V, S = RandomState>`,
 `PersistentHashSet<T, S = RandomState>`, their one-way `TransientHashMap` / `TransientHashSet`
 editing sessions, `PersistentHashBag<T, S = RandomState>`,

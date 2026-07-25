@@ -8,7 +8,7 @@
 
 The C17 Merkle search tree is an immutable ordered content-addressed map. It is the type-erased C
 port of the C# reference and implements the exact `mst-sha256-b16-v2` hashing and `MST2` block
-contract. Include [`merkle_search_tree.h`](../include/Tools/DataStructures/Hamt/merkle_search_tree.h)
+contract. Include [`merkle_search_tree.h`](../include/durable7/hamt/merkle_search_tree.h)
 and compile [`merkle_search_tree.c`](../src/merkle_search_tree.c). On Windows link `bcrypt`; on
 non-Windows hosts link OpenSSL Crypto.
 
@@ -18,7 +18,7 @@ and iterative synchronization, and present-null-safe typed three-way merge.
 
 ## Deterministic Policy
 
-A `tds_merkle_policy` binds these four byte strings into one SHA-256 domain:
+A `d7_merkle_policy` binds these four byte strings into one SHA-256 domain:
 
 1. the algorithm identifier `mst-sha256-b16-v2`;
 2. the caller's semantic policy identifier;
@@ -29,7 +29,7 @@ The domain preimage is byte `0x50`, followed by each field as an unsigned big-en
 and its exact bytes. A policy identifier must be non-empty well-formed UTF-8 containing at least one
 non-whitespace code point. Every codec identifier must be well-formed UTF-8 with no Unicode
 whitespace at either edge and end in `-v` plus one or more ASCII decimal digits. Identifiers are
-copied into the policy and therefore need not outlive `tds_merkle_policy_create`.
+copied into the policy and therefore need not outlive `d7_merkle_policy_create`.
 
 The empty-tree preimage is ASCII `MST2`, byte `0`, and the 32-byte domain digest. A key's layer hash
 uses byte `0x4b` with two framed fields: the domain digest and canonical key bytes. Its layer is the
@@ -54,7 +54,7 @@ block:
 
 Lengths are unsigned big-endian 32-bit integers. Entries in a block share its layer and are strictly
 ordered by the configured comparator. Child layers are strictly lower and their keys stay between
-the adjacent separators. `tds_merkle_search_tree_visit_blocks` exposes borrowed `(digest, bytes)`
+the adjacent separators. `d7_merkle_search_tree_visit_blocks` exposes borrowed `(digest, bytes)`
 pairs in preorder without transferring ownership.
 
 The cross-language single-entry golden policy is `golden-int-string-v1`, with `i32-be-v1` keys and
@@ -79,7 +79,7 @@ or fail without leaving ownership in the destination.
 Encoding is fallible and deliberately two-pass. The first call receives `(destination == NULL,
 destination_size == 0)` and reports the exact size. The second receives exactly that many
 library-owned bytes and must report the same size. A mismatch is
-`TDS_MERKLE_INCONSISTENT_POLICY`; no node is published. Decode constructs a value in uninitialized
+`D7_MERKLE_INCONSISTENT_POLICY`; no node is published. Decode constructs a value in uninitialized
 storage and is used by later untrusted-wire ingestion; a successful decode will be re-encoded and
 must reproduce the original bytes before publication.
 
@@ -97,7 +97,7 @@ truncation, and values beyond U+10FFFF.
 
 ## Handle Ownership And Publication
 
-`tds_merkle_policy` and `tds_merkle_search_tree` are owning handles, not trivially copyable values.
+`d7_merkle_policy` and `d7_merkle_search_tree` are owning handles, not trivially copyable values.
 Use their `copy`, `move`, and `dispose` functions. Stored keys, values, canonical byte arrays,
 entries, nodes, and policies are immutable reference-counted objects. Reference counts are atomic;
 node release is intrusive and iterative, so disposal allocates no memory and does not recurse.
@@ -105,8 +105,8 @@ node release is intrusive and iterative, so disposal allocates no memory and doe
 Producing operations accept exact source/result aliasing:
 
 ```c
-tds_merkle_status status =
-    tds_merkle_search_tree_set(&tree, &key, &value, &tree);
+d7_merkle_status status =
+    d7_merkle_search_tree_set(&tree, &key, &value, &tree);
 ```
 
 Every allocation, callback, encoding, hash, and node construction completes before publication.
@@ -115,48 +115,48 @@ untouched. A distinct successful result owns a policy reference and root referen
 disposed. Replacing a comparator-equivalent key preserves the first stored key representative;
 bulk creation is stable, retaining the first representative and last value.
 
-The same ownership discipline applies to `tds_merkle_block`, `tds_merkle_block_pack`,
-`tds_merkle_sync_plan`, `tds_merkle_proof`, `tds_merkle_memory_block_store`, and
-`tds_merkle_three_way_merge_result`: use the matching `copy`, `move`, and `dispose` operations.
+The same ownership discipline applies to `d7_merkle_block`, `d7_merkle_block_pack`,
+`d7_merkle_sync_plan`, `d7_merkle_proof`, `d7_merkle_memory_block_store`, and
+`d7_merkle_three_way_merge_result`: use the matching `copy`, `move`, and `dispose` operations.
 Handles produced from a tree retain its exact policy representation, including allocator and typed
 object callback lifetime. Public constructors that instead accept a standalone allocator copy that
 allocator value; its context must remain valid until the final handle copy is disposed.
 
-`tds_merkle_memory_block_store_as_store` returns a borrowed callback adapter. At least one owning
+`d7_merkle_memory_block_store_as_store` returns a borrowed callback adapter. At least one owning
 memory-store handle must outlive every adapter call. `try_get` returns an owned block snapshot, not
 a borrowed slot; the snapshot remains valid across concurrent removal, clear, and store disposal.
 The memory store serializes count/contains/get/put/remove/clear, keeps digests sorted, and makes
 same-digest insertion a race-safe three-state operation: `ADDED`, `PRESENT_IDENTICAL`, or
-`CONFLICT`. A conflict also returns `TDS_MERKLE_VERIFICATION_FAILURE`. Its lock is non-recursive,
+`CONFLICT`. A conflict also returns `D7_MERKLE_VERIFICATION_FAILURE`. Its lock is non-recursive,
 but allocator/deallocator callbacks, block destruction, and digest visitors all run outside that
 lock and may reenter live adapter reads. Final owning-handle disposal ends adapter lifetime before
 the allocator tears down the store itself. On non-Windows C11 threads, lock acquisition failure is
-reported as `TDS_MERKLE_CALLBACK_FAILURE`; an impossible unlock failure is a process-fatal internal
+reported as `D7_MERKLE_CALLBACK_FAILURE`; an impossible unlock failure is a process-fatal internal
 synchronization invariant rather than permission to continue with an unknown lock state.
 
 Generic store wrappers use private scratch outputs. Count/contains/remove outputs are published only
 on `OK`. `try_get` accepts `OK + found` only with a valid owning block and accepts `OK + not found`
 only with an empty block; it disposes callback scratch on failure. `put` accepts only `OK + ADDED`,
 `OK + PRESENT_IDENTICAL`, or `VERIFICATION_FAILURE + CONFLICT`. Inconsistent callback combinations
-become `TDS_MERKLE_CALLBACK_FAILURE`, and caller outputs remain untouched. Callback contexts are
+become `D7_MERKLE_CALLBACK_FAILURE`, and caller outputs remain untouched. Callback contexts are
 borrowed for the lifetime of adapter use.
 
 ## Ordered Persistent Cursor
 
-`tds_merkle_search_tree_cursor` owns a retained tree snapshot plus a comparer-order rank gap. Create
+`d7_merkle_search_tree_cursor` owns a retained tree snapshot plus a comparer-order rank gap. Create
 one at a rank, start, end, lower bound, upper bound, or exact-key lower-bound result. `at_key`
 publishes a separate `found` flag, so a miss still returns a usable insertion gap. Peeks return
-borrowed `tds_merkle_search_entry_ref` values that remain valid until the cursor is destroyed.
+borrowed `d7_merkle_search_entry_ref` values that remain valid until the cursor is destroyed.
 
 Navigation and edits are immutable. `move_previous`, `move_next`, and `seek` return a new cursor over
-the same snapshot. `insert` rejects an existing key with `TDS_MERKLE_DUPLICATE_KEY` and also rejects
+the same snapshot. `insert` rejects an existing key with `D7_MERKLE_DUPLICATE_KEY` and also rejects
 a key whose lower-bound rank is not the current gap. `put` updates the exact next entry or inserts
 at a missing lower-bound gap. `set_next_value` retains the stored key representative;
 `delete_previous` moves the gap left and `delete_next` keeps it fixed. `snapshot` returns an owning
 tree copy and never consumes the cursor.
 
-Use `tds_merkle_search_tree_cursor_copy` for a second live owner and
-`tds_merkle_search_tree_cursor_destroy` for every initialized cursor. A zeroed or destroyed cursor
+Use `d7_merkle_search_tree_cursor_copy` for a second live owner and
+`d7_merkle_search_tree_cursor_destroy` for every initialized cursor. A zeroed or destroyed cursor
 is invalid but safely destroyable. Producing operations support exact source/result aliasing and
 otherwise require a distinct output to be zeroed or destroyed; failure leaves both source and
 output unchanged. Rank and neighbor lookup use cached subtree counts. Cursor edits call the
@@ -166,7 +166,7 @@ is local navigation state and is never part of `MST2`, `MSP2`, a pack, proof, or
 
 ## Verified Persistence
 
-`tds_merkle_search_tree_export_pack` emits the complete closure in deterministic preorder.
+`d7_merkle_search_tree_export_pack` emits the complete closure in deterministic preorder.
 `export_blocks` emits exactly the requested unique digests in caller order and rejects missing or
 duplicate requests. `save` preflights every destination digest before its first put, then reports
 how many blocks were newly added. A generic external store is not transactional: an unexpected
@@ -187,7 +187,7 @@ tree publication. Supplied authenticated blocks that are not reachable from the 
 legal and are committed as useful partial-sync state. The declared root closure itself may not be
 partial. Destination conflicts are preflighted across the entire pack before its first put.
 
-Verification failures return `TDS_MERKLE_VERIFICATION_FAILURE` plus a structured kind and optional
+Verification failures return `D7_MERKLE_VERIFICATION_FAILURE` plus a structured kind and optional
 block digest. Operational allocator, crypto, codec, comparator, and store failures retain their
 ordinary status. `verified_block_count` and `verified_byte_count` count unique authenticated input
 work and are published on both success and verification failure.
@@ -230,7 +230,7 @@ the exact key/value pair, not merely key presence. Nonmembership proves the cano
 without the key. Range verification checks the complete canonical expansion frontier, so omitting,
 adding, reordering, or redirecting a step/expansion invalidates the proof.
 
-Proof verification returns `TDS_MERKLE_OK` with `is_valid == false` for an untrusted invalid proof;
+Proof verification returns `D7_MERKLE_OK` with `is_valid == false` for an untrusted invalid proof;
 operational failures remain non-OK statuses. Its security-sensitive preflight order is fixed:
 
 1. reject an oversized query with zero verified blocks and zero verified bytes;
@@ -258,7 +258,7 @@ most one round per target height when every response is delivered.
 
 ## Typed Three-Way Merge
 
-`tds_merkle_search_tree_merge(base, left, right, ...)` performs an ordered three-way merge. All
+`d7_merkle_search_tree_merge(base, left, right, ...)` performs an ordered three-way merge. All
 three operands must retain the exact same policy representation—not merely equal domains and type
 tags—because merged entries reuse allocator-owned typed objects. Per key it applies the usual rules:
 
@@ -269,7 +269,7 @@ tags—because merged entries reuse allocator-owned typed objects. Per key it ap
 
 Presence is explicit. `present == true` with a nullable wrapper whose `has_value == false` is a
 semantic null value; `present == false` is deletion/absence. An ordinary unresolved merge returns
-`TDS_MERKLE_OK` with `success == false`, one or more owned conflict records, and no tree. It is not an
+`D7_MERKLE_OK` with `success == false`, one or more owned conflict records, and no tree. It is not an
 operational error status. Resolver or allocator failure leaves the result untouched. If every
 conflict resolves, the result owns one canonical tree and no conflicts. A replacement retains the
 chosen key representative and encodes the new value under the shared policy.
@@ -295,7 +295,7 @@ into changed children; otherwise it performs an ordered merge. Visitors observe 
 removals, and changes in key order. Visitor failure stops immediately; effects of earlier calls are
 not rolled back.
 
-`tds_merkle_search_tree_validate` re-encodes every stored key and value, recomputes key layers,
+`d7_merkle_search_tree_validate` re-encodes every stored key and value, recomputes key layers,
 checks strict ordering and child bounds, recomputes cached count/height/block metadata, reconstructs
 every canonical block, and checks its digest. Outputs are published only on a successful validation
 call. Shape, block, root-identity, node-identity, and shared-node APIs are diagnostics and expose

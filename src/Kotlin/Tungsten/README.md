@@ -6,7 +6,7 @@
 - Scope: Kotlin/JVM sources and tests under `src/Kotlin/Tungsten`
 
 This workspace ports the Tungsten `List` and `Association` collection family to Kotlin/JVM. Public
-types live in `tools.datastructures.tungsten`:
+types live in `durable7.tungsten`:
 
 This is an application-specific leaf port. It may consume the Kotlin HAMT and FingerTree packages,
 but no general Kotlin/JVM library may depend on Tungsten or treat its kernel-derived behavior as a

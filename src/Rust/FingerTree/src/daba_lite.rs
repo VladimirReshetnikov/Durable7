@@ -57,7 +57,7 @@ where
 /// the paper's worst-case O(1) bound when the monoid callbacks themselves are O(1).
 ///
 /// ```compile_fail
-/// use tools_data_structures_fingertree::{DabaLite, SumMeasure};
+/// use durable7_fingertree::{DabaLite, SumMeasure};
 ///
 /// fn require_send_and_sync<T: Send + Sync>() {}
 /// require_send_and_sync::<DabaLite<i32, SumMeasure<i32>>>();

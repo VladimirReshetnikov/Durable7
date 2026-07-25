@@ -220,15 +220,15 @@ The language surfaces are idiomatic rather than mechanically identical:
 
 | Language | Carrier and ownership model | Primary implementation areas |
 | --- | --- | --- |
-| C# | Immutable cursor classes/readonly values; family-named factories and result carriers | `Tools.DataStructures.Hamt`, `Tools.DataStructures.FingerTree`, and `Tools.DataStructures.Ordered` partial cursor sources. |
+| C# | Immutable cursor classes/readonly values; family-named factories and result carriers | `Durable7.Hamt`, `Durable7.FingerTree`, and `Durable7.Ordered` partial cursor sources. |
 | C | Explicit owned structs/handles; `copy`/`destroy` or family-local `dispose`; producing calls support exact source/result aliasing and failure-atomic publication | HAMT public headers/sources, FingerTree cursor declarations/cores, and `Ordered/ordered_cursor`. |
 | C++ | Immutable value cursors in public headers, with exceptions following owning operations | HAMT headers, FingerTree sequence/ordered-search cursor headers, and Ordered cursor header. |
-| Haskell | Pure opaque cursor values and explicit search-result records; policy construction remains where already required | HAMT modules, FingerTree cursor modules/facades, and `Data.Structures.Ordered.Cursor`. |
+| Haskell | Pure opaque cursor values and explicit search-result records; policy construction remains where already required | HAMT modules, FingerTree cursor modules/facades, and `Durable7.Ordered.Cursor`. |
 | Kotlin | Immutable cursor classes/data carriers over retained snapshots | HAMT Merkle/Patricia sources, FingerTree sequence/ordered-search sources, and Ordered cursors. |
 | OCaml | Abstract/module-qualified cursor values with `option`/`result` following the local API | `lib/hamt`, `lib/finger_tree`, and `lib/ordered` cursor modules or owning family modules. |
 | Rust | Owned immutable cursor structs over shared persistent storage; moves are enforced by the type system | HAMT modules, FingerTree/Range cursor implementations, and the Ordered `cursors` module. |
 | TypeScript | Immutable exported cursor classes with strict ESM typing | `src/hamt`, `src/finger-tree`, and `src/ordered`. |
-| Python | Typed immutable cursor objects and search result dataclasses | `data_structures.hamt`, `data_structures.finger_tree`, and `data_structures.ordered`. |
+| Python | Typed immutable cursor objects and search result dataclasses | `durable7.hamt`, `durable7.finger_tree`, and `durable7.ordered`. |
 
 The intentionally cursor-free boundary is equally normative. CHAMP and its bag/bimap/multimap/
 relation/patch/indexed-map composites keep lookup paths private because hash enumeration has no

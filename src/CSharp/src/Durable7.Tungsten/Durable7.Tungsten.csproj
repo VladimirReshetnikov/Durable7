@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Durable7.Tungsten</AssemblyName>
+    <RootNamespace>Durable7.Tungsten</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Durable7.Tungsten.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Durable7.FingerTree\Durable7.FingerTree.csproj" />
+    <ProjectReference Include="..\Durable7.Hamt\Durable7.Hamt.csproj" />
+  </ItemGroup>
+</Project>

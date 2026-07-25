@@ -108,7 +108,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 
 [[package]]
-name = "tools-data-structures-fingertree"
+name = "durable7-fingertree"
 version = "0.1.0"
 dependencies = [
  "getrandom",
@@ -118,33 +118,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "tools-data-structures-hamt"
+name = "durable7-hamt"
 version = "0.1.0"
 dependencies = [
  "sha2",
 ]
 
 [[package]]
-name = "tools-data-structures-ordered"
+name = "durable7-ordered"
 version = "0.1.0"
 dependencies = [
- "tools-data-structures-fingertree",
- "tools-data-structures-hamt",
+ "durable7-fingertree",
+ "durable7-hamt",
 ]
 
 [[package]]
-name = "tools-data-structures-range-update"
+name = "durable7-range-update"
 version = "0.1.0"
 dependencies = [
- "tools-data-structures-fingertree",
+ "durable7-fingertree",
 ]
 
 [[package]]
-name = "tools-data-structures-tungsten"
+name = "durable7-tungsten"
 version = "0.1.0"
 dependencies = [
- "tools-data-structures-fingertree",
- "tools-data-structures-hamt",
+ "durable7-fingertree",
+ "durable7-hamt",
 ]
 
 [[package]]

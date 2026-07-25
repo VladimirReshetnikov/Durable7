@@ -1,5 +1,5 @@
-#include <tools/data_structures/ordered/ordered_set.h>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/ordered/ordered_set.h>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -25,8 +25,8 @@ static void fail_at(const char* file, int line, const char* expression)
 
 #define REQUIRE_STATUS(expression) \
     do { \
-        const tds_ordered_status actual_status__ = (expression); \
-        if (actual_status__ != TDS_ORDERED_OK) { \
+        const d7_ordered_status actual_status__ = (expression); \
+        if (actual_status__ != D7_ORDERED_OK) { \
             (void)fprintf( \
                 stderr, \
                 "%s:%d: %s returned %d\n", \
@@ -120,22 +120,22 @@ static uint32_t hash_counted(const void* item, void* context)
     return hash_int(item, NULL);
 }
 
-static void init_int_policy(tds_ordered_policy* policy)
+static void init_int_policy(d7_ordered_policy* policy)
 {
     ft_value_type item_type;
     ft_value_type_init(&item_type, sizeof(int));
-    tds_ordered_policy_init(policy, &item_type, hash_int, equal_int, NULL);
+    d7_ordered_policy_init(policy, &item_type, hash_int, equal_int, NULL);
 }
 
-static void init_mod10_policy(tds_ordered_policy* policy)
+static void init_mod10_policy(d7_ordered_policy* policy)
 {
     ft_value_type item_type;
     ft_value_type_init(&item_type, sizeof(int));
-    tds_ordered_policy_init(policy, &item_type, hash_mod10, equal_mod10, NULL);
+    d7_ordered_policy_init(policy, &item_type, hash_mod10, equal_mod10, NULL);
 }
 
 static void init_counted_policy(
-    tds_ordered_policy* policy,
+    d7_ordered_policy* policy,
     ownership_counts* counts)
 {
     ft_value_type item_type;
@@ -143,7 +143,7 @@ static void init_counted_policy(
     item_type.copy = copy_counted;
     item_type.destroy = destroy_counted;
     item_type.context = counts;
-    tds_ordered_policy_init(policy, &item_type, hash_counted, equal_int, counts);
+    d7_ordered_policy_init(policy, &item_type, hash_counted, equal_int, counts);
 }
 
 static void collect_int(const void* item, void* context)
@@ -155,16 +155,16 @@ static void collect_int(const void* item, void* context)
 }
 
 static bool set_matches(
-    const tds_ordered_set* set,
+    const d7_ordered_set* set,
     const int* expected,
     size_t count)
 {
-    if (tds_ordered_set_size(set) != count || !tds_ordered_set_debug_validate(set)) {
+    if (d7_ordered_set_size(set) != count || !d7_ordered_set_debug_validate(set)) {
         return false;
     }
     for (size_t index = 0u; index != count; ++index) {
         const void* item = NULL;
-        if (tds_ordered_set_at(set, index, &item) != TDS_ORDERED_OK ||
+        if (d7_ordered_set_at(set, index, &item) != D7_ORDERED_OK ||
             item == NULL || *(const int*)item != expected[index]) {
             return false;
         }
@@ -172,7 +172,7 @@ static bool set_matches(
 
     int_buffer buffer;
     buffer.count = 0u;
-    if (tds_ordered_set_visit(set, collect_int, &buffer) != TDS_ORDERED_OK ||
+    if (d7_ordered_set_visit(set, collect_int, &buffer) != D7_ORDERED_OK ||
         buffer.count != count) {
         return false;
     }
@@ -184,200 +184,200 @@ static bool set_matches(
     return true;
 }
 
-static void replace_set(tds_ordered_set* current, tds_ordered_set* next)
+static void replace_set(d7_ordered_set* current, d7_ordered_set* next)
 {
-    tds_ordered_set_destroy(current);
-    tds_ordered_set_move(current, next);
+    d7_ordered_set_destroy(current);
+    d7_ordered_set_move(current, next);
 }
 
 static void test_construction_and_representatives(void)
 {
-    tds_ordered_policy policy;
+    d7_ordered_policy policy;
     init_mod10_policy(&policy);
     const int values[] = {1, 11, 2, 12, 3, 21};
-    tds_ordered_set set;
-    REQUIRE_STATUS(tds_ordered_set_from_array(
+    d7_ordered_set set;
+    REQUIRE_STATUS(d7_ordered_set_from_array(
         &set,
         &policy,
         values,
         sizeof(values) / sizeof(values[0])));
     const int expected[] = {1, 2, 3};
     REQUIRE(set_matches(&set, expected, sizeof(expected) / sizeof(expected[0])));
-    REQUIRE(!tds_ordered_set_empty(&set));
-    REQUIRE(tds_ordered_set_policy(&set) != NULL);
+    REQUIRE(!d7_ordered_set_empty(&set));
+    REQUIRE(d7_ordered_set_policy(&set) != NULL);
 
     const int lookup = 31;
     const void* actual = NULL;
-    REQUIRE(tds_ordered_set_try_get_value(&set, &lookup, &actual));
+    REQUIRE(d7_ordered_set_try_get_value(&set, &lookup, &actual));
     REQUIRE(actual != NULL && *(const int*)actual == 1);
     size_t index = SIZE_MAX;
-    REQUIRE(tds_ordered_set_index_of(&set, &lookup, &index));
+    REQUIRE(d7_ordered_set_index_of(&set, &lookup, &index));
     REQUIRE(index == 0u);
 
     const void* endpoint = NULL;
-    REQUIRE_STATUS(tds_ordered_set_front(&set, &endpoint));
+    REQUIRE_STATUS(d7_ordered_set_front(&set, &endpoint));
     REQUIRE(*(const int*)endpoint == 1);
-    REQUIRE_STATUS(tds_ordered_set_back(&set, &endpoint));
+    REQUIRE_STATUS(d7_ordered_set_back(&set, &endpoint));
     REQUIRE(*(const int*)endpoint == 3);
 
     const int duplicate = 41;
-    tds_ordered_set unchanged;
-    REQUIRE_STATUS(tds_ordered_set_add(&set, &duplicate, &unchanged));
-    REQUIRE(tds_ordered_set_debug_shares_order(&set, &unchanged));
-    REQUIRE(tds_ordered_set_debug_shares_index(&set, &unchanged));
+    d7_ordered_set unchanged;
+    REQUIRE_STATUS(d7_ordered_set_add(&set, &duplicate, &unchanged));
+    REQUIRE(d7_ordered_set_debug_shares_order(&set, &unchanged));
+    REQUIRE(d7_ordered_set_debug_shares_index(&set, &unchanged));
     REQUIRE(set_matches(&unchanged, expected, sizeof(expected) / sizeof(expected[0])));
 
     const void* item_pointers[] = {
         &values[0], &values[1], &values[2], &values[3], &values[4]
     };
-    tds_ordered_set from_items;
-    REQUIRE_STATUS(tds_ordered_set_from_items(
+    d7_ordered_set from_items;
+    REQUIRE_STATUS(d7_ordered_set_from_items(
         &from_items,
         &policy,
         item_pointers,
         sizeof(item_pointers) / sizeof(item_pointers[0])));
     REQUIRE(set_matches(&from_items, expected, sizeof(expected) / sizeof(expected[0])));
 
-    tds_ordered_set_destroy(&from_items);
-    tds_ordered_set_destroy(&unchanged);
-    tds_ordered_set_destroy(&set);
+    d7_ordered_set_destroy(&from_items);
+    d7_ordered_set_destroy(&unchanged);
+    d7_ordered_set_destroy(&set);
 }
 
 static void test_positional_edits_and_removal(void)
 {
-    tds_ordered_policy policy;
+    d7_ordered_policy policy;
     init_int_policy(&policy);
     const int initial[] = {1, 2, 3};
-    tds_ordered_set current;
-    REQUIRE_STATUS(tds_ordered_set_from_array(&current, &policy, initial, 3u));
+    d7_ordered_set current;
+    REQUIRE_STATUS(d7_ordered_set_from_array(&current, &policy, initial, 3u));
 
     int value = 4;
-    tds_ordered_set next;
-    REQUIRE_STATUS(tds_ordered_set_add_first(&current, &value, &next));
+    d7_ordered_set next;
+    REQUIRE_STATUS(d7_ordered_set_add_first(&current, &value, &next));
     replace_set(&current, &next);
     const int after_first[] = {4, 1, 2, 3};
     REQUIRE(set_matches(&current, after_first, 4u));
 
     value = 5;
-    REQUIRE_STATUS(tds_ordered_set_insert(&current, 2u, &value, &next));
+    REQUIRE_STATUS(d7_ordered_set_insert(&current, 2u, &value, &next));
     replace_set(&current, &next);
     const int after_insert[] = {4, 1, 5, 2, 3};
     REQUIRE(set_matches(&current, after_insert, 5u));
 
     value = 1;
-    REQUIRE_STATUS(tds_ordered_set_move_to(&current, 4u, &value, &next));
+    REQUIRE_STATUS(d7_ordered_set_move_to(&current, 4u, &value, &next));
     replace_set(&current, &next);
     const int after_move[] = {4, 5, 2, 3, 1};
     REQUIRE(set_matches(&current, after_move, 5u));
 
     value = 3;
-    REQUIRE_STATUS(tds_ordered_set_move_to_first(&current, &value, &next));
+    REQUIRE_STATUS(d7_ordered_set_move_to_first(&current, &value, &next));
     replace_set(&current, &next);
     const int after_move_first[] = {3, 4, 5, 2, 1};
     REQUIRE(set_matches(&current, after_move_first, 5u));
 
     value = 4;
-    REQUIRE_STATUS(tds_ordered_set_move_to_last(&current, &value, &next));
+    REQUIRE_STATUS(d7_ordered_set_move_to_last(&current, &value, &next));
     replace_set(&current, &next);
     const int after_move_last[] = {3, 5, 2, 1, 4};
     REQUIRE(set_matches(&current, after_move_last, 5u));
 
     value = 99;
-    REQUIRE(tds_ordered_set_move_to_first(&current, &value, &next) == TDS_ORDERED_NOT_FOUND);
-    REQUIRE(tds_ordered_set_move_to(&current, 5u, &value, &next) == TDS_ORDERED_OUT_OF_RANGE);
+    REQUIRE(d7_ordered_set_move_to_first(&current, &value, &next) == D7_ORDERED_NOT_FOUND);
+    REQUIRE(d7_ordered_set_move_to(&current, 5u, &value, &next) == D7_ORDERED_OUT_OF_RANGE);
 
     bool removed = false;
     value = 2;
-    REQUIRE_STATUS(tds_ordered_set_try_remove(&current, &value, &removed, &next));
+    REQUIRE_STATUS(d7_ordered_set_try_remove(&current, &value, &removed, &next));
     REQUIRE(removed);
     replace_set(&current, &next);
     const int after_remove[] = {3, 5, 1, 4};
     REQUIRE(set_matches(&current, after_remove, 4u));
 
     value = 99;
-    REQUIRE_STATUS(tds_ordered_set_try_remove(&current, &value, &removed, &next));
+    REQUIRE_STATUS(d7_ordered_set_try_remove(&current, &value, &removed, &next));
     REQUIRE(!removed);
-    REQUIRE(tds_ordered_set_debug_shares_order(&current, &next));
+    REQUIRE(d7_ordered_set_debug_shares_order(&current, &next));
     replace_set(&current, &next);
 
-    REQUIRE_STATUS(tds_ordered_set_remove_at(&current, 1u, &next));
+    REQUIRE_STATUS(d7_ordered_set_remove_at(&current, 1u, &next));
     replace_set(&current, &next);
-    REQUIRE_STATUS(tds_ordered_set_remove_first(&current, &next));
+    REQUIRE_STATUS(d7_ordered_set_remove_first(&current, &next));
     replace_set(&current, &next);
-    REQUIRE_STATUS(tds_ordered_set_remove_last(&current, &next));
+    REQUIRE_STATUS(d7_ordered_set_remove_last(&current, &next));
     replace_set(&current, &next);
     const int remaining[] = {1};
     REQUIRE(set_matches(&current, remaining, 1u));
 
-    REQUIRE_STATUS(tds_ordered_set_clear(&current, &next));
+    REQUIRE_STATUS(d7_ordered_set_clear(&current, &next));
     replace_set(&current, &next);
-    REQUIRE(tds_ordered_set_empty(&current));
-    REQUIRE(tds_ordered_set_remove_first(&current, &next) == TDS_ORDERED_EMPTY);
-    REQUIRE(tds_ordered_set_remove_last(&current, &next) == TDS_ORDERED_EMPTY);
-    tds_ordered_set_destroy(&current);
+    REQUIRE(d7_ordered_set_empty(&current));
+    REQUIRE(d7_ordered_set_remove_first(&current, &next) == D7_ORDERED_EMPTY);
+    REQUIRE(d7_ordered_set_remove_last(&current, &next) == D7_ORDERED_EMPTY);
+    d7_ordered_set_destroy(&current);
 }
 
 static void test_ranges_reverse_and_stable_sort(void)
 {
-    tds_ordered_policy policy;
+    d7_ordered_policy policy;
     init_int_policy(&policy);
     const int values[] = {5, 2, 3, 4, 1};
-    tds_ordered_set set;
-    REQUIRE_STATUS(tds_ordered_set_from_array(&set, &policy, values, 5u));
+    d7_ordered_set set;
+    REQUIRE_STATUS(d7_ordered_set_from_array(&set, &policy, values, 5u));
 
-    tds_ordered_set range;
-    REQUIRE_STATUS(tds_ordered_set_get_range(&set, 1u, 3u, &range));
+    d7_ordered_set range;
+    REQUIRE_STATUS(d7_ordered_set_get_range(&set, 1u, 3u, &range));
     const int expected_range[] = {2, 3, 4};
     REQUIRE(set_matches(&range, expected_range, 3u));
 
-    tds_ordered_set taken;
-    REQUIRE_STATUS(tds_ordered_set_take(&set, 2u, &taken));
+    d7_ordered_set taken;
+    REQUIRE_STATUS(d7_ordered_set_take(&set, 2u, &taken));
     const int expected_take[] = {5, 2};
     REQUIRE(set_matches(&taken, expected_take, 2u));
 
-    tds_ordered_set dropped;
-    REQUIRE_STATUS(tds_ordered_set_drop(&set, 3u, &dropped));
+    d7_ordered_set dropped;
+    REQUIRE_STATUS(d7_ordered_set_drop(&set, 3u, &dropped));
     const int expected_drop[] = {4, 1};
     REQUIRE(set_matches(&dropped, expected_drop, 2u));
 
-    tds_ordered_set reversed;
-    REQUIRE_STATUS(tds_ordered_set_reverse(&set, &reversed));
+    d7_ordered_set reversed;
+    REQUIRE_STATUS(d7_ordered_set_reverse(&set, &reversed));
     const int expected_reverse[] = {1, 4, 3, 2, 5};
     REQUIRE(set_matches(&reversed, expected_reverse, 5u));
 
-    tds_ordered_set sorted;
-    REQUIRE_STATUS(tds_ordered_set_sort(&set, compare_parity, NULL, &sorted));
+    d7_ordered_set sorted;
+    REQUIRE_STATUS(d7_ordered_set_sort(&set, compare_parity, NULL, &sorted));
     const int expected_sort[] = {2, 4, 5, 3, 1};
     REQUIRE(set_matches(&sorted, expected_sort, 5u));
 
-    tds_ordered_set unchanged;
-    REQUIRE_STATUS(tds_ordered_set_sort(&sorted, compare_parity, NULL, &unchanged));
-    REQUIRE(tds_ordered_set_debug_shares_order(&sorted, &unchanged));
-    REQUIRE(tds_ordered_set_debug_shares_index(&sorted, &unchanged));
+    d7_ordered_set unchanged;
+    REQUIRE_STATUS(d7_ordered_set_sort(&sorted, compare_parity, NULL, &unchanged));
+    REQUIRE(d7_ordered_set_debug_shares_order(&sorted, &unchanged));
+    REQUIRE(d7_ordered_set_debug_shares_index(&sorted, &unchanged));
 
-    tds_ordered_set invalid_result;
+    d7_ordered_set invalid_result;
     (void)memset(&invalid_result, 0, sizeof(invalid_result));
-    REQUIRE(tds_ordered_set_get_range(&set, 4u, 2u, &invalid_result) ==
-        TDS_ORDERED_OUT_OF_RANGE);
+    REQUIRE(d7_ordered_set_get_range(&set, 4u, 2u, &invalid_result) ==
+        D7_ORDERED_OUT_OF_RANGE);
     REQUIRE(invalid_result.context == NULL);
-    tds_ordered_set_destroy(&unchanged);
-    tds_ordered_set_destroy(&sorted);
-    tds_ordered_set_destroy(&reversed);
-    tds_ordered_set_destroy(&dropped);
-    tds_ordered_set_destroy(&taken);
-    tds_ordered_set_destroy(&range);
-    tds_ordered_set_destroy(&set);
+    d7_ordered_set_destroy(&unchanged);
+    d7_ordered_set_destroy(&sorted);
+    d7_ordered_set_destroy(&reversed);
+    d7_ordered_set_destroy(&dropped);
+    d7_ordered_set_destroy(&taken);
+    d7_ordered_set_destroy(&range);
+    d7_ordered_set_destroy(&set);
 }
 
 static void test_algebra_and_relations(void)
 {
-    tds_ordered_policy mod_policy;
-    tds_ordered_policy exact_policy;
+    d7_ordered_policy mod_policy;
+    d7_ordered_policy exact_policy;
     init_mod10_policy(&mod_policy);
     init_int_policy(&exact_policy);
     const int receiver_values[] = {1, 2, 3};
-    tds_ordered_set receiver;
-    REQUIRE_STATUS(tds_ordered_set_from_array(
+    d7_ordered_set receiver;
+    REQUIRE_STATUS(d7_ordered_set_from_array(
         &receiver,
         &mod_policy,
         receiver_values,
@@ -388,50 +388,50 @@ static void test_algebra_and_relations(void)
     const int c = 14;
     const int d = 2;
     const void* arguments[] = {&a, &b, &c, &d};
-    tds_ordered_set result;
-    REQUIRE_STATUS(tds_ordered_set_union_many(&receiver, arguments, 4u, &result));
+    d7_ordered_set result;
+    REQUIRE_STATUS(d7_ordered_set_union_many(&receiver, arguments, 4u, &result));
     const int expected_union[] = {1, 2, 3, 4};
     REQUIRE(set_matches(&result, expected_union, 4u));
-    tds_ordered_set_destroy(&result);
+    d7_ordered_set_destroy(&result);
 
-    REQUIRE_STATUS(tds_ordered_set_intersect_many(&receiver, arguments, 4u, &result));
+    REQUIRE_STATUS(d7_ordered_set_intersect_many(&receiver, arguments, 4u, &result));
     const int expected_intersect[] = {1, 2};
     REQUIRE(set_matches(&result, expected_intersect, 2u));
-    tds_ordered_set_destroy(&result);
+    d7_ordered_set_destroy(&result);
 
-    REQUIRE_STATUS(tds_ordered_set_except_many(&receiver, arguments, 4u, &result));
+    REQUIRE_STATUS(d7_ordered_set_except_many(&receiver, arguments, 4u, &result));
     const int expected_except[] = {3};
     REQUIRE(set_matches(&result, expected_except, 1u));
-    tds_ordered_set_destroy(&result);
+    d7_ordered_set_destroy(&result);
 
-    REQUIRE_STATUS(tds_ordered_set_symmetric_except_many(
+    REQUIRE_STATUS(d7_ordered_set_symmetric_except_many(
         &receiver,
         arguments,
         4u,
         &result));
     const int expected_symmetric[] = {3, 4};
     REQUIRE(set_matches(&result, expected_symmetric, 2u));
-    tds_ordered_set_destroy(&result);
+    d7_ordered_set_destroy(&result);
 
     const int right_values[] = {11, 21, 4};
-    tds_ordered_set right;
-    REQUIRE_STATUS(tds_ordered_set_from_array(&right, &exact_policy, right_values, 3u));
-    REQUIRE_STATUS(tds_ordered_set_union(&receiver, &right, &result));
+    d7_ordered_set right;
+    REQUIRE_STATUS(d7_ordered_set_from_array(&right, &exact_policy, right_values, 3u));
+    REQUIRE_STATUS(d7_ordered_set_union(&receiver, &right, &result));
     REQUIRE(set_matches(&result, expected_union, 4u));
-    tds_ordered_set_destroy(&result);
+    d7_ordered_set_destroy(&result);
 
     bool answer = false;
-    REQUIRE_STATUS(tds_ordered_set_is_subset_of_many(&receiver, arguments, 4u, &answer));
+    REQUIRE_STATUS(d7_ordered_set_is_subset_of_many(&receiver, arguments, 4u, &answer));
     REQUIRE(!answer);
-    REQUIRE_STATUS(tds_ordered_set_is_proper_subset_of_many(&receiver, arguments, 4u, &answer));
+    REQUIRE_STATUS(d7_ordered_set_is_proper_subset_of_many(&receiver, arguments, 4u, &answer));
     REQUIRE(!answer);
-    REQUIRE_STATUS(tds_ordered_set_is_superset_of_many(&receiver, arguments, 4u, &answer));
+    REQUIRE_STATUS(d7_ordered_set_is_superset_of_many(&receiver, arguments, 4u, &answer));
     REQUIRE(!answer);
-    REQUIRE_STATUS(tds_ordered_set_is_proper_superset_of_many(&receiver, arguments, 4u, &answer));
+    REQUIRE_STATUS(d7_ordered_set_is_proper_superset_of_many(&receiver, arguments, 4u, &answer));
     REQUIRE(!answer);
-    REQUIRE_STATUS(tds_ordered_set_overlaps_many(&receiver, arguments, 4u, &answer));
+    REQUIRE_STATUS(d7_ordered_set_overlaps_many(&receiver, arguments, 4u, &answer));
     REQUIRE(answer);
-    REQUIRE_STATUS(tds_ordered_set_equals_many(&receiver, arguments, 4u, &answer));
+    REQUIRE_STATUS(d7_ordered_set_equals_many(&receiver, arguments, 4u, &answer));
     REQUIRE(!answer);
 
     const int same_a = 11;
@@ -439,61 +439,61 @@ static void test_algebra_and_relations(void)
     const int same_c = 13;
     const int same_duplicate = 21;
     const void* same_items[] = {&same_a, &same_b, &same_c, &same_duplicate};
-    REQUIRE_STATUS(tds_ordered_set_equals_many(&receiver, same_items, 4u, &answer));
+    REQUIRE_STATUS(d7_ordered_set_equals_many(&receiver, same_items, 4u, &answer));
     REQUIRE(answer);
-    REQUIRE_STATUS(tds_ordered_set_is_subset_of(&receiver, &right, &answer));
+    REQUIRE_STATUS(d7_ordered_set_is_subset_of(&receiver, &right, &answer));
     REQUIRE(!answer);
-    REQUIRE_STATUS(tds_ordered_set_overlaps(&receiver, &right, &answer));
+    REQUIRE_STATUS(d7_ordered_set_overlaps(&receiver, &right, &answer));
     REQUIRE(answer);
 
-    tds_ordered_set_destroy(&right);
-    tds_ordered_set_destroy(&receiver);
+    d7_ordered_set_destroy(&right);
+    d7_ordered_set_destroy(&receiver);
 }
 
 static void test_relabel_persistence_and_failure_atomicity(void)
 {
     ownership_counts counts;
     (void)memset(&counts, 0, sizeof(counts));
-    tds_ordered_policy policy;
+    d7_ordered_policy policy;
     init_counted_policy(&policy, &counts);
     const int initial[] = {0, 1};
-    tds_ordered_set original;
-    REQUIRE_STATUS(tds_ordered_set_from_array(&original, &policy, initial, 2u));
-    tds_ordered_set current;
-    REQUIRE_STATUS(tds_ordered_set_clone(&original, &current));
+    d7_ordered_set original;
+    REQUIRE_STATUS(d7_ordered_set_from_array(&original, &policy, initial, 2u));
+    d7_ordered_set current;
+    REQUIRE_STATUS(d7_ordered_set_clone(&original, &current));
 
     for (int value = 2; value != 72; ++value) {
-        tds_ordered_set next;
-        REQUIRE_STATUS(tds_ordered_set_insert(&current, 1u, &value, &next));
-        REQUIRE(tds_ordered_set_debug_validate(&next));
+        d7_ordered_set next;
+        REQUIRE_STATUS(d7_ordered_set_insert(&current, 1u, &value, &next));
+        REQUIRE(d7_ordered_set_debug_validate(&next));
         replace_set(&current, &next);
     }
-    REQUIRE(tds_ordered_set_size(&current) == 72u);
+    REQUIRE(d7_ordered_set_size(&current) == 72u);
     REQUIRE(set_matches(&original, initial, 2u));
 
-    tds_ordered_set untouched;
+    d7_ordered_set untouched;
     (void)memset(&untouched, 0, sizeof(untouched));
-    tds_ordered_set untouched_before = untouched;
+    d7_ordered_set untouched_before = untouched;
     counts.hash_calls = 0u;
     const int value = 5;
-    REQUIRE(tds_ordered_set_insert(&current, 999u, &value, &untouched) ==
-        TDS_ORDERED_OUT_OF_RANGE);
+    REQUIRE(d7_ordered_set_insert(&current, 999u, &value, &untouched) ==
+        D7_ORDERED_OUT_OF_RANGE);
     REQUIRE(memcmp(&untouched, &untouched_before, sizeof(untouched)) == 0);
     REQUIRE(counts.hash_calls == 0u);
-    REQUIRE(tds_ordered_set_move_to(&current, 999u, &value, &untouched) ==
-        TDS_ORDERED_OUT_OF_RANGE);
+    REQUIRE(d7_ordered_set_move_to(&current, 999u, &value, &untouched) ==
+        D7_ORDERED_OUT_OF_RANGE);
     REQUIRE(memcmp(&untouched, &untouched_before, sizeof(untouched)) == 0);
     REQUIRE(counts.hash_calls == 0u);
 
     bool answer = true;
     const void* bad_items[] = {&value, NULL};
-    REQUIRE(tds_ordered_set_equals_many(&current, bad_items, 2u, &answer) ==
-        TDS_ORDERED_INVALID_ARGUMENT);
+    REQUIRE(d7_ordered_set_equals_many(&current, bad_items, 2u, &answer) ==
+        D7_ORDERED_INVALID_ARGUMENT);
     REQUIRE(answer);
-    REQUIRE(tds_ordered_set_debug_validate(&current));
+    REQUIRE(d7_ordered_set_debug_validate(&current));
 
-    tds_ordered_set_destroy(&current);
-    tds_ordered_set_destroy(&original);
+    d7_ordered_set_destroy(&current);
+    d7_ordered_set_destroy(&original);
     REQUIRE(counts.copies == counts.destroys);
 }
 
@@ -552,10 +552,10 @@ static uint32_t next_random(uint32_t* state)
 
 static void test_generated_model(void)
 {
-    tds_ordered_policy policy;
+    d7_ordered_policy policy;
     init_int_policy(&policy);
-    tds_ordered_set current;
-    REQUIRE_STATUS(tds_ordered_set_init(&current, &policy));
+    d7_ordered_set current;
+    REQUIRE_STATUS(d7_ordered_set_init(&current, &policy));
     int_model model;
     model.count = 0u;
     uint32_t random = UINT32_C(0x6d2b79f5);
@@ -564,38 +564,38 @@ static void test_generated_model(void)
         const uint32_t bits = next_random(&random);
         const unsigned operation = (unsigned)(bits % 8u);
         const int value = (int)((bits >> 8) % 64u);
-        tds_ordered_set next;
+        d7_ordered_set next;
 
         if (operation == 0u) {
-            REQUIRE_STATUS(tds_ordered_set_add(&current, &value, &next));
+            REQUIRE_STATUS(d7_ordered_set_add(&current, &value, &next));
             model_insert(&model, model.count, value);
         } else if (operation == 1u) {
-            REQUIRE_STATUS(tds_ordered_set_add_first(&current, &value, &next));
+            REQUIRE_STATUS(d7_ordered_set_add_first(&current, &value, &next));
             model_insert(&model, 0u, value);
         } else if (operation == 2u) {
             const size_t index = model.count == 0u
                 ? 0u
                 : (size_t)(next_random(&random) % (uint32_t)(model.count + 1u));
-            REQUIRE_STATUS(tds_ordered_set_insert(&current, index, &value, &next));
+            REQUIRE_STATUS(d7_ordered_set_insert(&current, index, &value, &next));
             model_insert(&model, index, value);
         } else if (operation == 3u && model.count != 0u) {
             const size_t source = (size_t)(next_random(&random) % (uint32_t)model.count);
             const size_t destination = (size_t)(next_random(&random) % (uint32_t)model.count);
             const int present = model.values[source];
-            REQUIRE_STATUS(tds_ordered_set_move_to(&current, destination, &present, &next));
+            REQUIRE_STATUS(d7_ordered_set_move_to(&current, destination, &present, &next));
             model_move(&model, source, destination);
         } else if (operation == 4u) {
-            REQUIRE_STATUS(tds_ordered_set_remove(&current, &value, &next));
+            REQUIRE_STATUS(d7_ordered_set_remove(&current, &value, &next));
             const size_t index = model_find(&model, value);
             if (index != SIZE_MAX) {
                 model_remove_at(&model, index);
             }
         } else if (operation == 5u && model.count != 0u) {
             const size_t index = (size_t)(next_random(&random) % (uint32_t)model.count);
-            REQUIRE_STATUS(tds_ordered_set_remove_at(&current, index, &next));
+            REQUIRE_STATUS(d7_ordered_set_remove_at(&current, index, &next));
             model_remove_at(&model, index);
         } else if (operation == 6u) {
-            REQUIRE_STATUS(tds_ordered_set_reverse(&current, &next));
+            REQUIRE_STATUS(d7_ordered_set_reverse(&current, &next));
             for (size_t left = 0u, right = model.count == 0u ? 0u : model.count - 1u;
                  left < right;
                  ++left, --right) {
@@ -611,7 +611,7 @@ static void test_generated_model(void)
             const size_t count = remaining == 0u
                 ? 0u
                 : (size_t)(next_random(&random) % (uint32_t)(remaining + 1u));
-            REQUIRE_STATUS(tds_ordered_set_get_range(&current, start, count, &next));
+            REQUIRE_STATUS(d7_ordered_set_get_range(&current, start, count, &next));
             (void)memmove(
                 model.values,
                 model.values + start,
@@ -622,7 +622,7 @@ static void test_generated_model(void)
         replace_set(&current, &next);
         REQUIRE(set_matches(&current, model.values, model.count));
     }
-    tds_ordered_set_destroy(&current);
+    d7_ordered_set_destroy(&current);
 }
 
 static void run_test(const char* name, void (*test)(void))
@@ -640,7 +640,7 @@ static void run_test(const char* name, void (*test)(void))
 
 int main(void)
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 

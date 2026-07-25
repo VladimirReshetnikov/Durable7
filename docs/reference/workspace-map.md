@@ -25,7 +25,7 @@ src/
 │   └── Tungsten/
 ├── CSharp/
 │   ├── README.md
-│   ├── DataStructures.sln
+│   ├── Durable7.sln
 │   ├── Directory.Build.props
 │   ├── benchmarks/
 │   ├── docs/
@@ -36,11 +36,11 @@ src/
 │   │   └── Tungsten/
 │   ├── samples/
 │   ├── src/
-│   │   ├── Tools.DataStructures.FingerTree/
-│   │   ├── Tools.DataStructures.Hamt/
-│   │   ├── Tools.DataStructures.Ordered/
-│   │   ├── Tools.DataStructures.Tungsten/
-│   │   └── Tools.Numerics/
+│   │   ├── Durable7.FingerTree/
+│   │   ├── Durable7.Hamt/
+│   │   ├── Durable7.Ordered/
+│   │   ├── Durable7.Tungsten/
+│   │   └── Durable7.Numerics/
 │   └── tests/
 ├── Haskell/
 │   ├── README.md
@@ -55,7 +55,7 @@ src/
 ├── OCaml/
 │   ├── README.md
 │   ├── dune-project
-│   ├── tools-data-structures.opam
+│   ├── durable7.opam
 │   ├── lib/
 │   ├── docs/
 │   ├── tests/
@@ -63,7 +63,7 @@ src/
 ├── Python/
 │   ├── README.md
 │   ├── docs/
-│   ├── src/vladimir_reshetnikov/data_structures/
+│   ├── src/durable7/
 │   ├── tests/
 │   └── test.ps1
 ├── Rust/
@@ -110,13 +110,13 @@ See the detailed
 [Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) for the
 normative code, test, documentation, porting, and extraction rules.
 
-`Tools.DataStructures.Ordered` is an independently owned general workspace created under that rule.
+`Durable7.Ordered` is an independently owned general workspace created under that rule.
 Its dependency graph is deliberately limited to public general substrates:
 
 ```text
-Tools.DataStructures.Ordered
-├── Tools.DataStructures.Hamt
-└── Tools.DataStructures.FingerTree
+Durable7.Ordered
+├── Durable7.Hamt
+└── Durable7.FingerTree
 ```
 
 There is no Ordered-to-Tungsten project, source, test-oracle, or semantic-authority edge. Ordered and
@@ -128,41 +128,41 @@ contract.
 
 | Workspace | Role | Main entry points | Local docs |
 | --- | --- | --- | --- |
-| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | Managed fixed-width and sparse integer numerics library | `DataStructures.sln`, `src/Tools.Numerics/`, `tests/Tools.Numerics.Tests/` | [`docs`](../../src/CSharp/docs/Numerics/README.md) |
-| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed persistent hash map/set, multiplicity bag, strict bimap, Ctrie, Patricia, and Merkle library | `DataStructures.sln`, `src/Tools.DataStructures.Hamt/`, `tests/Tools.DataStructures.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
-| [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT/bag/bimap/Patricia port and complete type-erased wire-compatible Merkle search tree | `include/Tools/DataStructures/Hamt/*.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md), [Merkle guide](../../src/C/Hamt/docs/merkle-search-tree.md) |
-| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/bag/bimap/Patricia port and complete wire-compatible Merkle search tree | `include/Tools/DataStructures/Hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), [persistence](../../src/Cpp/Hamt/docs/merkle-persistence.md) |
-| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/bag/bimap/Patricia port and complete pure wire-compatible Merkle search tree | `tools-data-structures-hamt.cabal`, `src/Data/Structures/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
-| [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/bag/bimap/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/tools/datastructures/hamt/`, `test/tools/datastructures/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
+| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | Managed fixed-width and sparse integer numerics library | `Durable7.sln`, `src/Durable7.Numerics/`, `tests/Durable7.Numerics.Tests/` | [`docs`](../../src/CSharp/docs/Numerics/README.md) |
+| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed persistent hash map/set, multiplicity bag, strict bimap, Ctrie, Patricia, and Merkle library | `Durable7.sln`, `src/Durable7.Hamt/`, `tests/Durable7.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
+| [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT/bag/bimap/Patricia port and complete type-erased wire-compatible Merkle search tree | `include/durable7/hamt/*.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md), [Merkle guide](../../src/C/Hamt/docs/merkle-search-tree.md) |
+| [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/bag/bimap/Patricia port and complete wire-compatible Merkle search tree | `include/durable7/hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), [persistence](../../src/Cpp/Hamt/docs/merkle-persistence.md) |
+| [`src/Haskell/Hamt`](../../src/Haskell/Hamt/README.md) | Haskell HAMT/bag/bimap/Patricia port and complete pure wire-compatible Merkle search tree | `durable7-hamt.cabal`, `src/Durable7/Hamt/` | [`README`](../../src/Haskell/Hamt/README.md), [Merkle guide](../../src/Haskell/Hamt/docs/merkle-search-tree.md) |
+| [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | Kotlin/JVM HAMT/bag/bimap/Ctrie/Patricia port and complete wire-compatible Merkle search tree | `src/durable7/hamt/`, `test/durable7/hamt/` | [`docs`](../../src/Kotlin/Hamt/docs/README.md) |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | Rust HAMT/bag/bimap/Patricia port and wire-compatible Merkle search tree | `Cargo.toml`, `src/lib.rs`, `src/merkle_search_tree.rs` | [`docs`](../../src/Rust/Hamt/docs/README.md) |
-| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed persistent-sequence library: FingerTree family plus the independent implicit-AVL Range-update core | `DataStructures.sln`, `src/Tools.DataStructures.FingerTree/`, `tests/Tools.DataStructures.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md), [Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md) |
-| [C# Ordered collections](../../src/CSharp/docs/Ordered/overview.md) | Independently owned neutral insertion/explicit-position ordered set with first-representative and receiver-policy algebra contracts over public CHAMP/FingerTree substrates | [`DataStructures.sln`](../../src/CSharp/DataStructures.sln), [project](../../src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj), [tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) | [`docs`](../../src/CSharp/docs/Ordered/README.md), [validation](../../src/CSharp/docs/Ordered/validation.md) |
+| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | Canonical managed persistent-sequence library: FingerTree family plus the independent implicit-AVL Range-update core | `Durable7.sln`, `src/Durable7.FingerTree/`, `tests/Durable7.FingerTree.Tests/`, `samples/`, `benchmarks/` | [`docs`](../../src/CSharp/docs/FingerTree/README.md), [Range contract](../../src/CSharp/docs/FingerTree/range-update-sequence.md) |
+| [C# Ordered collections](../../src/CSharp/docs/Ordered/overview.md) | Independently owned neutral insertion/explicit-position ordered set with first-representative and receiver-policy algebra contracts over public CHAMP/FingerTree substrates | [`Durable7.sln`](../../src/CSharp/Durable7.sln), [project](../../src/CSharp/src/Durable7.Ordered/Durable7.Ordered.csproj), [tests](../../src/CSharp/tests/Durable7.Ordered.Tests/README.md) | [`docs`](../../src/CSharp/docs/Ordered/README.md), [validation](../../src/CSharp/docs/Ordered/validation.md) |
 | [`src/C/Ordered`](../../src/C/Ordered/README.md) | Neutral type-erased C17 ordered-set port | `include/`, `src/`, `tests/`, `CMakePresets.json` | [API](../../src/C/Ordered/docs/api-specification.md), [validation](../../src/C/Ordered/docs/validation.md) |
 | [`src/Cpp/Ordered`](../../src/Cpp/Ordered/README.md) | Neutral header-first C++ persistent ordered-set port | `include/`, `tests/`, `CMakePresets.json` | [API](../../src/Cpp/Ordered/docs/api-notes.md), [validation](../../src/Cpp/Ordered/docs/validation.md) |
-| [`src/Haskell/Ordered`](../../src/Haskell/Ordered/README.md) | Neutral Haskell persistent ordered-set package | `tools-data-structures-ordered.cabal`, `src/`, `test/` | [`README`](../../src/Haskell/Ordered/README.md) |
+| [`src/Haskell/Ordered`](../../src/Haskell/Ordered/README.md) | Neutral Haskell persistent ordered-set package | `durable7-ordered.cabal`, `src/`, `test/` | [`README`](../../src/Haskell/Ordered/README.md) |
 | [`src/Kotlin/Ordered`](../../src/Kotlin/Ordered/README.md) | Neutral Kotlin/JVM persistent ordered-set workspace | `src/`, `test/` | [`docs`](../../src/Kotlin/Ordered/docs/README.md) |
 | [`src/Rust/Ordered`](../../src/Rust/Ordered/README.md) | Neutral safe Rust persistent ordered-set crate | `Cargo.toml`, `src/`, `tests/` | [API](../../src/Rust/Ordered/docs/api-notes.md), [validation](../../src/Rust/Ordered/docs/validation.md) |
-| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family with Range, Brodal/PSQ cores, positional/measured/text rope cursors, and native DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
-| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with Range, positional/measured/text rope cursors, type-erased Brodal/PSQ cores, and DABA Lite | `include/tools/data_structures/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
-| [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port with Range and positional/measured/text rope cursors | `tools-data-structures-fingertree.cabal`, `src/Data/Structures/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
-| [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/Range/optimal-priority family plus managed DABA Lite | `src/tools/datastructures/fingertree/`, `test/tools/datastructures/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
+| [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | C++23 FingerTree/RRB/canonical-set family with Range, Brodal/PSQ cores, positional/measured/text rope cursors, and native DABA Lite | `include/durable7/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/Cpp/FingerTree/docs/README.md) |
+| [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | C11 FingerTree/RRB/canonical-set family with Range, positional/measured/text rope cursors, type-erased Brodal/PSQ cores, and DABA Lite | `include/durable7/finger_tree/`, `CMakePresets.json` | [`docs`](../../src/C/FingerTree/docs/README.md) |
+| [`src/Haskell/FingerTree`](../../src/Haskell/FingerTree/README.md) | Haskell FingerTree/RRB/canonical-set family port with Range and positional/measured/text rope cursors | `durable7-fingertree.cabal`, `src/Durable7/FingerTree/` | [`README`](../../src/Haskell/FingerTree/README.md) |
+| [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/Range/optimal-priority family plus managed DABA Lite | `src/durable7/fingertree/`, `test/durable7/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint with non-`Clone` Brodal/PSQ cores plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
 | [`src/Rust/RangeUpdate`](../../src/Rust/RangeUpdate/README.md) | Safe Rust implicit-AVL range-update sequence crate | `Cargo.toml`, `src/`, `tests/` | [`docs`](../../src/Rust/RangeUpdate/docs/README.md) |
-| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Application-specific leaf collections for the Tungsten project; canonical only within the sibling Tungsten port family and not a general collection foundation | `DataStructures.sln`, `src/Tools.DataStructures.Tungsten/`, `tests/Tools.DataStructures.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
-| [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
-| [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/tools/data_structures/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
-| [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `tools-data-structures-tungsten.cabal`, `src/Data/Structures/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
-| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/tools/datastructures/tungsten/`, `test/tools/datastructures/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
+| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Application-specific leaf collections for the Tungsten project; canonical only within the sibling Tungsten port family and not a general collection foundation | `Durable7.sln`, `src/Durable7.Tungsten/`, `tests/Durable7.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
+| [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/durable7/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
+| [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/durable7/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
+| [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `durable7-tungsten.cabal`, `src/Durable7/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
+| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/durable7/tungsten/`, `test/durable7/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
-| [`src/OCaml`](../../src/OCaml/README.md) | Qualified Dune package covering Numerics, HAMT/Merkle, FingerTree/Range, neutral Ordered, and application-leaf Tungsten | `dune-project`, `tools-data-structures.opam`, `lib/`, `tests/`, `test.ps1` | [API notes](../../src/OCaml/docs/api-notes.md), [validation](../../src/OCaml/docs/validation.md), [tests](../../src/OCaml/tests/README.md) |
+| [`src/OCaml`](../../src/OCaml/README.md) | Qualified Dune package covering Numerics, HAMT/Merkle, FingerTree/Range, neutral Ordered, and application-leaf Tungsten | `dune-project`, `durable7.opam`, `lib/`, `tests/`, `test.ps1` | [API notes](../../src/OCaml/docs/api-notes.md), [validation](../../src/OCaml/docs/validation.md), [tests](../../src/OCaml/tests/README.md) |
 | [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of the current HAMT/FingerTree-derived/Range/Ordered/Numerics surfaces plus application-leaf Tungsten | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
-| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Range/Ordered/Numerics surfaces plus application-leaf Tungsten | `pyproject.toml`, `src/vladimir_reshetnikov/data_structures/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
+| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Range/Ordered/Numerics surfaces plus application-leaf Tungsten | `pyproject.toml`, `src/durable7/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
 
 ## Port Lineage
 
 HAMT lineage:
 
-1. C# HAMT (`src/CSharp/src/Tools.DataStructures.Hamt`) defines the managed public contract and model-test baseline.
+1. C# HAMT (`src/CSharp/src/Durable7.Hamt`) defines the managed public contract and model-test baseline.
 2. `src/Cpp/Hamt` ports the HAMT semantics to C++ value types, templates, and `std::shared_ptr` node
    sharing, and ports the Merkle search tree through exact `MST2` blocks, bounded verified
    persistence, `MSP2` proofs, iterative synchronization, and present-null-safe typed merge.
@@ -190,7 +190,7 @@ HAMT lineage:
 
 FingerTree lineage:
 
-1. C# FingerTree (`src/CSharp/src/Tools.DataStructures.FingerTree`) is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, the independently implemented implicit-AVL `RangeUpdateSequence`, samples, benchmarks, and design notes.
+1. C# FingerTree (`src/CSharp/src/Durable7.FingerTree`) is the broadest implementation and documentation source: tuned deque, general measured tree, derived sorted/priority/interval collections, ropes, text helpers, the independently implemented implicit-AVL `RangeUpdateSequence`, samples, benchmarks, and design notes.
 2. `src/Cpp/FingerTree` ports the persistent family to a header-first C++23 library, adds the
    system-crypto-backed policy-canonical zip-zip set and move-only-capable Brodal-Okasaki and
    winner-cached priority-search cores, includes positional/measured/text root-sharing rope cursor
@@ -221,7 +221,7 @@ FingerTree lineage:
 Range-update lineage:
 
 1. C# owns the semantic reference in
-   `src/CSharp/src/Tools.DataStructures.FingerTree`: `IRangeUpdateAlgebra` defines the tag monoid and
+   `src/CSharp/src/Durable7.FingerTree`: `IRangeUpdateAlgebra` defines the tag monoid and
    its count-aware action on elements and ordered measures, while `RangeUpdateSequence` owns the
    path-copied implicit-AVL node/tag invariant, indexed and range API, public struct enumerator,
    failure atomicity, and deterministic structural bounds. The exact contract is
@@ -240,7 +240,7 @@ languages.
 
 Ordered-set lineage:
 
-1. C# Ordered (`src/CSharp/src/Tools.DataStructures.Ordered`) owns the neutral
+1. C# Ordered (`src/CSharp/src/Durable7.Ordered`) owns the neutral
    `PersistentOrderedSet<T>` contract, dual-index invariants, sparse labels, explicit movement,
    positional ranges, stable one-shot sort, receiver-policy algebra, and the enforced absence of a
    Tungsten dependency. Deterministic relabel fallback, eager failure behavior, focused serialized
@@ -248,7 +248,7 @@ Ordered-set lineage:
 2. `src/TypeScript/src/ordered` ports the same observable contract to strict ESM with a runtime
    `HashPolicy`, persistent measured sequence, bigint-private labels, typed lookup/removal
    results, and a public invariant diagnostic used by package tests.
-3. `src/Python/src/vladimir_reshetnikov/data_structures/ordered` ports it to typed Python with a
+3. `src/Python/src/durable7/ordered` ports it to typed Python with a
    retained `HashPolicy`, persistent deque order index, presence-safe dataclass results, and
    Python-native exceptions. Neither sibling package imports or delegates to its Tungsten module.
 4. `src/C/Ordered`, `src/Cpp/Ordered`, `src/Haskell/Ordered`, `src/Kotlin/Ordered`, and
@@ -264,7 +264,7 @@ no dependency or semantic obligation for a general collection. New kernel eviden
 whole lineage, and any generally useful mechanism must move by an independently owned fork rather
 than by making another family depend on Tungsten.
 
-1. C# Tungsten collections (`src/CSharp/src/Tools.DataStructures.Tungsten`) define the managed
+1. C# Tungsten collections (`src/CSharp/src/Durable7.Tungsten`) define the managed
    Tungsten-port contract: `PersistentList<T>` over the FingerTree deque and
    `PersistentAssociation<TKey, TValue>` composed per the historical
    [derived structure catalog](derived-structure-catalog.md) case study, with the kernel-verified
@@ -274,8 +274,8 @@ than by making another family depend on Tungsten.
    models while preserving the substrate composition, sparse-stamp relabel behavior, and
    average/worst-case operation bounds.
 
-Numerics originates in `src/CSharp/src/Tools.Numerics`; `src/TypeScript/src/numerics`,
-`src/Python/src/vladimir_reshetnikov/data_structures/numerics`, and `src/OCaml/lib/numerics` port the six fixed-width types,
+Numerics originates in `src/CSharp/src/Durable7.Numerics`; `src/TypeScript/src/numerics`,
+`src/Python/src/durable7/numerics`, and `src/OCaml/lib/numerics` port the six fixed-width types,
 binary/format semantics, `SparseInteger`, and `BitConverterEx` over their native arbitrary-precision
 integer substrates.
 

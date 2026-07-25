@@ -31,7 +31,7 @@ Proceed in this order:
 1. Add persistent-HAMT single-pass `GetOrAdd`/`AddOrUpdate` operations — **shipped across all eight languages**.
 2. Implement `PersistentHashBag<T>` over `PersistentHashMap<T, int>` — **shipped across all eight languages** (with language-appropriate wide total-count types).
 3. Implement `PersistentOrderedSet<T>` as an independently owned composite in a new general
-   `Tools.DataStructures.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
+   `Durable7.Ordered` project. Fork the useful dual-index and sparse-label mechanics;
    do not reference, wrap, or inherit semantics from Tungsten `PersistentAssociation` — **shipped
    across all eight languages in neutral Ordered packages**.
 4. Implement `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` as the next genuinely new
@@ -218,22 +218,22 @@ point-update kernel and hash bag.
 
 The shipped neutral general-purpose project and corresponding tests/docs are:
 
-- `src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj`;
-- namespace `Tools.DataStructures.Ordered`;
-- `src/CSharp/tests/Tools.DataStructures.Ordered.Tests`; and
+- `src/CSharp/src/Durable7.Ordered/Durable7.Ordered.csproj`;
+- namespace `Durable7.Ordered`;
+- `src/CSharp/tests/Durable7.Ordered.Tests`; and
 - `src/CSharp/docs/Ordered`.
 
 The project references public HAMT and FingerTree projects. Neither foundation references Ordered,
 and Ordered does not reference Tungsten:
 
 ```text
-Tools.DataStructures.Ordered
-├── Tools.DataStructures.Hamt
-└── Tools.DataStructures.FingerTree
+Durable7.Ordered
+├── Durable7.Hamt
+└── Durable7.FingerTree
 
-Tools.DataStructures.Tungsten
-├── Tools.DataStructures.Hamt
-└── Tools.DataStructures.FingerTree
+Durable7.Tungsten
+├── Durable7.Hamt
+└── Durable7.FingerTree
 ```
 
 Do not initially refactor Tungsten to consume Ordered. Similar mechanics do not imply shared
@@ -589,7 +589,7 @@ These are operation-count and correctness gates, not wall-clock gates.
 
 ### Representation
 
-Place the bag in `Tools.DataStructures.Hamt` beside `PersistentHashMap` and `PersistentHashSet`.
+Place the bag in `Durable7.Hamt` beside `PersistentHashMap` and `PersistentHashSet`.
 It adds no cross-project dependency.
 
 ```csharp

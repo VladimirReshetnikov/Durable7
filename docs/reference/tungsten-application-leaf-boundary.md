@@ -22,12 +22,12 @@ implementation. In ordinary project-reference notation, where the arrow points f
 its dependency, the allowed graph is:
 
 ```text
-Tools.DataStructures.Tungsten
-├── Tools.DataStructures.Hamt
-└── Tools.DataStructures.FingerTree
+Durable7.Tungsten
+├── Durable7.Hamt
+└── Durable7.FingerTree
 
-Tools.DataStructures.Hamt         (must not reference Tungsten)
-Tools.DataStructures.FingerTree   (must not reference Tungsten)
+Durable7.Hamt         (must not reference Tungsten)
+Durable7.FingerTree   (must not reference Tungsten)
 Any other general library         (must not reference Tungsten)
 ```
 
@@ -251,7 +251,7 @@ in.
 ### Rejected design
 
 The original benchmark-independent proposal placed `PersistentOrderedSet<T>` in
-`Tools.DataStructures.Tungsten` and represented it as `PersistentAssociation<T, Unit>`. That design
+`Durable7.Tungsten` and represented it as `PersistentAssociation<T, Unit>`. That design
 was mechanically compact but violated this policy in four ways:
 
 1. the general public type lived in an application-owned assembly;
@@ -266,13 +266,13 @@ Renaming the wrapper or moving only its namespace would not fix those dependenci
 A general ordered set belongs in a neutral composition workspace:
 
 ```text
-Tools.DataStructures.Ordered
-├── Tools.DataStructures.Hamt
-└── Tools.DataStructures.FingerTree
+Durable7.Ordered
+├── Durable7.Hamt
+└── Durable7.FingerTree
 
-Tools.DataStructures.Tungsten
-├── Tools.DataStructures.Hamt
-└── Tools.DataStructures.FingerTree
+Durable7.Tungsten
+├── Durable7.Hamt
+└── Durable7.FingerTree
 ```
 
 Neither consumer references the other. The first version should not refactor Tungsten to consume
@@ -334,7 +334,7 @@ replacement, pre-removal `Insert` index, exact stamp gap, or kernel vocabulary.
 ### Independent validation
 
 Among repository collection projects, the test project should reference
-`Tools.DataStructures.Ordered` only; ordinary test infrastructure remains allowed. A comparer-aware
+`Durable7.Ordered` only; ordinary test infrastructure remains allowed. A comparer-aware
 ordered-list model supplies expected behavior. Collision-heavy comparers, object-distinct equivalent
 values, retained branches, relabel histories, stable sorting, no-op identity, exception paths, and
 concurrent readers are still valuable scenarios, but their expected results come from the Ordered

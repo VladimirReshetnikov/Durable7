@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace tools::data_structures::finger_tree::tests {
+namespace durable7::finger_tree::tests {
 
 class deterministic_rng final {
 public:
@@ -165,4 +165,4 @@ template <class Operation, class Fails>
     return failing;
 }
 
-} // namespace tools::data_structures::finger_tree::tests
+} // namespace durable7::finger_tree::tests

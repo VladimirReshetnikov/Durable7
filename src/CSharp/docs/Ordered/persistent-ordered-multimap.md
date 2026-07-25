@@ -3,7 +3,7 @@
 - Status: Implemented normative contract
 - Created (UTC): 2026-07-17T00:00:00Z
 - Repository HEAD: `0bee5b4e50d0a21d43af88efbce5df6d34516bf9`
-- Audience: Consumers and maintainers of `Tools.DataStructures.Ordered`
+- Audience: Consumers and maintainers of `Durable7.Ordered`
 - Scope: `PersistentOrderedMultimap<TKey, TValue>` semantics, API, and complexity
 
 `PersistentOrderedMultimap<TKey, TValue>` is an immutable set of key/value pairs with two nested

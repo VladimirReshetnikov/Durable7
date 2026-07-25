@@ -19,7 +19,7 @@ $target = switch ($Workspace) {
     'Hamt' { 'hamt-test' }
     'FingerTree' { 'ft-test' }
     'Ordered' { 'ordered-test' }
-    'Tungsten' { 'tools-data-structures-tungsten' }
+    'Tungsten' { 'durable7-tungsten' }
 }
 
 $cabal = Get-Command cabal -ErrorAction Stop

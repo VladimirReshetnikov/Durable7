@@ -1,6 +1,6 @@
 #include "benchmark_allocation.hpp"
 
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 
 #include <algorithm>
 #include <array>
@@ -21,8 +21,8 @@
 #include <utility>
 #include <vector>
 
-namespace ft = tools::data_structures::finger_tree;
-namespace bench = tools::data_structures::finger_tree::benchmarks;
+namespace ft = durable7::finger_tree;
+namespace bench = durable7::finger_tree::benchmarks;
 
 namespace {
 

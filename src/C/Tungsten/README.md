@@ -7,7 +7,7 @@
 
 This workspace is the C17 port of the Tungsten `List` and `Association` collection family. It exposes
 type-erased, explicit-lifetime APIs through
-[`tungsten.h`](include/tools/data_structures/tungsten/tungsten.h).
+[`tungsten.h`](include/durable7/tungsten/tungsten.h).
 
 This is an application-specific leaf port. It may consume the C HAMT and FingerTree libraries, but
 no general C library may depend on Tungsten or treat its kernel-derived behavior as a baseline.
@@ -15,8 +15,8 @@ Fork reusable mechanics into an independently owned implementation; C# is author
 the sibling Tungsten ports. See the normative
 [application-leaf boundary](../../../docs/reference/tungsten-application-leaf-boundary.md).
 
-- `tds_tungsten_list` is a value-type facade over the C FingerTree persistent deque.
-- `tds_tungsten_association` composes the C HAMT with an internal ref-counted AVL sequence ordered by
+- `d7_tungsten_list` is a value-type facade over the C FingerTree persistent deque.
+- `d7_tungsten_association` composes the C HAMT with an internal ref-counted AVL sequence ordered by
   sparse stamps. The HAMT gives keyed lookup and stored-key recovery; the stamp sequence gives ordered
   traversal, indexed access, keyed position lookup, positional edits, relabeling, slicing, and sorting
   with the same asymptotic bounds as the C# reference.
@@ -39,12 +39,12 @@ Unlike the C HAMT (whose operations support `result` aliasing the source), every
 association operation requires `result` to be a distinct struct: aliasing the source would overwrite the
 caller's only handle before the source is fully consumed, leaking the previous version. All entry points
 reject `result == source` (and `result == right` for two-operand forms) with
-`TDS_TUNGSTEN_INVALID_ARGUMENT`. Use the operation into a temporary plus `tds_tungsten_list_move` /
-`tds_tungsten_association_move` for update-in-place call patterns.
+`D7_TUNGSTEN_INVALID_ARGUMENT`. Use the operation into a temporary plus `d7_tungsten_list_move` /
+`d7_tungsten_association_move` for update-in-place call patterns.
 
 ## Concurrency
 
-Already-retained `tds_tungsten_list` and `tds_tungsten_association` snapshots may be read concurrently when
+Already-retained `d7_tungsten_list` and `d7_tungsten_association` snapshots may be read concurrently when
 their value/key callbacks and borrowed payloads are reader-safe. Keep every published handle alive until its
 readers finish.
 

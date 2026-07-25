@@ -6,7 +6,7 @@ add_executable(
 target_link_libraries(
     tungsten_smoke_tests
     PRIVATE
-        tools::data_structures::tungsten
+        durable7::tungsten
 )
 
 target_include_directories(
@@ -17,4 +17,4 @@ target_include_directories(
 
 tungsten_configure_target(tungsten_smoke_tests)
 
-tds_add_headless_test(NAME tungsten.smoke TARGET tungsten_smoke_tests)
+d7_add_headless_test(NAME tungsten.smoke TARGET tungsten_smoke_tests)

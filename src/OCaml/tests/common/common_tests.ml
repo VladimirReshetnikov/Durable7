@@ -1,4 +1,4 @@
-open Tools_data_structures
+open Durable7
 
 let test_hash_policy () =
   let policy = Common.Hash_policy.create ~hash:String.length ~equal:String.equal in

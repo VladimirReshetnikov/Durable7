@@ -8,7 +8,7 @@
 
 `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` is an immutable indexed sequence that can
 transform every element in a contiguous range and update the range's cached measure without
-visiting the range interior. It is a sibling core in `Tools.DataStructures.FingerTree`, not a
+visiting the range interior. It is a sibling core in `Durable7.FingerTree`, not a
 modification of either shipped finger-tree engine. A deterministic implicit-key AVL tree supplies
 split, join, indexed editing, and concatenation; an algebra supplied by `TOps` supplies element
 measurement, ordered measure combination, lazy-tag composition, and the action of a tag on both an
@@ -304,7 +304,7 @@ and then adds a delta. The tag denotes the affine action
 `x -> (HasAssignment ? Assignment : x) + Addition`:
 
 ```csharp
-using Tools.DataStructures.FingerTree;
+using Durable7.FingerTree;
 
 public readonly record struct AffineTag(
     bool HasAssignment,
@@ -376,7 +376,7 @@ public readonly struct AffineSumAlgebra
 Using that policy:
 
 ```csharp
-using Sequence = Tools.DataStructures.FingerTree.RangeUpdateSequence<
+using Sequence = Durable7.FingerTree.RangeUpdateSequence<
     long, long, AffineTag, AffineSumAlgebra>;
 
 var original = Sequence.Create([1, 2, 3, 4]);

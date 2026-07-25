@@ -1,4 +1,4 @@
-#include <tools/data_structures/finger_tree/persistent_interval_map.hpp>
+#include <durable7/finger_tree/persistent_interval_map.hpp>
 
 #include "test_support/test_runner.hpp"
 
@@ -10,8 +10,8 @@
 #include <utility>
 #include <vector>
 
-namespace ft = tools::data_structures::finger_tree;
-using namespace tools::data_structures::finger_tree::tests;
+namespace ft = durable7::finger_tree;
+using namespace durable7::finger_tree::tests;
 
 namespace {
 

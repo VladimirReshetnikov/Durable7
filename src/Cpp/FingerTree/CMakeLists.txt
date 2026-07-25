@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(
-    ToolsDataStructuresFingerTreeCpp
+    Durable7FingerTreeCpp
     VERSION 0.1.0
-    DESCRIPTION "C++ port of Tools.DataStructures.FingerTree"
+    DESCRIPTION "C++ port of Durable7.FingerTree"
     LANGUAGES CXX
 )
 
@@ -20,26 +20,26 @@ option(
     ON
 )
 
-add_library(tools_data_structures_finger_tree INTERFACE)
-add_library(tools::data_structures::finger_tree ALIAS tools_data_structures_finger_tree)
+add_library(durable7_finger_tree INTERFACE)
+add_library(durable7::finger_tree ALIAS durable7_finger_tree)
 
 if(WIN32)
-    target_link_libraries(tools_data_structures_finger_tree INTERFACE bcrypt)
+    target_link_libraries(durable7_finger_tree INTERFACE bcrypt)
 else()
     find_package(OpenSSL REQUIRED COMPONENTS Crypto)
-    target_link_libraries(tools_data_structures_finger_tree INTERFACE OpenSSL::Crypto)
+    target_link_libraries(durable7_finger_tree INTERFACE OpenSSL::Crypto)
 endif()
 
 target_include_directories(
-    tools_data_structures_finger_tree
+    durable7_finger_tree
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-target_compile_features(tools_data_structures_finger_tree INTERFACE cxx_std_23)
+target_compile_features(durable7_finger_tree INTERFACE cxx_std_23)
 set_target_properties(
-    tools_data_structures_finger_tree
+    durable7_finger_tree
     PROPERTIES
         EXPORT_NAME finger_tree
 )
@@ -47,7 +47,7 @@ set_target_properties(
 # Keep an export created by MSVC consumable by non-MSVC compilers. Generator
 # expressions defer the compiler-specific flags until the consuming project.
 target_compile_options(
-    tools_data_structures_finger_tree
+    durable7_finger_tree
     INTERFACE
         $<$<CXX_COMPILER_ID:MSVC>:/std:c++latest>
         $<$<CXX_COMPILER_ID:MSVC>:/permissive->
@@ -108,7 +108,7 @@ endif()
 if(FINGERTREE_BUILD_TESTS)
     add_subdirectory(tests)
 
-    tds_add_headless_command_test(
+    d7_add_headless_command_test(
         NAME fingertree.installed-consumer
         COMMAND
             "${CMAKE_COMMAND}"
@@ -131,8 +131,8 @@ if(FINGERTREE_BUILD_TESTS)
 endif()
 
 install(
-    TARGETS tools_data_structures_finger_tree
-    EXPORT ToolsDataStructuresFingerTreeTargets
+    TARGETS durable7_finger_tree
+    EXPORT Durable7FingerTreeTargets
 )
 install(
     DIRECTORY include/
@@ -141,37 +141,37 @@ install(
 )
 install(
     FILES "${CMAKE_CURRENT_SOURCE_DIR}/../../../LICENSE"
-    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/licenses/ToolsDataStructuresFingerTree"
+    DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/licenses/Durable7FingerTree"
 )
 
 set(
     FINGERTREE_INSTALL_CMAKEDIR
-    "${CMAKE_INSTALL_LIBDIR}/cmake/ToolsDataStructuresFingerTree"
+    "${CMAKE_INSTALL_LIBDIR}/cmake/Durable7FingerTree"
     CACHE STRING
-    "Install location for the ToolsDataStructuresFingerTree CMake package."
+    "Install location for the Durable7FingerTree CMake package."
 )
 
 configure_package_config_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ToolsDataStructuresFingerTreeConfig.cmake.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/ToolsDataStructuresFingerTreeConfig.cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Durable7FingerTreeConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/Durable7FingerTreeConfig.cmake"
     INSTALL_DESTINATION "${FINGERTREE_INSTALL_CMAKEDIR}"
 )
 write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/ToolsDataStructuresFingerTreeConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/Durable7FingerTreeConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
     COMPATIBILITY SameMajorVersion
     ARCH_INDEPENDENT
 )
 
 install(
-    EXPORT ToolsDataStructuresFingerTreeTargets
-    FILE ToolsDataStructuresFingerTreeTargets.cmake
-    NAMESPACE tools::data_structures::
+    EXPORT Durable7FingerTreeTargets
+    FILE Durable7FingerTreeTargets.cmake
+    NAMESPACE durable7::
     DESTINATION "${FINGERTREE_INSTALL_CMAKEDIR}"
 )
 install(
     FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/ToolsDataStructuresFingerTreeConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/ToolsDataStructuresFingerTreeConfigVersion.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/Durable7FingerTreeConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/Durable7FingerTreeConfigVersion.cmake"
     DESTINATION "${FINGERTREE_INSTALL_CMAKEDIR}"
 )

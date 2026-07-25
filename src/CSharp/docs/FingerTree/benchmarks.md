@@ -3,9 +3,9 @@
 - Created (UTC): 2026-06-13T00:00:00Z
 - Repository HEAD: a93058305d... (benchmark harness)
 - Audience: Maintainers and reviewers assessing the library's measured performance
-- Scope: Curated results from `benchmarks/Tools.DataStructures.FingerTree.Benchmarks`
+- Scope: Curated results from `benchmarks/Durable7.FingerTree.Benchmarks`
 
-This document records representative results from the [BenchmarkDotNet harness](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md),
+This document records representative results from the [BenchmarkDotNet harness](../../benchmarks/Durable7.FingerTree.Benchmarks/README.md),
 which turns the library's asymptotic and constant-factor claims into measured evidence against the BCL's
 persistent collections. The harness — not these snapshots — is the source of truth; re-run it to refresh.
 
@@ -122,7 +122,7 @@ A flat ~22 ns across four orders of magnitude is O(1) amortized under branching 
 the lazy spine was built for. The collections built on the same core inherit it: `SortedSet.Add` on a retained
 set stays O(log n) (~180–224 ns across the sizes), on par with the BCL's persistent `ImmutableSortedSet.Add`
 (~127–298 ns). (Reading the memoized `Measure` of a retained tree is O(1); see the
-[unit-test guards](../../tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs), which
+[unit-test guards](../../tests/Durable7.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs), which
 also pin branching correctness, 1,000,000-element stack safety, and concurrent convergence.)
 
 ## Sorted collections — competitive, honest
@@ -146,7 +146,7 @@ generic `TryLocate<TPredicate>` overload, the descent allocates nothing at all:
 So the reads went from ~2.4 KB per query to **zero** — BCL-parity allocation behavior — at comparable speed.
 Eliminating the tree rebuild gave the ~7× speedup; replacing the capturing lambda with a constrained value-type
 predicate (`KeyAtLeastPredicate<T>` etc.) removed the last per-read closure, which the
-[zero-allocation guard tests](../../tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs) pin
+[zero-allocation guard tests](../../tests/Durable7.FingerTree.Tests/AllocationFreeReadTests.cs) pin
 across SortedSet/SortedBag/SortedDictionary/PriorityQueue/IntervalTree. The BCL's sub-nanosecond reads here are
 in the hoisting-caveat regime and are not literal. The finger-tree value proposition for sorted data is the
 **unified measure framework** — one core yielding multiset, set, map, interval tree, priority queue, and

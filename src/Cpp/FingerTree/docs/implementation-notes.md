@@ -27,7 +27,7 @@ Compared material:
 Implemented:
 
 - Header-first CMake workspace rooted at `src/Cpp/FingerTree`.
-- Public aggregate include `tools/data_structures/finger_tree/finger_tree.hpp`.
+- Public aggregate include `durable7/finger_tree/finger_tree.hpp`.
 - CTest smoke executable with a tiny local runner.
 - Test-support allocation counter, operation/comparison counter, deterministic RNG, and command-sequence scaffold.
 - Visual Studio/Ninja presets using absolute paths for bundled CMake/Ninja tools.
@@ -51,25 +51,25 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Measures.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Comparisons.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/SumMeasure.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/ProductMeasure.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/PriorityQueue.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/IntervalTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Measures.cs`
+- `src/CSharp/src/Durable7.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Durable7.FingerTree/Comparisons.cs`
+- `src/CSharp/src/Durable7.FingerTree/SumMeasure.cs`
+- `src/CSharp/src/Durable7.FingerTree/ProductMeasure.cs`
+- `src/CSharp/src/Durable7.FingerTree/MeasurePredicate.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Durable7.FingerTree/PriorityQueue.cs`
+- `src/CSharp/src/Durable7.FingerTree/IntervalTree.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SumMeasureTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ProductMeasureTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/PriorityQueueTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/IntervalTreeTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ZeroClosureNamedOpTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/SumMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/ProductMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/PriorityQueueTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/IntervalTreeTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/ZeroClosureNamedOpTests.cs`
 
 Implemented:
 
@@ -128,17 +128,17 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/MiddleTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
 - `src/Cpp/FingerTree/docs/port-plan.md`
 - `src/Cpp/FingerTree/docs/port-plan-editorial-notes.md`
 
 Compared C# tests and examples:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/PersistenceConcurrencyExamplesTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/PersistenceConcurrencyExamplesTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/TearableConcurrencyStressTests.cs`
 
 Implemented:
 
@@ -186,8 +186,8 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/TearableConcurrencyStressTests.cs`
 - `src/Cpp/FingerTree/docs/port-plan-editorial-notes.md`
 
 Implemented:
@@ -220,8 +220,8 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
 - `src/Cpp/FingerTree/docs/port-plan.md`
 - `src/Cpp/FingerTree/docs/port-plan-editorial-notes.md`
 
@@ -257,26 +257,26 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeDeque.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeDequeResults.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/TreeElement.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Digit.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Node.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Tree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MiddleTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/TreeOperations.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTreeDeque.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTreeDequeResults.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/TreeElement.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Digit.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Node.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Tree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/MiddleTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/TreeOperations.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEndpointOperationTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeBranchingPersistenceTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeIndexingAndSplitTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeEnumerationAndCopyTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeSortedSearchEdgeTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeComplexityGuardTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/FingerTreeDequeRandomizedModelTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeEndpointOperationTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeBranchingPersistenceTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeIndexingAndSplitTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeEnumerationAndCopyTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeSortedSearchTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeSortedSearchEdgeTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeComplexityGuardTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/FingerTreeDequeRandomizedModelTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -354,20 +354,20 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasurePredicate.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredElements.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredMiddle.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/MeasurePredicate.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredElements.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredMiddle.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreeTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TryLocateTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/MeasuredFingerTreeTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/MeasuredFingerTreePersistenceTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/TryLocateTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/AllocationFreeReadTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -440,15 +440,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/PriorityQueue.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Durable7.FingerTree/PriorityQueue.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Durable7.FingerTree/BuiltInMeasures.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/PriorityQueueTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/PriorityQueueTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/CustomComparisonMeasureTests.cs`
 
 Implemented:
 
@@ -498,15 +498,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/IntervalTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Durable7.FingerTree/IntervalTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/MeasurePredicates.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/IntervalTreeTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/BuiltInMeasureTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/CustomComparisonMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/IntervalTreeTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/BuiltInMeasureTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/CustomComparisonMeasureTests.cs`
 
 Implemented:
 
@@ -590,21 +590,21 @@ Validation:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/SortedBag.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/SortedSet.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/SortedDictionary.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/BuiltInMeasures.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasurePredicates.cs`
+- `src/CSharp/src/Durable7.FingerTree/SortedBag.cs`
+- `src/CSharp/src/Durable7.FingerTree/SortedSet.cs`
+- `src/CSharp/src/Durable7.FingerTree/SortedDictionary.cs`
+- `src/CSharp/src/Durable7.FingerTree/BuiltInMeasures.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/MeasurePredicates.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedBagTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedSetTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedDictionaryTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/SortedCollectionPropertyTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/DerivedCollectionPersistenceTests.cs`
-- The sorted-set section of `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/SortedBagTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/SortedSetTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/SortedDictionaryTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/SortedCollectionPropertyTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/AllocationFreeReadTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/DerivedCollectionPersistenceTests.cs`
+- The sorted-set section of `src/CSharp/tests/Durable7.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -677,13 +677,13 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleElements.cs`
+- `src/CSharp/src/Durable7.FingerTree/ReversibleDeque.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Reversible/ReversibleTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Reversible/ReversibleElements.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ReversibleDequeTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/ReversibleDequeTests.cs`
 
 Implemented:
 
@@ -748,15 +748,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Rope.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
+- `src/CSharp/src/Durable7.FingerTree/Rope.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/RopeChunk.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeModelTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
-- The rope section of `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/RopeTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/RopeModelTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/RopePropertyTests.cs`
+- The rope section of `src/CSharp/tests/Durable7.FingerTree.Tests/ModelBasedCommandTests.cs`
 
 Implemented:
 
@@ -819,15 +819,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/MeasuredRopeChunk.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/RopeChunk.cs`
+- `src/CSharp/src/Durable7.FingerTree/MeasuredRope.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/MeasuredRopeChunk.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/RopeChunk.cs`
 
 Compared C# tests:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/MeasuredRopeTests.cs`
-- The measured-rope section of `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ModelBasedCommandTests.cs`
-- The measured-rope property checks in `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/MeasuredRopeTests.cs`
+- The measured-rope section of `src/CSharp/tests/Durable7.FingerTree.Tests/ModelBasedCommandTests.cs`
+- The measured-rope property checks in `src/CSharp/tests/Durable7.FingerTree.Tests/RopePropertyTests.cs`
 
 Implemented:
 
@@ -887,15 +887,15 @@ Findings:
 
 Compared C# source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/RopeText.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/RopeBuilder.cs`
+- `src/CSharp/src/Durable7.FingerTree/RopeText.cs`
+- `src/CSharp/src/Durable7.FingerTree/RopeBuilder.cs`
 
 Compared C# tests and samples:
 
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeTextTests.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopeBuilderTests.cs`
-- The text-rope line-navigation property in `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/RopePropertyTests.cs`
-- The text-rope usage in `src/CSharp/samples/Tools.DataStructures.FingerTree.Tour/TourProgram.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/RopeTextTests.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/RopeBuilderTests.cs`
+- The text-rope line-navigation property in `src/CSharp/tests/Durable7.FingerTree.Tests/RopePropertyTests.cs`
+- The text-rope usage in `src/CSharp/samples/Durable7.FingerTree.Tour/TourProgram.cs`
 
 Implemented:
 
@@ -960,12 +960,12 @@ Compared review material:
 
 Compared C# source and tests:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeMeasureExtensions.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeProductExtensions.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/SumMeasure.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/MeasuredRope.cs`
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/TearableConcurrencyStressTests.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTreeMeasureExtensions.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTreeProductExtensions.cs`
+- `src/CSharp/src/Durable7.FingerTree/SumMeasure.cs`
+- `src/CSharp/src/Durable7.FingerTree/MeasuredRope.cs`
+- `src/CSharp/tests/Durable7.FingerTree.Tests/TearableConcurrencyStressTests.cs`
 
 Implemented:
 
@@ -1036,8 +1036,8 @@ Implemented benchmarks:
 Implemented packaging and portability:
 
 - Added install rules for public headers, an export set, package config/version files, and the installed imported
-  target `tools::data_structures::finger_tree` discovered through
-  `find_package(ToolsDataStructuresFingerTree CONFIG)`.
+  target `durable7::finger_tree` discovered through
+  `find_package(Durable7FingerTree CONFIG)`.
 - Marked the header-only package architecture-independent and installed the repository's MIT-0 license alongside
   the package artifacts.
 - Added the headless `fingertree.installed-consumer` integration test. It installs to a private prefix, configures

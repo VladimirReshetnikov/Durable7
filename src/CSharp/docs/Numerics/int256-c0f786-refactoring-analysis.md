@@ -3,10 +3,10 @@
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Status: Historical analysis
-- Audience: `Tools.Numerics` maintainers and reviewers
+- Audience: `Durable7.Numerics` maintainers and reviewers
 - Scope: behavioral and maintainability analysis of the `Int256.cs` refactoring commit `c0f7869247c630aa066f6520f690920b76b0d745`
 - Related code:
-  - `src/CSharp/src/Tools.Numerics/Int256.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int256.cs`
 - Related commits:
   - `c0f7869247c630aa066f6520f690920b76b0d745` (“Simplify `Int256` implementation by inlining helper methods and other refactorings”)
 

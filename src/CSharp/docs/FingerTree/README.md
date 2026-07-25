@@ -4,7 +4,7 @@
 - Created (UTC): 2026-04-27T18:33:25Z
 - Repository HEAD: df8ea08345ca22ba76e6f4fc7e92d0fd41686de3
 - Audience: Maintainers and implementers working on the C# finger-tree collection family
-- Scope: Index of design references and local specifications for `src/CSharp/src/Tools.DataStructures.FingerTree`
+- Scope: Index of design references and local specifications for `src/CSharp/src/Durable7.FingerTree`
 
 ## Current Documents
 
@@ -15,7 +15,7 @@ project.
 - [Usage guide](usage.md) shows namespace setup, persistent value semantics, facade selection,
   interval-set and interval-map queries, common update/query patterns, samples, and pointers to the
   API, benchmark, and concurrency references.
-- [C# FingerTree API Specification](api-specification.md) defines the normative public C# API shape, semantic contracts, and complexity targets for the implementation in `src/Tools.DataStructures.FingerTree/`.
+- [C# FingerTree API Specification](api-specification.md) defines the normative public C# API shape, semantic contracts, and complexity targets for the implementation in `src/Durable7.FingerTree/`.
 - [Persistent chunked bit set](persistent-chunked-bit-set.md) specifies the sparse nonnegative-int
   domain, inclusive rank, zero-based select, chunk-stream algebra, API, and complexity contract.
 - [Range-update sequence contract](range-update-sequence.md) specifies the static tag/action algebra,
@@ -28,7 +28,7 @@ project.
   postponed until they can run in isolation.
 - [Validation](validation.md) records the local .NET restore/build/test commands, XML-documentation gate,
   sample and benchmark validation boundaries, stress controls, and test-suite coverage.
-- [Tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md) maps the xUnit/CsCheck test project,
+- [Tests README](../../tests/Durable7.FingerTree.Tests/README.md) maps the xUnit/CsCheck test project,
   source files, sample-smoke hooks, model/property suites, and stress controls.
 - [Rope cursor C0 decision](rope-cursor-c0-decision.md) records the readonly-struct cursor representation selected for
   the shipped C# positional `RopeCursor<T>`, its 16/256 focus/carry tuning, benchmark gate, and the

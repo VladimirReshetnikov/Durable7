@@ -4,7 +4,7 @@
 - Repository HEAD: 83d2d4bc69d8c77980127695f656f0aa5ecf56bd
 - Audience: Consumers, maintainers, reviewers, and port authors
 - Scope: Documentation index, cursor contract, and intentional Rust mappings for
-  `tools-data-structures-range-update`
+  `durable7-range-update`
 
 - [Crate overview and Rust API mapping](../README.md) describes the algebra trait, public surface,
   lazy invariant, persistence, result mapping, complexity, and focused validation command.

@@ -5,7 +5,7 @@
 - Audience: Consumers, maintainers, reviewers, and sibling-language port authors
 - Scope: Neutral Rust persistent ordered set/map crate, contracts, and validation entry point
 
-`tools-data-structures-ordered` provides the safe-Rust port of the repository's neutral persistent
+`durable7-ordered` provides the safe-Rust port of the repository's neutral persistent
 insertion-ordered collections. `PersistentOrderedSet<T, S = RandomState>` combines the public CHAMP
 `PersistentHashMap<T, i64, S>` membership index with the public FingerTree `PersistentDeque`
 positional sequence. It is independently owned general-purpose code: the crate has no dependency on

@@ -2,12 +2,12 @@
 
 - Created (UTC): 2026-07-07T15:05:40Z
 - Repository HEAD: 754f2e474caf2419bfabd5f88565341ddadbf449
-- Audience: Maintainers, reviewers, and porters of `Tools.DataStructures.Tungsten`
+- Audience: Maintainers, reviewers, and porters of `Durable7.Tungsten`
 - Scope: Public contracts, ordering rules, complexity, and allocation behavior
 
 The XML documentation in
-[`PersistentList.cs`](../../src/Tools.DataStructures.Tungsten/PersistentList.cs) and
-[`PersistentAssociation.cs`](../../src/Tools.DataStructures.Tungsten/PersistentAssociation.cs) is
+[`PersistentList.cs`](../../src/Durable7.Tungsten/PersistentList.cs) and
+[`PersistentAssociation.cs`](../../src/Durable7.Tungsten/PersistentAssociation.cs) is
 the member-level source of truth. This document specifies the cross-cutting contracts and the
 tables ports must reproduce.
 

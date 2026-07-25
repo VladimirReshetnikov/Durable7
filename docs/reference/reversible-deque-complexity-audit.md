@@ -24,21 +24,21 @@ previously reversed deque must not pay a hidden O(n) materialization cost.
 
 C#:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/ReversibleDeque.cs` delegates `Reverse()` to
+- `src/CSharp/src/Durable7.FingerTree/ReversibleDeque.cs` delegates `Reverse()` to
   `_root.Mirror()` and `Concat` to `RevTreeOps.Concat`.
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleTree.cs` makes deep
+- `src/CSharp/src/Durable7.FingerTree/Internal/Reversible/ReversibleTree.cs` makes deep
   `Mirror()` flip a bit and implements `Glue` through `LogicalPrefix`, `LogicalMiddle`, and `LogicalSuffix`.
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Reversible/ReversibleElements.cs` gives
+- `src/CSharp/src/Durable7.FingerTree/Internal/Reversible/ReversibleElements.cs` gives
   internal nodes the same O(1) mirror bit and logical child access.
-- `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/ReversibleDequeTests.cs` covers all four
+- `src/CSharp/tests/Durable7.FingerTree.Tests/ReversibleDequeTests.cs` covers all four
   concat orientation combinations, reversed split reconstruction, deep reversed-middle updates, and constant
   allocation for whole-deque reverse.
 
 C++:
 
-- `src/Cpp/FingerTree/include/tools/data_structures/finger_tree/reversible_deque.hpp` delegates `reverse()` to
+- `src/Cpp/FingerTree/include/durable7/finger_tree/reversible_deque.hpp` delegates `reverse()` to
   `root_.mirror()` and `concat` to `detail::rev_concat`.
-- `src/Cpp/FingerTree/include/tools/data_structures/finger_tree/detail/reversible_tree.hpp` mirrors the C#
+- `src/Cpp/FingerTree/include/durable7/finger_tree/detail/reversible_tree.hpp` mirrors the C#
   logical-prefix/middle/suffix algorithm; `rev_concat_with_middle` builds bridges from logical digits.
 - `src/Cpp/FingerTree/tests/reversible_deque_tests.cpp` covers all four concat orientation combinations,
   reversed split reconstruction, deep reversed-middle updates, random histories with reverse, and allocation
@@ -46,7 +46,7 @@ C++:
 
 C:
 
-- `src/C/FingerTree/include/tools/data_structures/finger_tree/fingertree.h` exposes `ft_reversible_deque` through
+- `src/C/FingerTree/include/durable7/finger_tree/fingertree.h` exposes `ft_reversible_deque` through
   an opaque `ft_reversible_deque_rep` and declares reverse, index, endpoint push/pop, concat, split, set,
   insert/remove, traversal, and copy/dispose operations.
 - `src/C/FingerTree/src/fingertree.c` implements `ft_reversible_deque_reverse` through `ft_rev_rep_mirror`. Deep
@@ -59,7 +59,7 @@ C:
 
 Haskell:
 
-- `src/Haskell/FingerTree/src/Data/Structures/FingerTree/ReversibleDeque.hs` now owns a strict reversible tree
+- `src/Haskell/FingerTree/src/Durable7/FingerTree/ReversibleDeque.hs` now owns a strict reversible tree
   with `Tree` and `Elem` reversal bits. `reverse` mirrors the root in O(1).
 - `append` delegates to `treeConcat`; its `glue` path combines logical suffix/middle/prefix digits and recurses
   through `logicalMiddle`, matching the C#/C++ reversal-aware concat shape instead of flattening either operand.
@@ -70,14 +70,14 @@ Haskell:
 
 Kotlin:
 
-- `src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt` now gives `ReversibleDeque<T>` a private
+- `src/Kotlin/FingerTree/src/durable7/fingertree/Core.kt` now gives `ReversibleDeque<T>` a private
   balanced node tree with small leaves, concat nodes, and reversed root wrappers. `reverse()` wraps or unwraps
   the root in O(1), and the reversed wrapper keeps the original storage token for sharing checks.
 - `concatReversibleDequeNodes` joins roots directly and descends through logical concat parts for balancing, so
   joining previously reversed operands does not normalize either side into a list.
 - `front`, `back`, `get`, `splitAt`, `tryViewLeft`, `tryViewRight`, and `toList` use node operations that project
   logical orientation. Only explicit materialization APIs allocate the full list.
-- `src/Kotlin/FingerTree/test/tools/datastructures/fingertree/FingerTreeTests.kt` covers all four concat
+- `src/Kotlin/FingerTree/test/durable7/fingertree/FingerTreeTests.kt` covers all four concat
   orientation combinations, split/rejoin, endpoint views, nullable elements, and larger mixed concat histories.
 
 Rust:

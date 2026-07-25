@@ -2,7 +2,7 @@
 
 - Created (UTC): 2026-07-02T20:15:41Z
 - Repository HEAD: 6a3f4d2b64b7a6f367557a45a1d0549c232f9eed
-- Audience: .NET consumers and maintainers using `Tools.DataStructures.FingerTree`
+- Audience: .NET consumers and maintainers using `Durable7.FingerTree`
 - Scope: Namespace, construction, persistence, public facade selection, common update/query patterns, and samples
 
 This guide is the practical entry point for the C# FingerTree workspace. The
@@ -12,18 +12,18 @@ code shapes callers use first.
 
 ## Namespace, Build, And Samples
 
-The public types live in the `Tools.DataStructures.FingerTree` namespace:
+The public types live in the `Durable7.FingerTree` namespace:
 
 ```csharp
-using Tools.DataStructures.FingerTree;
+using Durable7.FingerTree;
 ```
 
 Some names intentionally match BCL collection names. Use namespace aliases when a file also imports
 `System.Collections.Generic` broadly:
 
 ```csharp
-using FtPriorityQueue = Tools.DataStructures.FingerTree.PriorityQueue<string, int>;
-using FtSortedSet = Tools.DataStructures.FingerTree.SortedSet<int>;
+using FtPriorityQueue = Durable7.FingerTree.PriorityQueue<string, int>;
+using FtSortedSet = Durable7.FingerTree.SortedSet<int>;
 ```
 
 Validate the workspace through the solution:
@@ -35,9 +35,9 @@ Validate the workspace through the solution:
 Runnable tours live under [`samples`](../../samples/README.md):
 
 ```powershell
-dotnet run --project samples/Tools.DataStructures.FingerTree.Tour -c Release
-dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase -c Release
-dotnet run --project samples/Tools.DataStructures.FingerTree.Editor -c Release
+dotnet run --project samples/Durable7.FingerTree.Tour -c Release
+dotnet run --project samples/Durable7.FingerTree.Showcase -c Release
+dotnet run --project samples/Durable7.FingerTree.Editor -c Release
 ```
 
 ## Persistent Values
@@ -130,7 +130,7 @@ var middle = bag.GetRange(2, 5);
 set algebra:
 
 ```csharp
-var set = Tools.DataStructures.FingerTree.SortedSet<int>
+var set = Durable7.FingerTree.SortedSet<int>
     .CreateRange(new[] { 5, 1, 3, 3 });
 
 var withFour = set.Add(4);
@@ -139,7 +139,7 @@ if (withFour.TryFloor(4, out var floor))
     // floor == 4
 }
 
-var other = Tools.DataStructures.FingerTree.SortedSet<int>.CreateRange(new[] { 3, 7 });
+var other = Durable7.FingerTree.SortedSet<int>.CreateRange(new[] { 3, 7 });
 var union = withFour.Union(other);
 var intersection = withFour.Intersect(other);
 ```
@@ -147,7 +147,7 @@ var intersection = withFour.Intersect(other);
 `SortedDictionary<TKey, TValue>` is a key-ordered persistent map:
 
 ```csharp
-var map = Tools.DataStructures.FingerTree.SortedDictionary<int, string>.Empty
+var map = Durable7.FingerTree.SortedDictionary<int, string>.Empty
     .SetItem(2, "two")
     .SetItem(1, "one");
 
@@ -166,7 +166,7 @@ is not the desired order.
 For large batches of sorted-set or sorted-dictionary edits followed by a snapshot, use the nested builders:
 
 ```csharp
-var builder = Tools.DataStructures.FingerTree.SortedSet<int>.CreateBuilder();
+var builder = Durable7.FingerTree.SortedSet<int>.CreateBuilder();
 builder.UnionWith(new[] { 5, 1, 3 });
 builder.Remove(1);
 var frozenSet = builder.ToImmutable();
@@ -279,7 +279,7 @@ Cartesian tree in O(n).
 in insertion order, and two queues can be melded efficiently:
 
 ```csharp
-var queue = Tools.DataStructures.FingerTree.PriorityQueue<string, int>.Empty
+var queue = Durable7.FingerTree.PriorityQueue<string, int>.Empty
     .Enqueue("slow", 10)
     .Enqueue("fast", 1)
     .Enqueue("normal", 5);
@@ -629,7 +629,7 @@ For example, the affine sum policy in the
 defines tags that assign or add `long` values while measuring each range by its sum:
 
 ```csharp
-using Sequence = Tools.DataStructures.FingerTree.RangeUpdateSequence<
+using Sequence = Durable7.FingerTree.RangeUpdateSequence<
     long, long, AffineTag, AffineSumAlgebra>;
 
 var source = Sequence.Create([1, 2, 3, 4]);

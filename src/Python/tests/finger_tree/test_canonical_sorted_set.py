@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.finger_tree.canonical_sorted_set import (
+from durable7.finger_tree.canonical_sorted_set import (
     CanonicalSortedSet,
     ZipTreeRank,
     ZipTreeRankPolicy,
@@ -50,7 +50,7 @@ def test_default_python_rank_hash_is_stable_and_equivalence_coherent() -> None:
     assert rank == ZipTreeRank(0, 0x4CD4_2C0F_CFA9_D547, 0x39BB_C03A_DEBB_0445)
 
     code = (
-        "from vladimir_reshetnikov.data_structures.finger_tree."
+        "from durable7.finger_tree."
         "canonical_sorted_set import stable_rank_hash; print(stable_rank_hash('alpha'))"
     )
     outputs = []

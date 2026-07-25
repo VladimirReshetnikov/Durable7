@@ -117,8 +117,8 @@ all 109 tests as shipped.
 ### High severity
 
 **H1 — `finger_tree::try_locate` silently discards `measure_before` on every miss; `measured_rope::try_locate_by_measure` repeats the same defect.**
-[`measured_finger_tree.hpp:169-179`](../include/tools/data_structures/finger_tree/measured_finger_tree.hpp:169),
-[`measured_rope.hpp:357-363`](../include/tools/data_structures/finger_tree/measured_rope.hpp:357)
+[`measured_finger_tree.hpp:169-179`](../include/durable7/finger_tree/measured_finger_tree.hpp:169),
+[`measured_rope.hpp:357-363`](../include/durable7/finger_tree/measured_rope.hpp:357)
 
 ```cpp
 [[nodiscard]] std::optional<finger_tree_locate_result<Element, MeasurePolicy>> try_locate(Predicate predicate) const
@@ -153,9 +153,9 @@ measure_before; std::optional<T> found; }` exactly as the docs already specify, 
 same fix to `measured_rope::try_locate_by_measure`.
 
 **H2 — The C# "named-operation" convenience layer has no C++ counterpart at all.**
-[`built_in_measures.hpp`](../include/tools/data_structures/finger_tree/built_in_measures.hpp),
-[`product_measure.hpp`](../include/tools/data_structures/finger_tree/product_measure.hpp),
-[`sum_measure.hpp`](../include/tools/data_structures/finger_tree/sum_measure.hpp)
+[`built_in_measures.hpp`](../include/durable7/finger_tree/built_in_measures.hpp),
+[`product_measure.hpp`](../include/durable7/finger_tree/product_measure.hpp),
+[`sum_measure.hpp`](../include/durable7/finger_tree/sum_measure.hpp)
 
 These three headers (plus `measure_predicates.hpp`) contain only the monoid-policy struct
 definitions (`max_measure`, `order_statistic_measure`, `priority_measure`, `interval_measure`,
@@ -224,8 +224,8 @@ honoring a duration env var, as both Milestone 3 and Milestone 7's validation se
 ### Medium severity
 
 **M1 — The measured-tree core engine and its public facade carry zero documentation comments.**
-[`detail/measured_tree.hpp`](../include/tools/data_structures/finger_tree/detail/measured_tree.hpp) (1,198 lines),
-[`measured_finger_tree.hpp`](../include/tools/data_structures/finger_tree/measured_finger_tree.hpp)
+[`detail/measured_tree.hpp`](../include/durable7/finger_tree/detail/measured_tree.hpp) (1,198 lines),
+[`measured_finger_tree.hpp`](../include/durable7/finger_tree/measured_finger_tree.hpp)
 
 Undocumented code is a repository-wide pattern across this port (none of the 23 publisrc/C/detail
 headers carry Doxygen-style contract comments), but these two files are the most load-bearing
@@ -290,12 +290,12 @@ Two more specific, easily-fixed items:
 
 - **`validate_and_count`'s rightmost-leaf signpost check is compiled out via `if constexpr` for any
   element type without `operator==`**
-  ([`detail/deque_tree.hpp:588-606`](../include/tools/data_structures/finger_tree/detail/deque_tree.hpp:588)),
+  ([`detail/deque_tree.hpp:588-606`](../include/durable7/finger_tree/detail/deque_tree.hpp:588)),
   silently weakening the deque's own diagnostic invariant check relative to the C# original's
   unconditional `EqualityComparer<T>.Default.Equals`. Confined to the debug-only validation path,
   not production operations.
 - **One isolated arithmetic-helper inconsistency**: `sorted_set::merge()`
-  ([`sorted_set.hpp:315`](../include/tools/data_structures/finger_tree/sorted_set.hpp:315)) computes
+  ([`sorted_set.hpp:315`](../include/durable7/finger_tree/sorted_set.hpp:315)) computes
   `left.size() + right.size()` directly instead of via the `checked_add` helper used essentially
   everywhere else in the port (e.g. the directly analogous `rope_chunk::concat()` does use it).
   Practical overflow risk is nil (the addends are already-validated container sizes), but it is
@@ -453,7 +453,7 @@ coverage, complexity guards, and structure-level tearable concurrency tests.
 Milestone 8 now ships deterministic `showcase` and persistent text-snapshot samples with captured-output smoke
 tests plus a dependency-free benchmark harness. The short harness covers all planned families; retained branching
 measured exactly 4.00 allocations / 472 bytes per operation at sizes 100, 10,000, and 1,000,000. Install/export
-rules provide the architecture-independent `tools::data_structures::finger_tree` CMake target, version metadata,
+rules provide the architecture-independent `durable7::finger_tree` CMake target, version metadata,
 public headers, and MIT-0 license. The headless installed-consumer test requires the staged package, disables
 registries and repository developer targets, and rejects source-include leakage.
 

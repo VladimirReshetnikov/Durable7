@@ -7,7 +7,7 @@
 #include <functional>
 #include <utility>
 
-namespace tools::data_structures::finger_tree::tests {
+namespace durable7::finger_tree::tests {
 
 class operation_counter final {
 public:
@@ -64,4 +64,4 @@ private:
     Compare compare_;
 };
 
-} // namespace tools::data_structures::finger_tree::tests
+} // namespace durable7::finger_tree::tests

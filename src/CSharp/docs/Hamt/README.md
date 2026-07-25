@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
 - Audience: Maintainers and implementers working on the C# CHAMP and derived persistent structures, Ctrie, Patricia, and Merkle families
-- Scope: Index of current specifications, usage, and validation for `src/CSharp/src/Tools.DataStructures.Hamt`
+- Scope: Index of current specifications, usage, and validation for `src/CSharp/src/Durable7.Hamt`
 
 ## Current Documents
 
@@ -29,7 +29,7 @@
 - [Validation](validation.md) records the local .NET restore/build/test commands, workspace warning
   policy, generated XML-documentation gate, and xUnit/CsCheck/model/stress coverage for the CHAMP
   map/set/bag/bimap/multimap/relation, Ctrie, Patricia, and Merkle families.
-- [Tests README](../../tests/Tools.DataStructures.Hamt.Tests/README.md) maps the xUnit/CsCheck test project,
+- [Tests README](../../tests/Durable7.Hamt.Tests/README.md) maps the xUnit/CsCheck test project,
   source files, filter commands, wire vectors, proof/persistence adversarial cases, concurrency
   histories, and model/property coverage.
 - [CHAMP transient T0 decision](transient-t0-decision.md) locks the private T1 deciding tuple,

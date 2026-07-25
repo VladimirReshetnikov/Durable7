@@ -5,8 +5,8 @@
 - Audience: Maintainers and AI agents working on the C++ Tungsten-collections port
 - Scope: Header-first C++ Tungsten collection workspace under `src/Cpp/Tungsten`
 
-This workspace ports the C# `Tools.DataStructures.Tungsten` collection family to C++23 value types.
-The public headers live under [`include/tools/data_structures/tungsten`](include/tools/data_structures/tungsten):
+This workspace ports the C# `Durable7.Tungsten` collection family to C++23 value types.
+The public headers live under [`include/durable7/tungsten`](include/durable7/tungsten):
 
 This is an application-specific leaf port. It may consume the C++ HAMT and FingerTree libraries,
 but no general C++ library may depend on Tungsten or treat its kernel-derived behavior as a

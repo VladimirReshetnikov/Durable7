@@ -106,7 +106,7 @@ ordered key/value lookup respectively. The generic map owns a representation-neu
 the Tungsten case study independently specialized the broad composition idea for `Association`.
 *Application-specific shipment 2026-07-07*: the Tungsten workspaces own a values-in-both
 `PersistentAssociation` (plus the `PersistentList` sequence facade), with the C# workspace
-([`Tools.DataStructures.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
+([`Durable7.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
 reference only for C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml Tungsten ports linked from the
 [data-structure catalog](data-structure-catalog.md#tungsten-application-collections). This did not
 ship the generic ordered-map candidate at that time; the later neutral shipment did. Other

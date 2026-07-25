@@ -82,19 +82,19 @@ validation, benchmark entry points, warning policy, and generated-output locatio
 
 ## Layout
 
-- `include/tools/data_structures/finger_tree/fingertree.h` contains the public C API.
-- `include/tools/data_structures/finger_tree/canonical_sorted_set.h` contains the independent canonical zip-zip
+- `include/durable7/finger_tree/fingertree.h` contains the public C API.
+- `include/durable7/finger_tree/canonical_sorted_set.h` contains the independent canonical zip-zip
   sorted-set and rank-policy API.
-- `include/tools/data_structures/finger_tree/brodal_okasaki_heap.h` contains the independent persistent
+- `include/durable7/finger_tree/brodal_okasaki_heap.h` contains the independent persistent
   Brodal-Okasaki heap and policy API.
-- `include/tools/data_structures/finger_tree/priority_search_queue.h` contains the independent winner-cached
+- `include/durable7/finger_tree/priority_search_queue.h` contains the independent winner-cached
   priority-search queue, owned-entry, and policy API.
-- `include/tools/data_structures/finger_tree/range_update_sequence.h` contains the independent persistent
+- `include/durable7/finger_tree/range_update_sequence.h` contains the independent persistent
   range-update sequence, algebra-policy, ownership, visitor, and diagnostic API.
-- `include/tools/data_structures/finger_tree/persistent_interval_map.h` contains the derived
+- `include/durable7/finger_tree/persistent_interval_map.h` contains the derived
   payload-bearing interval-map API.
-- `include/tools/data_structures/finger_tree/rrb_vector.h` contains the separate RRB vector API.
-- `include/tools/data_structures/finger_tree/daba_lite.h` contains the separate mutable DABA Lite API.
+- `include/durable7/finger_tree/rrb_vector.h` contains the separate RRB vector API.
+- `include/durable7/finger_tree/daba_lite.h` contains the separate mutable DABA Lite API.
 - `src/fingertree.c` contains the measured-tree implementation and its wrappers;
   `src/brodal_okasaki_heap.c` contains the fused bootstrapped skew-binomial heap;
   `src/canonical_sorted_set.c` contains the immutable zip-zip core and cryptographic policy implementation;

@@ -1,4 +1,4 @@
-#include <tools/data_structures/finger_tree/persistent_chunked_bit_set.hpp>
+#include <durable7/finger_tree/persistent_chunked_bit_set.hpp>
 
 #include "test_support/test_runner.hpp"
 
@@ -9,8 +9,8 @@
 #include <stdexcept>
 #include <vector>
 
-namespace ft = tools::data_structures::finger_tree;
-using namespace tools::data_structures::finger_tree::tests;
+namespace ft = durable7::finger_tree;
+using namespace durable7::finger_tree::tests;
 
 void add_persistent_chunked_bit_set_tests(suite& tests)
 {

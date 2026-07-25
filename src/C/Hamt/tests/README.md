@@ -107,7 +107,7 @@ The hash-bag executable registers:
 - `algebra allocation failure sweeps are atomic`
 - `deterministic model history and retained snapshots`
 
-These cases distinguish `tds_hamt_bag_distinct_count` from the checked expanded total, prove positive additions
+These cases distinguish `d7_hamt_bag_distinct_count` from the checked expanded total, prove positive additions
 select their multiplicity through one `add_or_update` descent, and cover maximum/minimum/saturated-
 difference/checked-sum algebra. The cross-policy fixtures deliberately collapse exact classes under
 the receiver's broader equality policy; a count-allocation failpoint proves that normalization runs

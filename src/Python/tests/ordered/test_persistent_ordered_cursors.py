@@ -2,8 +2,8 @@
 
 import operator
 
-from vladimir_reshetnikov.data_structures import HashPolicy, create_hash_policy
-from vladimir_reshetnikov.data_structures.ordered import (
+from durable7 import HashPolicy, create_hash_policy
+from durable7.ordered import (
     OrderedMapEntry,
     OrderedMultimapEntry,
     PersistentOrderedMap,

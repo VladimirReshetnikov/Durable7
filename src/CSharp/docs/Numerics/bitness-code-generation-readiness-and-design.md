@@ -1,24 +1,24 @@
-# Tools.Numerics Bitness Code Generation: Readiness Assessment and Design
+# Durable7.Numerics Bitness Code Generation: Readiness Assessment and Design
 
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Status: Informational with normative recommendations for future generator implementation
 - Audience: Maintainers, contributors, reviewers planning `Int2048` / `UInt2048` and future `2^N` width additions
-- Scope: `src/CSharp/src/Tools.Numerics` wide-integer family (`Int256/512/1024`, `UInt256/512/1024`) and corresponding tests in `src/CSharp/tests/Tools.Numerics.Tests`
+- Scope: `src/CSharp/src/Durable7.Numerics` wide-integer family (`Int256/512/1024`, `UInt256/512/1024`) and corresponding tests in `src/CSharp/tests/Durable7.Numerics.Tests`
 - Related code:
-  - `src/CSharp/src/Tools.Numerics/UInt256.cs`
-  - `src/CSharp/src/Tools.Numerics/Int256.cs`
-  - `src/CSharp/src/Tools.Numerics/UInt512.cs`
-  - `src/CSharp/src/Tools.Numerics/Int512.cs`
-  - `src/CSharp/src/Tools.Numerics/UInt1024.cs`
-  - `src/CSharp/src/Tools.Numerics/Int1024.cs`
-  - `src/CSharp/src/Tools.Numerics/BitHelpers.cs`
-  - `src/CSharp/src/Tools.Numerics/BitConverterEx.cs`
-  - `src/CSharp/tests/Tools.Numerics.Tests/MixedScenarios/DeclarationParityTests.cs`
-  - `src/CSharp/tests/Tools.Numerics.Tests/MixedScenarios/PublicApiCoverageTests.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt256.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int256.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt512.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int512.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt1024.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int1024.cs`
+  - `src/CSharp/src/Durable7.Numerics/BitHelpers.cs`
+  - `src/CSharp/src/Durable7.Numerics/BitConverterEx.cs`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/MixedScenarios/DeclarationParityTests.cs`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/MixedScenarios/PublicApiCoverageTests.cs`
 - Related docs:
   - `src/CSharp/docs/Numerics/overview.md`
-  - `src/CSharp/tests/Tools.Numerics.Tests/README.md`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/README.md`
   - `src/CSharp/docs/Numerics/wide-integer-maintainer-guidance.md`
 
 ## Summary
@@ -66,7 +66,7 @@ That recursive structure is generator-friendly because the generated code needs 
 
 ## 3) Project configuration does not block generated source files
 
-`Tools.Numerics.csproj` uses SDK defaults and does not explicitly enumerate `Compile` items. Generated `.cs` files placed under the project directory are automatically included.
+`Durable7.Numerics.csproj` uses SDK defaults and does not explicitly enumerate `Compile` items. Generated `.cs` files placed under the project directory are automatically included.
 
 This removes one common generator friction point (manual project-file edits per new type).
 
@@ -126,7 +126,7 @@ The codebase is at the right maturity stage to start generator work, as long as 
 
 - Replacing all handwritten numeric code in one shot.
 - Runtime source generation in consumer builds.
-- Inserting reflection-based dynamic type systems into `Tools.Numerics`.
+- Inserting reflection-based dynamic type systems into `Durable7.Numerics`.
 
 ## Generator architecture
 

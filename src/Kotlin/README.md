@@ -12,9 +12,9 @@ where the language surfaces line up.
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
 | [Hamt](Hamt/README.md) | Persistent CHAMP collections plus strict patches, directed graphs, indexed maps, Ctrie, Patricia, and Merkle | `PersistentHashMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap` | `.\build.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Persistent measured-tree family, sparse chunked bit set, cursors, RRB, priority cores, and DABA Lite | `tools.datastructures.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [FingerTree](FingerTree/README.md) | Persistent measured-tree family, sparse chunked bit set, cursors, RRB, priority cores, and DABA Lite | `durable7.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
 | [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set, map, and grouped multimap | `PersistentOrderedSet`, `PersistentOrderedMap`, `PersistentOrderedMultimap` | `.\build.ps1 -Workspace Ordered` |
-| [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Kotlin persistent substrates | `tools.datastructures.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
+| [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Kotlin persistent substrates | `durable7.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
 

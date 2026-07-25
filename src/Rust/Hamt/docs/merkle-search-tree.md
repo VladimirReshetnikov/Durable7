@@ -247,10 +247,10 @@ From `src/Rust`:
 
 ```powershell
 cargo fmt --all -- --check
-cargo clippy --jobs 1 -p tools-data-structures-hamt --all-targets -- -D warnings
-cargo test -p tools-data-structures-hamt --jobs 1 -- --test-threads=1
-cargo test -p tools-data-structures-hamt --release --jobs 1 -- --test-threads=1
-cargo doc --jobs 1 -p tools-data-structures-hamt --no-deps
+cargo clippy --jobs 1 -p durable7-hamt --all-targets -- -D warnings
+cargo test -p durable7-hamt --jobs 1 -- --test-threads=1
+cargo test -p durable7-hamt --release --jobs 1 -- --test-threads=1
+cargo doc --jobs 1 -p durable7-hamt --no-deps
 ```
 
 The broader workspace wrapper remains `./test.ps1 -Workspace Hamt`.

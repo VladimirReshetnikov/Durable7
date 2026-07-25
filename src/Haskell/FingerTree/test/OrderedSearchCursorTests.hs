@@ -2,15 +2,15 @@ module OrderedSearchCursorTests (run) where
 
 import Data.Word (Word64)
 
-import qualified Data.Structures.FingerTree.CanonicalSortedSet as Canonical
-import qualified Data.Structures.FingerTree.IntervalMap as IntervalMap
-import qualified Data.Structures.FingerTree.IntervalTree as IntervalTree
-import qualified Data.Structures.FingerTree.OrderedSearchCursor as Cursor
-import qualified Data.Structures.FingerTree.PersistentChunkedBitSet as BitSet
-import qualified Data.Structures.FingerTree.PrioritySearchQueue as PrioritySearch
-import qualified Data.Structures.FingerTree.SortedBag as SortedBag
-import qualified Data.Structures.FingerTree.SortedMap as SortedMap
-import qualified Data.Structures.FingerTree.SortedSet as SortedSet
+import qualified Durable7.FingerTree.CanonicalSortedSet as Canonical
+import qualified Durable7.FingerTree.IntervalMap as IntervalMap
+import qualified Durable7.FingerTree.IntervalTree as IntervalTree
+import qualified Durable7.FingerTree.OrderedSearchCursor as Cursor
+import qualified Durable7.FingerTree.PersistentChunkedBitSet as BitSet
+import qualified Durable7.FingerTree.PrioritySearchQueue as PrioritySearch
+import qualified Durable7.FingerTree.SortedBag as SortedBag
+import qualified Durable7.FingerTree.SortedMap as SortedMap
+import qualified Durable7.FingerTree.SortedSet as SortedSet
 
 data Ranked = Ranked !Int !String
   deriving (Show)

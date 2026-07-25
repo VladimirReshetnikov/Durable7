@@ -1,5 +1,5 @@
-#include <tools/data_structures/tungsten/tungsten.h>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/tungsten/tungsten.h>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -66,8 +66,8 @@ static void fail_at(const char* file, int line, const char* expression)
 
 #define REQUIRE_STATUS(expression) \
     do { \
-        const tds_tungsten_status actual_status__ = (expression); \
-        if (actual_status__ != TDS_TUNGSTEN_OK) { \
+        const d7_tungsten_status actual_status__ = (expression); \
+        if (actual_status__ != D7_TUNGSTEN_OK) { \
             (void)fprintf(stderr, "%s:%d: %s returned %d\n", __FILE__, __LINE__, #expression, actual_status__); \
             ++g_failures; \
             return; \
@@ -146,19 +146,19 @@ static bool equal_mod10(const void* left, const void* right, void* context)
     return left_value == right_value;
 }
 
-static void init_assoc_policy(tds_tungsten_association_policy* policy)
+static void init_assoc_policy(d7_tungsten_association_policy* policy)
 {
     ft_value_type int_type;
     init_int_type(&int_type);
-    tds_tungsten_association_policy_init(policy, &int_type, &int_type, hash_int, equal_int, NULL);
+    d7_tungsten_association_policy_init(policy, &int_type, &int_type, hash_int, equal_int, NULL);
     policy->value_equal = equal_int;
 }
 
-static void init_mod10_policy(tds_tungsten_association_policy* policy)
+static void init_mod10_policy(d7_tungsten_association_policy* policy)
 {
     ft_value_type int_type;
     init_int_type(&int_type);
-    tds_tungsten_association_policy_init(policy, &int_type, &int_type, hash_mod10, equal_mod10, NULL);
+    d7_tungsten_association_policy_init(policy, &int_type, &int_type, hash_mod10, equal_mod10, NULL);
     policy->value_equal = equal_int;
 }
 
@@ -176,22 +176,22 @@ static void collect_pair(const void* key, const void* value, void* context)
     ++buffer->count;
 }
 
-static bool list_matches(const tds_tungsten_list* list, const int* expected, size_t count)
+static bool list_matches(const d7_tungsten_list* list, const int* expected, size_t count)
 {
-    if (tds_tungsten_list_size(list) != count) {
+    if (d7_tungsten_list_size(list) != count) {
         return false;
     }
 
     for (size_t index = 0; index != count; ++index) {
         int actual = 0;
-        if (tds_tungsten_list_at(list, index, &actual) != TDS_TUNGSTEN_OK || actual != expected[index]) {
+        if (d7_tungsten_list_at(list, index, &actual) != D7_TUNGSTEN_OK || actual != expected[index]) {
             return false;
         }
     }
 
     int_buffer buffer;
     buffer.count = 0;
-    if (tds_tungsten_list_visit(list, collect_int, &buffer) != TDS_TUNGSTEN_OK || buffer.count != count) {
+    if (d7_tungsten_list_visit(list, collect_int, &buffer) != D7_TUNGSTEN_OK || buffer.count != count) {
         return false;
     }
 
@@ -204,29 +204,29 @@ static bool list_matches(const tds_tungsten_list* list, const int* expected, siz
     return true;
 }
 
-static bool assoc_matches(const tds_tungsten_association* association, const int* keys, const int* values, size_t count)
+static bool assoc_matches(const d7_tungsten_association* association, const int* keys, const int* values, size_t count)
 {
-    if (tds_tungsten_association_size(association) != count) {
+    if (d7_tungsten_association_size(association) != count) {
         return false;
     }
 
     for (size_t index = 0; index != count; ++index) {
         int actual_key = 0;
         int actual_value = 0;
-        if (tds_tungsten_association_entry_at(association, index, &actual_key, &actual_value) != TDS_TUNGSTEN_OK ||
+        if (d7_tungsten_association_entry_at(association, index, &actual_key, &actual_value) != D7_TUNGSTEN_OK ||
             actual_key != keys[index] ||
             actual_value != values[index]) {
             return false;
         }
 
         int lookup_value = 0;
-        if (!tds_tungsten_association_try_get(association, &keys[index], &lookup_value) ||
+        if (!d7_tungsten_association_try_get(association, &keys[index], &lookup_value) ||
             lookup_value != values[index]) {
             return false;
         }
 
         size_t found_index = 0;
-        if (!tds_tungsten_association_index_of_key(association, &keys[index], &found_index) ||
+        if (!d7_tungsten_association_index_of_key(association, &keys[index], &found_index) ||
             found_index != index) {
             return false;
         }
@@ -234,7 +234,7 @@ static bool assoc_matches(const tds_tungsten_association* association, const int
 
     pair_buffer buffer;
     buffer.count = 0;
-    if (tds_tungsten_association_visit(association, collect_pair, &buffer) != TDS_TUNGSTEN_OK ||
+    if (d7_tungsten_association_visit(association, collect_pair, &buffer) != D7_TUNGSTEN_OK ||
         buffer.count != count) {
         return false;
     }
@@ -249,10 +249,10 @@ static bool assoc_matches(const tds_tungsten_association* association, const int
 }
 
 typedef struct concurrent_tungsten_context {
-    const tds_tungsten_list* list;
+    const d7_tungsten_list* list;
     const int* list_values;
     size_t list_count;
-    const tds_tungsten_association* association;
+    const d7_tungsten_association* association;
     const int* association_keys;
     const int* association_values;
     size_t association_count;
@@ -349,25 +349,25 @@ static void test_list_map_owning_result_type(void)
     g_owned_destructions = 0;
 
     const int values[] = {1, 2, 3, 4, 5};
-    tds_tungsten_list list;
-    REQUIRE_STATUS(tds_tungsten_list_from_array(&list, &int_type, values, 5));
+    d7_tungsten_list list;
+    REQUIRE_STATUS(d7_tungsten_list_from_array(&list, &int_type, values, 5));
 
-    tds_tungsten_list mapped;
-    REQUIRE_STATUS(tds_tungsten_list_map(&list, &owned_type, map_int_to_owned, NULL, &mapped));
-    REQUIRE(tds_tungsten_list_size(&mapped) == 5);
+    d7_tungsten_list mapped;
+    REQUIRE_STATUS(d7_tungsten_list_map(&list, &owned_type, map_int_to_owned, NULL, &mapped));
+    REQUIRE(d7_tungsten_list_size(&mapped) == 5);
 
     owned_int front;
-    REQUIRE_STATUS(tds_tungsten_list_front(&mapped, &front));
+    REQUIRE_STATUS(d7_tungsten_list_front(&mapped, &front));
     REQUIRE(front.payload != NULL && *front.payload == 3);
     owned_int_destroy(&front, NULL);
 
     owned_int back;
-    REQUIRE_STATUS(tds_tungsten_list_back(&mapped, &back));
+    REQUIRE_STATUS(d7_tungsten_list_back(&mapped, &back));
     REQUIRE(back.payload != NULL && *back.payload == 15);
     owned_int_destroy(&back, NULL);
 
-    tds_tungsten_list_dispose(&mapped);
-    tds_tungsten_list_dispose(&list);
+    d7_tungsten_list_dispose(&mapped);
+    d7_tungsten_list_dispose(&list);
 
     /* Every owned payload constructed by the map callback or copied into the
      * list must have been destroyed exactly once. */
@@ -381,60 +381,60 @@ static void test_list_examples(void)
     init_int_type(&int_type);
 
     const int values[] = {1, 2, 3, 4, 5};
-    tds_tungsten_list list;
-    REQUIRE_STATUS(tds_tungsten_list_from_array(&list, &int_type, values, 5));
-    REQUIRE(tds_tungsten_list_size(&list) == 5);
+    d7_tungsten_list list;
+    REQUIRE_STATUS(d7_tungsten_list_from_array(&list, &int_type, values, 5));
+    REQUIRE(d7_tungsten_list_size(&list) == 5);
 
     int front = 0;
     int back = 0;
-    REQUIRE_STATUS(tds_tungsten_list_front(&list, &front));
-    REQUIRE_STATUS(tds_tungsten_list_back(&list, &back));
+    REQUIRE_STATUS(d7_tungsten_list_front(&list, &front));
+    REQUIRE_STATUS(d7_tungsten_list_back(&list, &back));
     REQUIRE(front == 1);
     REQUIRE(back == 5);
 
     int inserted_value = 99;
-    tds_tungsten_list inserted;
-    REQUIRE_STATUS(tds_tungsten_list_insert_at(&list, 2, &inserted_value, &inserted));
+    d7_tungsten_list inserted;
+    REQUIRE_STATUS(d7_tungsten_list_insert_at(&list, 2, &inserted_value, &inserted));
     const int inserted_expected[] = {1, 2, 99, 3, 4, 5};
     REQUIRE(list_matches(&inserted, inserted_expected, 6));
 
     const int range_values[] = {7, 8};
-    tds_tungsten_list range_inserted;
-    REQUIRE_STATUS(tds_tungsten_list_insert_range(&list, 1, range_values, 2, &range_inserted));
+    d7_tungsten_list range_inserted;
+    REQUIRE_STATUS(d7_tungsten_list_insert_range(&list, 1, range_values, 2, &range_inserted));
     const int range_expected[] = {1, 7, 8, 2, 3, 4, 5};
     REQUIRE(list_matches(&range_inserted, range_expected, 7));
 
-    tds_tungsten_list removed;
-    REQUIRE_STATUS(tds_tungsten_list_remove_range(&range_inserted, 1, 2, &removed));
+    d7_tungsten_list removed;
+    REQUIRE_STATUS(d7_tungsten_list_remove_range(&range_inserted, 1, 2, &removed));
     REQUIRE(list_matches(&removed, values, 5));
 
-    tds_tungsten_list slice;
-    REQUIRE_STATUS(tds_tungsten_list_slice(&list, 1, 3, &slice));
+    d7_tungsten_list slice;
+    REQUIRE_STATUS(d7_tungsten_list_slice(&list, 1, 3, &slice));
     const int slice_expected[] = {2, 3, 4};
     REQUIRE(list_matches(&slice, slice_expected, 3));
 
-    tds_tungsten_list reversed;
-    REQUIRE_STATUS(tds_tungsten_list_reverse(&list, &reversed));
+    d7_tungsten_list reversed;
+    REQUIRE_STATUS(d7_tungsten_list_reverse(&list, &reversed));
     const int reversed_expected[] = {5, 4, 3, 2, 1};
     REQUIRE(list_matches(&reversed, reversed_expected, 5));
 
-    tds_tungsten_list mapped;
-    REQUIRE_STATUS(tds_tungsten_list_map(&list, &int_type, double_int, NULL, &mapped));
+    d7_tungsten_list mapped;
+    REQUIRE_STATUS(d7_tungsten_list_map(&list, &int_type, double_int, NULL, &mapped));
     const int mapped_expected[] = {2, 4, 6, 8, 10};
     REQUIRE(list_matches(&mapped, mapped_expected, 5));
 
     size_t index = 0;
     const int needle = 4;
-    REQUIRE(tds_tungsten_list_index_of(&list, &needle, equal_int, NULL, &index));
+    REQUIRE(d7_tungsten_list_index_of(&list, &needle, equal_int, NULL, &index));
     REQUIRE(index == 3);
 
-    tds_tungsten_list_dispose(&mapped);
-    tds_tungsten_list_dispose(&reversed);
-    tds_tungsten_list_dispose(&slice);
-    tds_tungsten_list_dispose(&removed);
-    tds_tungsten_list_dispose(&range_inserted);
-    tds_tungsten_list_dispose(&inserted);
-    tds_tungsten_list_dispose(&list);
+    d7_tungsten_list_dispose(&mapped);
+    d7_tungsten_list_dispose(&reversed);
+    d7_tungsten_list_dispose(&slice);
+    d7_tungsten_list_dispose(&removed);
+    d7_tungsten_list_dispose(&range_inserted);
+    d7_tungsten_list_dispose(&inserted);
+    d7_tungsten_list_dispose(&list);
 }
 
 static void test_result_aliasing_is_rejected(void)
@@ -443,41 +443,41 @@ static void test_result_aliasing_is_rejected(void)
     init_int_type(&int_type);
 
     const int values[] = {1, 2, 3};
-    tds_tungsten_list list;
-    REQUIRE_STATUS(tds_tungsten_list_from_array(&list, &int_type, values, 3));
+    d7_tungsten_list list;
+    REQUIRE_STATUS(d7_tungsten_list_from_array(&list, &int_type, values, 3));
 
     /* Every operation must reject a result that aliases the source and leave it intact. */
     const int extra = 4;
-    REQUIRE(tds_tungsten_list_push_back(&list, &extra, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
-    REQUIRE(tds_tungsten_list_insert_range(&list, 0, values, 3, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
-    REQUIRE(tds_tungsten_list_slice(&list, 0, 2, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
-    REQUIRE(tds_tungsten_list_reverse(&list, &list) == TDS_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(d7_tungsten_list_push_back(&list, &extra, &list) == D7_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(d7_tungsten_list_insert_range(&list, 0, values, 3, &list) == D7_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(d7_tungsten_list_slice(&list, 0, 2, &list) == D7_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(d7_tungsten_list_reverse(&list, &list) == D7_TUNGSTEN_INVALID_ARGUMENT);
     REQUIRE(list_matches(&list, values, 3));
 
     /* An out-of-range drop is a range error, matching take/slice and the association. */
-    tds_tungsten_list dropped;
-    REQUIRE(tds_tungsten_list_drop(&list, 4, &dropped) == TDS_TUNGSTEN_OUT_OF_RANGE);
+    d7_tungsten_list dropped;
+    REQUIRE(d7_tungsten_list_drop(&list, 4, &dropped) == D7_TUNGSTEN_OUT_OF_RANGE);
 
-    tds_tungsten_association_policy policy;
+    d7_tungsten_association_policy policy;
     init_assoc_policy(&policy);
 
-    tds_tungsten_association association;
-    REQUIRE_STATUS(tds_tungsten_association_init(&association, &policy));
+    d7_tungsten_association association;
+    REQUIRE_STATUS(d7_tungsten_association_init(&association, &policy));
 
     const int key = 1;
     const int value = 10;
-    REQUIRE(tds_tungsten_association_set_item(&association, &key, &value, &association) ==
-            TDS_TUNGSTEN_INVALID_ARGUMENT);
-    REQUIRE(tds_tungsten_association_copy(&association, &association) == TDS_TUNGSTEN_INVALID_ARGUMENT);
-    REQUIRE(tds_tungsten_association_size(&association) == 0);
+    REQUIRE(d7_tungsten_association_set_item(&association, &key, &value, &association) ==
+            D7_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(d7_tungsten_association_copy(&association, &association) == D7_TUNGSTEN_INVALID_ARGUMENT);
+    REQUIRE(d7_tungsten_association_size(&association) == 0);
 
-    tds_tungsten_association_dispose(&association);
-    tds_tungsten_list_dispose(&list);
+    d7_tungsten_association_dispose(&association);
+    d7_tungsten_list_dispose(&list);
 }
 
-static tds_tungsten_assoc_pair pair_of(const int* key, const int* value)
+static d7_tungsten_assoc_pair pair_of(const int* key, const int* value)
 {
-    tds_tungsten_assoc_pair pair;
+    d7_tungsten_assoc_pair pair;
     pair.key = key;
     pair.value = value;
     return pair;
@@ -485,7 +485,7 @@ static tds_tungsten_assoc_pair pair_of(const int* key, const int* value)
 
 static void test_association_ordering_examples(void)
 {
-    tds_tungsten_association_policy policy;
+    d7_tungsten_association_policy policy;
     init_assoc_policy(&policy);
 
     int k1 = 1;
@@ -498,106 +498,106 @@ static void test_association_ordering_examples(void)
     int v5 = 5;
     int v9 = 9;
 
-    const tds_tungsten_assoc_pair duplicate_pairs[] = {
+    const d7_tungsten_assoc_pair duplicate_pairs[] = {
         pair_of(&k1, &v1),
         pair_of(&k2, &v2),
         pair_of(&k1, &v3)
     };
-    tds_tungsten_association duplicates;
-    REQUIRE_STATUS(tds_tungsten_association_from_pairs(&duplicates, &policy, duplicate_pairs, 3));
+    d7_tungsten_association duplicates;
+    REQUIRE_STATUS(d7_tungsten_association_from_pairs(&duplicates, &policy, duplicate_pairs, 3));
     const int duplicate_keys[] = {1, 2};
     const int duplicate_values[] = {3, 2};
     REQUIRE(assoc_matches(&duplicates, duplicate_keys, duplicate_values, 2));
 
-    tds_tungsten_association set;
-    REQUIRE_STATUS(tds_tungsten_association_set_item(&duplicates, &k1, &v5, &set));
+    d7_tungsten_association set;
+    REQUIRE_STATUS(d7_tungsten_association_set_item(&duplicates, &k1, &v5, &set));
     const int set_values[] = {5, 2};
     REQUIRE(assoc_matches(&set, duplicate_keys, set_values, 2));
 
-    tds_tungsten_association appended;
-    REQUIRE_STATUS(tds_tungsten_association_append(&duplicates, &k1, &v9, &appended));
+    d7_tungsten_association appended;
+    REQUIRE_STATUS(d7_tungsten_association_append(&duplicates, &k1, &v9, &appended));
     const int append_keys[] = {2, 1};
     const int append_values[] = {2, 9};
     REQUIRE(assoc_matches(&appended, append_keys, append_values, 2));
 
-    tds_tungsten_association prepended;
-    REQUIRE_STATUS(tds_tungsten_association_prepend(&duplicates, &k2, &v9, &prepended));
+    d7_tungsten_association prepended;
+    REQUIRE_STATUS(d7_tungsten_association_prepend(&duplicates, &k2, &v9, &prepended));
     const int prepend_keys[] = {2, 1};
     const int prepend_values[] = {9, 3};
     REQUIRE(assoc_matches(&prepended, prepend_keys, prepend_values, 2));
 
-    const tds_tungsten_assoc_pair left_pairs[] = {pair_of(&k1, &v1), pair_of(&k2, &v2)};
-    const tds_tungsten_assoc_pair right_pairs[] = {pair_of(&k1, &v3), pair_of(&k3, &v4)};
-    tds_tungsten_association left;
-    tds_tungsten_association right;
-    REQUIRE_STATUS(tds_tungsten_association_from_pairs(&left, &policy, left_pairs, 2));
-    REQUIRE_STATUS(tds_tungsten_association_from_pairs(&right, &policy, right_pairs, 2));
-    tds_tungsten_association joined;
-    REQUIRE_STATUS(tds_tungsten_association_join(&left, &right, &joined));
+    const d7_tungsten_assoc_pair left_pairs[] = {pair_of(&k1, &v1), pair_of(&k2, &v2)};
+    const d7_tungsten_assoc_pair right_pairs[] = {pair_of(&k1, &v3), pair_of(&k3, &v4)};
+    d7_tungsten_association left;
+    d7_tungsten_association right;
+    REQUIRE_STATUS(d7_tungsten_association_from_pairs(&left, &policy, left_pairs, 2));
+    REQUIRE_STATUS(d7_tungsten_association_from_pairs(&right, &policy, right_pairs, 2));
+    d7_tungsten_association joined;
+    REQUIRE_STATUS(d7_tungsten_association_join(&left, &right, &joined));
     const int joined_keys[] = {1, 2, 3};
     const int joined_values[] = {3, 2, 4};
     REQUIRE(assoc_matches(&joined, joined_keys, joined_values, 3));
 
-    tds_tungsten_association inserted;
-    REQUIRE_STATUS(tds_tungsten_association_insert_at(&joined, 2, &k1, &v9, &inserted));
+    d7_tungsten_association inserted;
+    REQUIRE_STATUS(d7_tungsten_association_insert_at(&joined, 2, &k1, &v9, &inserted));
     const int inserted_keys[] = {2, 1, 3};
     const int inserted_values[] = {2, 9, 4};
     REQUIRE(assoc_matches(&inserted, inserted_keys, inserted_values, 3));
 
-    tds_tungsten_association taken;
-    REQUIRE_STATUS(tds_tungsten_association_take(&joined, 2, &taken));
+    d7_tungsten_association taken;
+    REQUIRE_STATUS(d7_tungsten_association_take(&joined, 2, &taken));
     const int taken_keys[] = {1, 2};
     const int taken_values[] = {3, 2};
     REQUIRE(assoc_matches(&taken, taken_keys, taken_values, 2));
 
-    tds_tungsten_association dropped;
-    REQUIRE_STATUS(tds_tungsten_association_drop(&joined, 1, &dropped));
+    d7_tungsten_association dropped;
+    REQUIRE_STATUS(d7_tungsten_association_drop(&joined, 1, &dropped));
     const int dropped_keys[] = {2, 3};
     const int dropped_values[] = {2, 4};
     REQUIRE(assoc_matches(&dropped, dropped_keys, dropped_values, 2));
 
-    tds_tungsten_association reversed;
-    REQUIRE_STATUS(tds_tungsten_association_reverse(&joined, &reversed));
+    d7_tungsten_association reversed;
+    REQUIRE_STATUS(d7_tungsten_association_reverse(&joined, &reversed));
     const int reversed_keys[] = {3, 2, 1};
     const int reversed_values[] = {4, 2, 3};
     REQUIRE(assoc_matches(&reversed, reversed_keys, reversed_values, 3));
 
-    tds_tungsten_association sorted_by_key;
-    REQUIRE_STATUS(tds_tungsten_association_key_sort(&reversed, compare_int, NULL, &sorted_by_key));
+    d7_tungsten_association sorted_by_key;
+    REQUIRE_STATUS(d7_tungsten_association_key_sort(&reversed, compare_int, NULL, &sorted_by_key));
     REQUIRE(assoc_matches(&sorted_by_key, joined_keys, joined_values, 3));
 
-    tds_tungsten_association sorted_by_value;
-    REQUIRE_STATUS(tds_tungsten_association_sort(&joined, compare_int, NULL, &sorted_by_value));
+    d7_tungsten_association sorted_by_value;
+    REQUIRE_STATUS(d7_tungsten_association_sort(&joined, compare_int, NULL, &sorted_by_value));
     const int sorted_value_keys[] = {2, 1, 3};
     const int sorted_value_values[] = {2, 3, 4};
     REQUIRE(assoc_matches(&sorted_by_value, sorted_value_keys, sorted_value_values, 3));
 
     const void* requested[] = {&k3, &k1, &k3};
-    tds_tungsten_association key_taken;
-    REQUIRE_STATUS(tds_tungsten_association_key_take(&joined, requested, 3, &key_taken));
+    d7_tungsten_association key_taken;
+    REQUIRE_STATUS(d7_tungsten_association_key_take(&joined, requested, 3, &key_taken));
     const int key_taken_keys[] = {3, 1};
     const int key_taken_values[] = {4, 3};
     REQUIRE(assoc_matches(&key_taken, key_taken_keys, key_taken_values, 2));
 
-    tds_tungsten_association_dispose(&key_taken);
-    tds_tungsten_association_dispose(&sorted_by_value);
-    tds_tungsten_association_dispose(&sorted_by_key);
-    tds_tungsten_association_dispose(&reversed);
-    tds_tungsten_association_dispose(&dropped);
-    tds_tungsten_association_dispose(&taken);
-    tds_tungsten_association_dispose(&inserted);
-    tds_tungsten_association_dispose(&joined);
-    tds_tungsten_association_dispose(&right);
-    tds_tungsten_association_dispose(&left);
-    tds_tungsten_association_dispose(&prepended);
-    tds_tungsten_association_dispose(&appended);
-    tds_tungsten_association_dispose(&set);
-    tds_tungsten_association_dispose(&duplicates);
+    d7_tungsten_association_dispose(&key_taken);
+    d7_tungsten_association_dispose(&sorted_by_value);
+    d7_tungsten_association_dispose(&sorted_by_key);
+    d7_tungsten_association_dispose(&reversed);
+    d7_tungsten_association_dispose(&dropped);
+    d7_tungsten_association_dispose(&taken);
+    d7_tungsten_association_dispose(&inserted);
+    d7_tungsten_association_dispose(&joined);
+    d7_tungsten_association_dispose(&right);
+    d7_tungsten_association_dispose(&left);
+    d7_tungsten_association_dispose(&prepended);
+    d7_tungsten_association_dispose(&appended);
+    d7_tungsten_association_dispose(&set);
+    d7_tungsten_association_dispose(&duplicates);
 }
 
 static void test_association_custom_policy(void)
 {
-    tds_tungsten_association_policy policy;
+    d7_tungsten_association_policy policy;
     init_mod10_policy(&policy);
 
     int k11 = 11;
@@ -607,21 +607,21 @@ static void test_association_custom_policy(void)
     int v1 = 1;
     int v2 = 2;
     int v3 = 3;
-    const tds_tungsten_assoc_pair pairs[] = {pair_of(&k11, &v1), pair_of(&k12, &v2)};
+    const d7_tungsten_assoc_pair pairs[] = {pair_of(&k11, &v1), pair_of(&k12, &v2)};
 
-    tds_tungsten_association association;
-    REQUIRE_STATUS(tds_tungsten_association_from_pairs(&association, &policy, pairs, 2));
-    tds_tungsten_association set;
-    REQUIRE_STATUS(tds_tungsten_association_set_item(&association, &k21, &v3, &set));
+    d7_tungsten_association association;
+    REQUIRE_STATUS(d7_tungsten_association_from_pairs(&association, &policy, pairs, 2));
+    d7_tungsten_association set;
+    REQUIRE_STATUS(d7_tungsten_association_set_item(&association, &k21, &v3, &set));
     int actual_key = 0;
-    REQUIRE(tds_tungsten_association_try_get_key(&set, &k21, &actual_key));
+    REQUIRE(d7_tungsten_association_try_get_key(&set, &k21, &actual_key));
     REQUIRE(actual_key == 11);
     const int set_keys[] = {11, 12};
     const int set_values[] = {3, 2};
     REQUIRE(assoc_matches(&set, set_keys, set_values, 2));
 
-    tds_tungsten_association appended;
-    REQUIRE_STATUS(tds_tungsten_association_append(&set, &k31, &v1, &appended));
+    d7_tungsten_association appended;
+    REQUIRE_STATUS(d7_tungsten_association_append(&set, &k31, &v1, &appended));
     const int append_keys[] = {12, 31};
     const int append_values[] = {2, 1};
     REQUIRE(assoc_matches(&appended, append_keys, append_values, 2));
@@ -629,61 +629,61 @@ static void test_association_custom_policy(void)
     /* Rule-2 no-op fast path: a key already terminal with an equal value
      * returns the receiver's content and keeps the stored key payload. */
     int k22 = 22;
-    tds_tungsten_association append_noop;
-    REQUIRE_STATUS(tds_tungsten_association_append(&set, &k22, &v2, &append_noop));
+    d7_tungsten_association append_noop;
+    REQUIRE_STATUS(d7_tungsten_association_append(&set, &k22, &v2, &append_noop));
     REQUIRE(assoc_matches(&append_noop, set_keys, set_values, 2));
-    REQUIRE(tds_tungsten_association_try_get_key(&append_noop, &k22, &actual_key));
+    REQUIRE(d7_tungsten_association_try_get_key(&append_noop, &k22, &actual_key));
     REQUIRE(actual_key == 12);
 
-    tds_tungsten_association prepend_noop;
-    REQUIRE_STATUS(tds_tungsten_association_prepend(&set, &k21, &v3, &prepend_noop));
+    d7_tungsten_association prepend_noop;
+    REQUIRE_STATUS(d7_tungsten_association_prepend(&set, &k21, &v3, &prepend_noop));
     REQUIRE(assoc_matches(&prepend_noop, set_keys, set_values, 2));
-    REQUIRE(tds_tungsten_association_try_get_key(&prepend_noop, &k21, &actual_key));
+    REQUIRE(d7_tungsten_association_try_get_key(&prepend_noop, &k21, &actual_key));
     REQUIRE(actual_key == 11);
 
-    tds_tungsten_association_dispose(&prepend_noop);
-    tds_tungsten_association_dispose(&append_noop);
-    tds_tungsten_association_dispose(&appended);
-    tds_tungsten_association_dispose(&set);
-    tds_tungsten_association_dispose(&association);
+    d7_tungsten_association_dispose(&prepend_noop);
+    d7_tungsten_association_dispose(&append_noop);
+    d7_tungsten_association_dispose(&appended);
+    d7_tungsten_association_dispose(&set);
+    d7_tungsten_association_dispose(&association);
 }
 
 static void test_association_relabel_stress(void)
 {
-    tds_tungsten_association_policy policy;
+    d7_tungsten_association_policy policy;
     init_assoc_policy(&policy);
 
     int k0 = 0;
     int v0 = 0;
     int k999 = 999;
     int v999 = 999;
-    const tds_tungsten_assoc_pair pairs[] = {pair_of(&k0, &v0), pair_of(&k999, &v999)};
-    tds_tungsten_association association;
-    REQUIRE_STATUS(tds_tungsten_association_from_pairs(&association, &policy, pairs, 2));
+    const d7_tungsten_assoc_pair pairs[] = {pair_of(&k0, &v0), pair_of(&k999, &v999)};
+    d7_tungsten_association association;
+    REQUIRE_STATUS(d7_tungsten_association_from_pairs(&association, &policy, pairs, 2));
 
     for (int value = 1; value <= 25; ++value) {
-        tds_tungsten_association next;
-        REQUIRE_STATUS(tds_tungsten_association_insert_at(&association, 1, &value, &value, &next));
-        tds_tungsten_association_dispose(&association);
-        tds_tungsten_association_move(&association, &next);
+        d7_tungsten_association next;
+        REQUIRE_STATUS(d7_tungsten_association_insert_at(&association, 1, &value, &value, &next));
+        d7_tungsten_association_dispose(&association);
+        d7_tungsten_association_move(&association, &next);
     }
 
-    REQUIRE(tds_tungsten_association_size(&association) == 27);
+    REQUIRE(d7_tungsten_association_size(&association) == 27);
     int lookup = 0;
     int needle = 25;
-    REQUIRE(tds_tungsten_association_try_get(&association, &needle, &lookup));
+    REQUIRE(d7_tungsten_association_try_get(&association, &needle, &lookup));
     REQUIRE(lookup == 25);
 
     const int expected_prefix[] = {0, 25, 24, 23, 22, 21};
     for (size_t index = 0; index != sizeof(expected_prefix) / sizeof(expected_prefix[0]); ++index) {
         int key = 0;
         int value = 0;
-        REQUIRE_STATUS(tds_tungsten_association_entry_at(&association, index, &key, &value));
+        REQUIRE_STATUS(d7_tungsten_association_entry_at(&association, index, &key, &value));
         REQUIRE(key == expected_prefix[index]);
         REQUIRE(value == expected_prefix[index]);
     }
 
-    tds_tungsten_association_dispose(&association);
+    d7_tungsten_association_dispose(&association);
 }
 
 static void model_delete(model_assoc* model, int key)
@@ -777,54 +777,54 @@ static void model_slice(model_assoc* model, size_t start, size_t count)
     model->count = count;
 }
 
-static bool association_matches_model(const tds_tungsten_association* association, const model_assoc* model)
+static bool association_matches_model(const d7_tungsten_association* association, const model_assoc* model)
 {
     return assoc_matches(association, model->keys, model->values, model->count);
 }
 
 static void test_association_generated_history(void)
 {
-    tds_tungsten_association_policy policy;
+    d7_tungsten_association_policy policy;
     init_assoc_policy(&policy);
 
-    tds_tungsten_association association;
-    REQUIRE_STATUS(tds_tungsten_association_init(&association, &policy));
+    d7_tungsten_association association;
+    REQUIRE_STATUS(d7_tungsten_association_init(&association, &policy));
     model_assoc model;
     (void)memset(&model, 0, sizeof(model));
 
     for (int command = 0; command != 120; ++command) {
         const int key = (command * 37 + 11) % 17;
         const int value = command * 101 - key;
-        tds_tungsten_association next;
+        d7_tungsten_association next;
         switch (command % 7) {
         case 0:
-            REQUIRE_STATUS(tds_tungsten_association_set_item(&association, &key, &value, &next));
+            REQUIRE_STATUS(d7_tungsten_association_set_item(&association, &key, &value, &next));
             model_set(&model, key, value);
             break;
         case 1:
-            REQUIRE_STATUS(tds_tungsten_association_append(&association, &key, &value, &next));
+            REQUIRE_STATUS(d7_tungsten_association_append(&association, &key, &value, &next));
             model_append(&model, key, value);
             break;
         case 2:
-            REQUIRE_STATUS(tds_tungsten_association_prepend(&association, &key, &value, &next));
+            REQUIRE_STATUS(d7_tungsten_association_prepend(&association, &key, &value, &next));
             model_prepend(&model, key, value);
             break;
         case 3: {
             const size_t position = model.count == 0 ? 0u : (size_t)command % (model.count + 1u);
-            REQUIRE_STATUS(tds_tungsten_association_insert_at(&association, position, &key, &value, &next));
+            REQUIRE_STATUS(d7_tungsten_association_insert_at(&association, position, &key, &value, &next));
             model_insert_at(&model, position, key, value);
             break;
         }
         case 4:
-            REQUIRE_STATUS(tds_tungsten_association_remove(&association, &key, &next));
+            REQUIRE_STATUS(d7_tungsten_association_remove(&association, &key, &next));
             model_delete(&model, key);
             break;
         case 5: {
             const size_t position = model.count == 0 ? 0u : (size_t)command % model.count;
             if (model.count == 0) {
-                REQUIRE_STATUS(tds_tungsten_association_copy(&association, &next));
+                REQUIRE_STATUS(d7_tungsten_association_copy(&association, &next));
             } else {
-                REQUIRE_STATUS(tds_tungsten_association_remove_at(&association, position, &next));
+                REQUIRE_STATUS(d7_tungsten_association_remove_at(&association, position, &next));
                 model_delete_at(&model, position);
             }
             break;
@@ -832,18 +832,18 @@ static void test_association_generated_history(void)
         default: {
             const size_t start = model.count == 0 ? 0u : (size_t)command % model.count;
             const size_t length = model.count == 0 ? 0u : (size_t)(command / 3) % (model.count - start + 1u);
-            REQUIRE_STATUS(tds_tungsten_association_slice(&association, start, length, &next));
+            REQUIRE_STATUS(d7_tungsten_association_slice(&association, start, length, &next));
             model_slice(&model, start, length);
             break;
         }
         }
 
-        tds_tungsten_association_dispose(&association);
-        tds_tungsten_association_move(&association, &next);
+        d7_tungsten_association_dispose(&association);
+        d7_tungsten_association_move(&association, &next);
         REQUIRE(association_matches_model(&association, &model));
     }
 
-    tds_tungsten_association_dispose(&association);
+    d7_tungsten_association_dispose(&association);
 }
 
 static void test_concurrent_retained_snapshot_reads(void)
@@ -856,23 +856,23 @@ static void test_concurrent_retained_snapshot_reads(void)
         list_values[index] = index;
     }
 
-    tds_tungsten_list list;
-    REQUIRE_STATUS(tds_tungsten_list_from_array(&list, &int_type, list_values, 128));
+    d7_tungsten_list list;
+    REQUIRE_STATUS(d7_tungsten_list_from_array(&list, &int_type, list_values, 128));
 
-    tds_tungsten_association_policy policy;
+    d7_tungsten_association_policy policy;
     init_assoc_policy(&policy);
 
     int keys[64];
     int values[64];
-    tds_tungsten_assoc_pair pairs[64];
+    d7_tungsten_assoc_pair pairs[64];
     for (int index = 0; index != 64; ++index) {
         keys[index] = index;
         values[index] = -index;
         pairs[index] = pair_of(&keys[index], &values[index]);
     }
 
-    tds_tungsten_association association;
-    REQUIRE_STATUS(tds_tungsten_association_from_pairs(&association, &policy, pairs, 64));
+    d7_tungsten_association association;
+    REQUIRE_STATUS(d7_tungsten_association_from_pairs(&association, &policy, pairs, 64));
 
     concurrent_tungsten_context context;
     context.list = &list;
@@ -904,8 +904,8 @@ static void test_concurrent_retained_snapshot_reads(void)
 #endif
 
     REQUIRE(test_atomic_long_read(&context.failures) == 0);
-    tds_tungsten_association_dispose(&association);
-    tds_tungsten_list_dispose(&list);
+    d7_tungsten_association_dispose(&association);
+    d7_tungsten_list_dispose(&list);
 }
 
 static void run_test(const char* name, void (*test)(void))
@@ -923,7 +923,7 @@ static void run_test(const char* name, void (*test)(void))
 
 int main(void)
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 

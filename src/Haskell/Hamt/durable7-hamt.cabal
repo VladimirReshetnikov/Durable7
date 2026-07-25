@@ -1,0 +1,50 @@
+cabal-version: 3.0
+name: durable7-hamt
+version: 0.1.0.0
+synopsis: Persistent CHAMP maps, sets, bags, bimaps, Patricia collections, and Merkle maps
+description: Haskell port of the DataStructures repository HAMT, hash-bag, bimap, Patricia, and Merkle search-tree families.
+category: Data
+license: MIT-0
+author: Vladimir Reshetnikov
+maintainer: Vladimir Reshetnikov
+build-type: Simple
+
+library
+  exposed-modules:
+    Durable7.Hamt
+    Durable7.Hamt.BiMap
+    Durable7.Hamt.HashBag
+    Durable7.Hamt.Hashable
+    Durable7.Hamt.HashMap
+    Durable7.Hamt.HashMultimap
+    Durable7.Hamt.HashSet
+    Durable7.Hamt.MerkleEncoding
+    Durable7.Hamt.MerklePersistence
+    Durable7.Hamt.MerkleSearchTree
+    Durable7.Hamt.Patricia
+    Durable7.Hamt.PersistentDirectedGraph
+    Durable7.Hamt.PersistentIndexedMap
+    Durable7.Hamt.PersistentMapPatch
+    Durable7.Hamt.Relation
+    Durable7.Hamt.Transient
+  hs-source-dirs: src
+  build-depends:
+    array >=0.5 && <0.6,
+    base >=4.21 && <4.22,
+    bytestring >=0.12 && <0.13,
+    containers >=0.7 && <0.8,
+    text >=2.1 && <2.2
+  default-language: Haskell2010
+
+test-suite hamt-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+    BiMapTests
+    PersistenceTests
+  hs-source-dirs: test
+  build-depends:
+    base >=4.21 && <4.22,
+    bytestring >=0.12 && <0.13,
+    durable7-hamt
+  default-language: Haskell2010

@@ -139,18 +139,18 @@ validation across all six types.
 
 ### C Tungsten — `list_map` leaked owning payloads (fixed, `7e1e587`)
 
-`tds_tungsten_list_map` never destroyed the values its `map` callback constructed into the staging
+`d7_tungsten_list_map` never destroyed the values its `map` callback constructed into the staging
 buffer: `push_back` deep-copies the buffer into the result list, so a result value type with an
 owning copy/destroy pair leaked one payload per element (only the raw buffer was freed once at the
 end). The existing tests exercised only POD ints, so this was unexercised. The visit callback now
 destroys the buffer value right after each `push_back` (success and failure alike), the
-`tds_tungsten_map_fn` typedef documents the ownership contract, and a new owning-result-type test
+`d7_tungsten_map_fn` typedef documents the ownership contract, and a new owning-result-type test
 drives `list_map` with heap-owning payloads under balanced allocation/destruction counters (the old
 code fails it by five unmatched allocations).
 
-Also in that commit: the stamp-exhaustion relabel path of `tds_tungsten_insert_absent` collected
-entries with a per-index `tds_tungsten_tree_at` loop (O(n log n)); it now uses the O(n) in-order
-`tds_tungsten_tree_fill_views` walk plus a `memmove` splice, matching reverse/sort/slice. And the C
+Also in that commit: the stamp-exhaustion relabel path of `d7_tungsten_insert_absent` collected
+entries with a per-index `d7_tungsten_tree_at` loop (O(n log n)); it now uses the O(n) in-order
+`d7_tungsten_tree_fill_views` walk plus a `memmove` splice, matching reverse/sort/slice. And the C
 FingerTree api-notes now spell out that the infallible-copy abort-on-OOM boundary includes read
 paths that copy compound entries out (`ft_rope_at`, `ft_measured_rope_at`,
 `ft_sorted_map_entry_at`, priority/interval entry reads), which prior wording left implicit.
@@ -251,20 +251,20 @@ while recording the subsequently shipped state. **All three recorded backlog ite
    Rust exposes [`BulkBuilder`](../../src/Rust/Hamt/src/lib.rs), routes map/set bulk construction
    through it, and uses detached immutable freezes; the builder and snapshot-isolation regressions
    live in the same module. C++ exposes `persistent_hash_map::bulk_builder` in
-   [`persistent_hash_map.hpp`](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_hash_map.hpp),
+   [`persistent_hash_map.hpp`](../../src/Cpp/Hamt/include/durable7/hamt/persistent_hash_map.hpp),
    routes range factories and set intersection through it, and covers leaf, collision, bitmap,
    replacement, snapshot, and scale paths in
    [`persistent_hamt_tests.cpp`](../../src/Cpp/Hamt/tests/persistent_hamt_tests.cpp). The Tungsten
    association rebuild paths in both languages consume the corresponding bulk construction path.
 2. **Kotlin logarithmic sorted bounds — resolved by `832dd1b`.**
-   [`Sorted.kt`](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Sorted.kt) expresses
+   [`Sorted.kt`](../../src/Kotlin/FingerTree/src/durable7/fingertree/Sorted.kt) expresses
    lower/upper bounds as monotone-prefix searches, while
-   [`Core.kt`](../../src/Kotlin/FingerTree/src/tools/datastructures/fingertree/Core.kt) delegates
+   [`Core.kt`](../../src/Kotlin/FingerTree/src/durable7/fingertree/Core.kt) delegates
    `prefixLength` to one measured-tree root-to-leaf descent. Counting-comparator gates over 65,536
    elements in the FingerTree tests distinguish this O(log n) path from the former O(log² n)
    binary search over logarithmic indexing.
 3. **C# allocation-read guard flake — resolved by `2b16781`.**
-   [`AllocationFreeReadTests.cs`](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/AllocationFreeReadTests.cs)
+   [`AllocationFreeReadTests.cs`](../../src/CSharp/tests/Durable7.FingerTree.Tests/AllocationFreeReadTests.cs)
    still uses the tight 256-byte ceiling, but now measures three post-warmup passes and takes their
    minimum. A real per-read allocation appears in every pass and still fails; a one-time tiered-JIT
    or OSR transition under machine load no longer creates a false failure. No recurrence is recorded

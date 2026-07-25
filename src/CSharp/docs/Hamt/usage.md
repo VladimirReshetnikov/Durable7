@@ -11,10 +11,10 @@ specification remains the normative contract for complexity, allocation behavior
 
 ## Namespace And Build
 
-The public types live in the `Tools.DataStructures.Hamt` namespace:
+The public types live in the `Durable7.Hamt` namespace:
 
 ```csharp
-using Tools.DataStructures.Hamt;
+using Durable7.Hamt;
 ```
 
 Validate the workspace through the solution:
@@ -27,18 +27,18 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+dotnet restore .\Durable7.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build .\DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+dotnet build .\Durable7.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     -- RunConfiguration.MaxCpuCount=1
 ```
 
 The repository currently builds the library from source under
-[`src/Tools.DataStructures.Hamt`](../../src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj).
+[`src/Durable7.Hamt`](../../src/Durable7.Hamt/Durable7.Hamt.csproj).
 
 ## Persistent Values
 

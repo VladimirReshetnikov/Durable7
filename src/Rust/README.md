@@ -11,11 +11,11 @@ contracts of the C# baseline where the current implementation exposes equivalent
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Hamt](Hamt/README.md) | Persistent CHAMP collections, map patches, directed graphs, indexed maps, Patricia, and Merkle port with `Arc` structural sharing | `tools_data_structures_hamt::{PersistentHashMap, PersistentMapPatch, PersistentDirectedGraph, PersistentIndexedMap, *}` | `.\test.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family, payload interval map, chunked bit set, positional/measured/text rope cursors, and mutable DABA Lite FIFO-window aggregator | `tools_data_structures_fingertree::{PersistentIntervalMap, PersistentChunkedBitSet, *}` | `.\test.ps1 -Workspace FingerTree` |
-| [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set, map, and grouped multimap with explicit positional movement, ranges, stable one-shot sorting, and receiver-policy set algebra | `tools_data_structures_ordered::{PersistentOrderedMap, PersistentOrderedMultimap, PersistentOrderedSet}` | `.\test.ps1 -Workspace Ordered` |
-| [RangeUpdate](RangeUpdate/README.md) | Neutral implicit-AVL sequence with ordered cached measures and algebraic lazy contiguous range updates | `tools_data_structures_range_update::{RangeUpdateAlgebra, RangeUpdateSequence}` | `.\test.ps1 -Workspace RangeUpdate` |
-| [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Rust persistent substrates | `tools_data_structures_tungsten::{PersistentList, PersistentAssociation}` | `.\test.ps1 -Workspace Tungsten` |
+| [Hamt](Hamt/README.md) | Persistent CHAMP collections, map patches, directed graphs, indexed maps, Patricia, and Merkle port with `Arc` structural sharing | `durable7_hamt::{PersistentHashMap, PersistentMapPatch, PersistentDirectedGraph, PersistentIndexedMap, *}` | `.\test.ps1 -Workspace Hamt` |
+| [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family, payload interval map, chunked bit set, positional/measured/text rope cursors, and mutable DABA Lite FIFO-window aggregator | `durable7_fingertree::{PersistentIntervalMap, PersistentChunkedBitSet, *}` | `.\test.ps1 -Workspace FingerTree` |
+| [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set, map, and grouped multimap with explicit positional movement, ranges, stable one-shot sorting, and receiver-policy set algebra | `durable7_ordered::{PersistentOrderedMap, PersistentOrderedMultimap, PersistentOrderedSet}` | `.\test.ps1 -Workspace Ordered` |
+| [RangeUpdate](RangeUpdate/README.md) | Neutral implicit-AVL sequence with ordered cached measures and algebraic lazy contiguous range updates | `durable7_range_update::{RangeUpdateAlgebra, RangeUpdateSequence}` | `.\test.ps1 -Workspace RangeUpdate` |
+| [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Rust persistent substrates | `durable7_tungsten::{PersistentList, PersistentAssociation}` | `.\test.ps1 -Workspace Tungsten` |
 
 Run the full Rust validation from this directory:
 

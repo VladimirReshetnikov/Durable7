@@ -4,11 +4,11 @@
 - Created (UTC): 2026-07-15T09:00:00Z
 - Repository HEAD: 2d75a79feb424f4476ec32c2d6e4f19263441bf3
 - Audience: C consumers, maintainers, reviewers, and sibling-port authors
-- Scope: `tds_ordered_set`, `tds_ordered_map`, and `tds_ordered_multimap`
+- Scope: `d7_ordered_set`, `d7_ordered_map`, and `d7_ordered_multimap`
 
 ## Ordered multimap
 
-`tds_ordered_multimap` retains independent `tds_ordered_policy` values for keys and values and an
+`d7_ordered_multimap` retains independent `d7_ordered_policy` values for keys and values and an
 ordered map whose payloads are nonempty ordered sets. The first key representative fixes group
 position; the first value representative fixes its position inside that group. Visiting flattens
 groups in key order, then values in group order. Duplicate pair addition and absent removal clone a
@@ -18,13 +18,13 @@ failure-atomicity rules as the base ordered collections.
 
 ## Ownership and policy
 
-`tds_ordered_set` is a persistent value handle. A successful initializer or operation publishes one
-owned handle; use `tds_ordered_set_clone` for another owner, `tds_ordered_set_move` to transfer one,
-and `tds_ordered_set_destroy` exactly once per initialized owner. Operations that return a set take
+`d7_ordered_set` is a persistent value handle. A successful initializer or operation publishes one
+owned handle; use `d7_ordered_set_clone` for another owner, `d7_ordered_set_move` to transfer one,
+and `d7_ordered_set_destroy` exactly once per initialized owner. Operations that return a set take
 an uninitialized result distinct from every input. They build unpublished foundation versions and
 write the result only after all fallible work succeeds.
 
-`tds_ordered_policy` retains an `ft_value_type`, hash callback, optional equality callback, and
+`d7_ordered_policy` retains an `ft_value_type`, hash callback, optional equality callback, and
 callback context. A null equality callback means byte equality over `item_type.size`; hashing is
 always explicit. The callback functions and their contexts remain caller-owned and usable until all
 sets in the lineage are destroyed. Already-retained immutable versions may be read concurrently;
@@ -124,8 +124,8 @@ persistent branches that independently relabel.
 
 ## Ordered map
 
-`tds_ordered_map` is the payload-bearing sibling declared in
-`tools/data_structures/ordered/ordered_map.h`. It owns an embedded ordered set of keys and a CHAMP
+`d7_ordered_map` is the payload-bearing sibling declared in
+`durable7/ordered/ordered_map.h`. It owns an embedded ordered set of keys and a CHAMP
 map from those keys to values under one heap-owned policy context. Its result, callback-lifetime,
 non-aliasing, snapshot-concurrency, and first-key-representative rules match the ordered set.
 
@@ -139,7 +139,7 @@ both indexes, while a range rebuilds the value index for precisely its selected 
 Reads and visitors return borrowed key/value pointers. `entry_at`, `front`, and `back` use explicit
 order; keyed lookup and containment use the receiver's hash/equality policy. Stable sort receives
 both key and value for each comparison and does not install a maintained ordering policy.
-`tds_ordered_map_debug_validate` checks each component's native invariant, equal counts, and both
+`d7_ordered_map_debug_validate` checks each component's native invariant, equal counts, and both
 directions of cross-index membership.
 
 Let `w <= 7` be CHAMP depth and `c` an equal-full-hash collision scan. Keyed lookup is O(w+c), an
@@ -150,8 +150,8 @@ contracts rather than benchmark results.
 
 ## Ordered cursors
 
-`ordered_cursor.h` declares `tds_ordered_set_cursor`, `tds_ordered_map_cursor`, and
-`tds_ordered_multimap_cursor` and exports 62 functions across them: 20 for the set, 21 for the map,
+`ordered_cursor.h` declares `d7_ordered_set_cursor`, `d7_ordered_map_cursor`, and
+`d7_ordered_multimap_cursor` and exports 62 functions across them: 20 for the set, 21 for the map,
 and 21 for the multimap. Each cursor is an explicit-position gap over one retained snapshot. The set
 and map use `size_t` positions in `0 .. size`; the multimap uses `int64_t` positions in
 `0 .. pair_count`. All three are Profile R snapshot-plus-position checkpoints under the
@@ -174,7 +174,7 @@ representation, memoization, callback ceiling, allocation bound, or amortized lo
 
 The map alone has an in-place edit verb; `set_next_value` retains the stored key representative, its
 sparse label, and the gap. The multimap alone has two keyed factories and spells insertion `add`.
-Fifty-six functions return `tds_ordered_status`, three `_move` functions return `void`, and the
+Fifty-six functions return `d7_ordered_status`, three `_move` functions return `void`, and the
 `_valid`, `_is_at_start`, and `_is_at_end` predicates return `bool`. `_cursor_count` and
 `_cursor_position` return `0` both for a genuinely empty snapshot and for an invalid cursor; only
 `_cursor_valid` distinguishes those states.
@@ -216,8 +216,8 @@ following two individually documented guarantees compose into a use-after-free:
 ```c
 const void *item = NULL;
 bool found = false;
-tds_ordered_set_cursor_try_peek_next(&cursor, &found, &item);
-tds_ordered_set_cursor_delete_next(&cursor, &cursor); /* self-alias destroys the snapshot */
+d7_ordered_set_cursor_try_peek_next(&cursor, &found, &item);
+d7_ordered_set_cursor_delete_next(&cursor, &cursor); /* self-alias destroys the snapshot */
 /* `item` now dangles. */
 ```
 
@@ -231,7 +231,7 @@ before the call.
 One further transparency exception is recorded here because it is observable rather than theoretical:
 the three cursor structs embed their collection handle **by value**, and those handles are public
 structs. `cursor.set.stamps`, `cursor.map.values`, `cursor.map.keys.stamps`, and
-`cursor.map.groups.keys.stamps` are all reachable `tds_hamt_map` values, and
+`cursor.map.groups.keys.stamps` are all reachable `d7_hamt_map` values, and
 `cursor.map.pair_count` is a writable `int64_t` that the multimap cursor's own validity predicate
 depends on. The repository design forbids sparse labels from entering the cursor contract, and the C
 port is the only one of the nine that leaks them. Treat every field of a cursor as private: reading

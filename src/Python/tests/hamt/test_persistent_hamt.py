@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.hamt import (
+from durable7.hamt import (
     ConcurrentHashTrie,
     DuplicateKeyError,
     HashPolicy,

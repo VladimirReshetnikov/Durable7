@@ -89,7 +89,7 @@ src/
         │   ├── port-plan-editorial-notes.md
         │   └── validation.md
         ├── include/
-        │   └── tools/data_structures/finger_tree/
+        │   └── durable7/finger_tree/
         │       ├── finger_tree.hpp
         │       ├── persistent_deque.hpp
         │       ├── reversible_deque.hpp
@@ -161,8 +161,8 @@ src/
             └── deterministic transcript smoke test
 ```
 
-The public include namespace should be `tools::data_structures::finger_tree`. Internal implementation should
-live under `tools::data_structures::finger_tree::detail`.
+The public include namespace should be `durable7::finger_tree`. Internal implementation should
+live under `durable7::finger_tree::detail`.
 
 ## Dependency Plan
 

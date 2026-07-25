@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.hamt.merkle_encoding import (
+from durable7.hamt.merkle_encoding import (
     INT32_MERKLE_CODEC,
     INT64_MERKLE_CODEC,
     NULLABLE_BYTES_MERKLE_CODEC,
@@ -19,7 +19,7 @@ from vladimir_reshetnikov.data_structures.hamt.merkle_encoding import (
     MerkleDigest,
     MerkleSearchTreePolicy,
 )
-from vladimir_reshetnikov.data_structures.hamt.merkle_persistence import (
+from durable7.hamt.merkle_persistence import (
     InMemoryMerkleBlockStore,
     MerkleBlock,
     MerkleBlockPack,
@@ -33,7 +33,7 @@ from vladimir_reshetnikov.data_structures.hamt.merkle_persistence import (
     plan_merkle_sync,
     save_merkle_tree,
 )
-from vladimir_reshetnikov.data_structures.hamt.merkle_proofs_merge import (
+from durable7.hamt.merkle_proofs_merge import (
     MerkleMembershipQuery,
     MerkleMergeResolution,
     MerkleProof,
@@ -44,7 +44,7 @@ from vladimir_reshetnikov.data_structures.hamt.merkle_proofs_merge import (
     merge_merkle_trees,
     verify_merkle_proof,
 )
-from vladimir_reshetnikov.data_structures.hamt.merkle_search_tree import (
+from durable7.hamt.merkle_search_tree import (
     MerkleEntry,
     MerkleSearchTree,
 )

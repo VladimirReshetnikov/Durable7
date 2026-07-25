@@ -165,7 +165,7 @@ Record evidence in final notes, commit messages, or review summaries with enough
 
 ```text
 Validation:
-- `dotnet test .\DataStructures.sln` from `src/CSharp`: passed; proves managed libraries, XML docs, samples, and xUnit/CsCheck suites.
+- `dotnet test .\Durable7.sln` from `src/CSharp`: passed; proves managed libraries, XML docs, samples, and xUnit/CsCheck suites.
 - Markdown link checker from `docs/guides/build-and-validation.md`: passed; proves repository-owned Markdown links resolve.
 - `git diff --check`: passed; proves no whitespace errors in the staged diff.
 ```

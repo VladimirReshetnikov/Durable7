@@ -223,7 +223,7 @@ forms. Tests compare randomized histories with `BTreeMap` and cover signed bound
 combining algebra, invariant counts, and no-op root sharing.
 
 **Haskell status (2026-07-11): Implemented for explicit `Int32` and `Int64` widths.**
-`Data.Structures.Hamt.Patricia` exposes strict maps and sets over one `Word64` path core, sign-bit
+`Durable7.Hamt.Patricia` exposes strict maps and sets over one `Word64` path core, sign-bit
 ordering, compressed prefixes, cached subtree counts, keyed/unkeyed combining algebra, and an
 invariant validator. The explicit aliases avoid making the width contract depend on platform-sized
 `Int`.
@@ -233,8 +233,8 @@ invariant validator. The explicit aliases avoid making the width contract depend
 subtree counts, signed-order traversal, prefix-aligned fixed and resolver-combining algebra, and
 root-preserving semantic no-ops.
 
-**C status (2026-07-11): Implemented for both widths.** The type-erased `tds_int_map` / `set` and
-`tds_long_map` / `set` share a reference-counted C17 core with explicit value ownership policy,
+**C status (2026-07-11): Implemented for both widths.** The type-erased `d7_int_map` / `set` and
+`d7_long_map` / `set` share a reference-counted C17 core with explicit value ownership policy,
 cached subtree counts, signed-order visitors, prefix-aware structural algebra, typed combining
 callbacks, alias-safe updates, and deterministic model/lifetime tests.
 
@@ -295,7 +295,7 @@ constructible non-assignable values, and injected exceptions; native benchmark p
 reads and concatenation directly with `rope<T>`.
 
 **Haskell status (2026-07-11): Implemented with an idiomatic pure construction tier.**
-`Data.Structures.FingerTree.RrbVector` uses boxed immutable arrays, radix-indexed regular branches,
+`Durable7.FingerTree.RrbVector` uses boxed immutable arrays, radix-indexed regular branches,
 relaxed cumulative sizes, structural split/append/range edits, cached metadata validation, and
 root-sharing diagnostics. `fromList` performs bottom-up bulk construction; no public mutable
 transient is exposed because an `ST`-style implementation detail would not be an idiomatic public
@@ -402,7 +402,7 @@ budget, proof tampering, partial-store repair, concurrent stores, retained snaps
 non-`Clone` values; clippy and rustdoc are warning-clean.
 
 **Haskell status (2026-07-12): Implemented through the complete pure persistence tier with exact
-wire compatibility.** `Data.Structures.Hamt.MerklePersistence` adds immutable block-store
+wire compatibility.** `Durable7.Hamt.MerklePersistence` adds immutable block-store
 snapshots, deterministic complete/partial packs, whole-result save/import publication, strict
 bounded closure reconstruction, exact `MSP2` point/range proofs, closure-pruned and iterative
 frontier synchronization, and present/absent-safe typed merge. Its opaque budget admits seven
@@ -416,7 +416,7 @@ build of all eight library and two test modules pass; pure successor stores are 
 language-local replacement for a concurrent mutable store.
 
 **C status (2026-07-12): Implemented through the complete type-erased persistence tier with exact
-wire compatibility and failure atomicity.** `tds_merkle_search_tree` binds stable type tags,
+wire compatibility and failure atomicity.** `d7_merkle_search_tree` binds stable type tags,
 fallible copy/destroy/equality/comparison/codec/store hooks, and an injected allocator into atomic
 immutable handles. The public tier adds a synchronized three-state block store, complete/requested
 packs, seven verification budgets, bounded closure-checked load/import, exact `MSP2` point/range
@@ -596,9 +596,9 @@ and the distinctive key-range/priority-threshold query over one winner-cached AV
 public structural validators. Strict Fibonacci and hollow heaps remain explicit non-goals.
 
 **Haskell status (2026-07-11): Brodal-Okasaki heap and priority search queue implemented.**
-`Data.Structures.FingerTree.BrodalOkasakiHeap` directly implements the fused bootstrapped
+`Durable7.FingerTree.BrodalOkasakiHeap` directly implements the fused bootstrapped
 skew-binomial representation and validates primitive-child/embedded-forest boundaries, ranks, heap
-order, count, and depth. `Data.Structures.FingerTree.PrioritySearchQueue` is a direct strict winner-
+order, count, and depth. `Durable7.FingerTree.PrioritySearchQueue` is a direct strict winner-
 cached AVL rather than a `Map`/heap composition. It retains one entry per ordered key, breaks
 priority ties by key, supports O(1) minimum and O(log n) keyed update/delete-min, validates all
 AVL/winner metadata, and preserves retained snapshots through a 10,000-operation model.
@@ -1055,7 +1055,7 @@ over immutable version and navigation-context references; it did not select the 
 alternative. The shipped cursor has a bounded 16-element active focus and at most one partial carry
 smaller than 256 elements on each side. Movement and edits return cursor values. Navigation shares
 the logical sequence version and snapshot memo; an edit creates a new version state. The public
-[source](../../src/CSharp/src/Tools.DataStructures.FingerTree/Rope.Cursor.cs),
+[source](../../src/CSharp/src/Durable7.FingerTree/Rope.Cursor.cs),
 [usage guide](../../src/CSharp/docs/FingerTree/usage.md), and
 [API specification](../../src/CSharp/docs/FingerTree/api-specification.md) describe that current
 surface.

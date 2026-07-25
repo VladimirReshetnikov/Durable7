@@ -5,8 +5,8 @@
 - Audience: Maintainers implementing and reviewing the Rust HAMT port
 - Scope: Rust naming, contracts, and intentional differences from the C# and C++ workspaces
 
-The public crate is `tools-data-structures-hamt`, with library name
-`tools_data_structures_hamt`.
+The public crate is `durable7-hamt`, with library name
+`durable7_hamt`.
 
 Primary entry points:
 

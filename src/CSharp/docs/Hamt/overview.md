@@ -4,10 +4,10 @@
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
 - Audience: Maintainers implementing and reviewing the CHAMP, hash-bag, hash-multimap, relation, bimap, Ctrie, Patricia, and Merkle families
-- Scope: Project layout and validation entry points for `src/CSharp/src/Tools.DataStructures.Hamt`
+- Scope: Project layout and validation entry points for `src/CSharp/src/Durable7.Hamt`
 
-`src/CSharp/src/Tools.DataStructures.Hamt` contains the .NET 10 C# preview workspace for
-`Tools.DataStructures.Hamt`, a persistent and concurrent trie/search-tree library led by canonical
+`src/CSharp/src/Durable7.Hamt` contains the .NET 10 C# preview workspace for
+`Durable7.Hamt`, a persistent and concurrent trie/search-tree library led by canonical
 CHAMP. `PersistentHashMap<TKey, TValue>` is an immutable unordered dictionary with structural
 sharing across versions. `PersistentHashSet<T>` is built on the same core and implements
 `IReadOnlySet<T>`. `PersistentHashBag<T>` is the immutable unordered multiset facade: it stores one
@@ -132,8 +132,8 @@ and canonical topology alone does not confer reference identity.
 
 ## Layout
 
-- `DataStructures.sln` is the solution entry point.
-- `src/Tools.DataStructures.Hamt/` contains the public library.
+- `Durable7.sln` is the solution entry point.
+- `src/Durable7.Hamt/` contains the public library.
   - `PersistentHashMap.cs` is the bitmap-indexed HAMT map implementation.
   - `PersistentHashMap.SinglePassUpdates.cs` implements persistent `GetOrAdd`/`AddOrUpdate` through
     one hash computation, one trie descent, and one selected factory invocation.
@@ -162,9 +162,9 @@ and canonical topology alone does not confer reference identity.
     synchronization, point/range proofs, and three-way merge.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
   - `PersistentHashSet.Transient.cs` is the public one-way set facade.
-- [`tests/Tools.DataStructures.Hamt.Tests/`](../../tests/Tools.DataStructures.Hamt.Tests/README.md) contains xUnit
+- [`tests/Durable7.Hamt.Tests/`](../../tests/Durable7.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.
-- [`benchmarks/Tools.DataStructures.FingerTree.Benchmarks/`](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md)
+- [`benchmarks/Durable7.FingerTree.Benchmarks/`](../../benchmarks/Durable7.FingerTree.Benchmarks/README.md)
   is the shared C# persistent-collections harness. Its `ChampBenchmarks`, `CtrieBenchmarks`,
   `TransientLifecycleBenchmarks`, `PatriciaMapBenchmarks`, and `MerkleSearchTreeBenchmarks` classes
   cover this workspace; Release configuration is required for meaningful measurements. The
@@ -187,7 +187,7 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     -c Release --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false `
     -- RunConfiguration.MaxCpuCount=1

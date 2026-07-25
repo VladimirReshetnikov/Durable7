@@ -147,7 +147,7 @@ P0 also establishes common instrumentation before any spike is interpreted:
   rules within each comparable lane, with controls that cannot represent a semantic lane explicitly
   omitted rather than fed different data;
 - an `InternalsVisibleTo` grant from the HAMT project to the existing
-  `Tools.DataStructures.FingerTree.Benchmarks` assembly, plus internal-only diagnostic hooks for roots,
+  `Durable7.FingerTree.Benchmarks` assembly, plus internal-only diagnostic hooks for roots,
   ownership, copied-node counts, and `BulkBuilder`; benchmark access does not become public API;
 - a predeclared materiality rule in the benchmark README, at least the larger of the measured noise
   floor and a maintainer-chosen practical margin, so a threshold is not selected after seeing data;

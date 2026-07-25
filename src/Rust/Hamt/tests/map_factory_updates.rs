@@ -4,7 +4,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tools_data_structures_hamt::PersistentHashMap;
+use durable7_hamt::PersistentHashMap;
 
 #[derive(Clone, Debug)]
 struct Representative {

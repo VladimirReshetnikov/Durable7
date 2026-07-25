@@ -5,7 +5,7 @@
 - Repository HEAD: 9bba9109d24a3a104e05212e3828f12783fe8aaa
 - Updated (UTC): 2026-07-16T22:52:15Z
 - Updated against repository HEAD: 88164edb086096800b2fb32eeaa7e7a1e556e183
-- Audience: Maintainers and reviewers of `tools::data_structures::hamt`
+- Audience: Maintainers and reviewers of `durable7::hamt`
 - Scope: Public C++ API, immutable-version semantics, wire contracts, and complexity guarantees
 
 For practical include and value-semantics examples, start with the [usage guide](usage.md). The

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::thread;
 
-use tools_data_structures_ordered::{OrderedSetMoveError, PersistentOrderedSet};
+use durable7_ordered::{OrderedSetMoveError, PersistentOrderedSet};
 
 fn assert_values<T, S>(set: &PersistentOrderedSet<T, S>, expected: &[T])
 where

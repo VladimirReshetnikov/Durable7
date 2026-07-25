@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vladimir_reshetnikov.data_structures import (
+from durable7 import (
     HashPolicy,
     MapPatchCompositionError,
     MapPatchConflictError,

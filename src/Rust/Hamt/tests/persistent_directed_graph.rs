@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tools_data_structures_hamt::PersistentDirectedGraph;
+use durable7_hamt::PersistentDirectedGraph;
 
 #[derive(Clone, Debug)]
 struct Vertex {

@@ -99,9 +99,9 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet restore DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+dotnet restore Durable7.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+dotnet build Durable7.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 
 # Scrub credentials before any BenchmarkDotNet child process captures its environment.
@@ -109,8 +109,8 @@ Get-ChildItem Env: | Where-Object {
     $_.Name -match '(?i)(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|CONNECTION|COOKIE|AUTH|IGCCSVC)'
 } | Remove-Item -ErrorAction SilentlyContinue
 
-Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
-$driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+Set-Location benchmarks\Durable7.FingerTree.Benchmarks
+$driver = '.\bin\Release\net10.0\Durable7.FingerTree.Benchmarks.dll'
 
 # Exhaustive opportunity-counter census. Dry timings are not deciding evidence.
 dotnet $driver `
@@ -224,17 +224,17 @@ all final evidence uses the exact filter above.
 
 | Evidence | Required location | Current state |
 | --- | --- | --- |
-| Exhaustive 456-case persistent counter census | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/dry-persistent/` | Complete; 456 sanitized CSV rows plus reports |
-| Selected persistent short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-persistent-short/` | Complete |
-| Selected `BulkBuilder` short control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-bulk-builder-short/` | Complete |
-| Unpinned exact-SHA hybrid-core pilot | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1-unpinned-1befaa2/` | Complete; archived as inconclusive and excluded from the gate |
-| Five independent selected-control noise runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/noise-persistent-*/` | Complete; curated in the T1 decision |
-| Full direct-separate deciding candidate | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/candidate-direct-separate-full/` | Complete; selected by T1 |
-| Full Every64 persistent corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-persistent-every64-full/` | Complete |
-| Full Every64 direct-separate corroboration | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-direct-every64-full/` | Complete |
-| Full sparse ordinary update guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-update-every-edit-full/` | Complete |
-| Full sparse direct-separate guard | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/guard-direct-every-edit-full/` | Complete |
-| Full ordinary lookup regression control | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-lookup-full/` | Complete |
+| Exhaustive 456-case persistent counter census | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/dry-persistent/` | Complete; 456 sanitized CSV rows plus reports |
+| Selected persistent short control | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-persistent-short/` | Complete |
+| Selected `BulkBuilder` short control | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t0/candidate-bulk-builder-short/` | Complete |
+| Unpinned exact-SHA hybrid-core pilot | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1-unpinned-1befaa2/` | Complete; archived as inconclusive and excluded from the gate |
+| Five independent selected-control noise runs | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/noise-persistent-*/` | Complete; curated in the T1 decision |
+| Full direct-separate deciding candidate | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/candidate-direct-separate-full/` | Complete; selected by T1 |
+| Full Every64 persistent corroboration | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-persistent-every64-full/` | Complete |
+| Full Every64 direct-separate corroboration | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/corroboration-direct-every64-full/` | Complete |
+| Full sparse ordinary update guard | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-update-every-edit-full/` | Complete |
+| Full sparse direct-separate guard | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/guard-direct-every-edit-full/` | Complete |
+| Full ordinary lookup regression control | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-t1/ordinary-lookup-full/` | Complete |
 | Curated T1 matrix and counter table | [T1 decision](transient-t1-decision.md) | Complete |
 | T0 advance/defer result | This document | **Advance to T1** |
 

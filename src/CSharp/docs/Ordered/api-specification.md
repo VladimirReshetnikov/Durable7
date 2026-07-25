@@ -16,7 +16,7 @@ identity, failure, and complexity.
 public sealed class PersistentOrderedSet<T> : IReadOnlySet<T>
 ```
 
-The type is owned by `Tools.DataStructures.Ordered`, which references public HAMT and FingerTree
+The type is owned by `Durable7.Ordered`, which references public HAMT and FingerTree
 projects. There is no `notnull` constraint and no dependency on Tungsten production code, tests,
 internals, semantics, or a live Tungsten oracle.
 

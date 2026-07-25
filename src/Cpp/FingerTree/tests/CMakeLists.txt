@@ -32,7 +32,7 @@ add_executable(
 target_link_libraries(
     fingertree_smoke_tests
     PRIVATE
-        tools::data_structures::finger_tree
+        durable7::finger_tree
 )
 
 target_include_directories(
@@ -80,7 +80,7 @@ set(
     sorted-collections
 )
 
-tds_add_headless_test(
+d7_add_headless_test(
     NAME fingertree.support
     TARGET fingertree_smoke_tests
     ARGUMENTS --group support
@@ -92,7 +92,7 @@ set_tests_properties(
 )
 
 foreach(group IN LISTS FINGERTREE_TEST_GROUPS)
-    tds_add_headless_command_test(
+    d7_add_headless_command_test(
         NAME fingertree.${group}
         COMMAND $<TARGET_FILE:fingertree_smoke_tests> --group ${group}
     )

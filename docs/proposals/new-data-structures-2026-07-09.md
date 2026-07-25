@@ -126,7 +126,7 @@ efficient increments (otherwise every `Add` is two walks).
 > **Superseded ownership and design (2026-07-14):** the proposal-time text below is retained as
 > history, but its “same machinery” and Association-ordering recommendation must not be implemented
 > as a Tungsten wrapper or semantic dependency. The current design forks useful sparse-label and
-> dual-index mechanics into `Tools.DataStructures.Ordered`, selects set behavior independently, and
+> dual-index mechanics into `Durable7.Ordered`, selects set behavior independently, and
 > uses an independent model rather than Association as a live oracle.
 
 New since the catalog. The insertion-ordered *map* shipped as `PersistentAssociation`; the set

@@ -208,8 +208,8 @@ reach into the shared representation.
 
 ### 2.3 C leaks private sparse stamps through the cursor surface
 
-`tds_ordered_set_cursor` has a public by-value `tds_ordered_set set;` whose `stamps` field is a
-`tds_hamt_map`, so `cursor.set.stamps` is reachable from any consumer. The design forbids this twice
+`d7_ordered_set_cursor` has a public by-value `d7_ordered_set set;` whose `stamps` field is a
+`d7_hamt_map`, so `cursor.set.stamps` is reachable from any consumer. The design forbids this twice
 ("never exposes sparse stamps"; "private sparse labels never enter the cursor contract"). The C tests
 make the leak load-bearing, so the fix is an opaque handle plus test rework. **All eight other ports
 are clean** — verified by grepping every cursor surface for stamp/label.
@@ -287,10 +287,10 @@ a self-copy re-initialized the destination (leaking the original rep) and then r
 
 ### 3.5 C: the Ordered multimap group copy could free raw heap bytes as pointers
 
-`tds_ordered_multimap_group_copy` discards the status of `tds_ordered_set_clone`, which writes its
+`d7_ordered_multimap_group_copy` discards the status of `d7_ordered_set_clone`, which writes its
 destination **only on success**. On refcount saturation or a deque-copy failure the destination stays
-whatever the HAMT allocated; `tds_ordered_set_destroy` then guards on non-`NULL` fields, which pass on
-garbage, and releases wild pointers. Reachable directly through `tds_ordered_multimap_cursor_try_add`.
+whatever the HAMT allocated; `d7_ordered_set_destroy` then guards on non-`NULL` fields, which pass on
+garbage, and releases wild pointers. Reachable directly through `d7_ordered_multimap_cursor_try_add`.
 
 Fixed by zeroing the destination first, which converts undefined behavior into a wholly uninitialized
 group that `destroy` correctly rejects — matching the design's rule that a newly initialized output

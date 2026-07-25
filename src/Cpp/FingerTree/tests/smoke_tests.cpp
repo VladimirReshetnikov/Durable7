@@ -1,11 +1,11 @@
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
 #include "test_support/operation_counter.hpp"
 #include "test_support/test_runner.hpp"
 
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -16,8 +16,8 @@
 #include <string_view>
 #include <vector>
 
-using namespace tools::data_structures::finger_tree;
-using namespace tools::data_structures::finger_tree::tests;
+using namespace durable7::finger_tree;
+using namespace durable7::finger_tree::tests;
 
 void add_measure_tests(suite& tests);
 void add_interval_tree_tests(suite& tests);
@@ -47,7 +47,7 @@ void add_tearable_concurrency_tests(suite& tests);
 
 int main(const int argument_count, const char* const* arguments)
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 
@@ -58,7 +58,7 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("support");
     tests.add("public aggregate header exposes version metadata", [] {
-        FT_REQUIRE_EQUAL(library_name, std::string_view{"Tools.DataStructures.FingerTree.Cpp"});
+        FT_REQUIRE_EQUAL(library_name, std::string_view{"Durable7.FingerTree.Cpp"});
         FT_REQUIRE_EQUAL(version_major, 0U);
         FT_REQUIRE_EQUAL(version_minor, 1U);
         FT_REQUIRE_EQUAL(version_patch, 0U);

@@ -3,7 +3,7 @@
 - Status: Implemented
 - Created (UTC): 2026-07-02T05:02:24Z
 - Repository HEAD: 3c639e02d05377685676923a13b30a3d22fd4994
-- Audience: Maintainers and reviewers of `Tools.DataStructures.Hamt`
+- Audience: Maintainers and reviewers of `Durable7.Hamt`
 - Scope: Public API, persistence semantics, and complexity guarantees
 
 For practical namespace, comparer, persistent update, and set-algebra examples, start with the

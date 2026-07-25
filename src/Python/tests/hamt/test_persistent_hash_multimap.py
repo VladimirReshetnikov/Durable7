@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from vladimir_reshetnikov.data_structures.hamt import (
+from durable7.hamt import (
     HashPolicy,
     PersistentHashMultimap,
     create_hash_policy,

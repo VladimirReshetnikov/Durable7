@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(
-    ToolsDataStructuresOrderedCpp
+    Durable7OrderedCpp
     VERSION 0.1.0
     DESCRIPTION "Neutral C++ persistent ordered collections"
     LANGUAGES CXX
@@ -11,11 +11,11 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../../../eng/HeadlessTest.cmake")
 
 option(ORDERED_BUILD_TESTS "Build the C++ persistent ordered-set tests." ON)
 
-add_library(tools_data_structures_ordered INTERFACE)
-add_library(tools::data_structures::ordered ALIAS tools_data_structures_ordered)
+add_library(durable7_ordered INTERFACE)
+add_library(durable7::ordered ALIAS durable7_ordered)
 
 target_include_directories(
-    tools_data_structures_ordered
+    durable7_ordered
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../FingerTree/include>
@@ -23,11 +23,11 @@ target_include_directories(
         $<INSTALL_INTERFACE:include>
 )
 
-target_compile_features(tools_data_structures_ordered INTERFACE cxx_std_23)
+target_compile_features(durable7_ordered INTERFACE cxx_std_23)
 
 if(MSVC)
     target_compile_options(
-        tools_data_structures_ordered
+        durable7_ordered
         INTERFACE
             /std:c++latest
             /permissive-

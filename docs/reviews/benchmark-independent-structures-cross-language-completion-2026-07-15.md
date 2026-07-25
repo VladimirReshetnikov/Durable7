@@ -30,12 +30,12 @@ proposal's benchmark- or consumer-gated candidates remain outside this shipment.
 
 | Language | HAMT factories | Hash bag | Ordered set | Range-update sequence |
 | --- | --- | --- | --- | --- |
-| C# | `PersistentHashMap.GetOrAdd` / `AddOrUpdate`; focused callback/topology/model tests | `PersistentHashBag<T>`; algebra, overflow, enumeration, property, and API tests | `Tools.DataStructures.Ordered`; 62 focused model, failure, concurrency, API, and dependency tests | `IRangeUpdateAlgebra` + `RangeUpdateSequence`; 62 focused and 692 FingerTree tests |
-| C | `tds_hamt_map_get_or_add` / `tds_hamt_map_add_or_update`; node-transition and failpoint tests | `tds_hamt_bag`; nine deterministic groups plus retained-history and failure sweeps | `src/C/Ordered`; independent C17 workspace and model/failure tests | `ft_range_update_sequence`; algebra, DAG, failpoint, model, and concurrency tests |
+| C# | `PersistentHashMap.GetOrAdd` / `AddOrUpdate`; focused callback/topology/model tests | `PersistentHashBag<T>`; algebra, overflow, enumeration, property, and API tests | `Durable7.Ordered`; 62 focused model, failure, concurrency, API, and dependency tests | `IRangeUpdateAlgebra` + `RangeUpdateSequence`; 62 focused and 692 FingerTree tests |
+| C | `d7_hamt_map_get_or_add` / `d7_hamt_map_add_or_update`; node-transition and failpoint tests | `d7_hamt_bag`; nine deterministic groups plus retained-history and failure sweeps | `src/C/Ordered`; independent C17 workspace and model/failure tests | `ft_range_update_sequence`; algebra, DAG, failpoint, model, and concurrency tests |
 | C++ | `persistent_hash_map::get_or_add` / `add_or_update`; callback, topology, exception, and model tests | `persistent_hash_bag`; checked algebra and diagnostic tests | `src/Cpp/Ordered`; header-first independent workspace and 17-case suite | `range_update_sequence`; nine focused cases plus installed-consumer coverage |
-| Haskell | `HashMap.getOrAdd` / `addOrUpdate` and `Either` variants; laziness, callback, topology, and model tests | `Data.Structures.Hamt.HashBag`; checked `Int32`/`Int64` contract | `Data.Structures.Ordered.PersistentOrderedSet`; independent package and model suite | `Data.Structures.FingerTree.RangeUpdateSequence`; laws, model, sharing, and overflow tests |
+| Haskell | `HashMap.getOrAdd` / `addOrUpdate` and `Either` variants; laziness, callback, topology, and model tests | `Durable7.Hamt.HashBag`; checked `Int32`/`Int64` contract | `Durable7.Ordered.PersistentOrderedSet`; independent package and model suite | `Durable7.FingerTree.RangeUpdateSequence`; laws, model, sharing, and overflow tests |
 | Kotlin | `PersistentHashMap.getOrAdd` / `addOrUpdate`; nullable/callback/topology/model tests | `PersistentHashBag`; checked `Int`/`Long` contract | neutral `Ordered` workspace; 10 executable suites | `RangeUpdateSequence`; algebra, nullable, failure, model, DAG, and reader tests |
-| Rust | `PersistentHashMap::get_or_add` / `add_or_update`; panic, topology, and model tests | `PersistentHashBag`; checked `i32`/`i64` contract | `tools-data-structures-ordered`; 11 tests plus Clippy | `tools-data-structures-range-update`; nine integration tests plus Clippy |
+| Rust | `PersistentHashMap::get_or_add` / `add_or_update`; panic, topology, and model tests | `PersistentHashBag`; checked `i32`/`i64` contract | `durable7-ordered`; 11 tests plus Clippy | `durable7-range-update`; nine integration tests plus Clippy |
 | TypeScript | `PersistentHashMap.getOrAdd` / `addOrUpdate`; strict callback/topology/model tests | `PersistentHashBag`; policy/algebra/model tests | neutral `ordered` module; example, algebra, property, invariant, and dependency tests | `RangeUpdateSequence`; 45 focused tests within a 169-test full package gate |
 | Python | `PersistentHashMap.get_or_add` / `add_or_update`; callback/topology/model tests | `PersistentHashBag`; checked multiplicity and receiver-policy tests | neutral `ordered` package; example/property/invariant/dependency tests | `RangeUpdateSequence`; 18 focused tests within a 150-test full distribution gate |
 
@@ -43,13 +43,13 @@ proposal's benchmark- or consumer-gated candidates remain outside this shipment.
 
 ### C#
 
-- HAMT factories: `src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs` and the HAMT
+- HAMT factories: `src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs` and the HAMT
   factory-update tests.
-- Hash bag: `src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashBag.cs` and the
+- Hash bag: `src/CSharp/src/Durable7.Hamt/PersistentHashBag.cs` and the
   `PersistentHashBag*Tests.cs` suites.
-- Ordered set: `src/CSharp/src/Tools.DataStructures.Ordered/` and
-  `src/CSharp/tests/Tools.DataStructures.Ordered.Tests/`.
-- Range updates: `src/CSharp/src/Tools.DataStructures.FingerTree/RangeUpdateSequence*.cs`,
+- Ordered set: `src/CSharp/src/Durable7.Ordered/` and
+  `src/CSharp/tests/Durable7.Ordered.Tests/`.
+- Range updates: `src/CSharp/src/Durable7.FingerTree/RangeUpdateSequence*.cs`,
   `IRangeUpdateAlgebra.cs`, and the `RangeUpdate*Tests.cs` suites.
 
 ### C and C++
@@ -57,25 +57,25 @@ proposal's benchmark- or consumer-gated candidates remain outside this shipment.
 - C HAMT factory and bag APIs live under `src/C/Hamt/include` and `src/C/Hamt/src`; their tests are
   in `src/C/Hamt/tests`. The neutral ordered workspace is `src/C/Ordered`. The range API,
   implementation, and tests are respectively
-  `src/C/FingerTree/include/tools/data_structures/finger_tree/range_update_sequence.h`,
+  `src/C/FingerTree/include/durable7/finger_tree/range_update_sequence.h`,
   `src/C/FingerTree/src/range_update_sequence.c`, and
   `src/C/FingerTree/tests/range_update_sequence_tests.c`.
 - C++ HAMT factory and bag APIs live under `src/Cpp/Hamt/include` with executable coverage under
   `src/Cpp/Hamt/tests`. The neutral ordered workspace is `src/Cpp/Ordered`. The range header and
-  tests are `src/Cpp/FingerTree/include/tools/data_structures/finger_tree/range_update_sequence.hpp`
+  tests are `src/Cpp/FingerTree/include/durable7/finger_tree/range_update_sequence.hpp`
   and `src/Cpp/FingerTree/tests/range_update_sequence_tests.cpp`.
 
 ### Haskell, Kotlin, and Rust
 
 - Haskell exposes the HAMT additions from `src/Haskell/Hamt`, the ordered set from the independent
   `src/Haskell/Ordered` package, and the range core from
-  `Data.Structures.FingerTree.RangeUpdateSequence` in the FingerTree package.
+  `Durable7.FingerTree.RangeUpdateSequence` in the FingerTree package.
 - Kotlin exposes the HAMT additions from `src/Kotlin/Hamt`, the independent ordered workspace from
   `src/Kotlin/Ordered`, and the range core from
-  `src/Kotlin/FingerTree/src/tools/datastructures/fingertree/RangeUpdateSequence.kt`.
+  `src/Kotlin/FingerTree/src/durable7/fingertree/RangeUpdateSequence.kt`.
 - Rust exposes the HAMT additions from `src/Rust/Hamt`, the independent
-  `tools-data-structures-ordered` crate from `src/Rust/Ordered`, and the independent
-  `tools-data-structures-range-update` crate from `src/Rust/RangeUpdate`.
+  `durable7-ordered` crate from `src/Rust/Ordered`, and the independent
+  `durable7-range-update` crate from `src/Rust/RangeUpdate`.
 
 ### TypeScript and Python
 
@@ -83,7 +83,7 @@ proposal's benchmark- or consumer-gated candidates remain outside this shipment.
   from `src/TypeScript/src/ordered`, and the range algebra/core from
   `src/TypeScript/src/finger-tree`. The matching suites live under `src/TypeScript/test`.
 - Python exports the HAMT additions from
-  `src/Python/src/vladimir_reshetnikov/data_structures/hamt`, the neutral ordered set from
+  `src/Python/src/durable7/hamt`, the neutral ordered set from
   `.../ordered`, and the range core from `.../finger_tree/range_update_sequence.py`. Its matching
   suites live under `src/Python/tests` and the installed-wheel smoke gate exercises all four.
 

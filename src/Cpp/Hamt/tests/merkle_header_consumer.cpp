@@ -1,4 +1,4 @@
-#include <Tools/DataStructures/Hamt/hamt.hpp>
+#include <durable7/hamt/hamt.hpp>
 
 #include <cstdint>
 #include <memory>
@@ -16,7 +16,7 @@ int main()
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wlanguage-extension-token"
 #endif
-    __if_exists(tools::data_structures::hamt::merkle_persistence_access) {
+    __if_exists(durable7::hamt::merkle_persistence_access) {
         static_assert(false, "the legacy public Merkle persistence access bridge must not exist");
     }
 #if defined(__clang__)
@@ -24,7 +24,7 @@ int main()
 #endif
 #endif
 
-    using namespace tools::data_structures::hamt;
+    using namespace durable7::hamt;
 
     const auto champ_source = persistent_hash_map<std::int32_t, std::string>::empty()
         .set_item(1, "one");

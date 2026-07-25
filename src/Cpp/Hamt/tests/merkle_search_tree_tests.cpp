@@ -1,5 +1,5 @@
-#include <Tools/DataStructures/Hamt/merkle_proofs.hpp>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/hamt/merkle_proofs.hpp>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <algorithm>
 #include <array>
@@ -23,41 +23,41 @@
 #include <utility>
 #include <vector>
 
-using tools::data_structures::hamt::int32_merkle_codec;
-using tools::data_structures::hamt::int64_merkle_codec;
-using tools::data_structures::hamt::create_merkle_proof;
-using tools::data_structures::hamt::create_merkle_range_proof;
-using tools::data_structures::hamt::create_merkle_sync_pack;
-using tools::data_structures::hamt::export_merkle_pack;
-using tools::data_structures::hamt::import_merkle_pack;
-using tools::data_structures::hamt::in_memory_merkle_block_store;
-using tools::data_structures::hamt::load_merkle_tree;
-using tools::data_structures::hamt::merkle_bytes;
-using tools::data_structures::hamt::merkle_block;
-using tools::data_structures::hamt::merkle_block_pack;
-using tools::data_structures::hamt::merkle_block_store;
-using tools::data_structures::hamt::merkle_codec;
-using tools::data_structures::hamt::merkle_codec_error;
-using tools::data_structures::hamt::merkle_digest;
-using tools::data_structures::hamt::merkle_map_difference_kind;
-using tools::data_structures::hamt::merkle_policy_mismatch;
-using tools::data_structures::hamt::merkle_proof;
-using tools::data_structures::hamt::merkle_proof_kind;
-using tools::data_structures::hamt::merkle_proof_step;
-using tools::data_structures::hamt::merkle_range_error;
-using tools::data_structures::hamt::merkle_search_tree;
-using tools::data_structures::hamt::merkle_search_tree_policy;
-using tools::data_structures::hamt::merkle_tree_invariant_error;
-using tools::data_structures::hamt::merkle_verification_budget;
-using tools::data_structures::hamt::merkle_verification_error;
-using tools::data_structures::hamt::merkle_verification_failure_kind;
-using tools::data_structures::hamt::merge_merkle_trees;
-using tools::data_structures::hamt::nullable_bytes_merkle_codec;
-using tools::data_structures::hamt::nullable_utf8_merkle_codec;
-using tools::data_structures::hamt::rfc4122_guid;
-using tools::data_structures::hamt::rfc4122_guid_merkle_codec;
-using tools::data_structures::hamt::save_merkle_tree;
-using tools::data_structures::hamt::verify_merkle_proof;
+using durable7::hamt::int32_merkle_codec;
+using durable7::hamt::int64_merkle_codec;
+using durable7::hamt::create_merkle_proof;
+using durable7::hamt::create_merkle_range_proof;
+using durable7::hamt::create_merkle_sync_pack;
+using durable7::hamt::export_merkle_pack;
+using durable7::hamt::import_merkle_pack;
+using durable7::hamt::in_memory_merkle_block_store;
+using durable7::hamt::load_merkle_tree;
+using durable7::hamt::merkle_bytes;
+using durable7::hamt::merkle_block;
+using durable7::hamt::merkle_block_pack;
+using durable7::hamt::merkle_block_store;
+using durable7::hamt::merkle_codec;
+using durable7::hamt::merkle_codec_error;
+using durable7::hamt::merkle_digest;
+using durable7::hamt::merkle_map_difference_kind;
+using durable7::hamt::merkle_policy_mismatch;
+using durable7::hamt::merkle_proof;
+using durable7::hamt::merkle_proof_kind;
+using durable7::hamt::merkle_proof_step;
+using durable7::hamt::merkle_range_error;
+using durable7::hamt::merkle_search_tree;
+using durable7::hamt::merkle_search_tree_policy;
+using durable7::hamt::merkle_tree_invariant_error;
+using durable7::hamt::merkle_verification_budget;
+using durable7::hamt::merkle_verification_error;
+using durable7::hamt::merkle_verification_failure_kind;
+using durable7::hamt::merge_merkle_trees;
+using durable7::hamt::nullable_bytes_merkle_codec;
+using durable7::hamt::nullable_utf8_merkle_codec;
+using durable7::hamt::rfc4122_guid;
+using durable7::hamt::rfc4122_guid_merkle_codec;
+using durable7::hamt::save_merkle_tree;
+using durable7::hamt::verify_merkle_proof;
 
 namespace {
 
@@ -743,7 +743,7 @@ TEST(SingleEntryMst2GoldenLocksDomainRootAndExactBlockBytes)
 
     const auto empty = string_tree::create(policy);
     CHECK_EQ(policy.empty_digest(), empty.root_hash());
-    CHECK(empty.validate_structure() == tools::data_structures::hamt::merkle_search_tree_statistics{});
+    CHECK(empty.validate_structure() == durable7::hamt::merkle_search_tree_statistics{});
     const auto tree = empty.set_item(42, std::optional<std::string>{"forty-two"});
     CHECK_EQ(
         std::string{"1b464818e8934692ad28f35f520fa0c834634e2200f9e5873d0327e6524bcc94"},
@@ -1059,7 +1059,7 @@ struct equivalent_key final {
 };
 
 class equivalent_key_comparer final
-    : public tools::data_structures::hamt::merkle_key_comparer<equivalent_key> {
+    : public durable7::hamt::merkle_key_comparer<equivalent_key> {
 public:
     [[nodiscard]] int compare(const equivalent_key& left, const equivalent_key& right) const override
     {
@@ -1244,7 +1244,7 @@ struct failure_value final {
 };
 
 class throwing_comparer final
-    : public tools::data_structures::hamt::merkle_key_comparer<failure_key> {
+    : public durable7::hamt::merkle_key_comparer<failure_key> {
 public:
     explicit throwing_comparer(std::shared_ptr<failure_control> control)
         : control_(std::move(control))
@@ -2040,7 +2040,7 @@ TEST(PersistenceClosurePrunedPacksAndIterativeSyncConverge)
 
     auto rounds = std::size_t{0};
     while (true) {
-        const auto plan = tools::data_structures::hamt::plan_merkle_sync(
+        const auto plan = durable7::hamt::plan_merkle_sync(
             target, local, receiver);
         CHECK_EQ(target.root_hash(), plan.target_root_hash());
         CHECK_EQ(local.root_hash(), plan.local_root_hash());
@@ -2058,7 +2058,7 @@ TEST(PersistenceClosurePrunedPacksAndIterativeSyncConverge)
     CHECK(rounds > 1);
     const auto loaded = load_merkle_tree(target.root_hash(), policy, receiver);
     CHECK(target.content_equals(loaded));
-    const auto finished = tools::data_structures::hamt::plan_merkle_sync(
+    const auto finished = durable7::hamt::plan_merkle_sync(
         target, loaded, receiver);
     CHECK(finished.roots_match());
     CHECK(!finished.requires_blocks());
@@ -2104,7 +2104,7 @@ TEST(PersistenceThreeWayMergeIsPresentNullSafeAndNeverPublishesPartialOutput)
         conflict_left,
         conflict_right,
         [](const auto&) {
-            return tools::data_structures::hamt::merkle_merge_resolution<
+            return durable7::hamt::merkle_merge_resolution<
                 std::optional<std::string>>::set_value(std::optional<std::string>{"resolved"});
         });
     CHECK(resolved.success());
@@ -2122,7 +2122,7 @@ TEST(PersistenceThreeWayMergeIsPresentNullSafeAndNeverPublishesPartialOutput)
         present_null,
         deleted,
         [](const auto&) {
-            return tools::data_structures::hamt::merkle_merge_resolution<
+            return durable7::hamt::merkle_merge_resolution<
                 std::optional<std::string>>::use_left();
         });
     CHECK(keep_null.success());
@@ -2135,7 +2135,7 @@ TEST(PersistenceThreeWayMergeIsPresentNullSafeAndNeverPublishesPartialOutput)
             base,
             conflict_left,
             conflict_right,
-            [](const auto&) -> tools::data_structures::hamt::merkle_merge_resolution<
+            [](const auto&) -> durable7::hamt::merkle_merge_resolution<
                 std::optional<std::string>> {
                 throw std::runtime_error{"resolver failure"};
             }),
@@ -2187,7 +2187,7 @@ TEST(PersistenceMoveOnlyKeysAndValuesLoadProveImportAndMerge)
         left,
         conflict_right,
         [](const auto&) {
-            return tools::data_structures::hamt::merkle_merge_resolution<move_only_int>::set_value(
+            return durable7::hamt::merkle_merge_resolution<move_only_int>::set_value(
                 move_only_int{13});
         });
     CHECK(resolved.success());
@@ -2235,7 +2235,7 @@ TEST(PersistenceStoreLoadProofAndSyncAreConcurrentSafe)
 
 int main()
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 

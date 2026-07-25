@@ -128,12 +128,12 @@ $env:GITHUB_TOKEN = $null
 $env:GH_TOKEN = $null
 [System.Diagnostics.Process]::GetCurrentProcess().ProcessorAffinity = [IntPtr]1
 
-dotnet restore DataStructures.sln --disable-parallel
-dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+dotnet restore Durable7.sln --disable-parallel
+dotnet build Durable7.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false -p:RestoreDisableParallel=true
 
-Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
-$benchmarkDll = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+Set-Location benchmarks\Durable7.FingerTree.Benchmarks
+$benchmarkDll = '.\bin\Release\net10.0\Durable7.FingerTree.Benchmarks.dll'
 dotnet $benchmarkDll --verify-axis2-frozen-layouts
 
 # Continue only after the standalone correctness verifier passes and F0 has an evidence-backed
@@ -184,9 +184,9 @@ candidate/control difference:
 
 | Evidence | Required location | Current state |
 | --- | --- | --- |
-| Short semantic/timing smoke matrix | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/short-*` | Pending isolated run |
-| Full uniform/clustered/collision/null comparisons | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/full-*` | Pending isolated run |
-| Five independent BCL control runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/noise-bcl-frozen-*` | Pending isolated run |
+| Short semantic/timing smoke matrix | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/short-*` | Pending isolated run |
+| Full uniform/clustered/collision/null comparisons | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/full-*` | Pending isolated run |
+| Five independent BCL control runs | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-f1/noise-bcl-frozen-*` | Pending isolated run |
 | Retained-array `AXIS2_F1_RETAINED_V1` rows | Raw logs from the matching short/full directories | Pending isolated run |
 | Curated tables, break-even calculations, environment, and threshold calculation | This document, section `Curated evidence` | Pending isolated run |
 | F1 select/defer result | This document, replacing the postponed status without rewriting provenance | Pending isolated run |

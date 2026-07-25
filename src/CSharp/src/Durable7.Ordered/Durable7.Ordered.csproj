@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Durable7.Ordered</AssemblyName>
+    <RootNamespace>Durable7.Ordered</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Durable7.FingerTree\Durable7.FingerTree.csproj" />
+    <ProjectReference Include="..\Durable7.Hamt\Durable7.Hamt.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Durable7.Ordered.Tests" />
+  </ItemGroup>
+</Project>

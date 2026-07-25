@@ -107,12 +107,12 @@ including the new test.
 
 #### Ctrie (Kotlin) — `snapshot()` loses a concurrently-committed write and breaks snapshot isolation (CONFIRMED)
 
-[ConcurrentHashTrie.kt:82-90](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/ConcurrentHashTrie.kt).
+[ConcurrentHashTrie.kt:82-90](../../src/Kotlin/Hamt/src/durable7/hamt/ConcurrentHashTrie.kt).
 `snapshot()` reads `main = readMain(before.node)`, wraps that captured main into a new-generation
 root, and publishes it with a bare `root.compareAndSet(before, after)`. It never verifies that
 `before.node`'s main is still the value it read, so a writer that commits into the old generation
 between the `readMain` and the CAS is silently dropped from the live trie. The C# reference avoids
-this with a root RDCSS: `Complete(RootDescriptor)` ([ConcurrentHashTrie.cs:554-568](../../src/CSharp/src/Tools.DataStructures.Hamt/ConcurrentHashTrie.cs))
+this with a root RDCSS: `Complete(RootDescriptor)` ([ConcurrentHashTrie.cs:554-568](../../src/CSharp/src/Durable7.Hamt/ConcurrentHashTrie.cs))
 commits the root transition only if `descriptor.Before.Node.Main` still equals the expected main,
 and `ReadRoot()` help-completes a pending root descriptor before any writer decides its own GCAS.
 
@@ -138,7 +138,7 @@ CAS `root` from `before` to the descriptor, commit in a `complete(RootDescriptor
 #### Merkle core + wire — the only cross-language golden vector is degenerate (CONFIRMED test gap)
 
 The single shared wire vector pinned identically in all six suites (e.g.
-[MerklePersistenceAlgorithmsTests.cs:12-23](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/MerklePersistenceAlgorithmsTests.cs),
+[MerklePersistenceAlgorithmsTests.cs:12-23](../../src/CSharp/tests/Durable7.Hamt.Tests/MerklePersistenceAlgorithmsTests.cs),
 Rust `tests/merkle_core_wire.rs:238-265`, C `tests/merkle_search_tree_tests.c:374`) encodes a block
 with `level = 0`, `entryCount = 1`, and both children equal to the empty digest. It never exercises a
 non-zero level byte, more than one entry per block, a non-empty (nested) child digest, or multi-level
@@ -156,7 +156,7 @@ block bytes in all six suites.
 
 #### Ctrie (Kotlin) — concurrency tests never race a snapshot against a writer (CONFIRMED test gap)
 
-[HamtTests.kt:198-248](../../src/Kotlin/Hamt/test/tools/datastructures/hamt/HamtTests.kt). The tests
+[HamtTests.kt:198-248](../../src/Kotlin/Hamt/test/durable7/hamt/HamtTests.kt). The tests
 spawn real threads (good), but every `snapshot()` is taken in a quiescent gap between write phases,
 writers use only disjoint keys, and there is no linearizability oracle or structural validator. This
 is exactly why the Critical snapshot defect and the Medium tomb defect below pass undetected. Fix:
@@ -169,7 +169,7 @@ contention loop; and a small-history linearizability check against a model map.
 #### Ctrie (Kotlin) — no tomb nodes, so the trie never contracts (CONFIRMED)
 
 `MainNode` has only `CNode`/`LNode` implementers; there is no `TNode`, and removal
-([ConcurrentHashTrie.kt:126-129, 152-153](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/ConcurrentHashTrie.kt))
+([ConcurrentHashTrie.kt:126-129, 152-153](../../src/Kotlin/Hamt/src/durable7/hamt/ConcurrentHashTrie.kt))
 never tombs-and-contracts. After a remove, a non-root `INode` can be left pointing at a single-entry
 or empty `CNode` that is never pulled up or reclaimed. The C# reference maintains canonical compact
 form (`Contract`/`ContractCollision`/`CleanTombs`) and asserts `TombNodeCount == 0`. Repeated
@@ -182,7 +182,7 @@ from the reference, not an isolation break. Fix: port `TNode` + `Contract`/`Cont
 
 #### Patricia (C#) — combining `Union`/`Intersect` overloads are non-structural (CONFIRMED)
 
-[PersistentIntMap.cs:125-135, 147-159](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentIntMap.cs)
+[PersistentIntMap.cs:125-135, 147-159](../../src/CSharp/src/Durable7.Hamt/PersistentIntMap.cs)
 (identical in `PersistentLongMap.cs:124-134, 146-158`). The C# combining overloads are naive
 `foreach … SetItem` fallback loops; `PatriciaMapCore` has no combining structural merge (only the
 non-combine `UnionRight`/`IntersectLeft`/`Except`). All five ports implement genuine prefix-aligned
@@ -227,7 +227,7 @@ is a conscious design choice worth recording as one.
 
 Only the C# suite recursively asserts that two independently-built equal maps have identical node
 topology and that no branch is under-full after a randomized delete/insert history
-([PersistentHamtStructureTests.cs](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests)). The five
+([PersistentHamtStructureTests.cs](../../src/CSharp/tests/Durable7.Hamt.Tests)). The five
 ports assert only content equality plus shallow root-kind checks. Because C# `MapEquals`/`Diff` *rely
 on* canonical form (positional lockstep) they would break under a regression, but the ports' equality
 is content-based and would keep returning correct results while silently accumulating non-canonical
@@ -248,7 +248,7 @@ collapse logic itself was traced and is correct in all six.
   checks only count/height agreement; `has_regular_layout` drops the upper bound. Internally
   self-consistent, but diverges from the reference's `1..=MaximumHeight` contract.
 - **CHAMP (Haskell) `validStructure` does not certify canonical shape (CONFIRMED).**
-  [HashMap.hs:113-119](../../src/Haskell/Hamt/src/Data/Structures/Hamt/HashMap.hs) accepts an
+  [HashMap.hs:113-119](../../src/Haskell/Hamt/src/Durable7/Hamt/HashMap.hs) accepts an
   under-full non-collapsed branch (`Branch dataMap 0 [(h,k,v)] []`), so `validStructure == True` does
   not imply canonical topology despite the docstring. Add clauses rejecting fewer than two entries
   unless the single child is itself a `Branch`.
@@ -269,12 +269,12 @@ collapse logic itself was traced and is correct in all six.
   contract is anchored indirectly. Add a block-level byte assertion in `MerkleEncodingWireTests.cs`
   (the values are already computed there).
 - **Merkle (Haskell) hand-rolled SHA-256 is anchored by one fixed-length block (CONFIRMED).**
-  [MerkleEncoding.hs:379-448](../../src/Haskell/Hamt/src/Data/Structures/Hamt/MerkleEncoding.hs). SHA-256
+  [MerkleEncoding.hs:379-448](../../src/Haskell/Hamt/src/Durable7/Hamt/MerkleEncoding.hs). SHA-256
   bugs are overwhelmingly padding/length-boundary sensitive; no variable-length or multi-chunk bytes
   are cross-pinned. The wide/multi-level vector recommended for the High Merkle finding also closes
   this; alternatively add boundary-length SHA-256 vectors.
 - **Patricia (Haskell) `insert` reallocates on equal-value reinsert (CONFIRMED).**
-  [Patricia.hs:116-117](../../src/Haskell/Hamt/src/Data/Structures/Hamt/Patricia.hs) always builds a
+  [Patricia.hs:116-117](../../src/Haskell/Hamt/src/Durable7/Hamt/Patricia.hs) always builds a
   fresh leaf, so no-op identity holds less broadly than the other five ports. Benign — Haskell lacks
   cheap reference equality; document or add an `Eq v`-gated short-circuit.
 - **Brodal–Okasaki (C, C++) `skew_meld` uses a different algorithm than the reference (CONFIRMED,

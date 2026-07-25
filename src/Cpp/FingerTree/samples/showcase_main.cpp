@@ -4,5 +4,5 @@
 
 int main()
 {
-    tools::data_structures::finger_tree::samples::showcase::run(std::cout);
+    durable7::finger_tree::samples::showcase::run(std::cout);
 }

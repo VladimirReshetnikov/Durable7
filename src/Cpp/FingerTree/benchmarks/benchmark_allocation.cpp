@@ -9,7 +9,7 @@
 #include <malloc.h>
 #endif
 
-namespace tools::data_structures::finger_tree::benchmarks {
+namespace durable7::finger_tree::benchmarks {
 namespace {
 
 std::atomic<bool> enabled = false;
@@ -53,7 +53,7 @@ std::size_t allocation_counting_scope::bytes_allocated() const noexcept
     return enabled_ ? allocated_bytes.load(std::memory_order_relaxed) : 0;
 }
 
-} // namespace tools::data_structures::finger_tree::benchmarks
+} // namespace durable7::finger_tree::benchmarks
 
 #ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
 namespace {
@@ -67,7 +67,7 @@ namespace {
 {
     const auto requested = actual_size(size);
     if (void* const memory = std::malloc(requested)) {
-        tools::data_structures::finger_tree::benchmarks::record_allocation(requested);
+        durable7::finger_tree::benchmarks::record_allocation(requested);
         return memory;
     }
     return nullptr;
@@ -90,7 +90,7 @@ namespace {
     }
 #endif
     if (memory != nullptr) {
-        tools::data_structures::finger_tree::benchmarks::record_allocation(requested);
+        durable7::finger_tree::benchmarks::record_allocation(requested);
     }
     return memory;
 }

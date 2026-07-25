@@ -1,4 +1,4 @@
-use tools_data_structures_range_update::{MeasurePolicy, RangeUpdateAlgebra, RangeUpdateSequence};
+use durable7_range_update::{MeasurePolicy, RangeUpdateAlgebra, RangeUpdateSequence};
 
 #[derive(Debug)]
 struct Additive;

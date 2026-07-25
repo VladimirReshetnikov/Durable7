@@ -1,4 +1,4 @@
-#include <tools/data_structures/finger_tree/detail/lazy_cell.hpp>
+#include <durable7/finger_tree/detail/lazy_cell.hpp>
 
 #include "test_support/test_runner.hpp"
 
@@ -9,8 +9,8 @@
 #include <thread>
 #include <vector>
 
-using namespace tools::data_structures::finger_tree::tests;
-namespace detail = tools::data_structures::finger_tree::detail;
+using namespace durable7::finger_tree::tests;
+namespace detail = durable7::finger_tree::detail;
 
 namespace {
 

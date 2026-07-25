@@ -2,7 +2,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use tools_data_structures_hamt::PersistentIndexedMap;
+use durable7_hamt::PersistentIndexedMap;
 
 #[test]
 fn added_rows_populate_nonunique_secondary_groups() {

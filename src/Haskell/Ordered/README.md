@@ -3,14 +3,14 @@
 - Created (UTC): 2026-07-15T09:12:49Z
 - Repository HEAD: a47ada790d8028a744990c4608c32ab001376683
 - Audience: users and maintainers of the neutral Haskell ordered-set port
-- Scope: ownership, representation, public behavior, and validation of `tools-data-structures-ordered`
+- Scope: ownership, representation, public behavior, and validation of `durable7-ordered`
 
 This package is the independently owned Haskell port of the repository's neutral insertion-ordered
-set and map. It composes the public CHAMP map from `tools-data-structures-hamt` with the public persistent
-deque from `tools-data-structures-fingertree`; it has no dependency on the application-specific
+set and map. It composes the public CHAMP map from `durable7-hamt` with the public persistent
+deque from `durable7-fingertree`; it has no dependency on the application-specific
 Tungsten package and does not use Tungsten behavior as an oracle.
 
-`Data.Structures.Ordered.PersistentOrderedSet` stores one ordered `Entry` per comparer equivalence
+`Durable7.Ordered.PersistentOrderedSet` stores one ordered `Entry` per comparer equivalence
 class and one CHAMP entry from that representative to its private signed 64-bit order label. Labels
 are sparsely allocated and deterministically rebuilt when a local gap is exhausted. The spacing and
 relabel cadence are private implementation details.
@@ -33,7 +33,7 @@ policy equivalence class, matching labels on both sides, and agreement on the st
 Values are immutable and therefore safe for concurrent evaluation when caller-supplied hash/equality
 callbacks are themselves safe.
 
-`Data.Structures.Ordered.PersistentOrderedMap` composes that ordered key set with a CHAMP payload
+`Durable7.Ordered.PersistentOrderedMap` composes that ordered key set with a CHAMP payload
 index. Its API covers strict positional insertion, existing-value replacement without movement,
 explicit movement, keyed/positional removal, ranges, reversal, stable entry sorting, ordered
 enumeration, component-root sharing diagnostics, and two-way validation. The first key
@@ -53,7 +53,7 @@ That is a breaking API change and is deliberately not taken here. `PersistentOrd
 carry an independent value `HashPolicy`, so its grouped membership and its cursor's insert no-op are
 value-policy aware; the deviation is confined to `PersistentOrderedMap` payload writes.
 
-`Data.Structures.Ordered.PersistentOrderedMultimap` composes an ordered map of nonempty ordered
+`Durable7.Ordered.PersistentOrderedMultimap` composes an ordered map of nonempty ordered
 value sets under independent runtime policies. It retains first key and value representatives,
 enumerates key groups and their values in nested first-insertion order, removes empty groups, and
 tracks group and pair counts separately.
@@ -68,7 +68,7 @@ re-lookup can never find again.
 
 ## Persistent cursors
 
-`Data.Structures.Ordered.Cursor` adds one immutable gap cursor per family:
+`Durable7.Ordered.Cursor` adds one immutable gap cursor per family:
 `PersistentOrderedSetCursor a`, `PersistentOrderedMapCursor k v`, and
 `PersistentOrderedMultimapCursor k v`. Each is an opaque snapshot-plus-position value retaining one
 exact collection version plus a validated position in `0 .. size`, denoting the gap between the

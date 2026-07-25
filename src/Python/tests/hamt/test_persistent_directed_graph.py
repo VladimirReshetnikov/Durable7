@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from vladimir_reshetnikov.data_structures import (
+from durable7 import (
     HashPolicy,
     PersistentDirectedGraph,
     create_hash_policy,

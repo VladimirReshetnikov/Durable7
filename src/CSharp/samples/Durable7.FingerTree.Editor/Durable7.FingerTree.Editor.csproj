@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Durable7.FingerTree.Editor</AssemblyName>
+    <RootNamespace>Durable7.FingerTree.Editor</RootNamespace>
+    <!-- A runnable demo, not a shipped API surface: skip doc generation (the workspace default treats
+         CS1591/CS1573 as errors). -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Durable7.FingerTree\Durable7.FingerTree.csproj" />
+  </ItemGroup>
+</Project>

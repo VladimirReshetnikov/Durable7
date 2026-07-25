@@ -1,4 +1,4 @@
-open Tools_data_structures
+open Durable7
 open Numerics.Wide_integer
 
 let check_wrap (type value) (module Integer : S with type t = value) () =

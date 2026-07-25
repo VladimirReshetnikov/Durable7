@@ -9,12 +9,12 @@ import Data.Char (toLower)
 import qualified Data.List as List
 import Data.Maybe (fromMaybe)
 
-import Data.Structures.Hamt.Hashable (hash)
-import Data.Structures.Hamt.HashMap (HashPolicy(..), defaultPolicy)
-import qualified Data.Structures.Ordered.Cursor as Cursor
-import qualified Data.Structures.Ordered.PersistentOrderedSet as Ordered
-import qualified Data.Structures.Ordered.PersistentOrderedMap as OrderedMap
-import qualified Data.Structures.Ordered.PersistentOrderedMultimap as OrderedMultimap
+import Durable7.Hamt.Hashable (hash)
+import Durable7.Hamt.HashMap (HashPolicy(..), defaultPolicy)
+import qualified Durable7.Ordered.Cursor as Cursor
+import qualified Durable7.Ordered.PersistentOrderedSet as Ordered
+import qualified Durable7.Ordered.PersistentOrderedMap as OrderedMap
+import qualified Durable7.Ordered.PersistentOrderedMultimap as OrderedMultimap
 
 main :: IO ()
 main = do
@@ -29,7 +29,7 @@ main = do
   testOrderedMultimap
   testOrderedCursors
   testOrderedMultimapNonReflexiveValues
-  putStrLn "tools-data-structures-ordered tests passed"
+  putStrLn "durable7-ordered tests passed"
 
 -- | A @NaN@ payload is one the collection accepts but a content re-lookup can
 -- never find again, because it is not equal to itself.  Neither the multimap

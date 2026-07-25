@@ -5,8 +5,8 @@ from dataclasses import dataclass
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.hamt import HashPolicy, create_hash_policy
-from vladimir_reshetnikov.data_structures.ordered import PersistentOrderedSet
+from durable7.hamt import HashPolicy, create_hash_policy
+from durable7.ordered import PersistentOrderedSet
 
 
 @dataclass(frozen=True, slots=True, eq=False)

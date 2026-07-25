@@ -3,7 +3,7 @@
 - Status: Current API specification
 - Created (UTC): 2026-07-02T18:18:57Z
 - Repository HEAD: 3444f5ee27357d86c43db484993f8f12dfd4887c
-- Audience: Maintainers and reviewers of the pure C `tds_hamt` API
+- Audience: Maintainers and reviewers of the pure C `d7_hamt` API
 - Scope: Public C API, ownership semantics, persistent and one-way edit-session behavior, and complexity guarantees
 
 For practical policy setup and lifetime examples, start with the [usage guide](usage.md).
@@ -13,50 +13,50 @@ fallible ownership hooks, verified persistence, MSP2 proofs, synchronization, an
 
 ## Overview
 
-`tds_hamt_map` is an immutable unordered map backed by a hash-array mapped trie. Updates return a new
+`d7_hamt_map` is an immutable unordered map backed by a hash-array mapped trie. Updates return a new
 map value through an out parameter and leave the source map unchanged. Untouched nodes are shared by
 intrusive reference count; update operations clone only the search path and any touched equal-hash
 collision bucket.
 
-`tds_hamt_set` is a value-set wrapper over the same map core. It stores set items as map keys and
+`d7_hamt_set` is a value-set wrapper over the same map core. It stores set items as map keys and
 uses a unit value.
 
-The composition-first `tds_hamt_map_patch`, `tds_hamt_directed_graph`, and
-`tds_hamt_indexed_map` facades retain the underlying callback policies and explicit ownership.
+The composition-first `d7_hamt_map_patch`, `d7_hamt_directed_graph`, and
+`d7_hamt_indexed_map` facades retain the underlying callback policies and explicit ownership.
 Patch entries carry a separate presence flag so a present null pointer is not deletion; apply
 preflights every expected state. Graph edge insertion installs missing endpoints and vertex removal
 removes both incident directions. Indexed-map updates move exactly one primary representative
 between secondary groups when the selector changes class. All three use clone/move/destroy handles,
 write outputs only after success, and expose structural validation.
 
-`tds_hamt_bag` is an immutable unordered multiset wrapper over the map core. It stores one retained
+`d7_hamt_bag` is an immutable unordered multiset wrapper over the map core. It stores one retained
 item representative and one library-owned positive `int32_t` multiplicity per equivalence class,
 plus a checked nonnegative `int64_t` expanded total. It intentionally has no public builder or
 transient surface: construction and every edit publish ordinary persistent versions.
 
-`tds_hamt_multimap` is an immutable set-valued multimap. A key maps to one nonempty persistent set
+`d7_hamt_multimap` is an immutable set-valued multimap. A key maps to one nonempty persistent set
 of distinct values under an independent value policy; empty groups are never stored. It tracks
 distinct-key count and a checked `int64_t` pair count, retains the first representative of every key
 and value class, and supports pair/group edits plus receiver-policy union, intersection, and
 difference. Group sets are reference-counted values stored by the outer CHAMP, so untouched groups
 and outer paths share across versions.
 
-`tds_hamt_relation` maintains the same pair set in forward and inverse multimaps. Pair insertion and
+`d7_hamt_relation` maintains the same pair set in forward and inverse multimaps. Pair insertion and
 removal build both successors before publishing either, so allocation failure cannot expose a
 one-sided relation. Forward and reverse lookup use their respective policies; validation checks
 counts, both component invariants, and exact inverse membership.
 
-`tds_hamt_map_transient` and `tds_hamt_set_transient` are one-way, single-owner edit-session
+`d7_hamt_map_transient` and `d7_hamt_set_transient` are one-way, single-owner edit-session
 surfaces over those persistent values. They preserve the C# transient's lifecycle and collection
 semantics in C ownership terms, but intentionally delegate changed point edits to the established
 persistent path-copy operations. They are not an owner-token in-place engine and carry no edit-
 throughput claim.
 
-`tds_int_map` / `tds_long_map` and their set wrappers are a separate explicit-width family backed
+`d7_int_map` / `d7_long_map` and their set wrappers are a separate explicit-width family backed
 by one big-endian Patricia engine. They use integer keys directly rather than hashing and compress
 every unary prefix path into a branch prefix plus its highest differing bit.
 
-`tds_merkle_search_tree` is a separate persistent ordered family. It assigns keys deterministic
+`d7_merkle_search_tree` is a separate persistent ordered family. It assigns keys deterministic
 SHA-256 layers, groups same-layer separators into canonical wide blocks, and preserves exact
 cross-language content addresses. Unlike the borrowed-pointer HAMT defaults, its type-erased policy
 always materializes owned stored representatives and canonical encoded bytes. Its persistence API
@@ -72,7 +72,7 @@ collections ownership of copied or reference-counted objects.
 ## Merkle Persistence Contract
 
 The Merkle status family distinguishes operational failure from untrusted verification failure.
-`TDS_MERKLE_VERIFICATION_FAILURE` is accompanied by a structured failure kind and verified
+`D7_MERKLE_VERIFICATION_FAILURE` is accompanied by a structured failure kind and verified
 block/byte counters. Load/import enforce seven caller-configurable limits before publication and
 validate digest, domain, canonical codec round trips, key layers/order, child bounds, subtree counts,
 and exact reconstructed MST2 bytes. Import verifies the declared root closure before destination
@@ -80,28 +80,28 @@ preflight and writes; authenticated unreachable supplied blocks remain legal par
 
 Point/nonmembership/range proofs bind canonical `MSP2` query bytes to an ordered set of MST2 blocks
 and exact expanded-child indexes. Query, step, and expansion limits precede allocator, hash, codec,
-and comparator work. Invalid untrusted proofs return `TDS_MERKLE_OK` with `is_valid == false`;
+and comparator work. Invalid untrusted proofs return `D7_MERKLE_OK` with `is_valid == false`;
 allocator or callback failure remains a non-OK operational status.
 
 Three-way merge requires the exact same policy representation across base/left/right because it
 reuses typed entry objects. Absence is represented by `present == false`; a nullable value whose
 wrapper is present but contains semantic null remains distinct. Unresolved conflicts are a normal
-owned result (`TDS_MERKLE_OK`, `success == false`, no tree), not an error status. See the dedicated
+owned result (`D7_MERKLE_OK`, `success == false`, no tree), not an error status. See the dedicated
 [Merkle specification](merkle-search-tree.md) for the full store, ownership, sync, and complexity
 contracts.
 
 The Merkle tree also exposes an explicit-lifetime comparer-order cursor. It retains one tree
 snapshot and a rank gap, supports rank/lower/upper/exact factories, borrowed adjacent peeks,
 persistent insert/put/value-update/delete edits, and non-consuming snapshot. Strict duplicate
-insertion returns `TDS_MERKLE_DUPLICATE_KEY`. Exact source/result aliasing is supported and a
+insertion returns `D7_MERKLE_DUPLICATE_KEY`. Exact source/result aliasing is supported and a
 distinct output is installed only on success. The dedicated
 [Merkle specification](merkle-search-tree.md#ordered-persistent-cursor) owns the full lifetime and
 edit contract.
 
 ## Patricia Integer Contract
 
-Include `patricia.h` for `tds_int_map`, `tds_long_map`, `tds_int_set`, and `tds_long_set`. The two
-map widths accept type-erased values governed by `tds_patricia_value_policy`; the set wrappers store
+Include `patricia.h` for `d7_int_map`, `d7_long_map`, `d7_int_set`, and `d7_long_set`. The two
+map widths accept type-erased values governed by `d7_patricia_value_policy`; the set wrappers store
 a unit value. Sign-bit transforms map signed keys to lexicographically sortable unsigned paths, so
 visitor traversal is ascending signed order and covers the full `INT32_MIN`/`INT32_MAX` or
 `INT64_MIN`/`INT64_MAX` domain.
@@ -115,7 +115,7 @@ callback only for keys present on both sides.
 
 Combining callbacks receive `(key, left, right, context)` and return a borrowed value pointer. The
 map retains that value through its policy before publishing it, so an allocating retain callback can
-still report `TDS_HAMT_OUT_OF_MEMORY`. Callback execution is synchronous; its context need remain
+still report `D7_HAMT_OUT_OF_MEMORY`. Callback execution is synchronous; its context need remain
 valid only for the call, while any pointed-to returned value must obey the configured retain policy.
 Both operands of structural algebra must have identical equality/retain/release callback and context
 identities. A result may alias either operand.
@@ -131,7 +131,7 @@ rules as the owning Patricia values.
 ## Ownership
 
 Maps, sets, and bags are small value structs. Copying them with assignment does not retain the root.
-Use `tds_hamt_map_clone`, `tds_hamt_set_clone`, or `tds_hamt_bag_clone` when two live values should
+Use `d7_hamt_map_clone`, `d7_hamt_set_clone`, or `d7_hamt_bag_clone` when two live values should
 share the same version, and call the matching `destroy` function for every initialized value.
 
 The default policy hashes and compares pointer identity and stores borrowed pointers. Custom
@@ -143,7 +143,7 @@ policies can provide:
 - one opaque context pointer passed to every callback.
 
 Retain callbacks are value-returning: an allocating retain callback reports failure by returning
-`NULL` for a non-`NULL` input, which the library maps to `TDS_HAMT_OUT_OF_MEMORY` and unwinds
+`NULL` for a non-`NULL` input, which the library maps to `D7_HAMT_OUT_OF_MEMORY` and unwinds
 (already-retained payloads on the failed path are released; no partially retained node is
 published). Retaining a `NULL` key or value yields `NULL` and is not an error.
 
@@ -157,9 +157,9 @@ pointer (the removed flag stays accurate). Pass a distinct `result` when the rem
 is needed.
 
 Every operation's `result` may alias the source map or set: the library releases the overwritten
-version's root before publishing the new one, so `tds_hamt_map_set(&map, k, v, &map)`-style
+version's root before publishing the new one, so `d7_hamt_map_set(&map, k, v, &map)`-style
 in-place updates are safe (the previous version is no longer reachable afterwards). On a rejected
-duplicate, `tds_hamt_map_add` leaves an aliased `result` holding the unchanged source version,
+duplicate, `d7_hamt_map_add` leaves an aliased `result` holding the unchanged source version,
 while a distinct `result` is left destroyed (empty, not a live handle).
 
 Bag result parameters may likewise alias either input. A distinct result must not already own a
@@ -167,12 +167,12 @@ live bag. On every non-OK status the result bytes, both input handles, retained 
 and cached totals remain unchanged. On success the result owns exactly one handle, including when
 it root-shares a logical no-op. Bag lookups and iterators return borrowed representative pointers;
 keep the source bag alive until the pointer is no longer used. Entry iteration copies the
-multiplicity into the public `tds_hamt_bag_entry` and never exposes the internal owned count object.
+multiplicity into the public `d7_hamt_bag_entry` and never exposes the internal owned count object.
 
 ## One-Way CHAMP Edit Sessions
 
-`tds_hamt_map_transient_create` / `tds_hamt_set_transient_create` start empty sessions under the
-normalized supplied policy. `tds_hamt_map_to_transient` / `tds_hamt_set_to_transient` allocate one
+`d7_hamt_map_transient_create` / `d7_hamt_set_transient_create` start empty sessions under the
+normalized supplied policy. `d7_hamt_map_to_transient` / `d7_hamt_set_to_transient` allocate one
 small opaque session state and retain the source root without walking or copying the trie. The
 source remains an independent immutable snapshot. `*_transient_persist` transfers the session's
 own retained persistent handle to the caller, marks the state consumed, and does not walk the trie.
@@ -183,7 +183,7 @@ copy a live transient by assignment. `*_transient_clone` creates another owning 
 logical session without copying collection content; call `*_transient_destroy` for every initialized
 handle. A successful publication through any clone consumes the shared session. Every subsequent
 read, edit, iterator creation, clone, or publication through any alias returns
-`TDS_HAMT_TRANSIENT_CONSUMED`. Destroy remains valid and idempotent for zero/destroyed handles.
+`D7_HAMT_TRANSIENT_CONSUMED`. Destroy remains valid and idempotent for zero/destroyed handles.
 
 Map sessions expose policy, count, contains, stored-key lookup, value lookup, `set`, duplicate-
 rejecting `add`, `try_add`, `remove`, `try_remove`, `clear`, iteration, and terminal `persist`. Set
@@ -191,7 +191,7 @@ sessions expose the corresponding item policy, count, contains, stored-represent
 idempotent `add`, `try_add`, `remove`, `try_remove`, `clear`, all six set relations over both
 `*_many` inputs and persistent-set operands, iteration, and `persist`. Relation operations use the
 active transient as receiver, and therefore preserve its hash/equality policy and duplicate-
-collapsing semantics. Their boolean output is published only on `TDS_HAMT_OK`; allocation failure
+collapsing semantics. Their boolean output is published only on `D7_HAMT_OK`; allocation failure
 or a consumed session leaves it untouched. Policies and their context pointer are preserved exactly.
 Map replacement and set insertion retain the first equivalent stored key/item; equal-value
 replacement, duplicate try-add, absent removal, and clearing an empty session preserve root identity.
@@ -200,15 +200,15 @@ Changed point edits call the ordinary persistent operation into a temporary map 
 complete result only after every allocation and retaining callback succeeds. Consequently an
 `OUT_OF_MEMORY` result leaves session content, root identity, version, policy, output flags, and
 captured iterator validity unchanged. Publication has no allocation step: an invalid output pointer
-returns `TDS_HAMT_INVALID_ARGUMENT` and leaves the session active for retry. Hash/equality callbacks
+returns `D7_HAMT_INVALID_ARGUMENT` and leaves the session active for retry. Hash/equality callbacks
 retain their existing infallible C callback shape; retain callbacks report allocation failure by
 returning `NULL` for a non-`NULL` input.
 
 Transient iterators borrow the opaque session state and do not retain it. Keep at least one owning
 session handle alive until iteration ends. A changed edit increments the session version, and an
-older iterator then returns `TDS_HAMT_TRANSIENT_MODIFIED` without touching its output parameters.
+older iterator then returns `D7_HAMT_TRANSIENT_MODIFIED` without touching its output parameters.
 Logical no-ops and failed edits do not invalidate it. Publication makes an iterator return
-`TDS_HAMT_TRANSIENT_CONSUMED`. As with persistent iterators, a copied iterator advances
+`D7_HAMT_TRANSIENT_CONSUMED`. As with persistent iterators, a copied iterator advances
 independently while the session remains active and at the captured version.
 
 ## Hash Trie Shape
@@ -227,38 +227,38 @@ source map or set remains alive.
 
 ## Map Contract
 
-- `tds_hamt_map_create(policy)` returns an empty map using the supplied policy or pointer-identity
+- `d7_hamt_map_create(policy)` returns an empty map using the supplied policy or pointer-identity
   defaults.
-- `tds_hamt_map_create_range(policy, entries, count, result)` adds entries in array order with
+- `d7_hamt_map_create_range(policy, entries, count, result)` adds entries in array order with
   last-wins values.
-- `tds_hamt_map_set` adds or replaces a key.
-- `tds_hamt_map_set_many` adds or replaces entries in array order.
-- `tds_hamt_map_add` adds a key and returns `TDS_HAMT_DUPLICATE_KEY` when an equivalent key already
+- `d7_hamt_map_set` adds or replaces a key.
+- `d7_hamt_map_set_many` adds or replaces entries in array order.
+- `d7_hamt_map_add` adds a key and returns `D7_HAMT_DUPLICATE_KEY` when an equivalent key already
   exists.
-- `tds_hamt_map_try_add` returns an added flag and rejects duplicate keys without reporting an
+- `d7_hamt_map_try_add` returns an added flag and rejects duplicate keys without reporting an
   error.
-- `tds_hamt_map_get_or_add` invokes its add factory exactly once on a miss and not at all on a hit.
-- `tds_hamt_map_add_or_update` invokes exactly one add/update factory once. Both functions hash
+- `d7_hamt_map_get_or_add` invokes its add factory exactly once on a miss and not at all on a hit.
+- `d7_hamt_map_add_or_update` invokes exactly one add/update factory once. Both functions hash
   once, descend once, retain the first equivalent key, and return the concrete stored value
   representative through `selected_value` without a second lookup. Factory outputs are borrowed
   candidates retained through the map policy; eager null-factory validation precedes hashing, and
   callback, retention, or allocation failure publishes no output.
-- `tds_hamt_map_remove` removes a key if present.
-- `tds_hamt_map_try_remove` returns removed flag and removed value pointer; when `result` aliases
+- `d7_hamt_map_remove` removes a key if present.
+- `d7_hamt_map_try_remove` returns removed flag and removed value pointer; when `result` aliases
   the source map the removed value pointer is reported as `NULL` (see [Ownership](#ownership)).
-- `tds_hamt_map_try_get` returns the stored value pointer, if present.
-- `tds_hamt_map_try_get_key` returns the stored equivalent key pointer, or echoes the query pointer
+- `d7_hamt_map_try_get` returns the stored value pointer, if present.
+- `d7_hamt_map_try_get_key` returns the stored equivalent key pointer, or echoes the query pointer
   on miss.
-- `tds_hamt_map_clear` returns an empty map preserving the current policy.
-- `tds_hamt_map_union`, `tds_hamt_map_intersect`, `tds_hamt_map_except`, and
-  `tds_hamt_map_symmetric_except` combine two maps. Union retains receiver key representatives and
+- `d7_hamt_map_clear` returns an empty map preserving the current policy.
+- `d7_hamt_map_union`, `d7_hamt_map_intersect`, `d7_hamt_map_except`, and
+  `d7_hamt_map_symmetric_except` combine two maps. Union retains receiver key representatives and
   uses right values for unequal overlaps; intersection retains receiver entries.
-- `tds_hamt_map_equals` compares contents when the callback/context policy identities match. It
+- `d7_hamt_map_equals` compares contents when the callback/context policy identities match. It
   aligns canonical data/node bitmaps, returns immediately for every pointer-identical descendant,
   and compares only inline payloads and collision runs in the remaining trie regions.
-- `tds_hamt_map_diff` performs the same lockstep descendant pruning and calls a visitor with
+- `d7_hamt_map_diff` performs the same lockstep descendant pruning and calls a visitor with
   `ADDED`, `REMOVED`, and `CHANGED` records. It performs no result allocation or key rehashing and
-  returns `TDS_HAMT_INVALID_ARGUMENT` for incompatible policies. Equal-hash collision runs retain
+  returns `D7_HAMT_INVALID_ARGUMENT` for incompatible policies. Equal-hash collision runs retain
   unordered key matching and therefore have the existing quadratic bucket worst case.
 
 When replacing an existing key, the originally stored key is re-retained through the policy: with
@@ -269,18 +269,18 @@ reused and the stored value pointer is retained.
 
 ## Set Contract
 
-- `tds_hamt_set_create` and `tds_hamt_set_create_range` mirror the map factories.
+- `d7_hamt_set_create` and `d7_hamt_set_create_range` mirror the map factories.
 - `add`, `try_add`, `remove`, `try_remove`, `contains`, `try_get_value`, and `clear` mirror map
   behavior.
 - `union_many`, `intersect_many`, `except_many`, and `symmetric_except_many` return new persistent
   sets.
-- `tds_hamt_set_union`, `tds_hamt_set_intersect`, `tds_hamt_set_except`, and
-  `tds_hamt_set_symmetric_except` accept another set and combine CHAMP slots directly when every
+- `d7_hamt_set_union`, `d7_hamt_set_intersect`, `d7_hamt_set_except`, and
+  `d7_hamt_set_symmetric_except` accept another set and combine CHAMP slots directly when every
   callback and context pointer matches. Their same-set relation counterparts use the same path.
 - `is_subset_of_many`, `is_proper_subset_of_many`, `is_superset_of_many`,
   `is_proper_superset_of_many`, `overlaps_many`, and `equals_many` interpret equality through the
   set's policy callbacks. They report the relation through a `bool *result` out-parameter and
-  return `tds_hamt_status`, so an allocation failure while materializing the internal probe set is
+  return `d7_hamt_status`, so an allocation failure while materializing the internal probe set is
   distinguishable from a genuine negative answer.
 
 Compatible structural algebra caches cardinality in every node, retains pointer-identical nodes
@@ -289,28 +289,28 @@ When policy callbacks or context differ, the right operand is first normalized u
 policy so the established receiver-policy semantics remain intact.
 
 Set operations that need distinct right-side membership materialize their argument into a temporary
-`tds_hamt_set` using the receiver's policy. Superset and overlap checks stream their argument.
+`d7_hamt_set` using the receiver's policy. Superset and overlap checks stream their argument.
 
 ## Persistent Hash Bag Contract
 
-Include `persistent_hash_bag.h` for `tds_hamt_bag`, `tds_hamt_bag_entry`, and the three iterator
-types. A bag accepts the item portion of `tds_hamt_set_policy`; the implementation supplies its own
+Include `persistent_hash_bag.h` for `d7_hamt_bag`, `d7_hamt_bag_entry`, and the three iterator
+types. A bag accepts the item portion of `d7_hamt_set_policy`; the implementation supplies its own
 count equality/retain/release callbacks and stores multiplicities as owned heap values in an
-underlying `tds_hamt_map`. `tds_hamt_bag_get_policy` recovers the normalized item policy. The same
+underlying `d7_hamt_map`. `d7_hamt_bag_get_policy` recovers the normalized item policy. The same
 callback/context identity rules that define map policy compatibility define bag policy
 compatibility.
 
 The point and construction contract is:
 
-- `tds_hamt_bag_create` creates an empty policy-preserving bag and cannot fail.
-- `tds_hamt_bag_create_range` consumes the item array in order, adding one occurrence at a time.
+- `d7_hamt_bag_create` creates an empty policy-preserving bag and cannot fail.
+- `d7_hamt_bag_create_range` consumes the item array in order, adding one occurrence at a time.
   Equivalent later items increase the count without replacing the first retained representative.
 - `distinct_count`, `total_count`, and `is_empty` report equivalence classes, expanded occurrences,
   and emptiness independently.
 - `contains` and `count_of` use the item policy. `try_get_value` returns the stored representative
   when present and echoes the query pointer on a miss. `try_get_entry` returns the representative
   and copied multiplicity together and zeroes its entry output on a miss.
-- `add` and positive `add_copies` use `tds_hamt_map_add_or_update`, selecting the next multiplicity
+- `add` and positive `add_copies` use `d7_hamt_map_add_or_update`, selecting the next multiplicity
   during the single update descent. They hash once, retain the existing representative on a hit,
   and path-copy only after checked arithmetic succeeds.
 - `remove_copies` performs saturated subtraction, `remove_all` drops the complete class, and
@@ -318,12 +318,12 @@ The point and construction contract is:
   bag return a root-sharing version.
 
 An explicit copy request is an `int64_t` API value but must be in `[0, INT32_MAX]`. A negative or
-larger request returns `TDS_HAMT_INVALID_ARGUMENT`; validation occurs before hash, equality, retain,
+larger request returns `D7_HAMT_INVALID_ARGUMENT`; validation occurs before hash, equality, retain,
 or allocation callbacks. Zero returns before callbacks and shares the source root. A positive
 request that would make one class exceed `INT32_MAX`, make the expanded total exceed `INT64_MAX`,
 or collapse policy-incompatible argument classes beyond `INT32_MAX` returns
-`TDS_HAMT_OVERFLOW`. Allocation or retaining-callback failure returns
-`TDS_HAMT_OUT_OF_MEMORY`. No partially changed bag is published for any of these statuses.
+`D7_HAMT_OVERFLOW`. Allocation or retaining-callback failure returns
+`D7_HAMT_OUT_OF_MEMORY`. No partially changed bag is published for any of these statuses.
 
 Bag algebra is receiver-policy algebra:
 
@@ -339,23 +339,23 @@ retain callbacks can fail, and collapse can overflow. Surviving receiver classes
 representatives. An argument-only class uses the first representative encountered while
 normalizing/iterating the argument. Logical no-op results share the receiver root.
 
-`tds_hamt_bag_iterator` expands each class into `count` consecutive occurrences.
-`tds_hamt_bag_distinct_iterator` returns each representative once, and
-`tds_hamt_bag_entry_iterator` returns one `{ item, count }` record per class. All three follow the
+`d7_hamt_bag_iterator` expands each class into `count` consecutive occurrences.
+`d7_hamt_bag_distinct_iterator` returns each representative once, and
+`d7_hamt_bag_entry_iterator` returns one `{ item, count }` record per class. All three follow the
 underlying stable-for-one-version trie/collision order, borrow the source bag, use a fixed inline
 traversal stack, and can be copied by value to obtain independently advancing cursors.
 
 ## Persistent Bidirectional Map Contract
 
-Include `persistent_bi_map.h` for `tds_hamt_bi_map`. Each handle owns forward and inverse
-`tds_hamt_map` values plus a reference-counted policy bridge. The bridge copies independent
-`tds_hamt_set_policy` records for the key and value domains and dispatches each hash, equality,
+Include `persistent_bi_map.h` for `d7_hamt_bi_map`. Each handle owns forward and inverse
+`d7_hamt_map` values plus a reference-counted policy bridge. The bridge copies independent
+`d7_hamt_set_policy` records for the key and value domains and dispatches each hash, equality,
 retain, release, and context callback in the correct direction. Callback-owned contexts remain the
 caller's lifetime responsibility until the last related bimap is destroyed.
 
 `try_add` returns a cloned two-root source on conflict and reports key conflict before value
-conflict. Strict `add` maps those cases to `TDS_HAMT_DUPLICATE_KEY` and the bimap-specific
-`TDS_HAMT_DUPLICATE_VALUE`. `set` adds a missing free pair, preserves both roots and
+conflict. Strict `add` maps those cases to `D7_HAMT_DUPLICATE_KEY` and the bimap-specific
+`D7_HAMT_DUPLICATE_VALUE`. `set` adds a missing free pair, preserves both roots and
 representatives for a value-policy-equivalent update, replaces a present key only with a free
 value, and never displaces another key. Replacement deliberately removes and reinserts both
 directions. Both successor maps are complete before publication, and a failure leaves output and

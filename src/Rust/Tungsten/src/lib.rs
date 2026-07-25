@@ -5,8 +5,8 @@ use std::cmp::Ordering;
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hash};
 
-use tools_data_structures_fingertree::PersistentDeque;
-use tools_data_structures_hamt::{BulkBuilder, PersistentHashMap};
+use durable7_fingertree::PersistentDeque;
+use durable7_hamt::{BulkBuilder, PersistentHashMap};
 
 const STAMP_GAP: i64 = 1_i64 << 20;
 

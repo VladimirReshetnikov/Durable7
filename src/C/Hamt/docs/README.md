@@ -10,7 +10,7 @@
 
 - [API Specification](api-specification.md) defines the C public API shape, semantic adaptation from
   the C# and C++ workspaces, persistence behavior, ownership rules, and complexity targets for
-  `tds_hamt_map`, `tds_hamt_set`, and `tds_hamt_bag`, including map/set one-way transient
+  `d7_hamt_map`, `d7_hamt_set`, and `d7_hamt_bag`, including map/set one-way transient
   edit-session handles and the bag's checked multiplicity/algebra contract.
 - [Usage guide](usage.md) shows policy setup, borrowed/owned lifetime rules, persistent update
   patterns, one-way edit sessions, iteration, set algebra, and persistent hash-bag operations.

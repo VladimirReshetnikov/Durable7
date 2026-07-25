@@ -9,7 +9,7 @@ add_library(
 target_link_libraries(
     fingertree_sample_runs
     PUBLIC
-        tools::data_structures::finger_tree
+        durable7::finger_tree
     PRIVATE
         Threads::Threads
 )
@@ -32,6 +32,6 @@ if(FINGERTREE_BUILD_TESTS)
     add_executable(fingertree_sample_smoke_tests sample_smoke_tests.cpp)
     target_link_libraries(fingertree_sample_smoke_tests PRIVATE fingertree_sample_runs)
     fingertree_configure_target(fingertree_sample_smoke_tests)
-    tds_add_headless_test(NAME fingertree.samples TARGET fingertree_sample_smoke_tests)
+    d7_add_headless_test(NAME fingertree.samples TARGET fingertree_sample_smoke_tests)
     set_tests_properties(fingertree.samples PROPERTIES LABELS "fingertree;samples")
 endif()

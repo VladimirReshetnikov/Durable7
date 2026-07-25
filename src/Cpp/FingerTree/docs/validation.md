@@ -17,8 +17,8 @@ validation, stress, API, or benchmark-status claims. For API shape and practical
 The workspace uses CMake/Ninja presets without checked-in machine-specific tool paths. The `msvc-*` presets select
 the local configuration after a Visual Studio developer environment has put the toolchain and Ninja on `PATH`;
 the `ninja-*` presets use the compiler, CMake, and Ninja from the host environment. `CMakeLists.txt` defines the
-header-first interface library `tools_data_structures_finger_tree` and its
-`tools::data_structures::finger_tree` alias. Tests, deterministic samples, and the benchmark harness build by
+header-first interface library `durable7_finger_tree` and its
+`durable7::finger_tree` alias. Tests, deterministic samples, and the benchmark harness build by
 default and can be disabled independently with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
 `FINGERTREE_BUILD_BENCHMARKS`.
 
@@ -245,8 +245,8 @@ ctest --preset msvc-debug --parallel 1 -R '^fingertree\.samples$' --output-on-fa
 The packaging test performs a real installation to a configuration-specific private prefix, then configures a
 fresh project with `FINGERTREE_BUILD_TESTS`, `FINGERTREE_BUILD_SAMPLES`, and
 `FINGERTREE_BUILD_BENCHMARKS` all off. The consumer uses only
-`find_package(ToolsDataStructuresFingerTree CONFIG)`, the exported
-`tools::data_structures::finger_tree` target, and installed headers. Its aggregate-header program instantiates
+`find_package(Durable7FingerTree CONFIG)`, the exported
+`durable7::finger_tree` target, and installed headers. Its aggregate-header program instantiates
 the canonical rank policy (thereby proving the transitive crypto link), Brodal-Okasaki heap, winner-cached
 priority-search queue, range-update sequence, DABA Lite, and persistent collections:
 

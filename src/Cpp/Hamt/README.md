@@ -9,13 +9,13 @@
 - Scope: Project layout and validation entry points for `src/Cpp/Hamt`
 
 `src/Cpp/Hamt` is the C++20 port of the C# HAMT project under
-`src/CSharp/src/Tools.DataStructures.Hamt`. It provides immutable hash-trie, integer-Patricia, and
+`src/CSharp/src/Durable7.Hamt`. It provides immutable hash-trie, integer-Patricia, and
 content-addressed ordered-map cores:
 
-- `tools::data_structures::hamt::persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`
-- `tools::data_structures::hamt::persistent_hash_set<T, Hash, KeyEqual>`
-- `tools::data_structures::hamt::persistent_hash_bag<T, Hash, KeyEqual>`
-- `tools::data_structures::hamt::persistent_bi_map<Key, T, KeyHash, KeyEqual, ValueHash, ValueEqual>`
+- `durable7::hamt::persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>`
+- `durable7::hamt::persistent_hash_set<T, Hash, KeyEqual>`
+- `durable7::hamt::persistent_hash_bag<T, Hash, KeyEqual>`
+- `durable7::hamt::persistent_bi_map<Key, T, KeyHash, KeyEqual, ValueHash, ValueEqual>`
 - `persistent_hash_multimap<Key, Value, ...>` and `persistent_relation<Left, Right, ...>`
 - `persistent_map_patch<Key, Value, ...>`, `persistent_directed_graph<Vertex, ...>`, and
   `persistent_indexed_map<Key, Value, IndexKey, ...>`
@@ -79,27 +79,27 @@ three-way merge extend that core without weakening move-only key/value support.
 
 ## Layout
 
-- `include/Tools/DataStructures/Hamt/hamt.hpp` is the aggregate public include for all C++ HAMT,
+- `include/durable7/hamt/hamt.hpp` is the aggregate public include for all C++ HAMT,
   Patricia, and Merkle surfaces.
-- `include/Tools/DataStructures/Hamt/persistent_hash_map.hpp` contains the template map
+- `include/durable7/hamt/persistent_hash_map.hpp` contains the template map
   implementation, construction builder, and move-only edit session.
-- `include/Tools/DataStructures/Hamt/persistent_hash_set.hpp` contains the set wrapper and set
+- `include/durable7/hamt/persistent_hash_set.hpp` contains the set wrapper and set
   algebra plus its map-backed edit session.
-- `include/Tools/DataStructures/Hamt/persistent_hash_bag.hpp` contains the immutable unordered
+- `include/durable7/hamt/persistent_hash_bag.hpp` contains the immutable unordered
   multiset, checked multiplicity operations, receiver-policy algebra, and enumeration views.
-- `include/Tools/DataStructures/Hamt/persistent_bi_map.hpp` contains the strict bidirectional map
+- `include/durable7/hamt/persistent_bi_map.hpp` contains the strict bidirectional map
   facade, domain-conflict reporting, symmetric point edits, inversion, and invariant validation.
-- `include/Tools/DataStructures/Hamt/persistent_hash_multimap.hpp` contains the set-valued multimap;
+- `include/durable7/hamt/persistent_hash_multimap.hpp` contains the set-valued multimap;
   `persistent_relation.hpp` contains the bidirectional relation built from two inverse multimaps.
-- `include/Tools/DataStructures/Hamt/persistent_int_map.hpp` contains both widths of Patricia maps
+- `include/durable7/hamt/persistent_int_map.hpp` contains both widths of Patricia maps
   and sets.
-- `include/Tools/DataStructures/Hamt/merkle_encoding.hpp` contains SHA-256 digests, strict canonical
+- `include/durable7/hamt/merkle_encoding.hpp` contains SHA-256 digests, strict canonical
   codecs, comparers, and policy-domain construction.
-- `include/Tools/DataStructures/Hamt/merkle_search_tree.hpp` contains the immutable canonical wide
+- `include/durable7/hamt/merkle_search_tree.hpp` contains the immutable canonical wide
   tree, ordered-map operations, diagnostics, exact block enumeration, and deep validation.
-- `include/Tools/DataStructures/Hamt/merkle_persistence.hpp` contains immutable transfer values,
+- `include/durable7/hamt/merkle_persistence.hpp` contains immutable transfer values,
   the concurrent block store, bounded verified load/import, and synchronization algorithms.
-- `include/Tools/DataStructures/Hamt/merkle_proofs.hpp` contains exact `MSP2` proof creation and
+- `include/durable7/hamt/merkle_proofs.hpp` contains exact `MSP2` proof creation and
   verification plus typed three-way merge.
 - `tests/` contains the [deterministic native suites and copied-header consumer](tests/README.md).
 - `build.ps1` imports the MSVC toolchain through Scriptorium, stages a package-style include tree,

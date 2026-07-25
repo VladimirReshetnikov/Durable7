@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-12T00:23:48Z
 - Repository HEAD: 334e18db9c21711bc982c7719dc78875a0ad06bd
 - Audience: Haskell callers and maintainers of the canonical sorted-set port
-- Scope: `Data.Structures.FingerTree.CanonicalSortedSet`
+- Scope: `Durable7.FingerTree.CanonicalSortedSet`
 
 `CanonicalSortedSet a` is an immutable sorted set whose tree shape is a function of the represented
 equivalence classes and one retained `ZipTreeRankPolicy a`. It uses a binary-search tree ordered by
@@ -30,7 +30,7 @@ must participate in `union`, `intersection`, or `difference` from one policy val
 
 ```haskell
 import Data.Word (Word32, Word64)
-import qualified Data.Structures.FingerTree.CanonicalSortedSet as Canonical
+import qualified Durable7.FingerTree.CanonicalSortedSet as Canonical
 
 int32Hash :: Int -> Word64
 int32Hash value = fromIntegral (fromIntegral value :: Word32)

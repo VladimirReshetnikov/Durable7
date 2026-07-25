@@ -3,14 +3,14 @@
 - Created (UTC): 2026-06-13T00:00:00Z
 - Repository HEAD: b71609d90
 - Audience: Users adopting the library for snapshotting, undo, or multi-threaded workloads
-- Scope: How immutability gives every type in `Tools.DataStructures.FingerTree` cheap snapshots and lock-free concurrency
+- Scope: How immutability gives every type in `Durable7.FingerTree` cheap snapshots and lock-free concurrency
 
 Every public type in this library — the deque, the reversible deque, the general measured tree, the sorted
 collections, the priority queue, the interval tree, and both ropes — is **immutable and persistent**: an
 operation never changes its receiver; it returns a *new* version that shares almost all of its structure with
 the old one. Two properties fall out of that for free, and this document shows both as worked patterns. Each
 pattern is a runnable test in
-[`PersistenceConcurrencyExamplesTests.cs`](../../tests/Tools.DataStructures.FingerTree.Tests/PersistenceConcurrencyExamplesTests.cs),
+[`PersistenceConcurrencyExamplesTests.cs`](../../tests/Durable7.FingerTree.Tests/PersistenceConcurrencyExamplesTests.cs),
 so the code below is guaranteed to compile and behave as described.
 
 ## Snapshots are free; edits share structure

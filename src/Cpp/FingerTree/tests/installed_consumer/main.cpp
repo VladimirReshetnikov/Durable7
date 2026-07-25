@@ -1,11 +1,11 @@
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 
 #include <array>
 #include <cstddef>
 #include <iostream>
 #include <string_view>
 
-namespace ft = tools::data_structures::finger_tree;
+namespace ft = durable7::finger_tree;
 
 namespace {
 
@@ -58,7 +58,7 @@ struct range_add_algebra final {
 
 int main()
 {
-    if (ft::library_name != std::string_view{"Tools.DataStructures.FingerTree.Cpp"}) {
+    if (ft::library_name != std::string_view{"Durable7.FingerTree.Cpp"}) {
         std::cerr << "unexpected installed library metadata\n";
         return 1;
     }

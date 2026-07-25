@@ -1,35 +1,35 @@
-# Tools.Numerics API and Behavior Reference
+# Durable7.Numerics API and Behavior Reference
 
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Status: Normative (current contract and maintenance invariants)
 - Audience: Maintainers, reviewers, advanced consumers
-- Scope: Public behavior and compatibility contract for `src/CSharp/src/Tools.Numerics`
+- Scope: Public behavior and compatibility contract for `src/CSharp/src/Durable7.Numerics`
 - Related code:
-  - `src/CSharp/src/Tools.Numerics/UInt256.cs`
-  - `src/CSharp/src/Tools.Numerics/Int256.cs`
-  - `src/CSharp/src/Tools.Numerics/UInt512.cs`
-  - `src/CSharp/src/Tools.Numerics/Int512.cs`
-  - `src/CSharp/src/Tools.Numerics/UInt1024.cs`
-  - `src/CSharp/src/Tools.Numerics/Int1024.cs`
-  - `src/CSharp/src/Tools.Numerics/SparseInteger.cs`
-  - `src/CSharp/src/Tools.Numerics/SparseInteger.Conversions.cs`
-  - `src/CSharp/src/Tools.Numerics/BitConverterEx.cs`
-  - `src/CSharp/src/Tools.Numerics/BitHelpers.cs`
-  - `src/CSharp/src/Tools.Numerics/NumericParseHelpers.cs`
-  - `src/CSharp/src/Tools.Numerics/ArrayHelpers.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt256.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int256.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt512.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int512.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt1024.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int1024.cs`
+  - `src/CSharp/src/Durable7.Numerics/SparseInteger.cs`
+  - `src/CSharp/src/Durable7.Numerics/SparseInteger.Conversions.cs`
+  - `src/CSharp/src/Durable7.Numerics/BitConverterEx.cs`
+  - `src/CSharp/src/Durable7.Numerics/BitHelpers.cs`
+  - `src/CSharp/src/Durable7.Numerics/NumericParseHelpers.cs`
+  - `src/CSharp/src/Durable7.Numerics/ArrayHelpers.cs`
 - Related tests:
-  - `src/CSharp/tests/Tools.Numerics.Tests/BitWidth256/*`
-  - `src/CSharp/tests/Tools.Numerics.Tests/BitWidth512/*`
-  - `src/CSharp/tests/Tools.Numerics.Tests/BitWidth1024/*`
-  - `src/CSharp/tests/Tools.Numerics.Tests/MixedScenarios/*`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/BitWidth256/*`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/BitWidth512/*`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/BitWidth1024/*`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/MixedScenarios/*`
 - Related docs:
   - [Workspace overview](overview.md)
   - [Wide-integer maintainer guidance](wide-integer-maintainer-guidance.md)
 
 ## Summary
 
-`Tools.Numerics` provides fixed-width, two's-complement integer types where width itself is part of the behavior contract. This document defines the expected API shape and the semantic invariants that must remain stable across implementation changes.
+`Durable7.Numerics` provides fixed-width, two's-complement integer types where width itself is part of the behavior contract. This document defines the expected API shape and the semantic invariants that must remain stable across implementation changes.
 
 ## Responsibilities and non-goals
 
@@ -209,7 +209,7 @@ These dual modes are part of the public compatibility contract and are used by t
 
 ## Maintenance rules for behavior changes
 
-When changing behavior in any public member of `Tools.Numerics`:
+When changing behavior in any public member of `Durable7.Numerics`:
 
 1. Update or add tests in the corresponding width/signedness quadrant.
 2. Confirm parity implications for sibling types (`256/512/1024`, signed/unsigned).
@@ -240,4 +240,4 @@ Use this checklist for contract-sensitive pull requests:
 
 - Project overview: [workspace overview](overview.md)
 - Maintainer lessons learned and prevention checklist: [wide-integer maintainer guidance](wide-integer-maintainer-guidance.md)
-- Test structure map: [tests README](../../tests/Tools.Numerics.Tests/README.md)
+- Test structure map: [tests README](../../tests/Durable7.Numerics.Tests/README.md)

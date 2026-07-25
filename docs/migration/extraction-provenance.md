@@ -59,7 +59,7 @@ Build and test validation was run after standalone guidance and path normalizati
 
 ```powershell
 cd C:\DataStructures\FingerTree
-dotnet test .\DataStructures.sln
+dotnet test .\Durable7.sln
 ```
 
 Result: passed 346 tests, 0 failed, 0 skipped.
@@ -68,5 +68,5 @@ After the 2026-07 language-first repository reorganization, the equivalent valid
 
 ```powershell
 cd C:\DataStructures\src\CSharp
-dotnet test .\DataStructures.sln
+dotnet test .\Durable7.sln
 ```

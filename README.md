@@ -1,4 +1,4 @@
-# DataStructures repository
+# Durable7
 
 - Status: Active standalone repository
 - Created (UTC): 2026-06-30T01:28:46Z
@@ -6,7 +6,14 @@
 - Audience: Maintainers and AI coding agents working on repository-owned data structures and numerics
 - Scope: Repository layout, build entry points, and agent guidance
 
-This repository contains Vladimir Reshetnikov's standalone data-structure and numerics workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical. The Tools-side handoff is recorded by [`5fc4054da`](https://github.com/VladimirReshetnikov/Tools/commit/5fc4054da), which removes the former subtree and points the Tools indexes here.
+**Durable7** is Vladimir Reshetnikov's library of persistent data structures, authenticated
+collections, and fixed-width numerics, shipped as semantically aligned ports across nine languages.
+`Durable7` is the single brand for every port: C# namespaces are `Durable7.*`, C++ and OCaml use
+`durable7`, C uses the `d7_` identifier prefix and `durable7/` include roots, Haskell modules are
+`Durable7.*`, and the Kotlin, Rust, TypeScript, and Python packages are all named `durable7`. The
+former `Tools`, `Tools.DataStructures`, and `tds_` names are retired and must not reappear.
+
+This repository contains the Durable7 workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical. The Tools-side handoff is recorded by [`5fc4054da`](https://github.com/VladimirReshetnikov/Tools/commit/5fc4054da), which removes the former subtree and points the Tools indexes here.
 
 This document is the canonical repository guidance for Vladimir and the AI coding agents that help him. `AGENTS.md` and `CLAUDE.md` point here, so keep shared project and agent instructions in this file.
 
@@ -117,13 +124,13 @@ and a worked ordered-set example, is the
     │       └── tests/
     ├── CSharp/
     │   ├── README.md
-    │   ├── DataStructures.sln
+    │   ├── Durable7.sln
     │   ├── Directory.Build.props
     │   ├── Directory.Build.targets
     │   ├── test.ps1
     │   ├── test.runsettings
     │   ├── benchmarks/
-    │   │   └── Tools.DataStructures.FingerTree.Benchmarks/
+    │   │   └── Durable7.FingerTree.Benchmarks/
     │   ├── docs/
     │   │   ├── FingerTree/
     │   │   ├── Hamt/
@@ -131,38 +138,38 @@ and a worked ordered-set example, is the
     │   │   ├── Ordered/
     │   │   └── Tungsten/
     │   ├── samples/
-    │   │   ├── Tools.DataStructures.FingerTree.Editor/
-    │   │   ├── Tools.DataStructures.FingerTree.Showcase/
-    │   │   └── Tools.DataStructures.FingerTree.Tour/
+    │   │   ├── Durable7.FingerTree.Editor/
+    │   │   ├── Durable7.FingerTree.Showcase/
+    │   │   └── Durable7.FingerTree.Tour/
     │   ├── src/
-    │   │   ├── Tools.DataStructures.FingerTree/
-    │   │   ├── Tools.DataStructures.Hamt/
-    │   │   ├── Tools.DataStructures.Ordered/
-    │   │   ├── Tools.DataStructures.Tungsten/
-    │   │   └── Tools.Numerics/
+    │   │   ├── Durable7.FingerTree/
+    │   │   ├── Durable7.Hamt/
+    │   │   ├── Durable7.Ordered/
+    │   │   ├── Durable7.Tungsten/
+    │   │   └── Durable7.Numerics/
     │   └── tests/
-    │       ├── Tools.DataStructures.FingerTree.Tests/
-    │       ├── Tools.DataStructures.Hamt.Tests/
-    │       ├── Tools.DataStructures.Ordered.Tests/
-    │       ├── Tools.DataStructures.Tungsten.Tests/
-    │       └── Tools.Numerics.Tests/
+    │       ├── Durable7.FingerTree.Tests/
+    │       ├── Durable7.Hamt.Tests/
+    │       ├── Durable7.Ordered.Tests/
+    │       ├── Durable7.Tungsten.Tests/
+    │       └── Durable7.Numerics.Tests/
     ├── Haskell/
     │   ├── README.md
     │   ├── cabal.project
     │   ├── test.ps1
     │   ├── FingerTree/
     │   │   ├── README.md
-    │   │   ├── tools-data-structures-fingertree.cabal
+    │   │   ├── durable7-fingertree.cabal
     │   │   ├── src/
     │   │   └── test/
     │   ├── Hamt/
     │   │   ├── README.md
-    │   │   ├── tools-data-structures-hamt.cabal
+    │   │   ├── durable7-hamt.cabal
     │   │   ├── src/
     │   │   └── test/
     │   └── Tungsten/
     │       ├── README.md
-    │       ├── tools-data-structures-tungsten.cabal
+    │       ├── durable7-tungsten.cabal
     │       ├── src/
     │       └── test/
     ├── Kotlin/
@@ -187,7 +194,7 @@ and a worked ordered-set example, is the
     ├── OCaml/
     │   ├── README.md
     │   ├── dune-project
-    │   ├── tools-data-structures.opam
+    │   ├── durable7.opam
     │   ├── test.ps1
     │   ├── docs/
     │   ├── lib/
@@ -205,7 +212,7 @@ and a worked ordered-set example, is the
     │   ├── test.ps1
     │   ├── docs/
     │   ├── src/
-    │   │   └── vladimir_reshetnikov/data_structures/
+    │   │   └── durable7/
     │   │       ├── finger_tree/
     │   │       ├── hamt/
     │   │       ├── numerics/
@@ -266,14 +273,14 @@ collections intentionally have no public cursor. The
 [repository-wide cursor design](docs/proposals/repository-wide-persistent-cursor-design.md) is the
 exhaustive applicability, API, ownership, complexity, and validation contract.
 
-- [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Tools.Numerics](src/CSharp/src/Tools.Numerics/Tools.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
-- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Tools.DataStructures.Hamt](src/CSharp/src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>`, strict `PersistentBiMap<TKey, TValue>`, set-valued `PersistentHashMultimap<TKey, TValue>`, bidirectional `PersistentRelation<TLeft, TRight>`, strict `PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and `PersistentIndexedMap<TKey, TValue, TIndexKey>` add composition-first families with retained policies and atomic multi-index publication. These derived families ship across all nine languages. All eight siblings expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
-- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Tools.DataStructures.FingerTree](src/CSharp/src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,503/1,503 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
-- [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Tools.DataStructures.Ordered](src/CSharp/src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces, and the project and its tests have no Tungsten dependency or Tungsten semantic baseline. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. The current complete serialized C# Debug and Release gates each pass 1,503/1,503 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
-- [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 application-specific leaf library under [src/CSharp/src/Tools.DataStructures.Tungsten](src/CSharp/src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections for the Tungsten project: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference only for sibling Tungsten ports and is never a foundation for general collections.
+- [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Durable7.Numerics](src/CSharp/src/Durable7.Numerics/Durable7.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
+- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Durable7.Hamt](src/CSharp/src/Durable7.Hamt/Durable7.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>`, strict `PersistentBiMap<TKey, TValue>`, set-valued `PersistentHashMultimap<TKey, TValue>`, bidirectional `PersistentRelation<TLeft, TRight>`, strict `PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and `PersistentIndexedMap<TKey, TValue, TIndexKey>` add composition-first families with retained policies and atomic multi-index publication. These derived families ship across all nine languages. All eight siblings expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
+- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Durable7.FingerTree](src/CSharp/src/Durable7.FingerTree/Durable7.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,503/1,503 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
+- [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Durable7.Ordered](src/CSharp/src/Durable7.Ordered/Durable7.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces, and the project and its tests have no Tungsten dependency or Tungsten semantic baseline. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. The current complete serialized C# Debug and Release gates each pass 1,503/1,503 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
+- [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 application-specific leaf library under [src/CSharp/src/Durable7.Tungsten](src/CSharp/src/Durable7.Tungsten/Durable7.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections for the Tungsten project: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference only for sibling Tungsten ports and is never a foundation for general collections.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
-  `tds_hamt_map`, `tds_hamt_set`, `tds_hamt_bag`, strict `tds_hamt_bi_map`, set-valued
-  `tds_hamt_multimap`, and bidirectional `tds_hamt_relation` value structs with callback-driven hash/equality/ownership
+  `d7_hamt_map`, `d7_hamt_set`, `d7_hamt_bag`, strict `d7_hamt_bi_map`, set-valued
+  `d7_hamt_multimap`, and bidirectional `d7_hamt_relation` value structs with callback-driven hash/equality/ownership
   policy, explicit ref-counted one-way edit-session handles whose aliases share lifecycle status,
   Patricia integer maps/sets, and a type-erased Merkle search tree with exact cross-language
   `MST2` blocks, bounded verified persistence, `MSP2` proofs, synchronization, and present-null-safe
@@ -281,7 +288,7 @@ exhaustive applicability, API, ownership, complexity, and validation contract.
   failure-atomic publication, exhaustive failpoints, and native concurrency tests define its C
   ownership and trust-boundary surface.
 - [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, a type-erased CNG/OpenSSL-backed policy-canonical zip-zip set, failure-atomic type-erased Brodal-Okasaki and winner-cached priority-search cores, ropes/text with explicit-lifetime positional/measured/text cursors, and a separate mutable DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
-- [src/C/Tungsten](src/C/Tungsten/README.md) is the C17 port of the Tungsten collections. It provides type-erased `tds_tungsten_list` and `tds_tungsten_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
+- [src/C/Tungsten](src/C/Tungsten/README.md) is the C17 port of the Tungsten collections. It provides type-erased `d7_tungsten_list` and `d7_tungsten_association` value structs, composing the C FingerTree deque, C HAMT, and an internal ref-counted AVL stamp sequence for C#-parity keyed and positional Association operations.
 - [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides
   header-first CHAMP hash maps/sets, a checked hash bag, a strict persistent bimap, a set-valued
   multimap, a bidirectional relation, move-only one-way edit sessions, Patricia integer maps/sets,
@@ -397,7 +404,7 @@ harness probes are isolated compile/runtime smoke checks, not performance eviden
 Run benchmarks from the benchmark project:
 
 ```powershell
-cd C:\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+cd C:\DataStructures\src\CSharp\benchmarks\Durable7.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short
 ```
 
@@ -493,7 +500,7 @@ The expected local Windows environment includes:
 - Rust toolchain with Cargo for `src/Rust`; the local profile may expose Cargo as
   `$env:USERPROFILE\.cargo\bin\cargo.exe` even when it is not on `PATH`.
 - opam 2.1+, OCaml 4.14+, and Dune 3.20+ for `src/OCaml`; install the package dependencies from
-  `tools-data-structures.opam` and keep both opam and Dune at one job during repository validation.
+  `durable7.opam` and keep both opam and Dune at one job during repository validation.
 - Node.js 24 or newer and npm for `src/TypeScript`; use the committed lockfile with `npm ci`.
 
 Use `dotnet` directly for C# restore/build operations and `src/CSharp/test.ps1` for unattended

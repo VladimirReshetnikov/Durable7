@@ -38,7 +38,7 @@ The script uses these project-level compiler gates:
 - Exception mode: `/EHsc-`; the C port does not use C++ exceptions.
 - Flexible-array-member warning suppression: `/wd4200`, because the implementation intentionally uses
   flexible storage for compact HAMT nodes.
-- Test-only allocation hooks: `/DTDS_HAMT_TESTING`, enabling deterministic fail-after-N allocation
+- Test-only allocation hooks: `/DD7_HAMT_TESTING`, enabling deterministic fail-after-N allocation
   injection inside the native executables without adding hooks to the public headers.
 - Debug configuration: `/Od`, `/Zi`, `/MDd`.
 - Release configuration: `/O2`, `/MD`, `/DNDEBUG`.
@@ -75,7 +75,7 @@ Typical direct GCC lane:
 
 ```powershell
 New-Item -ItemType Directory -Force build\portable | Out-Null
-gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING `
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DD7_HAMT_TESTING `
     -Iinclude -I../../test_support/include src\hamt.c tests\hamt_tests.c `
     -o build\portable\hamt_tests_gcc.exe
 .\build\portable\hamt_tests_gcc.exe
@@ -84,7 +84,7 @@ gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING `
 Compile the bag executable against both production sources in the same serialized lane:
 
 ```powershell
-gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING `
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DD7_HAMT_TESTING `
     -Iinclude -I../../test_support/include `
     src\hamt.c src\persistent_hash_bag.c tests\persistent_hash_bag_tests.c `
     -o build\portable\persistent_hash_bag_tests_gcc.exe
@@ -108,7 +108,7 @@ Typical Clang lane on Windows, using the Visual Studio developer environment for
 $vsDevCmd = "C:\Program Files\Microsoft Visual Studio\18\Insiders\Common7\Tools\VsDevCmd.bat"
 $clang = "C:\Program Files\LLVM\bin\clang.exe"
 
-cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clang"" -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -Iinclude -I../../test_support/include src\hamt.c tests\hamt_tests.c -o build\portable\hamt_tests_clang.exe && build\portable\hamt_tests_clang.exe"
+cmd.exe /d /c "call ""$vsDevCmd"" -arch=x64 -host_arch=x64 && ""$clang"" -std=c17 -Wall -Wextra -Wpedantic -Werror -DD7_HAMT_TESTING -Iinclude -I../../test_support/include src\hamt.c tests\hamt_tests.c -o build\portable\hamt_tests_clang.exe && build\portable\hamt_tests_clang.exe"
 ```
 
 ## Portable Sanitizer Check
@@ -117,7 +117,7 @@ On hosts with GCC or Clang supporting AddressSanitizer and UndefinedBehaviorSani
 ownership-policy and collision-bucket changes:
 
 ```powershell
-gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DTDS_HAMT_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer `
+gcc -std=c17 -Wall -Wextra -Wpedantic -Werror -DD7_HAMT_TESTING -fsanitize=address,undefined -fno-omit-frame-pointer `
     -Iinclude -I../../test_support/include src/hamt.c tests/hamt_tests.c -o build/hamt_tests_asan
 ./build/hamt_tests_asan
 ```

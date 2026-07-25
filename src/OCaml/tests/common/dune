@@ -1,6 +1,6 @@
 (test
  (name common_tests)
- (libraries tools-data-structures alcotest)
+ (libraries durable7 alcotest)
  (flags
   (:standard
    -safe-string

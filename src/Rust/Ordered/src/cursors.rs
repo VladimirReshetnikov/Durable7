@@ -1,6 +1,6 @@
 use std::hash::{BuildHasher, Hash};
 
-use tools_data_structures_hamt::DuplicateKey;
+use durable7_hamt::DuplicateKey;
 
 use crate::{PersistentOrderedMap, PersistentOrderedMultimap, PersistentOrderedSet};
 

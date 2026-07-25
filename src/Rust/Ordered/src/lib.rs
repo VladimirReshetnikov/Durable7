@@ -23,8 +23,8 @@ use std::fmt;
 use std::hash::{BuildHasher, Hash};
 use std::ops::Index;
 
-use tools_data_structures_fingertree::PersistentDeque;
-use tools_data_structures_hamt::{BulkBuilder, PersistentHashMap};
+use durable7_fingertree::PersistentDeque;
+use durable7_hamt::{BulkBuilder, PersistentHashMap};
 
 const STAMP_GAP: i64 = 1_i64 << 20;
 

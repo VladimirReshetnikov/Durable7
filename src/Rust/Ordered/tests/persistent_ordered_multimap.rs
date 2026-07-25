@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tools_data_structures_ordered::PersistentOrderedMultimap;
+use durable7_ordered::PersistentOrderedMultimap;
 
 #[derive(Clone, Debug)]
 struct Folded {

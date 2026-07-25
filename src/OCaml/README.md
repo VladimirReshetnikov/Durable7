@@ -30,7 +30,7 @@ general libraries only in that direction.
 
 The workspace requires OCaml 4.14 or newer, Dune 3.20 or newer, Zarith, Digestif, and Uutf. Alcotest and
 QCheck are test-only dependencies; ocamlformat and odoc provide formatting and documentation gates. The package constraints
-are recorded in `tools-data-structures.opam`.
+are recorded in `durable7.opam`.
 
 ## Build And Test
 

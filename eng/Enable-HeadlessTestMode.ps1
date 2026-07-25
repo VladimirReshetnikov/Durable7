@@ -15,13 +15,13 @@ function Enable-HeadlessTestMode {
         }
     }
 
-    $nativeMethods = 'DataStructures.Testing.WindowsErrorMode' -as [type]
+    $nativeMethods = 'Durable7.Testing.WindowsErrorMode' -as [type]
     if ($null -eq $nativeMethods) {
         Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
-namespace DataStructures.Testing
+namespace Durable7.Testing
 {
     public static class WindowsErrorMode
     {
@@ -33,7 +33,7 @@ namespace DataStructures.Testing
     }
 }
 '@
-        $nativeMethods = 'DataStructures.Testing.WindowsErrorMode' -as [type]
+        $nativeMethods = 'Durable7.Testing.WindowsErrorMode' -as [type]
     }
 
     # These process flags are inherited by child processes. In particular,
