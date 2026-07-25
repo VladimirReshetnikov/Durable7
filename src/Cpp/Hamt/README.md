@@ -102,7 +102,8 @@ three-way merge extend that core without weakening move-only key/value support.
 - `include/durable7/hamt/merkle_proofs.hpp` contains exact `MSP2` proof creation and
   verification plus typed three-way merge.
 - `tests/` contains the [deterministic native suites and copied-header consumer](tests/README.md).
-- `build.ps1` imports the MSVC toolchain through Scriptorium, stages a package-style include tree,
+- `build.ps1` imports the MSVC toolchain through `eng/Import-VisualCppEnvironment.ps1`, stages a
+  package-style include tree,
   and compiles the CHAMP/Patricia suite, Merkle suite, and installed-header consumer.
 - `docs/api-specification.md` documents the C++ API adaptation and complexity guarantees.
 - `docs/merkle-search-tree.md` specifies the policy, codecs, canonical topology, `MST2` wire bytes,

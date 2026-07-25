@@ -16,8 +16,8 @@ pair it with the [API specification](api-specification.md), [usage guide](usage.
 ## Build Script
 
 `build.ps1` is the validation entry point. It imports the local MSVC environment through
-`C:\Scriptorium\windows\Import-VisualCppEnvironment.ps1 -IncludePrerelease`, copies the complete
-public `include/Tools` subtree into `build/<Configuration>/package/include`, and compiles:
+`eng\Import-VisualCppEnvironment.ps1 -IncludePrerelease`, copies the complete
+public `include/durable7` subtree into `build/<Configuration>/package/include`, and compiles:
 
 - `tests/persistent_hamt_tests.cpp` into `persistent_hamt_tests.exe`;
 - `tests/merkle_search_tree_tests.cpp` into `merkle_search_tree_tests.exe`; and

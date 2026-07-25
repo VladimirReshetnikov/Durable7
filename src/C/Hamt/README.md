@@ -95,7 +95,8 @@ callbacks and callback-owned contexts remain responsible for their own synchroni
 - `src/merkle_search_tree.c` contains the canonical Merkle search tree implementation and CNG /
   OpenSSL SHA-256 backend.
 - `tests/` contains the [deterministic native test executables](tests/README.md).
-- `build.ps1` imports the MSVC toolchain through Scriptorium and compiles all five native test
+- `build.ps1` imports the MSVC toolchain through `eng/Import-VisualCppEnvironment.ps1` and compiles
+  all five native test
   executables.
 - `docs/api-specification.md` documents the C API adaptation and complexity guarantees.
 - `docs/usage.md` provides practical policy, lifetime, update, iteration, and set-algebra examples.

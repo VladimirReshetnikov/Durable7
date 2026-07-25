@@ -28,8 +28,11 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
 │   ├── reference/
 │   └── migration/
 ├── eng/
+│   ├── Build-LatexDoc.ps1
 │   ├── Enable-HeadlessTestMode.ps1
 │   ├── HeadlessTest.cmake
+│   ├── Import-VisualCppEnvironment.ps1
+│   ├── Invoke-HeadlessCommandTest.ps1
 │   └── Invoke-HeadlessTest.ps1
 └── src/
     ├── README.md
@@ -435,8 +438,9 @@ The expected local Windows environment includes:
   provides `gcc.exe`, `g++.exe`, `cmake.exe`, `ninja.exe`, and `ctest.exe`; if the current shell has not picked up
   the new `PATH`, use the binaries under
   `%LOCALAPPDATA%\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin`.
-- MSVC C17/C++20 toolchain for `src/C/Hamt` and `src/Cpp/Hamt`; use Scriptorium's
-  `Import-VisualCppEnvironment.ps1` helper when compiling from a plain PowerShell process.
+- MSVC C17/C++20 toolchain for `src/C/Hamt` and `src/Cpp/Hamt`; the build scripts import it through
+  the repository's `eng/Import-VisualCppEnvironment.ps1` helper when compiling from a plain
+  PowerShell process.
 - `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.
 - GHC 9.12 and cabal 3.16 or newer for the Haskell packages under `src/Haskell`.
 - A JVM is optional for Kotlin validation because `src/Kotlin/build.ps1` bootstraps a local JDK 21 and

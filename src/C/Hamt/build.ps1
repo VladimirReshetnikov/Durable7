@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
 $headlessTestHelper = Join-Path $root '..\..\..\eng\Enable-HeadlessTestMode.ps1'
+$visualCppHelper = Join-Path $root '..\..\..\eng\Import-VisualCppEnvironment.ps1'
 $buildRoot = Join-Path $root 'build'
 $buildDir = Join-Path $buildRoot $Configuration
 $includeDir = Join-Path $root 'include'
@@ -55,7 +56,7 @@ if ($RunTests) {
     $null = Enable-HeadlessTestMode
 }
 
-& C:\Scriptorium\windows\Import-VisualCppEnvironment.ps1 -IncludePrerelease
+& $visualCppHelper -IncludePrerelease
 
 $commonArgs = @(
     '/nologo',

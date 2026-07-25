@@ -13,7 +13,7 @@ the [API specification](api-specification.md) and [usage guide](usage.md).
 ## Build Script
 
 `build.ps1` is the validation entry point. It imports the local MSVC environment through
-`C:\Scriptorium\windows\Import-VisualCppEnvironment.ps1 -IncludePrerelease`, then compiles
+`eng\Import-VisualCppEnvironment.ps1 -IncludePrerelease`, then compiles
 `src/hamt.c` and `tests/hamt_tests.c` into `build/<Configuration>/hamt_tests.exe`, then compiles
 `src/hamt.c`, `src/persistent_hash_bag.c`, and `tests/persistent_hash_bag_tests.c` into
 `build/<Configuration>/persistent_hash_bag_tests.exe`, then compiles

@@ -189,7 +189,7 @@ cd C:\DataStructures\src\Cpp
 ```
 
 The language-root scripts delegate to the HAMT native build scripts, which import the MSVC environment through
-Scriptorium. Build outputs are written
+`eng/Import-VisualCppEnvironment.ps1`. Build outputs are written
 under `build/<Configuration>/` and are ignored by the repository. The local guides define compiler flags,
 warning policy, generated outputs, and native model-test coverage:
 
