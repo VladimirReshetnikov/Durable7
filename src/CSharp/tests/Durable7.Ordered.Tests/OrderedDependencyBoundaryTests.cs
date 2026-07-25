@@ -282,12 +282,12 @@ public sealed class OrderedDependencyBoundaryTests
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "AGENTS.md"))
+            if (File.Exists(Path.Combine(directory.FullName, "README.md"))
                 && File.Exists(Path.Combine(directory.FullName, "src", "CSharp", "Durable7.sln")))
             {
                 return directory.FullName;
             }
         }
-        throw new InvalidOperationException("Could not locate the DataStructures repository root.");
+        throw new InvalidOperationException("Could not locate the Durable7 repository root.");
     }
 }

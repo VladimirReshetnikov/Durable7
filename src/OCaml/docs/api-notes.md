@@ -323,7 +323,7 @@ Two deviations must be read before relying on any repository-level bound for thi
   never called anywhere under `lib/ordered` — the retained policy is used only for `equal`.
   Consequently `index_of`, and therefore every `find`, is a **linear O(n) equality scan**, and every
   insertion or deletion **copies the whole array**. The repository-level O(w + c + log n) figure and
-  the root `CLAUDE.md` statement that the Ordered indexes "compose public CHAMP and FingerTree
+  the root `README.md` statement that the Ordered indexes "compose public CHAMP and FingerTree
   surfaces" **do not hold for OCaml**; this port composes neither.
 - On a miss, `ordered_set_find`, `ordered_map_find`, `ordered_multimap_find`, and
   `ordered_multimap_find_group` return a cursor at the **end gap**, not at a lower bound. `found` is

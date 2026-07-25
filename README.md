@@ -20,10 +20,7 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
 ├── .editorconfig
 ├── .gitattributes
 ├── .gitignore
-├── AGENTS.md
-├── CLAUDE.md
 ├── LICENSE
-├── PREFERENCES.md
 ├── README.md
 ├── docs/
 │   ├── README.md

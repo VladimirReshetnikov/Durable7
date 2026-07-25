@@ -24,7 +24,7 @@ idioms local while preserving family-level parity across languages.
 
 | Layer | What it answers | Primary documents |
 | --- | --- | --- |
-| Root | What is this repository, what workspaces exist, and how should agents work here? | [Root README](../../README.md), [AGENTS.md](../../AGENTS.md), [source index](../../src/README.md) |
+| Root | What is this repository, what workspaces exist, and how should agents work here? | [Root README](../../README.md), [source index](../../src/README.md) |
 | Repository guides | How do I perform recurring repository tasks? | [Guides index](README.md), [validation](build-and-validation.md), [porting](porting-and-semantic-parity.md), [documentation maintenance](documentation-maintenance.md) |
 | Repository reference | What facts stay true across workspaces? | [Reference index](../reference/README.md), [workspace map](../reference/workspace-map.md), [catalog](../reference/data-structure-catalog.md), [contracts](../reference/semantic-contracts.md), [test suite map](../reference/test-suite-map.md) |
 | Workspace docs | What does this library expose, how is it used, and how is it validated? | `src/<Language>/<Family>/README.md`, `src/<Language>/<Family>/docs/`, `src/CSharp/docs/<Family>/`, or package-level `src/Python/docs/`, `src/TypeScript/docs/`, and `src/OCaml/docs/` |
@@ -67,8 +67,7 @@ not "documentation-only"; it needs implementation evidence.
 
 ## Standard Work Loop
 
-1. Read the root guidance first. In this repository, `AGENTS.md`, `CLAUDE.md`, and `README.md` are
-   intentionally aligned entry points.
+1. Read the root guidance first. In this repository, `README.md` is the canonical entry point.
 2. Check `git status --short --branch`. Preserve user changes and work with them rather than
    reverting them.
 3. Use `rg` and the navigation matrix to find the owning workspace, API spec, tests, and validation
