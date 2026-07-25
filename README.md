@@ -1,423 +1,170 @@
 # Durable7
 
-**Durable7** is a library of persistent data structures, authenticated
-collections, shipped as semantically aligned ports across nine languages.
+**Persistent data structures and authenticated collections — implemented nine times, with the same
+semantics in every language.**
 
-## Where to start
+Durable7 is a library of immutable, structurally shared collections ported to
+**C, C++, C#, Haskell, Kotlin, OCaml, Python, Rust, and TypeScript**. Every port implements the same
+contracts: the same ordering rules, the same failure behavior, the same complexity guarantees — and,
+for the authenticated tier, the same bytes on the wire.
 
-| Goal | Start with | Then open |
+[![License: MIT-0](https://img.shields.io/badge/License-MIT--0-blue.svg)](LICENSE)
+![Languages](https://img.shields.io/badge/languages-9-informational)
+![Status](https://img.shields.io/badge/status-pre--release%200.1.0-orange)
+
+---
+
+## What "persistent" means here
+
+Every operation returns a **new version** and leaves the old one untouched and still valid. Versions
+share structure, so an update copies a path rather than the whole collection:
+
+```csharp
+var v1 = PersistentHashMap<int, string>.Empty.SetItem(1, "one");
+var v2 = v1.SetItem(2, "two");
+var v3 = v2.SetItem(1, "uno");
+
+// v1, v2, and v3 are three independent, live snapshots.
+// They share almost all of their internal nodes.
+```
+
+That makes undo/redo, branching history, snapshot isolation, and lock-free reader concurrency fall
+out of the data structure itself rather than out of a locking discipline. Mutation is confined to a
+few explicitly named places — builders, one-way transient sessions, the concurrent-trie facade, and
+`DabaLite` — and those are documented as mutable wherever they appear.
+
+## Why nine implementations
+
+Most collection libraries exist once, and a "port" is a loose family resemblance. Here, semantic
+parity is the product:
+
+- **One contract, nine languages.** Ordering, first-representative retention, no-op identity,
+  failure atomicity, and complexity bounds are specified once and upheld by every port. Where a port
+  genuinely differs, that difference is written down in its API notes instead of being discovered
+  later.
+- **Byte-identical authenticated data.** The Merkle search tree uses policy identity
+  `mst-sha256-b16-v2` with SHA-256 and a canonical `MST2` block format. A tree built in Rust
+  verifies against a proof produced in TypeScript. `MSP2` membership, absence, and range proofs are
+  exact across ports.
+- **Language-native, not transliterated.** Rust uses `Arc` and forbids `unsafe`; C# exposes
+  `IReadOnlyList<T>`; OCaml returns `option`/`result`; C is type-erased with explicit ownership and
+  fallible allocators. The semantics match; the idioms do not have to.
+
+## What's inside
+
+| Family | Highlights |
+| --- | --- |
+| **Hash maps & sets** | CHAMP maps/sets, hash bags, strict bimaps, set-valued multimaps, bidirectional relations, map patches, directed graphs, multi-index maps |
+| **Integer & authenticated** | 32/64-bit Patricia maps and sets, lock-free snapshotting Ctrie, Merkle search trees with bounded verification, proofs, synchronization, and three-way merge |
+| **Sequences** | Catenable deques, monoid-measured trees, RRB vectors, reversible deques, and a lazily range-updating implicit-AVL sequence |
+| **Ordered & sorted** | Sorted bags/sets/maps, canonical zip-zip sets, insertion-ordered set/map/multimap with explicit movement and stable sorting |
+| **Priority & interval** | Brodal–Okasaki heaps, measured priority queues, winner-cached priority-search queues, interval trees, and payload-bearing interval maps |
+| **Text & bits** | Positional and measured ropes, UTF-aware text ropes, sparse rank/select chunked bit sets |
+| **Cursors** | Immutable, version-bound gap and search cursors over the maps, sets, sequences, and ropes that have a stable neighbor axis |
+
+The [data-structure catalog](docs/reference/data-structure-catalog.md) lists every public entry point
+per language.
+
+## A quick look
+
+```python
+from durable7 import PersistentHashMap, PersistentHashBag, PersistentBiMap, TextRope
+
+snapshot = PersistentHashMap.empty().put("answer", 42)
+bag      = PersistentHashBag.from_values(["alpha", "alpha", "beta"])
+bimap    = PersistentBiMap.empty().add("answer", 42)
+text     = TextRope.from_text("alpha\nbeta")
+
+bimap.inverse[42]      # "answer"
+bag.count_of("alpha")  # 2
+```
+
+```ts
+import { PersistentBiMap, PersistentHashMap, Rope } from "durable7";
+
+const map    = PersistentHashMap.empty<string, number>().put("answer", 42);
+const bimap  = PersistentBiMap.empty<string, number>().add("answer", 42);
+const cached = map.getOrAdd("second answer", () => 43);
+const edited = Rope.fromText("abc").getCursor(1).insert("X").snapshot();
+```
+
+## Getting started
+
+> **Note** — Durable7 is not yet published to npm, PyPI, crates.io, NuGet, Hackage, or opam. Build
+> from source for now. Each language workspace is self-contained: you only need the toolchain for the
+> port you care about.
+
+```bash
+git clone https://github.com/VladimirReshetnikov/Durable7.git
+```
+
+Then build and test the port you want:
+
+| Language | Workspace | Build and test |
 | --- | --- | --- |
-| Get oriented in the repository | [Repository onboarding](docs/guides/repository-onboarding.md) | [Workspace map](docs/reference/workspace-map.md), [source index](src/README.md), [navigation matrix](docs/reference/navigation-matrix.md) |
-| Choose or compare a collection family | [Data-structure catalog](docs/reference/data-structure-catalog.md) | Relevant workspace usage guide and API specification or notes |
-| Preserve behavior across ports | [Semantic contracts](docs/reference/semantic-contracts.md) | [Porting guide](docs/guides/porting-and-semantic-parity.md), sibling workspace API docs, test READMEs |
-| Build or validate changes | [Build and validation](docs/guides/build-and-validation.md) | [Test suite map](docs/reference/test-suite-map.md), affected workspace validation guide |
-| Update documentation | [Documentation maintenance](docs/guides/documentation-maintenance.md) | Affected docs index, [navigation matrix](docs/reference/navigation-matrix.md), repository-owned Markdown checks |
+| C# | [`src/CSharp`](src/CSharp/README.md) | `dotnet build` then `.\test.ps1` |
+| C | [`src/C`](src/C/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` |
+| C++ | [`src/Cpp`](src/Cpp/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` |
+| Rust | [`src/Rust`](src/Rust/README.md) | `.\test.ps1` (or `cargo test`) |
+| TypeScript | [`src/TypeScript`](src/TypeScript/README.md) | `npm ci && npm run validate` |
+| Python | [`src/Python`](src/Python/README.md) | `.\test.ps1` |
+| Haskell | [`src/Haskell`](src/Haskell/README.md) | `.\test.ps1` (or `cabal test all`) |
+| Kotlin | [`src/Kotlin`](src/Kotlin/README.md) | `.\build.ps1` (bootstraps its own JDK) |
+| OCaml | [`src/OCaml`](src/OCaml/README.md) | `dune build @check && dune runtest` |
 
-## Top-level structure
+The C and C++ wrappers also accept `-Workspace FingerTree` and `-Workspace Ordered`. Toolchain
+versions are listed under [Prerequisites](docs/guides/build-and-validation.md#prerequisites); the
+full matrix, including the single-worker validation policy, is in the
+[build and validation guide](docs/guides/build-and-validation.md).
 
-```text
-.
-├── .editorconfig
-├── .gitattributes
-├── .gitignore
-├── LICENSE
-├── README.md
-├── docs/
-│   ├── README.md
-│   ├── guides/
-│   ├── reference/
-│   └── migration/
-├── eng/
-│   ├── Build-LatexDoc.ps1
-│   ├── Enable-HeadlessTestMode.ps1
-│   ├── HeadlessTest.cmake
-│   ├── Import-VisualCppEnvironment.ps1
-│   ├── Invoke-HeadlessCommandTest.ps1
-│   └── Invoke-HeadlessTest.ps1
-└── src/
-    ├── README.md
-    ├── C/
-    │   ├── README.md
-    │   ├── build.ps1
-    │   ├── FingerTree/
-    │   │   ├── CMakeLists.txt
-    │   │   ├── CMakePresets.json
-    │   │   ├── README.md
-    │   │   ├── benchmarks/
-    │   │   ├── docs/
-    │   │   ├── include/
-    │   │   ├── samples/
-    │   │   ├── src/
-    │   │   └── tests/
-    │   ├── Hamt/
-    │   │   ├── build.ps1
-    │   │   ├── README.md
-    │   │   ├── docs/
-    │   │   ├── include/
-    │   │   ├── src/
-    │   │   └── tests/
-    │       ├── CMakeLists.txt
-    │       ├── CMakePresets.json
-    │       ├── README.md
-    │       ├── include/
-    │       ├── src/
-    │       └── tests/
-    ├── Cpp/
-    │   ├── README.md
-    │   ├── build.ps1
-    │   ├── FingerTree/
-    │   │   ├── CMakeLists.txt
-    │   │   ├── CMakePresets.json
-    │   │   ├── README.md
-    │   │   ├── docs/
-    │   │   ├── include/
-    │   │   └── tests/
-    │   ├── Hamt/
-    │   │   ├── build.ps1
-    │   │   ├── README.md
-    │   │   ├── docs/
-    │   │   ├── include/
-    │   │   └── tests/
-    │       ├── CMakeLists.txt
-    │       ├── CMakePresets.json
-    │       ├── README.md
-    │       ├── include/
-    │       └── tests/
-    ├── CSharp/
-    │   ├── README.md
-    │   ├── Durable7.sln
-    │   ├── Directory.Build.props
-    │   ├── Directory.Build.targets
-    │   ├── test.ps1
-    │   ├── test.runsettings
-    │   ├── benchmarks/
-    │   │   └── Durable7.FingerTree.Benchmarks/
-    │   ├── docs/
-    │   │   ├── FingerTree/
-    │   │   ├── Hamt/
-    │   │   ├── Ordered/
-    │   ├── samples/
-    │   │   ├── Durable7.FingerTree.Editor/
-    │   │   ├── Durable7.FingerTree.Showcase/
-    │   │   └── Durable7.FingerTree.Tour/
-    │   ├── src/
-    │   │   ├── Durable7.FingerTree/
-    │   │   ├── Durable7.Hamt/
-    │   │   ├── Durable7.Ordered/
-    │   └── tests/
-    │       ├── Durable7.FingerTree.Tests/
-    │       ├── Durable7.Hamt.Tests/
-    │       ├── Durable7.Ordered.Tests/
-    ├── Haskell/
-    │   ├── README.md
-    │   ├── cabal.project
-    │   ├── test.ps1
-    │   ├── FingerTree/
-    │   │   ├── README.md
-    │   │   ├── durable7-fingertree.cabal
-    │   │   ├── src/
-    │   │   └── test/
-    │   ├── Hamt/
-    │   │   ├── README.md
-    │   │   ├── durable7-hamt.cabal
-    │   │   ├── src/
-    │   │   └── test/
-    │       ├── README.md
-    │       ├── src/
-    │       └── test/
-    ├── Kotlin/
-    │   ├── README.md
-    │   ├── build.ps1
-    │   ├── FingerTree/
-    │   │   ├── README.md
-    │   │   ├── docs/
-    │   │   ├── src/
-    │   │   ├── test/
-    │   │   └── tests/
-    │   ├── Hamt/
-    │   │   ├── README.md
-    │   │   ├── docs/
-    │   │   ├── src/
-    │   │   ├── test/
-    │   │   └── tests/
-    │       ├── README.md
-    │       ├── src/
-    │       └── test/
-    ├── OCaml/
-    │   ├── README.md
-    │   ├── dune-project
-    │   ├── durable7.opam
-    │   ├── test.ps1
-    │   ├── docs/
-    │   ├── lib/
-    │   │   ├── common/
-    │   │   ├── finger_tree/
-    │   │   ├── hamt/
-    │   │   ├── ordered/
-    │   └── tests/
-    ├── Python/
-    │   ├── README.md
-    │   ├── pyproject.toml
-    │   ├── requirements-dev.txt
-    │   ├── test.ps1
-    │   ├── docs/
-    │   ├── src/
-    │   │   └── durable7/
-    │   │       ├── finger_tree/
-    │   │       ├── hamt/
-    │   │       ├── ordered/
-    │   └── tests/
-    ├── test_support/
-    │   └── include/
-    ├── Rust/
-        ├── Cargo.toml
-        ├── README.md
-        ├── test.ps1
-        ├── Hamt/
-        │   ├── Cargo.toml
-        │   ├── README.md
-        │   ├── docs/
-        │   ├── src/
-        │   └── tests/
-        ├── FingerTree/
-        │   ├── Cargo.toml
-        │   ├── README.md
-        │   ├── docs/
-        │   ├── src/
-        │   └── tests/
-            ├── Cargo.toml
-            ├── README.md
-            └── src/
-    └── TypeScript/
-        ├── README.md
-        ├── package.json
-        ├── package-lock.json
-        ├── test.ps1
-        ├── docs/
-        ├── src/
-        │   ├── finger-tree/
-        │   ├── hamt/
-        │   ├── ordered/
-        └── test/
-```
+## Project status
 
-## Workspaces
+**Pre-release (0.1.0).** The collection families are implemented and tested across all nine ports,
+but the API is not frozen and nothing is published to a package registry yet.
 
-The [source index](src/README.md) and language indexes for [C](src/C/README.md),
-[C++](src/Cpp/README.md), [C#](src/CSharp/README.md), [Haskell](src/Haskell/README.md),
-[Kotlin](src/Kotlin/README.md), [OCaml](src/OCaml/README.md), [Python](src/Python/README.md), [Rust](src/Rust/README.md), and
-[TypeScript](src/TypeScript/README.md) are the quickest way to browse the
-language-first layout.
+Every port ships an executable test suite, and the gates run single-worker for determinism:
 
-All nine ports ship the shared persistent-cursor tier for Patricia maps/sets; measured and
-positional sequence families; sorted, canonical, priority-search, interval, and sparse-bit
-collections; neutral Ordered set/map/multimap; and authenticated Merkle search trees. Public
-cursors are immutable version-bound gaps or ordered search locations. Unordered CHAMP composites,
-live Ctries, graphs, non-search heaps, lifecycle/support objects, and DABA Lite
-intentionally have no public cursor. The
-[repository-wide cursor design](docs/proposals/repository-wide-persistent-cursor-design.md) is the
-exhaustive applicability, API, ownership, complexity, and validation contract.
+| Port | Suite |
+| --- | --- |
+| C# | 1,158 tests, zero-warning Debug and Release builds |
+| TypeScript | 252 tests (Vitest + fast-check) |
+| Python | 234 tests (pytest + Hypothesis), plus Ruff, strict Mypy, and installed-wheel gates |
+| Kotlin | 194 tests |
+| OCaml | 48 Alcotest/QCheck cases under strict warnings, ocamlformat, and odoc |
+| C / C++ | CTest suites per workspace, MSVC Debug and Release |
+| Haskell | Per-package executable suites |
+| Rust | Crate unit and integration tests, `#![forbid(unsafe_code)]` |
 
-- [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Durable7.Hamt](src/CSharp/src/Durable7.Hamt/Durable7.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>`, strict `PersistentBiMap<TKey, TValue>`, set-valued `PersistentHashMultimap<TKey, TValue>`, bidirectional `PersistentRelation<TLeft, TRight>`, strict `PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and `PersistentIndexedMap<TKey, TValue, TIndexKey>` add composition-first families with retained policies and atomic multi-index publication. These derived families ship across all nine languages. All eight siblings expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
-- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Durable7.FingerTree](src/CSharp/src/Durable7.FingerTree/Durable7.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,158/1,158 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
-- [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Durable7.Ordered](src/CSharp/src/Durable7.Ordered/Durable7.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. The current complete serialized C# Debug and Release gates each pass 1,158/1,158 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
-- [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
-  `d7_hamt_map`, `d7_hamt_set`, `d7_hamt_bag`, strict `d7_hamt_bi_map`, set-valued
-  `d7_hamt_multimap`, and bidirectional `d7_hamt_relation` value structs with callback-driven hash/equality/ownership
-  policy, explicit ref-counted one-way edit-session handles whose aliases share lifecycle status,
-  Patricia integer maps/sets, and a type-erased Merkle search tree with exact cross-language
-  `MST2` blocks, bounded verified persistence, `MSP2` proofs, synchronization, and present-null-safe
-  merge. Atomic immutable handles, a synchronized block store, fallible callbacks and allocators,
-  failure-atomic publication, exhaustive failpoints, and native concurrency tests define its C
-  ownership and trust-boundary surface.
-- [src/C/FingerTree](src/C/FingerTree/README.md) is the C11 port from the C++ workspace. It provides the measured-tree/deque family, RRB vectors, derived sorted/priority/interval collections, a type-erased CNG/OpenSSL-backed policy-canonical zip-zip set, failure-atomic type-erased Brodal-Okasaki and winner-cached priority-search cores, ropes/text with explicit-lifetime positional/measured/text cursors, and a separate mutable DABA Lite with allocation-atomic updates and O(n+c) deterministic clear, all covered by CTest and a dependency-light benchmark harness.
-- [src/Cpp/Hamt](src/Cpp/Hamt/README.md) is a C++20 port of the persistent HAMT library. It provides
-  header-first CHAMP hash maps/sets, a checked hash bag, a strict persistent bimap, a set-valued
-  multimap, a bidirectional relation, move-only one-way edit sessions, Patricia integer maps/sets,
-  plus a policy-bound Merkle
-  search tree with CNG/OpenSSL SHA-256, byte-identical `MST2` blocks, seven bounded-verification
-  limits, immutable block-store snapshots, exact `MSP2` proofs, iterative synchronization, and
-  present-null-safe three-way merge. Immutable `std::shared_ptr` state supports structural sharing
-  and move-only representatives; strict MSVC/GCC/Clang model, wire, failure, validation,
-  concurrency, analyzer, and packaged-header gates cover the native value-semantics surface.
-- [src/Cpp/FingerTree](src/Cpp/FingerTree/README.md) is the native C++ port of the FingerTree workspace and newer sequence/streaming cores. It is a header-first CMake/Ninja library with the persistent engines and facades, RRB vectors, a CNG/OpenSSL-backed policy-canonical zip-zip set, move-only-capable Brodal-Okasaki and winner-cached priority-search cores, ropes/text, positional/measured/text snapshot-plus-gap cursors, and a noncopyable mutable DABA Lite whose no-throw publication and O(n+c) deterministic clear are covered by CTest and benchmarks.
-- [src/Haskell/Hamt](src/Haskell/Hamt/README.md) is a Haskell persistent-map workspace. It provides CHAMP hash maps/sets, a checked hash bag, strict `BiMap`, set-valued `HashMultimap`, bidirectional `Relation`, one-way `MapTransient`/`SetTransient` sessions in `IO`, Patricia integer maps/sets, and a pure wire-compatible Merkle search tree with immutable block-store snapshots, bounded verification, `MSP2` proofs, frontier synchronization, and typed merge.
-- [src/Haskell/FingerTree](src/Haskell/FingerTree/README.md) is a Haskell port of the FingerTree family. It provides a general measured tree, size-measured deque, reversible deque, sorted bag/set/map facades, an IO-created/purely operated policy-canonical zip-zip set, Brodal-Okasaki and measured priority queues, a keyed priority-search queue, interval tree, positional and measured ropes, immutable snapshot-plus-gap positional/measured/text cursors, and newline-aware text helpers.
-- [src/Kotlin/Hamt](src/Kotlin/Hamt/README.md) is a Kotlin/JVM persistent-map workspace. It provides CHAMP hash maps/sets, a checked hash bag, strict `PersistentBiMap`, set-valued `PersistentHashMultimap`, bidirectional `PersistentRelation`, runtime-consumed version-view-bound `Transient` sessions, the managed Ctrie, Patricia integer maps/sets, and a wire-compatible Merkle search tree with bounded verified persistence, `MSP2` proofs, frontier synchronization, and typed three-way merge.
-- [src/Kotlin/FingerTree](src/Kotlin/FingerTree/README.md) is a Kotlin/JVM port of the FingerTree-family collections and newer sequence/streaming cores. Its immutable measured AVL, RRB, canonical zip-zip-tree, bootstrapped skew-binomial heap, and winner-cached AVL substrates provide structurally shared deque, measured sequence, vector, sorted bag/set/map, policy-canonical sorted set, both measured and worst-case-optimal meldable priority queues, a keyed priority-search queue, max-high interval tree, positional/measured ropes, snapshot-plus-gap positional and measured cursors, and a UTF-16 text cursor that retains the `TextRope` facade; the separate mutable DABA Lite core maintains FIFO monoid aggregates with worst-case bounded callbacks.
-- [src/OCaml](src/OCaml/README.md) is the opam/Dune port of every repository-owned family: CHAMP/derived HAMT, Patricia, synchronized snapshots, and exact `MST2` Merkle persistence/proofs; measured, sorted, priority, interval, vector, bit-set, Range, rope/cursor, canonical-set, heap/search, and DABA collections; and neutral ordered set/map/multimap. Strict warnings, ocamlformat, odoc, Alcotest, QCheck, and one-worker validation define its gate; [API notes](src/OCaml/docs/api-notes.md) record intentional OCaml implementation distinctions.
-- [src/Rust/Hamt](src/Rust/Hamt/README.md) is a safe Rust persistent-map workspace. It provides
-  CHAMP hash maps/sets, a checked hash bag, strict `PersistentBiMap`, set-valued
-  `PersistentHashMultimap`, bidirectional `PersistentRelation`, ownership-consuming `TransientHashMap`/`TransientHashSet` sessions, and
-  Patricia integer maps/sets, plus a policy-bound Merkle search tree with
-  C#-compatible `MST2` blocks, bounded verified persistence, `MSP2` proofs, synchronization, and
-  three-way merge. Immutable nodes and values use `Arc` sharing and the crate forbids unsafe code.
-- [src/Rust/FingerTree](src/Rust/FingerTree/README.md) is the Rust checkpoint port of the FingerTree
-  family and newer sequence/streaming cores. Its persistent deque, measured sequence, RRB vector,
-  policy-canonical zip-zip sorted set, non-`Clone` bootstrapped skew-binomial heap, winner-cached
-  priority-search queue, reversible deque, sorted bag/set/map, priority queue, interval tree, and
-  rope/text facades use structurally shared Rust storage; `RopeCursor<T>`,
-  `MeasuredRopeCursor<T, P>`, and `TextRopeCursor` add positional, measured, and nominal text
-  snapshot-plus-gap editing checkpoints. The separate mutable
-  `DabaLite<T, M>` preserves bounded FIFO aggregation callbacks and prompt deterministic
-  reclamation; it is `!Send`/`!Sync`, and `clear` is explicitly O(n + c) because owned values must
-  be dropped.
-- [src/TypeScript](src/TypeScript/README.md) is the strict ESM port for Node.js 24+. It packages the
-  HAMT/transient/Ctrie/Patricia/Merkle family—including one-descent map factories, the hash bag,
-  strict bimap, set-valued multimap, bidirectional relation, construction-only bulk builder, and
-  complete transient-set relations—measured sequence and derived FingerTree collections,
-  RRB/canonical-set/Brodal/priority-search/DABA cores, positional/measured/text rope cursors,
-  and the neutral insertion-ordered set. Its `MST2`/`MSP2` wire is byte-identical
-  to the sibling ports; runtime-specific concurrency and owner-token performance distinctions are
-  documented locally.
-- [src/Python](src/Python/README.md) is the typed Python 3.11+ distribution. It packages CHAMP with
-  one-descent map factories, a construction-only bulk builder, the hash bag, strict bimap, set-valued
-  multimap, bidirectional relation, and complete path-copy
-  one-way sessions, a lock-coordinated concurrent facade, Patricia maps/sets, the exact
-  `MST2`/`MSP2` Merkle tier with seven verification budgets, measured-AVL and RRB sequence families,
-  canonical zip-zip/Brodal/priority-search/DABA cores, code-point-indexed rope cursors, the
-  and the neutral insertion-ordered set.
-  Ruff, strict Mypy, pytest/Hypothesis, source/wheel builds, metadata checks, and an installed-wheel
-  smoke test form its validation gate.
-
-## Build and test
-
-Use [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) as the complete validation guide. In short, use the local .NET SDK toolchain for the C# workspace, the language-root MSVC build wrappers for C and C++, cabal for the Haskell packages, Cargo for the Rust crates, opam/Dune for OCaml, npm for TypeScript, and Python 3.11+ with the checked-in launcher for Python.
-
-```powershell
-cd C:\DataStructures\src\CSharp
-dotnet restore --disable-parallel --disable-build-servers -m:1 -nr:false `
-    -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build --no-restore --disable-build-servers -m:1 -nr:false `
-    -p:BuildInParallel=false -p:UseSharedCompilation=false
-.\test.ps1
-
-cd C:\DataStructures\src\C
-.\build.ps1 -Workspace Hamt -RunTests
-.\build.ps1 -Workspace Hamt -Configuration Release -RunTests
-
-cd C:\DataStructures\src\Cpp
-.\build.ps1 -Workspace Hamt -RunTests
-.\build.ps1 -Workspace Hamt -Configuration Release -RunTests
-
-cd C:\DataStructures\src\Rust
-.\test.ps1
-
-cd C:\DataStructures\src\TypeScript
-npm ci
-npm run validate
-
-cd C:\DataStructures\src\Python
-.\test.ps1
-
-cd C:\DataStructures\src\C
-.\build.ps1 -Workspace FingerTree -RunTests
-
-cd C:\DataStructures\src\Cpp
-.\build.ps1 -Workspace FingerTree -RunTests
-
-cd C:\DataStructures\src\Haskell
-.\test.ps1
-
-cd C:\DataStructures\src\Kotlin
-.\build.ps1
-
-cd C:\DataStructures\src\OCaml
-opam install . --deps-only --with-test --with-doc --with-dev-setup
-opam exec -- dune build -j 1 @check @fmt @doc
-opam exec -- dune runtest -j 1 --force
-```
-
-The checked-in launchers and native presets force one build worker/job; test runners are likewise
-restricted to one test host/thread where their toolchain supports it. Run language workspaces
-sequentially rather than overlapping restore, build, or test processes. Local benchmarks are a
-separate, explicit activity and are not part of routine validation. The C++ GitHub workflow's short
-harness probes are isolated compile/runtime smoke checks, not performance evidence.
-
-Run benchmarks from the benchmark project:
-
-```powershell
-cd C:\DataStructures\src\CSharp\benchmarks\Durable7.FingerTree.Benchmarks
-dotnet run -c Release -- --filter * --job short
-```
-
-Release configuration is required for meaningful benchmark numbers.
+Benchmarks exist for the C# workspace but are deliberately excluded from routine validation, and no
+performance numbers are published as shipment evidence.
 
 ## Documentation
 
-- [docs/README.md](docs/README.md) indexes repository-level documentation and migration provenance.
-- [src/README.md](src/README.md) indexes language-level source workspaces.
-- [docs/guides/README.md](docs/guides/README.md) indexes task-oriented repository procedures.
-- [docs/guides/repository-onboarding.md](docs/guides/repository-onboarding.md) is the end-to-end orientation guide for choosing workspaces, task scope, documentation responsibilities, and validation evidence.
-- [docs/guides/agent-workflows.md](docs/guides/agent-workflows.md) holds compact task-conditional workflow guidance.
-- [docs/guides/build-and-validation.md](docs/guides/build-and-validation.md) is the repository-wide validation matrix and command guide.
-- [docs/guides/documentation-maintenance.md](docs/guides/documentation-maintenance.md) defines documentation placement, writing standards, metadata, and validation.
-- [docs/guides/porting-and-semantic-parity.md](docs/guides/porting-and-semantic-parity.md) defines the workflow for keeping C#, C++, C, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python data-structure surfaces semantically aligned.
-- [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
-- [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python.
-- [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
-- [docs/reference/semantic-contracts.md](docs/reference/semantic-contracts.md) summarizes shared behavior, ownership, policy, ordering, and documentation obligations for repository-owned data structures.
-- [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
-- [src/CSharp/docs/Hamt/README.md](src/CSharp/docs/Hamt/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.
-- [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide, API specification, and validation guide.
-- [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
-  guide, API specification, exact-wire Merkle specification, and validation guide.
-- [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, and benchmark notes.
-- [src/CSharp/docs/Ordered/README.md](src/CSharp/docs/Ordered/README.md) indexes the neutral, independently owned insertion-ordered set's overview, usage guide, API specification, validation guide, project, and tests.
-- [src/Cpp/FingerTree/docs/README.md](src/Cpp/FingerTree/docs/README.md) indexes the C++ usage guide, port plan, API notes, validation guide, implementation notes, and review reports.
-- [src/C/FingerTree/docs/README.md](src/C/FingerTree/docs/README.md) indexes the C usage guide, API notes, and validation guide.
-- [src/Haskell/README.md](src/Haskell/README.md) indexes the Haskell cabal packages.
-- [src/Haskell/Hamt/test/README.md](src/Haskell/Hamt/test/README.md) and [src/Haskell/FingerTree/test/README.md](src/Haskell/FingerTree/test/README.md) summarize the Haskell executable test coverage.
-- [src/Kotlin/README.md](src/Kotlin/README.md) indexes the Kotlin/JVM workspaces.
-- [src/Kotlin/Hamt/docs/README.md](src/Kotlin/Hamt/docs/README.md) indexes the Kotlin HAMT port's API notes and validation guide.
-- [src/Kotlin/FingerTree/docs/README.md](src/Kotlin/FingerTree/docs/README.md) indexes the Kotlin FingerTree-family API notes and validation guide.
-- [src/Rust/Hamt/docs/README.md](src/Rust/Hamt/docs/README.md) indexes the Rust HAMT, Patricia, and
-  Merkle search-tree API notes and validation guidance.
-- [src/Rust/FingerTree/docs/README.md](src/Rust/FingerTree/docs/README.md) indexes the Rust
-  FingerTree-family API notes and validation guide.
-- [src/TypeScript/README.md](src/TypeScript/README.md) indexes the TypeScript package;
-  [API notes](src/TypeScript/docs/api-notes.md), [validation](src/TypeScript/docs/validation.md),
-  and the [test map](src/TypeScript/test/README.md) document its runtime mappings and gates.
-- [src/Python/README.md](src/Python/README.md) indexes the Python package;
-  [API notes](src/Python/docs/api-notes.md), [validation](src/Python/docs/validation.md), and the
-  [test map](src/Python/tests/README.md) document its runtime mappings and gates.
-- [src/OCaml/README.md](src/OCaml/README.md) indexes the OCaml package;
-  [API notes](src/OCaml/docs/api-notes.md), [validation](src/OCaml/docs/validation.md), and the
-  [test map](src/OCaml/tests/README.md) document its qualified modules and gates.
+| If you want to… | Read |
+| --- | --- |
+| Compare families and find entry points | [Data-structure catalog](docs/reference/data-structure-catalog.md) |
+| Understand the shared behavior contracts | [Semantic contracts](docs/reference/semantic-contracts.md) |
+| Find the doc that owns a topic | [Navigation matrix](docs/reference/navigation-matrix.md) |
+| Get oriented before contributing | [Repository onboarding](docs/guides/repository-onboarding.md) |
+| Build or validate a change | [Build and validation](docs/guides/build-and-validation.md) |
+| Keep ports semantically aligned | [Porting and semantic parity](docs/guides/porting-and-semantic-parity.md) |
+| See the repository layout | [Workspace map](docs/reference/workspace-map.md), [source index](src/README.md) |
 
-## Local environment
+## Repository layout
 
-The expected local Windows environment includes:
+```text
+docs/   Repository-wide guides, reference material, proposals, and review reports
+eng/    Shared build and test tooling
+src/    One directory per language, each a self-contained workspace
+```
 
-- `pwsh` / PowerShell 7.
-- `rg` for repository search.
-- `git` and `gh` for source-control and GitHub workflows.
-- Python 3.11 or newer with `venv` and `pip`, both for `src/Python` and ad hoc tooling.
-- .NET SDK 10.0 or newer with the .NET 10 targeting packs.
-- Visual Studio native C/C++ toolchain, including C++23 `/std:c++latest` support for `src/Cpp/FingerTree`, plus the bundled CMake and Ninja used by the `src/C/FingerTree` and `src/Cpp/FingerTree` presets.
-- LLVM/Clang for native portability validation. The local Windows installation normally exposes
-  `C:\Program Files\LLVM\bin\clang.exe` and `C:\Program Files\LLVM\bin\clang++.exe`; use the Visual Studio
-  developer environment when targeting the MSVC ABI.
-- GCC/MinGW for native portability validation. The local Windows installation uses WinLibs through winget and
-  provides `gcc.exe`, `g++.exe`, `cmake.exe`, `ninja.exe`, and `ctest.exe`; if the current shell has not picked up
-  the new `PATH`, use the binaries under
-  `%LOCALAPPDATA%\Microsoft\WinGet\Packages\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\mingw64\bin`.
-- MSVC C17/C++20 toolchain for `src/C/Hamt` and `src/Cpp/Hamt`; the build scripts import it through
-  the repository's `eng/Import-VisualCppEnvironment.ps1` helper when compiling from a plain
-  PowerShell process.
-- `git-filter-repo` usable as `python -m git_filter_repo` when future history work is needed.
-- GHC 9.12 and cabal 3.16 or newer for the Haskell packages under `src/Haskell`.
-- A JVM is optional for Kotlin validation because `src/Kotlin/build.ps1` bootstraps a local JDK 21 and
-  Kotlin compiler under `src/Kotlin/build/tools` when Java 21+ is not already available.
-- Rust toolchain with Cargo for `src/Rust`; the local profile may expose Cargo as
-  `$env:USERPROFILE\.cargo\bin\cargo.exe` even when it is not on `PATH`.
-- opam 2.1+, OCaml 4.14+, and Dune 3.20+ for `src/OCaml`; install the package dependencies from
-  `durable7.opam` and keep both opam and Dune at one job during repository validation.
-- Node.js 24 or newer and npm for `src/TypeScript`; use the committed lockfile with `npm ci`.
+## Contributing
 
-Use `dotnet` directly for C# restore/build operations and `src/CSharp/test.ps1` for unattended
-test validation in this local environment.
+Start with the [onboarding guide](docs/guides/repository-onboarding.md). The short version: a change
+to a public contract belongs in every port that exposes it, documentation is part of the change
+rather than a follow-up, and each affected workspace's gate should pass before the work is called
+done.
 
-## Licensing
+## License
 
-Unless a more specific license file is present, repository-owned content is licensed under MIT-0.
+[MIT No Attribution (MIT-0)](LICENSE) — use it, fork it, ship it; no attribution required.

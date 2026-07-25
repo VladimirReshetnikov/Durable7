@@ -14,7 +14,7 @@ Use the narrowest layer that owns the information:
 
 | Layer | Use for | Examples |
 | --- | --- | --- |
-| Root `README.md` | Repository entry point, canonical agent guidance, top-level build and layout orientation | Workspaces list, local environment, version-control policy |
+| Root `README.md` | Public landing page: what the project is, what it ships, and how to build a port | Project overview, family summary, per-language build entry points, status |
 | [`docs/guides`](README.md) | Procedures and repeatable workflows | Validation commands, agent workflow guidance, documentation maintenance, porting parity |
 | [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog, test-suite map |
 | [`docs/migration`](../migration/README.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
