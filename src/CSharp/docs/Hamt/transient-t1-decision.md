@@ -118,9 +118,9 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet restore DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+dotnet restore Durable7.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+dotnet build Durable7.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 
 # Prevent BenchmarkDotNet child processes from capturing credentials.
@@ -128,8 +128,8 @@ Get-ChildItem Env: | Where-Object {
     $_.Name -match '(?i)(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|CONNECTION|COOKIE|AUTH|IGCCSVC)'
 } | Remove-Item -ErrorAction SilentlyContinue
 
-Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
-$driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+Set-Location benchmarks\Durable7.FingerTree.Benchmarks
+$driver = '.\bin\Release\net10.0\Durable7.FingerTree.Benchmarks.dll'
 $affinityMask = 1
 $persistentEnd = '*TransientLifecycleBenchmarks.PersistentHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512)'
 $directEnd = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512)'
@@ -283,8 +283,8 @@ retained-byte fields. No modeled subtraction is used.
 Validation on the evidence commit used the same single-worker build policy:
 
 - `PersistentHashMapSeparateNodeKernelTests`: 26 passed, 0 failed;
-- complete `Tools.DataStructures.Hamt.Tests`: 190 passed, 0 failed; and
-- full `DataStructures.sln` Release build: 0 warnings, 0 errors.
+- complete `Durable7.Hamt.Tests`: 190 passed, 0 failed; and
+- full `Durable7.sln` Release build: 0 warnings, 0 errors.
 
 The focused suite covers every first-operation verb, no-op deferral, representative identity,
 collisions, lazy token/plan state, production/diagnostic layout parity, base/version isolation,

@@ -12,9 +12,9 @@ if(NOT DEFINED FINGERTREE_EXPECTED_PREFIX OR FINGERTREE_EXPECTED_PREFIX STREQUAL
     message(FATAL_ERROR "The installed consumer requires its expected staging prefix.")
 endif()
 
-find_package(ToolsDataStructuresFingerTree 0.1 CONFIG REQUIRED)
+find_package(Durable7FingerTree 0.1 CONFIG REQUIRED)
 file(REAL_PATH "${FINGERTREE_EXPECTED_PREFIX}" expected_prefix)
-file(REAL_PATH "${ToolsDataStructuresFingerTree_DIR}" resolved_package_dir)
+file(REAL_PATH "${Durable7FingerTree_DIR}" resolved_package_dir)
 file(TO_CMAKE_PATH "${expected_prefix}" expected_prefix)
 file(TO_CMAKE_PATH "${resolved_package_dir}" resolved_package_dir)
 string(FIND "${resolved_package_dir}/" "${expected_prefix}/" prefix_position)
@@ -29,7 +29,7 @@ add_executable(fingertree_installed_consumer main.cpp)
 target_link_libraries(
     fingertree_installed_consumer
     PRIVATE
-        tools::data_structures::finger_tree
+        durable7::finger_tree
 )
 
 enable_testing()

@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use tools_data_structures_fingertree::{
+use durable7_fingertree::{
     CanonicalSortedSet, Interval, IntervalTree, PersistentChunkedBitSet, PersistentIntervalMap,
     PrioritySearchEntry, PrioritySearchQueue, SortedBag, SortedMap, SortedSet, ZipTreeRankPolicy,
 };

@@ -8,7 +8,7 @@ import Control.Exception (ErrorCall, displayException, evaluate, try)
 import Control.Monad (forM_)
 import qualified Data.List as List
 
-import qualified Data.Structures.FingerTree.RangeUpdateSequence as Range
+import qualified Durable7.FingerTree.RangeUpdateSequence as Range
 
 data AffineTag = AffineTag
   { identityWitness :: !Bool
@@ -354,7 +354,7 @@ assertErrorPrefix label result =
   case result of
     Left exception ->
       assertBool (label ++ ": wrong exception")
-        ("Data.Structures.FingerTree.RangeUpdateSequence: length overflow"
+        ("Durable7.FingerTree.RangeUpdateSequence: length overflow"
           `List.isPrefixOf` displayException exception)
     Right _ -> fail (label ++ ": expected length-overflow exception")
 

@@ -62,8 +62,8 @@ receiver for either conflict.
 Throwing/status/result mappings differ, but a conflict never publishes a partial successor:
 
 - C# throws `ArgumentException`; `TryAdd` returns `false` plus the exact receiver.
-- C returns `TDS_HAMT_DUPLICATE_KEY`/`TDS_HAMT_DUPLICATE_VALUE`, or a
-  `tds_hamt_bi_map_conflict` from `try_add`.
+- C returns `D7_HAMT_DUPLICATE_KEY`/`D7_HAMT_DUPLICATE_VALUE`, or a
+  `d7_hamt_bi_map_conflict` from `try_add`.
 - C++ throws `bimap_conflict_error`, or returns `bimap_conflict` from `try_add`.
 - Haskell returns `Either BiMapConflict` and exposes `KeyConflict`/`ValueConflict`.
 - Kotlin throws `BiMapConflictException`, or returns a result carrying `BiMapConflict.KEY`/`VALUE`.
@@ -133,24 +133,24 @@ matrix spanning collisions in both domains; it is not implied by map or set alge
 
 | Language | Public surface | Implementation | Focused tests | Identity/ownership mapping |
 | --- | --- | --- | --- | --- |
-| C# | `PersistentBiMap<TKey, TValue>` implementing `IReadOnlyDictionary<TKey, TValue>` | [`PersistentBiMap.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentBiMap.cs) | [`PersistentBiMapTests.cs`](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/PersistentBiMapTests.cs) | Cached reciprocal reference identity; retained `IEqualityComparer` objects |
-| C | `tds_hamt_bi_map`, iterator, conflict enum, status-returning operations | [`persistent_bi_map.h`](../../src/C/Hamt/include/Tools/DataStructures/Hamt/persistent_bi_map.h), [`persistent_bi_map.c`](../../src/C/Hamt/src/persistent_bi_map.c) | [`persistent_bi_map_tests.c`](../../src/C/Hamt/tests/persistent_bi_map_tests.c) | Explicit clone/destroy handles, borrowed removal representatives, root-sharing double inverse |
-| C++ | `persistent_bi_map<Key, T, KeyHash, KeyEqual, ValueHash, ValueEqual>` | [`persistent_bi_map.hpp`](../../src/Cpp/Hamt/include/Tools/DataStructures/Hamt/persistent_bi_map.hpp) | Bimap groups in [`persistent_hamt_tests.cpp`](../../src/Cpp/Hamt/tests/persistent_hamt_tests.cpp) and the packaged-header consumer | Value semantics over `shared_ptr` roots; stateful policy objects retained by value |
-| Haskell | `Data.Structures.Hamt.BiMap` | [`BiMap.hs`](../../src/Haskell/Hamt/src/Data/Structures/Hamt/BiMap.hs) | [`BiMapTests.hs`](../../src/Haskell/Hamt/test/BiMapTests.hs) | Pure strict two-map value; nested `Maybe` preserves nullable presence |
-| Kotlin | `PersistentBiMap<K, V>` plus conflict/lookup/removal result types | [`PersistentBiMap.kt`](../../src/Kotlin/Hamt/src/tools/datastructures/hamt/PersistentBiMap.kt) | [`PersistentBiMapTests.kt`](../../src/Kotlin/Hamt/test/tools/datastructures/hamt/PersistentBiMapTests.kt) | Synchronized volatile reciprocal cache; retained runtime `HashPolicy` objects |
+| C# | `PersistentBiMap<TKey, TValue>` implementing `IReadOnlyDictionary<TKey, TValue>` | [`PersistentBiMap.cs`](../../src/CSharp/src/Durable7.Hamt/PersistentBiMap.cs) | [`PersistentBiMapTests.cs`](../../src/CSharp/tests/Durable7.Hamt.Tests/PersistentBiMapTests.cs) | Cached reciprocal reference identity; retained `IEqualityComparer` objects |
+| C | `d7_hamt_bi_map`, iterator, conflict enum, status-returning operations | [`persistent_bi_map.h`](../../src/C/Hamt/include/durable7/hamt/persistent_bi_map.h), [`persistent_bi_map.c`](../../src/C/Hamt/src/persistent_bi_map.c) | [`persistent_bi_map_tests.c`](../../src/C/Hamt/tests/persistent_bi_map_tests.c) | Explicit clone/destroy handles, borrowed removal representatives, root-sharing double inverse |
+| C++ | `persistent_bi_map<Key, T, KeyHash, KeyEqual, ValueHash, ValueEqual>` | [`persistent_bi_map.hpp`](../../src/Cpp/Hamt/include/durable7/hamt/persistent_bi_map.hpp) | Bimap groups in [`persistent_hamt_tests.cpp`](../../src/Cpp/Hamt/tests/persistent_hamt_tests.cpp) and the packaged-header consumer | Value semantics over `shared_ptr` roots; stateful policy objects retained by value |
+| Haskell | `Durable7.Hamt.BiMap` | [`BiMap.hs`](../../src/Haskell/Hamt/src/Durable7/Hamt/BiMap.hs) | [`BiMapTests.hs`](../../src/Haskell/Hamt/test/BiMapTests.hs) | Pure strict two-map value; nested `Maybe` preserves nullable presence |
+| Kotlin | `PersistentBiMap<K, V>` plus conflict/lookup/removal result types | [`PersistentBiMap.kt`](../../src/Kotlin/Hamt/src/durable7/hamt/PersistentBiMap.kt) | [`PersistentBiMapTests.kt`](../../src/Kotlin/Hamt/test/durable7/hamt/PersistentBiMapTests.kt) | Synchronized volatile reciprocal cache; retained runtime `HashPolicy` objects |
 | Rust | `PersistentBiMap<K, V, SK, SV>` plus `BiMapConflict` and result carriers | [`bi_map.rs`](../../src/Rust/Hamt/src/bi_map.rs) | [`persistent_bi_map.rs`](../../src/Rust/Hamt/tests/persistent_bi_map.rs) | Safe value semantics over `Arc` roots; lawful `Eq`/`Hash` plus independent `BuildHasher` states |
 | TypeScript | `PersistentBiMap<K, V>`, `BiMapLookup`, add/remove results, `BiMapConflictError` | [`persistent-bi-map.ts`](../../src/TypeScript/src/hamt/persistent-bi-map.ts) | [`persistent-bi-map.test.ts`](../../src/TypeScript/test/hamt/persistent-bi-map.test.ts) | Cached reciprocal object inside one isolate; explicit runtime `HashPolicy` objects |
-| Python | `PersistentBiMap[K, V]`, dataclass lookup/add/remove results, `BiMapConflictError` | [`persistent_bi_map.py`](../../src/Python/src/vladimir_reshetnikov/data_structures/hamt/persistent_bi_map.py) | [`test_persistent_bi_map.py`](../../src/Python/tests/hamt/test_persistent_bi_map.py) | Lock-coordinated reciprocal cache; explicit `HashPolicy`; unhashable defaults remain identity-based |
+| Python | `PersistentBiMap[K, V]`, dataclass lookup/add/remove results, `BiMapConflictError` | [`persistent_bi_map.py`](../../src/Python/src/durable7/hamt/persistent_bi_map.py) | [`test_persistent_bi_map.py`](../../src/Python/tests/hamt/test_persistent_bi_map.py) | Lock-coordinated reciprocal cache; explicit `HashPolicy`; unhashable defaults remain identity-based |
 
 ## Package And Documentation Wiring
 
-- C# compiles the type directly into `Tools.DataStructures.Hamt`; its XML documentation and API-
+- C# compiles the type directly into `Durable7.Hamt`; its XML documentation and API-
   shape tests guard the public surface.
 - C exposes a separate public header and compiles the production source plus focused executable from
   the serialized HAMT build wrapper.
 - C++ includes the bimap from the aggregate public HAMT header and constructs/replaces/inverts it in
   the copied installed-header consumer.
-- Haskell lists `Data.Structures.Hamt.BiMap` in the Cabal package and aggregate facade, and the
+- Haskell lists `Durable7.Hamt.BiMap` in the Cabal package and aggregate facade, and the
   dependency-light HAMT executable invokes `BiMapTests`.
 - Kotlin compiles the source and registered test group through the HAMT workspace launcher.
 - Rust re-exports the module from the crate root and includes its integration test target in both

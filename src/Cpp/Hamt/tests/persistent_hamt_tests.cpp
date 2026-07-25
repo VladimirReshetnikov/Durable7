@@ -1,14 +1,14 @@
-#include <Tools/DataStructures/Hamt/persistent_bi_map.hpp>
-#include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
-#include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
-#include <Tools/DataStructures/Hamt/persistent_hash_multimap.hpp>
-#include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
-#include <Tools/DataStructures/Hamt/persistent_directed_graph.hpp>
-#include <Tools/DataStructures/Hamt/persistent_indexed_map.hpp>
-#include <Tools/DataStructures/Hamt/persistent_map_patch.hpp>
-#include <Tools/DataStructures/Hamt/persistent_relation.hpp>
-#include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/hamt/persistent_bi_map.hpp>
+#include <durable7/hamt/persistent_hash_map.hpp>
+#include <durable7/hamt/persistent_hash_bag.hpp>
+#include <durable7/hamt/persistent_hash_multimap.hpp>
+#include <durable7/hamt/persistent_hash_set.hpp>
+#include <durable7/hamt/persistent_directed_graph.hpp>
+#include <durable7/hamt/persistent_indexed_map.hpp>
+#include <durable7/hamt/persistent_map_patch.hpp>
+#include <durable7/hamt/persistent_relation.hpp>
+#include <durable7/hamt/persistent_int_map.hpp>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <algorithm>
 #include <atomic>
@@ -35,23 +35,23 @@
 #include <utility>
 #include <vector>
 
-using tools::data_structures::hamt::persistent_hamt_node_kind;
-using tools::data_structures::hamt::map_difference_kind;
-using tools::data_structures::hamt::bimap_conflict;
-using tools::data_structures::hamt::bimap_conflict_error;
-using tools::data_structures::hamt::persistent_bi_map;
-using tools::data_structures::hamt::persistent_hash_bag;
-using tools::data_structures::hamt::persistent_hash_map;
-using tools::data_structures::hamt::persistent_hash_multimap;
-using tools::data_structures::hamt::persistent_int_map;
-using tools::data_structures::hamt::persistent_int_set;
-using tools::data_structures::hamt::persistent_long_map;
-using tools::data_structures::hamt::persistent_hash_set;
-using tools::data_structures::hamt::persistent_relation;
-using tools::data_structures::hamt::map_patch_entry;
-using tools::data_structures::hamt::persistent_directed_graph;
-using tools::data_structures::hamt::persistent_indexed_map;
-using tools::data_structures::hamt::persistent_map_patch;
+using durable7::hamt::persistent_hamt_node_kind;
+using durable7::hamt::map_difference_kind;
+using durable7::hamt::bimap_conflict;
+using durable7::hamt::bimap_conflict_error;
+using durable7::hamt::persistent_bi_map;
+using durable7::hamt::persistent_hash_bag;
+using durable7::hamt::persistent_hash_map;
+using durable7::hamt::persistent_hash_multimap;
+using durable7::hamt::persistent_int_map;
+using durable7::hamt::persistent_int_set;
+using durable7::hamt::persistent_long_map;
+using durable7::hamt::persistent_hash_set;
+using durable7::hamt::persistent_relation;
+using durable7::hamt::map_patch_entry;
+using durable7::hamt::persistent_directed_graph;
+using durable7::hamt::persistent_indexed_map;
+using durable7::hamt::persistent_map_patch;
 
 namespace {
 
@@ -1014,7 +1014,7 @@ TEST(PatriciaCursor_OrderedFactoriesBranchingEditsAndPresenceSafety) {
     CHECK_THROWS_AS(end.move_next(), std::logic_error);
     CHECK_THROWS_AS(end.delete_next(), std::logic_error);
 
-    const auto set = tools::data_structures::hamt::persistent_long_set{}
+    const auto set = durable7::hamt::persistent_long_set{}
         .add(INT64_MAX).add(0).add(INT64_MIN);
     const auto set_exact = set.get_cursor_at_item(0);
     CHECK(set_exact.second);
@@ -1028,9 +1028,9 @@ TEST(PatriciaCursor_OrderedFactoriesBranchingEditsAndPresenceSafety) {
     CHECK(set.get_cursor().snapshot().shares_root_with(set));
     CHECK(!set.add(7).shares_root_with(set));
     CHECK(!set.empty());
-    CHECK(tools::data_structures::hamt::persistent_long_set{}.empty());
-    CHECK(tools::data_structures::hamt::persistent_long_set{}
-        .shares_root_with(tools::data_structures::hamt::persistent_long_set{}));
+    CHECK(durable7::hamt::persistent_long_set{}.empty());
+    CHECK(durable7::hamt::persistent_long_set{}
+        .shares_root_with(durable7::hamt::persistent_long_set{}));
     const auto set_inserted = set.get_cursor_lower_bound(-1).insert(-1);
     CHECK_EQ(std::int64_t{-1}, *set_inserted.peek_previous());
     CHECK_EQ(std::int64_t{0}, *set_inserted.peek_next());
@@ -3231,7 +3231,7 @@ TEST(PersistentIndexedMap_StrictAddsRemovalAndBranchesArePersistent) {
 }
 
 TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {
-    using map_type = tools::data_structures::hamt::persistent_int_map<std::string>;
+    using map_type = durable7::hamt::persistent_int_map<std::string>;
 
     const auto left = map_type{}
         .set_item(1, "one")
@@ -3255,7 +3255,7 @@ TEST(PatriciaMap_CachedCountsAndNoOpAlgebraPreserveRoots) {
 } // namespace
 
 int main() {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 

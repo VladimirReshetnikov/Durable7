@@ -46,7 +46,7 @@
 % --- Title ---------------------------------------------------------------
 \title{\textbf{A Persistent Finger-Tree Library for .NET}\\[2mm]
   \large Design Notes: Architecture, Algorithms, Concurrency, and Testing}
-\author{Tools.DataStructures.FingerTree\\ \texttt{C:/DataStructures/FingerTree}}
+\author{Durable7.FingerTree\\ \texttt{C:/DataStructures/FingerTree}}
 \date{Created (UTC): 2026-06-13\\[1mm]
   Repository HEAD: \texttt{c05c26c97c0074a3fb581157b57bfad439e79729}}
 
@@ -54,7 +54,7 @@
 \maketitle
 
 \begin{abstract}
-This document is a single, navigable tour of \texttt{Tools.DataStructures.FingerTree}: a fully
+This document is a single, navigable tour of \texttt{Durable7.FingerTree}: a fully
 persistent (immutable, structurally sharing) data-structure library for .NET~10 built on finger trees.
 It explains the two engine cores --- a purpose-tuned catenable deque and a general monoid-measured
 tree --- the lazy-memoized spine that makes their amortized bounds survive branching persistence in a
@@ -76,7 +76,7 @@ maintainer.
 \section{Orientation}
 \label{sec:orientation}
 
-The library lives in one project, \texttt{Tools.DataStructures.FingerTree} (namespace identical),
+The library lives in one project, \texttt{Durable7.FingerTree} (namespace identical),
 targeting .NET~10 with C\# preview features (static abstract interface members in particular). Every
 public type is \textbf{immutable and persistent}: an operation never mutates its receiver; it returns a
 new version that shares all unchanged structure with the old one. Old versions remain valid forever,
@@ -791,9 +791,9 @@ grapheme addressing, newline-style detection, and the fluent builder. All three 
 cannot silently drift from the library. Run any with:
 
 \begin{lstlisting}[language={}]
-dotnet run --project samples/Tools.DataStructures.FingerTree.Tour      -c Release
-dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase  -c Release
-dotnet run --project samples/Tools.DataStructures.FingerTree.Editor    -c Release
+dotnet run --project samples/Durable7.FingerTree.Tour      -c Release
+dotnet run --project samples/Durable7.FingerTree.Showcase  -c Release
+dotnet run --project samples/Durable7.FingerTree.Editor    -c Release
 \end{lstlisting}
 
 \clearpage
@@ -870,13 +870,13 @@ readable minimal programs.
 \label{sec:map}
 
 \begin{itemize}[leftmargin=1.4em, itemsep=1pt]
-  \item \texttt{src/Tools.DataStructures.FingerTree/} --- the library. \cs{FingerTreeDeque} and its
+  \item \texttt{src/Durable7.FingerTree/} --- the library. \cs{FingerTreeDeque} and its
     \texttt{Internal/} core (\cs{Tree}, \cs{Digit}, \cs{Node}, \cs{MiddleTree}, \cs{TreeOperations});
     \cs{FingerTree} and \texttt{Internal/Measured/}; the measure framework (\cs{Measures},
     \cs{BuiltInMeasures}, \cs{SumMeasure}, \cs{ProductMeasure}, \cs{Comparisons}); the predicate API
     (\cs{MeasurePredicate}, \cs{Internal/MeasurePredicates}); the collections; and the rope family
     (\cs{Rope}, \cs{MeasuredRope}, \cs{RopeText}).
-  \item \texttt{tests/Tools.DataStructures.FingerTree.Tests/} --- the three-tier xUnit suite plus the
+  \item \texttt{tests/Durable7.FingerTree.Tests/} --- the three-tier xUnit suite plus the
     tearable concurrency stress tests.
   \item \texttt{benchmarks/} --- the BenchmarkDotNet harness; curated results in
     \texttt{docs/benchmarks.md}.

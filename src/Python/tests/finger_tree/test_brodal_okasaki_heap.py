@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.finger_tree.brodal_okasaki_heap import (
+from durable7.finger_tree.brodal_okasaki_heap import (
     BrodalOkasakiHeap,
 )
 

@@ -75,7 +75,7 @@ is noted.
 
 The remediation added the canonicalization validators the first review asked for, but in Kotlin the test that
 drives them cannot build the shapes they police. `champCanonicalizationAndDiff`
-([HamtTests.kt](../../src/Kotlin/Hamt/test/tools/datastructures/hamt/HamtTests.kt)) populated the map with
+([HamtTests.kt](../../src/Kotlin/Hamt/test/durable7/hamt/HamtTests.kt)) populated the map with
 dense integer keys `0..511` under identity hashing (`DefaultHashPolicy.hash = key.hashCode()`, no spread).
 Such keys form a maximally dense two-level trie — the root branches on bits 0–4 into 32 children, each a
 16-payload node on bits 5–8 — which structurally cannot contain a unary bridge, a collision node, a
@@ -112,7 +112,7 @@ returns a recoverable `FT_STATUS_OVERFLOW`. An over-height branch is unreachable
 commit-introduced failure-model divergence. Fixed: the `branch()` check is now a `debug_assert!` (keeping the
 debug-time invariant) so release builds match the reference; `validate_node` still hard-rejects. Also removed
 a dead duplicate root-height check in `validate_structure` (`validate_node` already rejects and returns via
-`?` first). Validated: `cargo test -p tools-data-structures-fingertree --lib rrb` 12/12 (including the
+`?` first). Validated: `cargo test -p durable7-fingertree --lib rrb` 12/12 (including the
 over-height rejection test), full crate test + clippy warning-clean.
 
 ### Historical findings for follow-up (resolved)
@@ -202,7 +202,7 @@ The cores the first review found clean were independently re-derived, not assume
 
 - Base merged from `origin/main` (`2fb11c0..0ae95fa`), fast-forward, no conflicts.
 - C#: `dotnet build` clean (0 warnings); `test.ps1` exit 0 (Numerics 319 + Hamt + Tungsten + FingerTree).
-- Rust RRB fix (`4ef23a6`): `cargo test -p tools-data-structures-fingertree --lib rrb` 12/12; full crate test
+- Rust RRB fix (`4ef23a6`): `cargo test -p durable7-fingertree --lib rrb` 12/12; full crate test
   + clippy warning-clean.
 - Kotlin CHAMP test-coverage fix: `build.ps1` compiled and ran all three Kotlin workspaces' suites,
   exit 0, every test passing — including the reworked `champCanonicalizationAndDiff` (registered in the

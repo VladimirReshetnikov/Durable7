@@ -3,7 +3,7 @@
 #include <atomic>
 #include <cstddef>
 
-namespace tools::data_structures::finger_tree::tests {
+namespace durable7::finger_tree::tests {
 
 class allocation_counter final {
 public:
@@ -27,4 +27,4 @@ public:
     [[nodiscard]] std::size_t bytes_allocated() const noexcept;
 };
 
-} // namespace tools::data_structures::finger_tree::tests
+} // namespace durable7::finger_tree::tests

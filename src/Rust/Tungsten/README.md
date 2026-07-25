@@ -5,7 +5,7 @@
 - Audience: Maintainers and AI agents working on the Rust Tungsten-collections port
 - Scope: Rust crate under `src/Rust/Tungsten`
 
-`tools-data-structures-tungsten` ports the Tungsten `List` and `Association` collection family to safe
+`durable7-tungsten` ports the Tungsten `List` and `Association` collection family to safe
 Rust:
 
 This is an application-specific leaf port. It may consume the Rust HAMT and FingerTree crates, but

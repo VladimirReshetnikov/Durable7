@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.hamt.hash_policy import HashPolicy, create_hash_policy
-from vladimir_reshetnikov.data_structures.tungsten import (
+from durable7.hamt.hash_policy import HashPolicy, create_hash_policy
+from durable7.tungsten import (
     PersistentAssociation,
     PersistentList,
 )

@@ -1,4 +1,4 @@
-use tools_data_structures_hamt::{MapPatchEntry, PersistentHashMap, PersistentMapPatch};
+use durable7_hamt::{MapPatchEntry, PersistentHashMap, PersistentMapPatch};
 
 #[test]
 fn between_and_apply_transform_source_exactly() {

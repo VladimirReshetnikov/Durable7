@@ -20,7 +20,7 @@ Use the narrowest layer that owns the information:
 | [`docs/migration`](../migration/README.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
 | Workspace `README.md` | Workspace orientation and local entry points | Purpose, layout, primary build/test command |
 | Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/docs/FingerTree/api-specification.md` |
-| Workspace `tests/` README | Local test runner shape, test-file grouping, direct executable path, filters, stress knobs | `src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md` |
+| Workspace `tests/` README | Local test runner shape, test-file grouping, direct executable path, filters, stress knobs | `src/CSharp/tests/Durable7.FingerTree.Tests/README.md` |
 | Workspace `samples/` or `benchmarks/` README | Runnable sample programs, expected transcript markers, benchmark workloads, output shape | `src/C/FingerTree/samples/README.md` |
 | Workspace `docs/external/` | External study material and source snapshots | Papers, source snapshots, article copies |
 

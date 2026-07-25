@@ -3,8 +3,8 @@
 - Status: Informational
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
-- Audience: Maintainers and implementers working on `Tools.Numerics`
-- Scope: Index of local specifications, guidance, validation, and design notes for `src/CSharp/src/Tools.Numerics`
+- Audience: Maintainers and implementers working on `Durable7.Numerics`
+- Scope: Index of local specifications, guidance, validation, and design notes for `src/CSharp/src/Durable7.Numerics`
 
 ## Current Documents
 
@@ -14,4 +14,4 @@
 - [Bitness Code Generation Readiness and Design](bitness-code-generation-readiness-and-design.md) assesses generator readiness for future wider fixed-width integer families.
 - [Integral Shared-Fragment Analysis](integral-shared-fragment-analysis.md) analyzes common declaration and implementation fragments across the integer family.
 - [Int256 Refactoring Analysis](int256-c0f786-refactoring-analysis.md) preserves a commit-scoped historical review of the `Int256` simplification pass.
-- [Tests README](../../tests/Tools.Numerics.Tests/README.md) maps the xUnit test project and bit-width directory layout.
+- [Tests README](../../tests/Durable7.Numerics.Tests/README.md) maps the xUnit test project and bit-width directory layout.

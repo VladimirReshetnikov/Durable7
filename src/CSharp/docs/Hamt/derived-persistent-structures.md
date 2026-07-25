@@ -3,7 +3,7 @@
 - Status: Implemented normative contract
 - Created (UTC): 2026-07-17T00:00:00Z
 - Repository HEAD: `0bee5b4e50d0a21d43af88efbce5df6d34516bf9`
-- Audience: Consumers and maintainers of `Tools.DataStructures.Hamt`
+- Audience: Consumers and maintainers of `Durable7.Hamt`
 - Scope: Map patches, simple directed graphs, and single-secondary-index persistent maps
 
 This document specifies three immutable facades built from the repository-general CHAMP family.

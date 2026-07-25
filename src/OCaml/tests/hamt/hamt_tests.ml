@@ -1,4 +1,4 @@
-open Tools_data_structures
+open Durable7
 open Hamt
 
 let int_policy () = Common.Hash_policy.create ~hash:(fun value -> value) ~equal:Int.equal

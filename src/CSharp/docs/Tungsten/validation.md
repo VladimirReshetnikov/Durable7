@@ -2,7 +2,7 @@
 
 - Created (UTC): 2026-07-07T15:05:40Z
 - Repository HEAD: 754f2e474caf2419bfabd5f88565341ddadbf449
-- Audience: Maintainers validating changes to `Tools.DataStructures.Tungsten`
+- Audience: Maintainers validating changes to `Durable7.Tungsten`
 - Scope: Build and test commands, coverage map, and validation expectations
 
 This validation guide governs the application-specific Tungsten family only. General collections
@@ -14,10 +14,10 @@ contract and independent expected model.
 From `src/CSharp`:
 
 ```powershell
-dotnet build .\DataStructures.sln --disable-build-servers -m:1 -nr:false `
+dotnet build .\Durable7.sln --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false # XML-documentation warnings-as-errors gate
 .\test.ps1                            # full workspace gate
-.\test.ps1 -Project .\tests\Tools.DataStructures.Tungsten.Tests\Tools.DataStructures.Tungsten.Tests.csproj
+.\test.ps1 -Project .\tests\Durable7.Tungsten.Tests\Durable7.Tungsten.Tests.csproj
 ```
 
 The test launcher establishes the inherited Windows headless error mode before starting `dotnet`; the shared
@@ -32,7 +32,7 @@ compiles with warnings fails the gate.
 
 ## What The Suite Covers
 
-See the [tests README](../../tests/Tools.DataStructures.Tungsten.Tests/README.md) for the source
+See the [tests README](../../tests/Durable7.Tungsten.Tests/README.md) for the source
 map. The important gates:
 
 - **Kernel-verified ordering semantics.** Every rule in the

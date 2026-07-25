@@ -40,8 +40,8 @@ that reject null are omitted from that lane instead of receiving a sentinel.
 Run the untimed verifier before collecting any performance artifact:
 
 ```powershell
-Set-Location C:\Users\vresh\.codex\worktrees\5cd5\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
-$driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+Set-Location C:\Users\vresh\.codex\worktrees\5cd5\DataStructures\src\CSharp\benchmarks\Durable7.FingerTree.Benchmarks
+$driver = '.\bin\Release\net10.0\Durable7.FingerTree.Benchmarks.dll'
 dotnet $driver --verify-axis2-frozen-layouts
 ```
 

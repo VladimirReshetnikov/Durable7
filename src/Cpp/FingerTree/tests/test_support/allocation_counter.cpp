@@ -8,7 +8,7 @@
 #include <malloc.h>
 #endif
 
-namespace tools::data_structures::finger_tree::tests {
+namespace durable7::finger_tree::tests {
 namespace {
 
 std::atomic<bool> g_enabled = false;
@@ -86,7 +86,7 @@ std::size_t allocation_counting_scope::bytes_allocated() const noexcept
     return allocation_counter::bytes_allocated();
 }
 
-} // namespace tools::data_structures::finger_tree::tests
+} // namespace durable7::finger_tree::tests
 
 #ifndef FINGERTREE_DISABLE_ALLOCATION_TRACKING
 namespace {
@@ -100,7 +100,7 @@ namespace {
 {
     const auto actual_size = actual_allocation_size(size);
     if (void* const memory = std::malloc(actual_size)) {
-        tools::data_structures::finger_tree::tests::record_test_allocation(actual_size);
+        durable7::finger_tree::tests::record_test_allocation(actual_size);
         return memory;
     }
 
@@ -110,7 +110,7 @@ namespace {
 void deallocate_unaligned(void* const memory) noexcept
 {
     if (memory != nullptr) {
-        tools::data_structures::finger_tree::tests::record_test_deallocation();
+        durable7::finger_tree::tests::record_test_deallocation();
     }
 
     std::free(memory);
@@ -135,7 +135,7 @@ void deallocate_unaligned(void* const memory) noexcept
     }
 #endif
     if (memory != nullptr) {
-        tools::data_structures::finger_tree::tests::record_test_allocation(actual_size);
+        durable7::finger_tree::tests::record_test_allocation(actual_size);
     }
 
     return memory;
@@ -144,7 +144,7 @@ void deallocate_unaligned(void* const memory) noexcept
 void deallocate_aligned(void* const memory) noexcept
 {
     if (memory != nullptr) {
-        tools::data_structures::finger_tree::tests::record_test_deallocation();
+        durable7::finger_tree::tests::record_test_deallocation();
     }
 
 #ifdef _WIN32

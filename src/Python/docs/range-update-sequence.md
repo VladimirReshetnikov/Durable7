@@ -11,7 +11,7 @@ document records the Python runtime mapping and public names.
 
 ## Public surface
 
-The `vladimir_reshetnikov.data_structures` root and `finger_tree` package export:
+The `durable7` root and `finger_tree` package export:
 
 - `RangeUpdateAlgebra[T, M, U]`, a structural runtime policy protocol;
 - `create_range_update_algebra(...)`, the functional policy adapter;

@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.28)
 
 project(
-    ToolsDataStructuresTungstenCpp
+    Durable7TungstenCpp
     VERSION 0.1.0
-    DESCRIPTION "C++ port of Tools.DataStructures.Tungsten"
+    DESCRIPTION "C++ port of Durable7.Tungsten"
     LANGUAGES CXX
 )
 
@@ -11,11 +11,11 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/../../../eng/HeadlessTest.cmake")
 
 option(TUNGSTEN_BUILD_TESTS "Build the C++ Tungsten collection tests." ON)
 
-add_library(tools_data_structures_tungsten INTERFACE)
-add_library(tools::data_structures::tungsten ALIAS tools_data_structures_tungsten)
+add_library(durable7_tungsten INTERFACE)
+add_library(durable7::tungsten ALIAS durable7_tungsten)
 
 target_include_directories(
-    tools_data_structures_tungsten
+    durable7_tungsten
     INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../FingerTree/include>
@@ -23,11 +23,11 @@ target_include_directories(
         $<INSTALL_INTERFACE:include>
 )
 
-target_compile_features(tools_data_structures_tungsten INTERFACE cxx_std_23)
+target_compile_features(durable7_tungsten INTERFACE cxx_std_23)
 
 if(MSVC)
     target_compile_options(
-        tools_data_structures_tungsten
+        durable7_tungsten
         INTERFACE
             /std:c++latest
             /permissive-

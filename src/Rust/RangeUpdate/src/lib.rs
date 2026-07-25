@@ -7,7 +7,7 @@ use std::iter::FusedIterator;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-pub use tools_data_structures_fingertree::MeasurePolicy;
+pub use durable7_fingertree::MeasurePolicy;
 
 /// The largest sequence length, matching the cross-port signed-32-bit count contract.
 pub const MAXIMUM_COUNT: usize = i32::MAX as usize;

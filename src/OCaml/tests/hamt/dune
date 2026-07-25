@@ -1,6 +1,6 @@
 (test
  (name hamt_tests)
- (libraries tools-data-structures alcotest qcheck)
+ (libraries durable7 alcotest qcheck)
  (flags
   (:standard
    -safe-string

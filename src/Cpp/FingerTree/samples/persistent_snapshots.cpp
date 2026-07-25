@@ -1,6 +1,6 @@
 #include "sample_runs.hpp"
 
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 
 #include <atomic>
 #include <cstddef>
@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace tools::data_structures::finger_tree::samples::persistent_snapshots {
+namespace durable7::finger_tree::samples::persistent_snapshots {
 namespace {
 
 [[nodiscard]] std::string quoted(const std::string_view text)
@@ -126,4 +126,4 @@ void run(std::ostream& output)
     output << "Done. Every retained or published version is immutable and structurally shared.\n";
 }
 
-} // namespace tools::data_structures::finger_tree::samples::persistent_snapshots
+} // namespace durable7::finger_tree::samples::persistent_snapshots

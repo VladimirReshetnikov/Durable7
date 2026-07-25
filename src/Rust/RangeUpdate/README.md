@@ -5,7 +5,7 @@
 - Audience: Consumers, maintainers, reviewers, and sibling-language port authors
 - Scope: Neutral Rust range-update algebra, persistent sequence, contracts, and validation entry point
 
-`tools-data-structures-range-update` is the safe-Rust port of the repository's benchmark-independent
+`durable7-range-update` is the safe-Rust port of the repository's benchmark-independent
 range-update sequence. `RangeUpdateSequence<T, A>` combines indexed persistent edits, ordered cached
 measures, and lazy algebraic transforms over contiguous ranges. It is a neutral general-purpose
 crate: it extends the public FingerTree crate's `MeasurePolicy<T>` vocabulary, owns its own

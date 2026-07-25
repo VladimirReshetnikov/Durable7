@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from vladimir_reshetnikov.data_structures import PersistentChunkedBitSet
+from durable7 import PersistentChunkedBitSet
 
 
 def test_construction_sorts_deduplicates_and_crosses_word_boundaries() -> None:

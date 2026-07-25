@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-03T04:37:54Z
 - Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
 - Audience: Maintainers and AI agents reviewing the Haskell persistent HAMT port
-- Scope: `tools-data-structures-hamt` package
+- Scope: `durable7-hamt` package
 
 This package ports the repository's persistent map cores to Haskell. It provides persistent
 `HashMap`, `HashSet`, `HashBag`, `HashMultimap`, and `Relation` values with a canonical 32-way CHAMP trie, strict split data/node maps,
@@ -26,7 +26,7 @@ stored representatives through idiomatic pure `Maybe`/`Either` results.
 
 ## One-Descent Map Factories
 
-`Data.Structures.Hamt.HashMap` exposes the following persistent point combinators:
+`Durable7.Hamt.HashMap` exposes the following persistent point combinators:
 
 - `getOrAdd key addFactory map`;
 - `addOrUpdate key addFactory updateFactory map`;
@@ -52,7 +52,7 @@ are semantic operation-count guarantees, not timing or benchmark claims.
 
 ## Persistent Hash Bag
 
-`Data.Structures.Hamt.HashBag` is an immutable unordered multiset backed by
+`Durable7.Hamt.HashBag` is an immutable unordered multiset backed by
 `HashMap k Int32`. It stores one positive multiplicity and one retained representative per
 `HashPolicy` equivalence class. `distinctCount :: Int` reports the number of classes and
 `totalCount :: Int64` reports expanded occurrences; the module deliberately exports no ambiguous
@@ -128,7 +128,7 @@ performance claim.
 
 ## Persistent Bidirectional Map
 
-`Data.Structures.Hamt.BiMap` composes forward `HashMap k v` and inverse `HashMap v k` values into a
+`Durable7.Hamt.BiMap` composes forward `HashMap k v` and inverse `HashMap v k` values into a
 strict immutable bijection. `emptyWith` retains independent `HashPolicy` values for the key and
 value domains. `add` returns `Either BiMapConflict`, while `tryAdd` returns the exact two-root source
 on conflict and gives `KeyConflict` precedence when both classes are occupied. `set` adds a missing
@@ -145,7 +145,7 @@ sources remain untouched if hashing, equality, or allocation raises an exception
 deliberately has no algebra, transient, builder, or displacing force-put mode and stores roughly
 two map entries per logical pair.
 
-`Data.Structures.Hamt.Transient` adds one-way `MapTransient` and `SetTransient` editing sessions in
+`Durable7.Hamt.Transient` adds one-way `MapTransient` and `SetTransient` editing sessions in
 `IO`. Creating a session adopts an immutable source by reference, and `persistMap` / `persistSet`
 publish the current value by reference and consume the session. Clean and logical-no-op sessions
 retain the exact source root; successful edits preserve the hash policy, first equivalent key/item
@@ -159,8 +159,8 @@ allocation behavior; only adoption, clear, and terminal publication are O(1). No
 speedup claim is attached to the API. A future internal mutable-node engine may optimize the same
 surface after separately reviewed evidence without changing its observable contract.
 
-`Data.Structures.Hamt.MerkleEncoding`, `Data.Structures.Hamt.MerkleSearchTree`, and
-`Data.Structures.Hamt.MerklePersistence` provide the policy-bound canonical Merkle search tree.
+`Durable7.Hamt.MerkleEncoding`, `Durable7.Hamt.MerkleSearchTree`, and
+`Durable7.Hamt.MerklePersistence` provide the policy-bound canonical Merkle search tree.
 The pure SHA-256 implementation, strict versioned codecs, domain/key framing, empty digest,
 complete `MST2` blocks, and `MSP2` proof queries match C#, Rust, and Kotlin exactly. The immutable
 wide tree supports stable first-key/last-value bulk construction, path-copy updates, ordered
@@ -205,7 +205,7 @@ documented caller precondition because Haskell functions have no semantic equali
 functions; pointer identity is used only as a safe positive optimization, not as a compatibility
 verdict.
 
-`Data.Structures.Hamt.Patricia` adds `IntMap32`/`IntSet32` and `IntMap64`/`IntSet64`. The shared
+`Durable7.Hamt.Patricia` adds `IntMap32`/`IntSet32` and `IntMap64`/`IntSet64`. The shared
 strict big-endian Patricia core sign-flips keys for ascending signed traversal, compresses common
 prefixes at the highest differing bit, and implements prefix-aware right-biased union,
 left-valued intersection, and difference. Every branch caches its subtree cardinality, so a
@@ -219,7 +219,7 @@ identity must compare first.
 
 ## Patricia Ordered Cursors
 
-`Data.Structures.Hamt.Patricia` also exposes an immutable ordered gap cursor per family:
+`Durable7.Hamt.Patricia` also exposes an immutable ordered gap cursor per family:
 `PatriciaCursor k v` over `IntMap32`/`IntMap64` and `PatriciaSetCursor k` over `IntSet32`/`IntSet64`.
 Both are opaque snapshot-plus-rank values. A cursor retains one exact map or set version plus a
 validated rank in `0 .. size` and denotes the gap between the entries before and at that rank. The

@@ -32,11 +32,11 @@ entry points for unattended validation.
 
 | Workspace | Primary command | Local validation guide | Test map | Coverage |
 | --- | --- | --- | --- | --- |
-| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Numerics/validation.md) | [Tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
-| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, one-descent map-factory, hash-bag, and strict-bimap contracts, xUnit tests, CsCheck model tests |
-| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
-| [C# Ordered](../../src/CSharp/docs/Ordered/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Ordered/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) | Neutral ordered-set project, independent HAMT/FingerTree composition, dependency-boundary audit, examples, invariants, comparer-aware CsCheck histories, and concurrent retained-version reads |
-| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | [Tests](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
+| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Numerics/validation.md) | [Tests](../../src/CSharp/tests/Durable7.Numerics.Tests/README.md) | .NET library build, XML-doc warning gate, xUnit wide/sparse-integer behavior tests, declaration parity guardrails |
+| [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Durable7.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, one-descent map-factory, hash-bag, and strict-bimap contracts, xUnit tests, CsCheck model tests |
+| [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Durable7.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
+| [C# Ordered](../../src/CSharp/docs/Ordered/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Ordered/validation.md) | [Tests](../../src/CSharp/tests/Durable7.Ordered.Tests/README.md) | Neutral ordered-set project, independent HAMT/FingerTree composition, dependency-boundary audit, examples, invariants, comparer-aware CsCheck histories, and concurrent retained-version reads |
+| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | [Tests](../../src/CSharp/tests/Durable7.Tungsten.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
 | [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/C` | [README](../../src/C/Tungsten/README.md) | [Tests](../../src/C/Tungsten/tests/tungsten_c_tests.c) | C17 MSVC Debug/Release CTest executable, list examples, Association ordering rules, custom policies, relabel stress, generated histories |
 | [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/Cpp` | [README](../../src/Cpp/Tungsten/README.md) | [Tests](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) | C++23 CTest executable, examples, policy tests, relabel stress, generated histories |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT/bag/bimap/Patricia/Merkle tests and native failpoints |
@@ -48,7 +48,7 @@ entry points for unattended validation.
 | [`src/Haskell`](../../src/Haskell/README.md) | `.\test.ps1` from `src/Haskell` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | Single-job GHC/cabal build, dependency-light HAMT/hash-bag/bimap, FingerTree positional/measured/text-cursor, and Tungsten executable tests |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM positional/measured/text cursor gap/model/ordered-measure/search/failure/UTF-16/overflow gates plus measured-tree tests across deque, reversible deque, sorted, cached priority, max-high interval, rope/text, AVL/share invariants, and generated/large stress |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `.\test.ps1 -Workspace FingerTree` from `src/Rust` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate with positional/measured/text cursor gap, measure, search, model, and overflow gates plus structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
-| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/tools/datastructures/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
+| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/durable7/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `.\test.ps1 -Workspace Tungsten` from `src/Rust` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
 | [`src/OCaml`](../../src/OCaml/README.md) | `opam exec -- dune build -j 1 @check @fmt @doc` then `opam exec -- dune runtest -j 1 --force` from `src/OCaml` | [Validation](../../src/OCaml/docs/validation.md) | [Tests](../../src/OCaml/tests/README.md) | Qualified package build with strict warnings, ocamlformat and odoc gates, plus 49 Alcotest/QCheck cases spanning every numerics and collection family |
 | [`src/TypeScript`](../../src/TypeScript/README.md) | `.\test.ps1` or `npm run validate` from `src/TypeScript` | [Validation](../../src/TypeScript/docs/validation.md) | [Tests](../../src/TypeScript/test/README.md) | Strict declaration checking; Vitest/fast-check coverage for one-descent HAMT factories, construction-only bulk building, hash bags, strict bimaps, complete transient-set relations, presence-safe rope-cursor peeks, and the neutral ordered set; exact `MST2`/`MSP2` vectors; ESM/declaration build; package surface |
@@ -95,15 +95,15 @@ project builds, and compiler sharing plus runsettings that limit vstest/xUnit to
 validation guides define family-specific coverage and optional stress/benchmark boundaries:
 
 - [C# Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
-- [C# Numerics tests](../../src/CSharp/tests/Tools.Numerics.Tests/README.md)
+- [C# Numerics tests](../../src/CSharp/tests/Durable7.Numerics.Tests/README.md)
 - [C# HAMT validation](../../src/CSharp/docs/Hamt/validation.md)
-- [C# HAMT tests](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md)
+- [C# HAMT tests](../../src/CSharp/tests/Durable7.Hamt.Tests/README.md)
 - [C# FingerTree validation](../../src/CSharp/docs/FingerTree/validation.md)
-- [C# FingerTree tests](../../src/CSharp/tests/Tools.DataStructures.FingerTree.Tests/README.md)
+- [C# FingerTree tests](../../src/CSharp/tests/Durable7.FingerTree.Tests/README.md)
 - [C# Ordered validation](../../src/CSharp/docs/Ordered/validation.md)
-- [C# Ordered tests](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md)
+- [C# Ordered tests](../../src/CSharp/tests/Durable7.Ordered.Tests/README.md)
 - [C# Tungsten collections validation](../../src/CSharp/docs/Tungsten/validation.md)
-- [C# Tungsten collections tests](../../src/CSharp/tests/Tools.DataStructures.Tungsten.Tests/README.md)
+- [C# Tungsten collections tests](../../src/CSharp/tests/Durable7.Tungsten.Tests/README.md)
 
 ## TypeScript Workspace
 
@@ -346,7 +346,7 @@ Benchmarks are not part of routine validation. Run them when changing complexity
 performance claims, or benchmark documentation.
 
 ```powershell
-cd C:\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+cd C:\DataStructures\src\CSharp\benchmarks\Durable7.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short
 
 cd C:\DataStructures\src\Cpp\FingerTree

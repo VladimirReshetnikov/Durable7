@@ -167,11 +167,11 @@ $env:MSBUILDDISABLENODEREUSE = '1'
 $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 
-dotnet restore DataStructures.sln --disable-parallel
-dotnet build DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 `
+dotnet restore Durable7.sln --disable-parallel
+dotnet build Durable7.sln -c Release --no-restore --disable-build-servers -m:1 `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 
-Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+Set-Location benchmarks\Durable7.FingerTree.Benchmarks
 dotnet run -c Release --no-build -- `
     --filter '*RopeCursorBenchmarks*' --job short `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-c0\short-main'
@@ -187,7 +187,7 @@ The decision-critical comparison uses the default BenchmarkDotNet job, and the c
 collector executes separately from all timed methods:
 
 ```powershell
-Set-Location C:\Users\vresh\.codex\worktrees\5cd5\DataStructures\src\CSharp\benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+Set-Location C:\Users\vresh\.codex\worktrees\5cd5\DataStructures\src\CSharp\benchmarks\Durable7.FingerTree.Benchmarks
 $env:DOTNET_CLI_DO_NOT_USE_MSBUILD_SERVER = '1'
 $env:DOTNET_CLI_USE_MSBUILD_SERVER = '0'
 $env:MSBUILDDISABLENODEREUSE = '1'
@@ -217,11 +217,11 @@ processes. These runs retain the same single-worker environment:
 
 | Evidence | Required location | Current state |
 | --- | --- | --- |
-| Replacement and bilateral-carry tuning | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/short-*` | Complete |
-| Full selected-point comparison | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/full-gate/` | Complete |
-| Five independent control runs | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/noise-rope-*` | Complete |
-| Untimed counters and adversarial branch traces | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/counters/` | Complete |
-| Retained-version graph measurements | `src/CSharp/benchmarks/Tools.DataStructures.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/retained/` | Complete |
+| Replacement and bilateral-carry tuning | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/short-*` | Complete |
+| Full selected-point comparison | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/full-gate/` | Complete |
+| Five independent control runs | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/noise-rope-*` | Complete |
+| Untimed counters and adversarial branch traces | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/counters/` | Complete |
+| Retained-version graph measurements | `src/CSharp/benchmarks/Durable7.FingerTree.Benchmarks/BenchmarkDotNet.Artifacts/axis2-c0/retained/` | Complete |
 | Curated tables and environment summary | `src/CSharp/docs/FingerTree/benchmarks.md`, section `Axis 2 C0 rope cursor` | Complete |
 | Final select/escalate/defer rationale | This document | Complete — select struct cursor |
 

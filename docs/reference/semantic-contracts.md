@@ -52,7 +52,7 @@ behavior change through sibling workspaces.
 
 ## Fixed-Width Integer Numerics
 
-`Tools.Numerics` in C# is the semantic reference; OCaml, TypeScript, and Python expose sibling ports
+`Durable7.Numerics` in C# is the semantic reference; OCaml, TypeScript, and Python expose sibling ports
 of its fixed-width signed and unsigned integers plus sparse integer helpers. OCaml uses Zarith,
 TypeScript uses `bigint`, and Python uses arbitrary-precision `int`, behind explicit fixed-width
 normalization and validation.
@@ -78,7 +78,7 @@ Shared obligations:
 Primary evidence:
 
 - [Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
-- [Numerics tests README](../../src/CSharp/tests/Tools.Numerics.Tests/README.md)
+- [Numerics tests README](../../src/CSharp/tests/Durable7.Numerics.Tests/README.md)
 - [Wide-integer maintainer guidance](../../src/CSharp/docs/Numerics/wide-integer-maintainer-guidance.md)
 - [OCaml API notes](../../src/OCaml/docs/api-notes.md) and [validation](../../src/OCaml/docs/validation.md)
 - [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and [validation](../../src/TypeScript/docs/validation.md)
@@ -93,7 +93,7 @@ Public surfaces:
 | Language | Map | Set | Policy shape |
 | --- | --- | --- | --- |
 | C# | `PersistentHashMap<TKey, TValue>` and its nested `Transient` | `PersistentHashSet<T>` and its nested `Transient` | `IEqualityComparer<T>` |
-| C | `tds_hamt_map` and `tds_hamt_map_transient` | `tds_hamt_set` and `tds_hamt_set_transient` | callback tables and context pointers |
+| C | `d7_hamt_map` and `d7_hamt_map_transient` | `d7_hamt_set` and `d7_hamt_set_transient` | callback tables and context pointers |
 | C++ | `persistent_hash_map<Key, T, Hash, KeyEqual, ValueEqual>` and nested `transient` | `persistent_hash_set<T, Hash, KeyEqual>` and nested `transient` | template policy objects |
 | Haskell | `HashMap k v` and `MapTransient k v` | `HashSet a` and `SetTransient a` | `Hashable`, `Eq`, optional `HashPolicy` |
 | Kotlin | `PersistentHashMap<K, V>` and nested `Transient<K, V>` | `PersistentHashSet<T>` and nested `Transient<T>` | runtime `HashPolicy<K>` |
@@ -283,7 +283,7 @@ advantage is claimed:
 
 | Language | Lifecycle and failure shape |
 | --- | --- |
-| C | `tds_hamt_map_transient` / `tds_hamt_set_transient` use explicit clone/destroy handles over one ref-counted state. Clones are lifecycle aliases: one successful publication consumes them all. Operations report `TDS_HAMT_TRANSIENT_CONSUMED` or `TDS_HAMT_TRANSIENT_MODIFIED` as appropriate; failed edits and relation queries preserve session/output atomicity. |
+| C | `d7_hamt_map_transient` / `d7_hamt_set_transient` use explicit clone/destroy handles over one ref-counted state. Clones are lifecycle aliases: one successful publication consumes them all. Operations report `D7_HAMT_TRANSIENT_CONSUMED` or `D7_HAMT_TRANSIENT_MODIFIED` as appropriate; failed edits and relation queries preserve session/output atomicity. |
 | C++ | Nested sessions are movable but not copyable and publish only through `std::move(session).persist()`. Generation-bound iterators reject changed or consumed sessions. A throwing custom policy move terminally invalidates the source and, for assignment, the destination; publication has no retry/content-preservation guarantee after a throwing policy move. Nothrow-movable policies avoid both exceptional boundaries. |
 | Haskell | `MapTransient` / `SetTransient` live in `IO`; `persistMap` / `persistSet` consume the `IORef` state. Candidate construction precedes a masked commit, so synchronous or asynchronous failure cannot partially install an edit. |
 | Kotlin | Nested `Transient` sessions enforce consumption with `IllegalStateException`; acquired views capture the current persistent snapshot and session version, survive logical no-ops, and fail after content changes. Callback failure leaves the active session unchanged and retryable. |
@@ -507,7 +507,7 @@ orientation-aware implementation.
 
 ## Insertion-Ordered Set
 
-`Tools.DataStructures.Ordered.PersistentOrderedSet<T>` is the C# reference for a general-purpose
+`Durable7.Ordered.PersistentOrderedSet<T>` is the C# reference for a general-purpose
 insertion-ordered set that also ships in the eight sibling languages, including OCaml. Its retained `IEqualityComparer<T>`
 defines equality classes, membership,
 lookup, duplicate collapse, and algebra. Enumeration order is a separate semantic dimension:
@@ -551,14 +551,14 @@ deterministic:
 | `SymmetricExcept` | Receiver-only classes in receiver order, then argument-only classes in normalized argument order |
 
 The workspace is independently owned and depends only on the public C# HAMT and FingerTree projects.
-Neither production nor tests may reference `Tools.DataStructures.Tungsten`, consume Tungsten source
+Neither production nor tests may reference `Durable7.Tungsten`, consume Tungsten source
 or internals, use `PersistentAssociation` as a live oracle, or adopt Tungsten as semantic authority.
 Similar sparse-order mechanics are provenance, not shared ownership. C, C++, Haskell, Kotlin,
 Rust, TypeScript, Python, and OCaml ship neutral sibling implementations derived from this Ordered
 contract through language-local ownership and policy models.
 
 The [Ordered validation guide](../../src/CSharp/docs/Ordered/validation.md) and
-[test map](../../src/CSharp/tests/Tools.DataStructures.Ordered.Tests/README.md) define the evidence
+[test map](../../src/CSharp/tests/Durable7.Ordered.Tests/README.md) define the evidence
 boundary. Focused single-worker Debug and Release lanes each discover and pass 62 tests. At the
 historical pre-Range Ordered shipment checkpoint, the complete serialized C# Release gate built
 with zero warnings or errors and passed all 1,355 tests.

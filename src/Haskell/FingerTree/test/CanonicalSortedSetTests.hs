@@ -14,7 +14,7 @@ import qualified Data.Set as Set
 import Data.Word (Word32, Word64)
 import System.IO.Unsafe (unsafePerformIO)
 
-import qualified Data.Structures.FingerTree.CanonicalSortedSet as Canonical
+import qualified Durable7.FingerTree.CanonicalSortedSet as Canonical
 
 run :: IO ()
 run = do

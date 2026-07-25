@@ -2,7 +2,7 @@
 
 - Created (UTC): 2026-07-07T15:05:40Z
 - Repository HEAD: 754f2e474caf2419bfabd5f88565341ddadbf449
-- Audience: Consumers of `Tools.DataStructures.Tungsten`
+- Audience: Consumers of `Durable7.Tungsten`
 - Scope: Task-oriented examples for `PersistentList<T>` and `PersistentAssociation<TKey, TValue>`
 
 This guide is for the Tungsten application's leaf collection family. General-purpose libraries
@@ -10,11 +10,11 @@ must not take a dependency on these types or use their behavior as a baseline; f
 mechanism into an independently owned implementation instead.
 
 Add a project reference to
-[`Tools.DataStructures.Tungsten.csproj`](../../src/Tools.DataStructures.Tungsten/Tools.DataStructures.Tungsten.csproj)
+[`Durable7.Tungsten.csproj`](../../src/Durable7.Tungsten/Durable7.Tungsten.csproj)
 and import the namespace:
 
 ```csharp
-using Tools.DataStructures.Tungsten;
+using Durable7.Tungsten;
 ```
 
 All indexes below are zero-based; the corresponding Tungsten positions are one-based.

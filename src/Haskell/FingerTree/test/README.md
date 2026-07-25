@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-03T04:37:54Z
 - Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
 - Audience: Maintainers and AI agents validating the Haskell FingerTree port
-- Scope: `tools-data-structures-fingertree` test executable
+- Scope: `durable7-fingertree` test executable
 
 Run from `src/Haskell`:
 

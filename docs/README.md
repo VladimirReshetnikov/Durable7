@@ -1,8 +1,8 @@
-# DataStructures Documentation
+# Durable7 Documentation
 
 - Created (UTC): 2026-06-30T01:28:46Z
 - Repository HEAD: d8c6160a9d3ae266e310089bfa73d71cc76ed5c3
-- Audience: Maintainers and AI agents working in the standalone DataStructures repository
+- Audience: Maintainers and AI agents working in the Durable7 repository
 - Scope: Repository-level documentation index
 
 This directory contains repository-level guides, reference material, and extraction provenance.

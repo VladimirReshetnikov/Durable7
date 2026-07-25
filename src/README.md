@@ -32,7 +32,7 @@ current `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGr
 owns the detailed managed contracts while siblings express the same semantics through language-local
 policies and ownership; the OCaml API notes identify checkpoint implementations that do not inherit
 specialized sibling topology or complexity claims. Both complete serialized C# Debug and Release solution builds finish with
-zero warnings and zero errors, and both test gates pass 1,503/1,503. No benchmark was run, and
+zero warnings and zero errors, and both test gates pass 1,530/1,530. No benchmark was run, and
 measurements remain postponed until an isolated session. The
 [data-structure catalog](../docs/reference/data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets)
 indexes the composition-first cross-language surfaces. The earlier

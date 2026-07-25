@@ -12,7 +12,7 @@ test-oracle, or semantic dependency on a Tungsten workspace.
 
 ## Surface
 
-`tds_ordered_set` is a persistent type-erased value handle with explicit `clone`, `move`, and
+`d7_ordered_set` is a persistent type-erased value handle with explicit `clone`, `move`, and
 `destroy` ownership. Its API covers:
 
 - empty and array construction with first-equivalent-representative retention;
@@ -26,13 +26,13 @@ test-oracle, or semantic dependency on a Tungsten workspace.
 - ordered visitation and two-way structural validation; and
 - diagnostics for unchanged order/index root reuse.
 
-`tds_ordered_map` adds payload-bearing entries while retaining the set's explicit key order. It
+`d7_ordered_map` adds payload-bearing entries while retaining the set's explicit key order. It
 supports strict and conditional positional insertion, value-only replacement, movement, keyed and
 positional removal, range/take/drop, reversal, stable entry sorting, and ordered visitation. Its
 ordered-set key index and CHAMP value index publish failure-atomically; reordering shares the value
 root, while replacing an existing value shares the complete order root.
 
-`tds_ordered_multimap` composes an ordered map of ordered sets under independent key and value
+`d7_ordered_multimap` composes an ordered map of ordered sets under independent key and value
 policies. It preserves first-insertion order for key groups and separately for distinct values in
 each group, reports key and checked pair counts, removes empty groups, and publishes every nested
 edit failure-atomically with explicit clone/move/destroy ownership.
@@ -47,9 +47,9 @@ midpoint selection, deterministic relabel, stable rebuild, and validation logic 
 The compiled graph is exactly:
 
 ```text
-tools_data_structures_ordered_c
-├── tools_data_structures_hamt_c
-└── tools_data_structures_finger_tree_c
+durable7_ordered_c
+├── durable7_hamt_c
+└── durable7_finger_tree_c
 ```
 
 The root C aggregator may build Ordered and Tungsten in the same invocation; that is not a runtime

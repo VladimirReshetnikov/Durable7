@@ -1,4 +1,4 @@
-use tools_data_structures_fingertree::{
+use durable7_fingertree::{
     FingerTree, PersistentDeque, ReversibleDeque, RrbVector, SumMeasure,
 };
 

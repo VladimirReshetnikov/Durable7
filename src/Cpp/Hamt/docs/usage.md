@@ -14,16 +14,16 @@ the specification.
 ## Include And Namespace
 
 ```cpp
-#include <Tools/DataStructures/Hamt/persistent_hash_map.hpp>
-#include <Tools/DataStructures/Hamt/persistent_hash_bag.hpp>
-#include <Tools/DataStructures/Hamt/persistent_bi_map.hpp>
-#include <Tools/DataStructures/Hamt/persistent_hash_multimap.hpp>
-#include <Tools/DataStructures/Hamt/persistent_relation.hpp>
-#include <Tools/DataStructures/Hamt/persistent_hash_set.hpp>
-#include <Tools/DataStructures/Hamt/persistent_int_map.hpp>
-#include <Tools/DataStructures/Hamt/merkle_search_tree.hpp>
-#include <Tools/DataStructures/Hamt/merkle_persistence.hpp>
-#include <Tools/DataStructures/Hamt/merkle_proofs.hpp>
+#include <durable7/hamt/persistent_hash_map.hpp>
+#include <durable7/hamt/persistent_hash_bag.hpp>
+#include <durable7/hamt/persistent_bi_map.hpp>
+#include <durable7/hamt/persistent_hash_multimap.hpp>
+#include <durable7/hamt/persistent_relation.hpp>
+#include <durable7/hamt/persistent_hash_set.hpp>
+#include <durable7/hamt/persistent_int_map.hpp>
+#include <durable7/hamt/merkle_search_tree.hpp>
+#include <durable7/hamt/merkle_persistence.hpp>
+#include <durable7/hamt/merkle_proofs.hpp>
 
 #include <cstdint>
 #include <limits>
@@ -31,13 +31,13 @@ the specification.
 #include <string>
 #include <vector>
 
-namespace hamt = tools::data_structures::hamt;
+namespace hamt = durable7::hamt;
 ```
 
 Consumers that want the complete workspace surface can replace the individual includes with:
 
 ```cpp
-#include <Tools/DataStructures/Hamt/hamt.hpp>
+#include <durable7/hamt/hamt.hpp>
 ```
 
 The workspace builds through `build.ps1`:

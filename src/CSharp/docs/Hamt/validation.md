@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-02T20:33:30Z
 - Repository HEAD: 7c02f68ae23244d48871317ea90d26c0defd2394
 - Audience: Maintainers validating the C# HAMT workspace
-- Scope: Local restore, build, test, warning-policy, and test-coverage guidance for `src/CSharp/src/Tools.DataStructures.Hamt`
+- Scope: Local restore, build, test, warning-policy, and test-coverage guidance for `src/CSharp/src/Durable7.Hamt`
 
 Use this guide when changing the C# HAMT library, tests, examples, or documentation that makes build,
 test, API, or complexity claims. For semantic contracts and usage examples, pair it with the
@@ -12,11 +12,11 @@ test, API, or complexity claims. For semantic contracts and usage examples, pair
 
 ## Build Model
 
-`DataStructures.sln` contains:
+`Durable7.sln` contains:
 
-- `src/Tools.DataStructures.Hamt/Tools.DataStructures.Hamt.csproj`, the public library containing
+- `src/Durable7.Hamt/Durable7.Hamt.csproj`, the public library containing
   the CHAMP map/set/bag/bimap/multimap/relation, Ctrie, Patricia, and Merkle families.
-- `tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Tests.csproj`, the xUnit/CsCheck
+- `tests/Durable7.Hamt.Tests/Durable7.Hamt.Tests.csproj`, the xUnit/CsCheck
   test project.
 
 `Directory.Build.props` applies the workspace defaults:
@@ -42,11 +42,11 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+dotnet restore .\Durable7.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build .\DataStructures.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
+dotnet build .\Durable7.sln -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     -- RunConfiguration.MaxCpuCount=1
@@ -66,7 +66,7 @@ test gates; postpone any performance measurements until the machine can run them
 For a focused public-transient pass after the Release build, substitute this final command:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     --filter 'FullyQualifiedName~PersistentHashMapTransientTests|FullyQualifiedName~PersistentHashMapTransientEnumeratorTests|FullyQualifiedName~PersistentHashSetTransientTests|FullyQualifiedName~TransientApiShapeTests' `
@@ -76,7 +76,7 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 For a focused hash-bag and internal construction-kernel pass after the Release build, use:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     --filter 'FullyQualifiedName~PersistentHashBag|FullyQualifiedName~PersistentHashMapBulkBuilderTests' `
@@ -86,7 +86,7 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 For a focused set-valued hash-multimap pass, use:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     --filter FullyQualifiedName~PersistentHashMultimapTests `
@@ -96,7 +96,7 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 For the mutually inverse relation contract, use:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     --filter FullyQualifiedName~PersistentRelationTests `
@@ -106,7 +106,7 @@ dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Te
 For the strict patch, directed graph, and indexed-map contracts, use:
 
 ```powershell
-dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
     --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     --filter 'FullyQualifiedName~PersistentMapPatchTests|FullyQualifiedName~PersistentDirectedGraphTests|FullyQualifiedName~PersistentIndexedMapTests' `
@@ -122,8 +122,8 @@ The focused lane currently passes 23/23 tests: 8 patch, 7 graph, and 8 indexed-m
 On 2026-07-17 UTC, the complete HAMT project passed 347/347 tests in both the full serialized Debug
 and Release solution gates. The focused new lanes pass 7/7 `PersistentHashMultimapTests`, 9/9
 `PersistentRelationTests`, and 23/23 derived-structure tests. Both complete solution builds finish
-with zero warnings and zero errors, and both full C# gates pass 1,503/1,503 tests. Benchmarks were
-not run.
+with zero warnings and zero errors, and both full C# gates currently pass 1,530/1,530 tests, of
+which the HAMT project contributes 354. Benchmarks were not run.
 
 `PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
 policy retention, configured-value-comparer replacement, first representatives, inverse identity,
@@ -131,14 +131,14 @@ symmetric removal, nullable values, failure atomicity, retained 1,000-command hi
 readers, enumeration, public API shape, and the bidirectional invariant. Run it alone with:
 
 ```powershell
-dotnet test tests/Tools.DataStructures.Hamt.Tests/Tools.DataStructures.Hamt.Tests.csproj `
+dotnet test tests/Durable7.Hamt.Tests/Durable7.Hamt.Tests.csproj `
     --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false `
     --filter FullyQualifiedName~PersistentBiMapTests
 ```
 
-`tests/Tools.DataStructures.Hamt.Tests/` covers the xUnit/CsCheck suite. See the
-[tests README](../../tests/Tools.DataStructures.Hamt.Tests/README.md) for source-file grouping and filter examples.
+`tests/Durable7.Hamt.Tests/` covers the xUnit/CsCheck suite. See the
+[tests README](../../tests/Durable7.Hamt.Tests/README.md) for source-file grouping and filter examples.
 
 The suite covers:
 
@@ -273,7 +273,7 @@ or the 100-sample public result.
 When reporting validation, include the workspace and exact command, for example:
 
 ```text
-src/CSharp> dotnet test .\tests\Tools.DataStructures.Hamt.Tests\Tools.DataStructures.Hamt.Tests.csproj -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false -p:BuildInParallel=false -p:UseSharedCompilation=false -- RunConfiguration.MaxCpuCount=1
+src/CSharp> dotnet test .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj -c Release --no-restore --no-build --disable-build-servers -m:1 -nr:false -p:BuildInParallel=false -p:UseSharedCompilation=false -- RunConfiguration.MaxCpuCount=1
 ```
 
 If a docs-only change only updates links or wording and does not alter commands, API claims, or XML

@@ -3,18 +3,18 @@
 - Status: Current validation guide
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
-- Audience: Maintainers validating `Tools.DataStructures.Ordered`
+- Audience: Maintainers validating `Durable7.Ordered`
 - Scope: Serialized restore, build, test, dependency, documentation, and benchmark-boundary guidance
 
-Use this guide with the [API specification](api-specification.md) and [test-suite map](../../tests/Tools.DataStructures.Ordered.Tests/README.md).
+Use this guide with the [API specification](api-specification.md) and [test-suite map](../../tests/Durable7.Ordered.Tests/README.md).
 
 ## Build Topology
 
-`DataStructures.sln` contains:
+`Durable7.sln` contains:
 
-- `src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj`, referencing only the
+- `src/Durable7.Ordered/Durable7.Ordered.csproj`, referencing only the
   public FingerTree and HAMT projects; and
-- `tests/Tools.DataStructures.Ordered.Tests/Tools.DataStructures.Ordered.Tests.csproj`, directly
+- `tests/Durable7.Ordered.Tests/Durable7.Ordered.Tests.csproj`, directly
   referencing only Ordered plus ordinary test packages.
 
 `Directory.Build.props` targets .NET 10, enables nullable annotations and preview C#, generates XML
@@ -34,20 +34,20 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet restore .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
+dotnet restore .\tests\Durable7.Ordered.Tests\Durable7.Ordered.Tests.csproj `
     --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
+dotnet build .\tests\Durable7.Ordered.Tests\Durable7.Ordered.Tests.csproj `
     -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1 `
-    -Project .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
+    -Project .\tests\Durable7.Ordered.Tests\Durable7.Ordered.Tests.csproj `
     -Configuration Release -NoRestore -NoBuild
 ```
 
 The launcher establishes inherited headless Windows failure handling before the SDK and testhost
 start, supplies `test.runsettings`, and reasserts the one-worker build and test settings. For the final
-managed-workspace gate, apply the same flags to `DataStructures.sln`, then run every test project
+managed-workspace gate, apply the same flags to `Durable7.sln`, then run every test project
 through `./test.ps1`. Do not overlap restore, build, test, native toolchains, npm, Cargo, Cabal,
 Kotlin, or benchmark processes.
 
@@ -63,10 +63,10 @@ servers, and compiler sharing disabled:
   Ordered 62, and Tungsten 52.
 
 The later derived-structure integration gate on 2026-07-17 UTC adds seven focused ordered-map and
-seven focused ordered-multimap tests. The complete Ordered project passes 76/76 tests in both full
+seven focused ordered-multimap tests. The complete Ordered project passes 81/81 tests in both full
 serialized Debug and Release solution gates. Both builds finish with zero warnings and zero errors,
 and both full C# gates pass
-1,503/1,503 tests: Numerics 319, HAMT 347, FingerTree 709, Ordered 76, and Tungsten 52. This is the
+1,530/1,530 tests: Numerics 319, HAMT 354, FingerTree 724, Ordered 81, and Tungsten 52. This is the
 complete C# tranche evidence; the final cross-language shipment record will supersede it after all
 ports are complete.
 
@@ -79,7 +79,7 @@ The focused ordered-multimap lane is:
 
 ```powershell
 .\test.ps1 `
-    -Project .\tests\Tools.DataStructures.Ordered.Tests\Tools.DataStructures.Ordered.Tests.csproj `
+    -Project .\tests\Durable7.Ordered.Tests\Durable7.Ordered.Tests.csproj `
     -Filter FullyQualifiedName~PersistentOrderedMultimapTests
 ```
 
@@ -112,7 +112,7 @@ The Ordered suite independently covers:
 
 Validation rejects:
 
-- an Ordered production or test project reference to `Tools.DataStructures.Tungsten`;
+- an Ordered production or test project reference to `Durable7.Tungsten`;
 - a compiled Ordered assembly reference to Tungsten;
 - a Tungsten namespace/type use, nested or linked Tungsten source file, unapproved package, analyzer,
   additional-file, project-as-analyzer, import, target, task, SDK, or other manifest generator route;

@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace tools::data_structures::finger_tree::benchmarks {
+namespace durable7::finger_tree::benchmarks {
 
 class allocation_counting_scope final {
 public:
@@ -18,4 +18,4 @@ private:
     bool enabled_;
 };
 
-} // namespace tools::data_structures::finger_tree::benchmarks
+} // namespace durable7::finger_tree::benchmarks

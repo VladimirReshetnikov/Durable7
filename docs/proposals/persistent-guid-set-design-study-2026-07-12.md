@@ -41,7 +41,7 @@ each verified against the source:
 
 - **Unboxed inline storage.** `Guid` is a 16-byte value type, and the node payload is a generic
   value-type `Entry` struct with a `public readonly TKey Key` field held in typed `Entry[]` arrays
-  ([`PersistentHashMap.cs:1302`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs),
+  ([`PersistentHashMap.cs:1302`](../../src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs),
   `:1491`). Nothing is stored as `object`/`object[]`, so a GUID sits inline in the array with no
   per-element boxing (which would otherwise add an object header plus ~16–24 bytes each). The only
   per-node overhead beyond the key is the node header and a cached 4-byte hash.
@@ -56,19 +56,19 @@ For membership-dominated workloads on GUIDs, this is already adequate.
 
 1. **The 128-bit key is collapsed to a 32-bit hash.** Slotting is driven by
    `unchecked((uint)comparer.GetHashCode(key))` — for the default comparer, `Guid.GetHashCode()`, a
-   32-bit value ([`PersistentHashMap.cs:559`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs)).
+   32-bit value ([`PersistentHashMap.cs:559`](../../src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs)).
    Every lookup/add/remove computes it once. When two distinct GUIDs share the full 32-bit hash, the
    trie stores them in a `CollisionNode` whose `Entry[]` is scanned linearly and re-allocated (with
-   an `Array.Copy`) on each insert ([`PersistentHashMap.cs:1419`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs),
+   an `Array.Copy`) on each insert ([`PersistentHashMap.cs:1419`](../../src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs),
    `:1433`). For random GUIDs these buckets are birthday-bound and modest — see [the numbers](#the-numbers-that-matter)
    — but the 32-bit ceiling is intrinsic regardless of hash quality.
 2. **Historical baseline: set algebra was element-wise, not structural.** `Union`, `Intersect`, `Except`, and
    `SymmetricExcept` all take `IEnumerable<T>` and operate element-by-element: `Union` folds
    `result.Add(item)`, `Except` folds `result.Remove(item)`, `Intersect` materializes a probe
-   `HashSet<T>` and rebuilds ([`PersistentHashSet.cs:210`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashSet.cs)–`290`).
+   `HashSet<T>` and rebuilds ([`PersistentHashSet.cs:210`](../../src/CSharp/src/Durable7.Hamt/PersistentHashSet.cs)–`290`).
    Merging two large GUID sets that share history therefore costs O(m) re-hash-and-insert operations
    (or an O(n) rebuild), never work proportional to the non-shared structure. The *map* layer does
-   have reference-equality-pruned `MapEquals`/`Diff` ([`PersistentHashMap.cs:441`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs)–`455`,
+   have reference-equality-pruned `MapEquals`/`Diff` ([`PersistentHashMap.cs:441`](../../src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs)–`455`,
    `:573`), but that is a change-enumeration over aligned nodes, not an algebraic combine, and it is
    not surfaced on the set at all.
 
@@ -84,7 +84,7 @@ For membership-dominated workloads on GUIDs, this is already adequate.
 The repository already ships the pattern that fixes limitations (1) and (2) for integers: the
 Okasaki–Gill big-endian Patricia trie behind `PersistentIntSet`/`PersistentLongSet`, where the key
 *is* the discriminator (no hash function) and `Union`/`Intersect`/`Except` are structural,
-reference-pruned merges ([`PatriciaMapCore.cs:245`](../../src/CSharp/src/Tools.DataStructures.Hamt/Internal/PatriciaMapCore.cs)–`318`).
+reference-pruned merges ([`PatriciaMapCore.cs:245`](../../src/CSharp/src/Durable7.Hamt/Internal/PatriciaMapCore.cs)–`318`).
 A GUID is 128 bits of (for v4) high-quality entropy, so the same idea extends directly:
 
 > **`PersistentGuidSet`** — a persistent set keyed by `System.Guid`, implemented as a big-endian
@@ -105,7 +105,7 @@ There are two representations of this idea, and the distinction is load-bearing:
 The key carrier is **native `System.UInt128`** (.NET 10+): it is a built-in value type (no
 allocation), it is exactly 128 bits = one GUID, and it implements `IBinaryInteger<UInt128>`, so the
 five bit primitives the trie needs (leading-zero count, shift, and, not, compare) come for free. The
-repository's own `Tools.Numerics` is the wrong choice here — it starts at `UInt256` (double width,
+repository's own `Durable7.Numerics` is the wrong choice here — it starts at `UInt256` (double width,
 wasteful), is not `IBinaryInteger`-shaped for those helpers, and would introduce a new
 `Hamt → Numerics` cross-project dependency. Two `ulong` limbs are a distant third, reintroducing the
 manual carry/leading-zero/compare logic `UInt128` already provides.
@@ -234,7 +234,7 @@ Consequences for the design:
 
 - The trie **must** encode big-endian RFC-4122 bytes (`Guid.TryWriteBytes(dst, bigEndian: true, …)`),
   which is exactly the order the repository's existing `guid-rfc4122-v1` Merkle codec already uses
-  ([`MerkleEncoding.cs:156`](../../src/CSharp/src/Tools.DataStructures.Hamt/MerkleEncoding.cs)).
+  ([`MerkleEncoding.cs:156`](../../src/CSharp/src/Durable7.Hamt/MerkleEncoding.cs)).
 - This equality is *runtime behavior*, not a language guarantee, and the encoding choice is an easy
   mistake — so any implementation must **pin the order with an explicit `Guid.CompareTo`-parity test**.
 - Even correct RFC-4122 order is **not** SQL Server `uniqueidentifier` order (which compares a
@@ -248,7 +248,7 @@ The custom set is not the only lever. Two shipped collections own adjacent niche
 - **`CanonicalSortedSet<Guid>`** (zip-zip tree). For equality/fingerprint-heavy, mostly-read
   workloads — snapshot many GUID sets and repeatedly ask "did this set change?" or "are these two the
   same set?" — its memoized 64-bit `ContentHash` gives an **O(1) inequality reject**
-  ([`CanonicalSortedSet.cs:49`](../../src/CSharp/src/Tools.DataStructures.FingerTree/CanonicalSortedSet.cs),
+  ([`CanonicalSortedSet.cs:49`](../../src/CSharp/src/Durable7.FingerTree/CanonicalSortedSet.cs),
   `:282`) and its history-independent canonical shape enables cheap dedup of equal sets. Two limits:
   the digest is a *non-cryptographic* 64-bit fingerprint (inequality is proven; equality still needs a
   structural walk) and is process-random by default, so it is a within-process accelerator, not a
@@ -286,7 +286,7 @@ Under the repository's own rules, **not speculatively.**
   entry explicitly gates exactly this class of new radix core on "a consumer with real prefix-query or
   byte-ordered-key needs." Building it now inverts the Tungsten-established consumer-first rule.
 - **This is not a thin facade.** `PatriciaMapCore` is hardwired to a 64-bit `ulong` path
-  (`IPatriciaKey.Encode(TKey) → ulong`, [`PatriciaMapCore.cs:8`](../../src/CSharp/src/Tools.DataStructures.Hamt/Internal/PatriciaMapCore.cs)),
+  (`IPatriciaKey.Encode(TKey) → ulong`, [`PatriciaMapCore.cs:8`](../../src/CSharp/src/Durable7.Hamt/Internal/PatriciaMapCore.cs)),
   and the trie's `HighestBit`/`PrefixOf`/`Matches`/`GoesLeft`/`Join` helpers operate on `ulong`. A
   128-bit path is genuine new code, and a full family pays the priciest parity bill (~30 public
   members across up to six languages — the reason the proposal document rates the Patricia family its

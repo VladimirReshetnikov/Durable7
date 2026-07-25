@@ -1,3 +1,3 @@
 add_executable(fingertree_c_benchmarks fingertree_c_benchmarks.c)
-target_link_libraries(fingertree_c_benchmarks PRIVATE tools::data_structures::finger_tree_c)
+target_link_libraries(fingertree_c_benchmarks PRIVATE durable7::finger_tree_c)
 fingertree_c_configure_target(fingertree_c_benchmarks)

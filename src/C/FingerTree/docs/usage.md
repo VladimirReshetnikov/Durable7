@@ -8,7 +8,7 @@
 This guide is a practical companion to the [API notes](api-notes.md). It shows how to set up value
 and measure policies, how to manage persistent handles, and which facade to start with for common
 C use cases. The normative public declarations live in
-[`fingertree.h`](../include/tools/data_structures/finger_tree/fingertree.h).
+[`fingertree.h`](../include/durable7/finger_tree/fingertree.h).
 
 ## Include And Link
 
@@ -17,13 +17,13 @@ Include the public header:
 ```c
 #include <stdio.h>
 
-#include <tools/data_structures/finger_tree/fingertree.h>
-#include <tools/data_structures/finger_tree/brodal_okasaki_heap.h>
-#include <tools/data_structures/finger_tree/canonical_sorted_set.h>
-#include <tools/data_structures/finger_tree/priority_search_queue.h>
-#include <tools/data_structures/finger_tree/range_update_sequence.h>
-#include <tools/data_structures/finger_tree/daba_lite.h>
-#include <tools/data_structures/finger_tree/rrb_vector.h>
+#include <durable7/finger_tree/fingertree.h>
+#include <durable7/finger_tree/brodal_okasaki_heap.h>
+#include <durable7/finger_tree/canonical_sorted_set.h>
+#include <durable7/finger_tree/priority_search_queue.h>
+#include <durable7/finger_tree/range_update_sequence.h>
+#include <durable7/finger_tree/daba_lite.h>
+#include <durable7/finger_tree/rrb_vector.h>
 ```
 
 The workspace builds a static C library through the CMake presets documented in

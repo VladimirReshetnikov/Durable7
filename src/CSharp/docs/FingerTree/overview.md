@@ -4,9 +4,9 @@
 - Created (UTC): 2026-04-27T18:33:25Z
 - Repository HEAD: df8ea08345ca22ba76e6f4fc7e92d0fd41686de3
 - Audience: Maintainers implementing and reviewing the finger-tree deque
-- Scope: Project layout and validation entry points for `src/CSharp/src/Tools.DataStructures.FingerTree`
+- Scope: Project layout and validation entry points for `src/CSharp/src/Durable7.FingerTree`
 
-`src/CSharp/src/Tools.DataStructures.FingerTree` contains the .NET 10 C# preview workspace for `Tools.DataStructures.FingerTree`, a persistent collection library built around tuned and general-purpose finger trees.
+`src/CSharp/src/Durable7.FingerTree` contains the .NET 10 C# preview workspace for `Durable7.FingerTree`, a persistent collection library built around tuned and general-purpose finger trees.
 
 This workspace provides two public finger-tree types. `FingerTree<TElement, TMeasure, TMeasureOps>` is the general Hinze–Paterson **measured** finger tree — a persistent sequence annotated by an arbitrary monoidal measure (supplied through the static-abstract `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` interfaces), whose monotone-predicate `Split` specializes it into a positional sequence (`SizeMeasure<T>`), a mergeable priority queue (`MaxMeasure<T>`/`MinMeasure<T>`), an ordered search tree (`KeyMeasure<T>`), an order-statistic tree (`OrderStatisticMeasure<T>`), or a persistent Fenwick-style cumulative-weight structure (`SumMeasure<T>`, for weighted selection and sampling) — all shipped ready-made with named operations in `FingerTreeMeasureExtensions` and `FingerTreeSumExtensions`, with any two of them composable through the `ProductMeasure<…>` combinator (e.g. size+sum for a tree that is positional *and* Fenwick, or size+max for a priority queue with positional access), and any custom measure expressible by implementing the interfaces. A full Hinze–Paterson interval tree (`IntervalTree<T>`) and payload-bearing `PersistentIntervalMap<TEndpoint, TValue>` provide logarithmic stabbing/overlap queries; a sorted multiset (`SortedBag<T>`) with ranking and order-statistic indexing, a sorted set (`SortedSet<T>`) with navigable-set queries and set algebra, a sorted dictionary (`SortedDictionary<TKey, TValue>`) with navigable-map queries and order-statistic access, and a meldable `PriorityQueue<TElement, TPriority>` are built on the same core. Each deep node holds its middle subtree behind a memoized suspension and computes its measure lazily — Hinze–Paterson's lazy finger tree realized in a strict language — so the amortized bounds hold under fully persistent (branching) histories; the only consequence versus the deque is that `Measure` is O(1) amortized rather than worst-case (a general monoid has no inverse, so a popped subtree's measure is recovered by forcing, not subtraction). See [docs/api-specification.md](api-specification.md#the-general-measured-finger-tree) for its contract.
 
@@ -72,8 +72,8 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
 
 ## Layout
 
-- `DataStructures.sln` is the solution entry point.
-- `src/Tools.DataStructures.FingerTree/` contains the public library.
+- `Durable7.sln` is the solution entry point.
+- `src/Durable7.FingerTree/` contains the public library.
   - `Measures.cs` — the `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` static-abstract measure interfaces and the built-in `SizeMeasure<T>`.
   - `Comparisons.cs` — the static-abstract `IComparison<T>` order strategy with `DefaultComparison<T>` and `ReverseComparison<T, TComparison>`, letting the comparison measures use a custom order without a hand-rolled measure.
   - `BuiltInMeasures.cs` — ready-made measures (`MaxMeasure<T>`, `MinMeasure<T>`, `KeyMeasure<T>`, `OrderStatisticMeasure<T>`) with their `Optional<T>` / `RankedKey<T>` carriers, covering priority queues, ordered sets, and order-statistic trees out of the box.
@@ -121,19 +121,19 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   - `FingerTreeDeque.cs` — public deque type, argument validation, and the struct enumerator.
   - `FingerTreeDequeResults.cs` — split and pop result record structs.
   - `Internal/` — the deque's tuned finger-tree core: `TreeElement.cs` (measured-element contract and the struct `Leaf<T>`), `Digit.cs`, `Node.cs`, `Tree.cs` (empty/single/deep levels), `MiddleTree.cs` (memoized middle-subtree suspensions and their pending operations), and `TreeOperations.cs` (smart deep constructors, pulls with the paper's `chop`, and concatenation).
-- [`tests/Tools.DataStructures.FingerTree.Tests/`](../../tests/Tools.DataStructures.FingerTree.Tests/README.md)
+- [`tests/Durable7.FingerTree.Tests/`](../../tests/Durable7.FingerTree.Tests/README.md)
   contains the xUnit/CsCheck suite. Its local README maps the deque, measured-tree, derived-collection, rope,
   range-update sequence, sample-smoke, property, model-command, persistence, and
   tearable-concurrency stress test files. The range-update focused Debug lane passes 62/62 tests,
   and the complete FingerTree project passes 692/692 tests in Debug and Release. At the pre-bimap
   Range shipment checkpoint, the full serialized C# solution passed 1,417/1,417 tests with zero
   build warnings or errors in both configurations.
-- `benchmarks/Tools.DataStructures.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
+- `benchmarks/Durable7.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
   the C# persistent-collections workspace. Alongside the deque, ropes, measures, sorted collections,
   and measured priority queue, it now contains RRB-vector, DABA Lite, canonical zip-set,
   Brodal-Okasaki heap, priority-search-queue, CHAMP, Ctrie, Patricia, and Merkle search-tree gates;
   see its `README.md` for the class-to-contract matrix and run commands.
-- `samples/` holds three runnable, smoke-tested console tours (see `samples/README.md`): `Tour` (a persistent text buffer — undo/redo over O(1) snapshots, O(log n) line/column navigation, and a background thread taking millions of lock-free, never-torn snapshots while a writer publishes versions), `Showcase` (one measured tree, many structures — priority queue, weighted sampling, order-statistic set, interval index, reversible deque, navigable map), and `Editor` (the editor-grade text extras — chars vs code points vs graphemes, newline detection, and offset addressing). Run e.g. `dotnet run --project samples/Tools.DataStructures.FingerTree.Editor -c Release`.
+- `samples/` holds three runnable, smoke-tested console tours (see `samples/README.md`): `Tour` (a persistent text buffer — undo/redo over O(1) snapshots, O(log n) line/column navigation, and a background thread taking millions of lock-free, never-torn snapshots while a writer publishes versions), `Showcase` (one measured tree, many structures — priority queue, weighted sampling, order-statistic set, interval index, reversible deque, navigable map), and `Editor` (the editor-grade text extras — chars vs code points vs graphemes, newline detection, and offset addressing). Run e.g. `dotnet run --project samples/Durable7.FingerTree.Editor -c Release`.
 - `docs/` contains usage, API, validation, and algorithm design references, including [docs/usage.md](usage.md) as the practical facade-selection and first-use guide; the [range-update sequence contract](range-update-sequence.md) for its tag algebra, implicit-AVL invariant, exact surface, and deterministic validation boundary; [docs/validation.md](validation.md) as the local restore/build/test, sample, benchmark, and stress-control guide; [docs/FingerTree-Design-Notes.tex](FingerTree-Design-Notes.tex) / [docs/FingerTree-Design-Notes.pdf](FingerTree-Design-Notes.pdf) — a single navigable design-notes tour of the whole library (the two cores, the lazy-memoized spine, the measure framework, the closure-free predicate API, the collection and rope families, the concurrency/memory-model argument, and the three-tier test strategy) — regenerate the PDF from the source with `pwsh -File docs/build-design-notes.ps1`; [docs/benchmarks.md](benchmarks.md) with curated measured results; and [docs/persistence-and-concurrency.md](persistence-and-concurrency.md) — a worked guide to cheap snapshots, structural-sharing undo/redo, and lock-free multi-threaded access (every pattern backed by a runnable example test).
 
 ## Validation
@@ -151,12 +151,12 @@ benchmark boundary, stress controls, and test-suite coverage map.
 ## Benchmarks
 
 ```powershell
-cd benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+cd benchmarks\Durable7.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short   # quick pass; drop --job for a full run
 ```
 
 The harness is a measurement gate, not itself a stored result. Its
-[README](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md) maps each benchmark
+[README](../../benchmarks/Durable7.FingerTree.Benchmarks/README.md) maps each benchmark
 class to the contract and baseline it exercises; [benchmarks.md](benchmarks.md) is the authoritative
 home for curated measured tables. Run the relevant class in Release before making a new constant-
 factor or scaling claim, and do not infer results for newly added Axis 1 classes merely from their

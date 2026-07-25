@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-03T18:26:53Z
 - Repository HEAD: 315d9f19500953c69c2b60ccb430e779f1c4226d
 - Audience: Maintainers and AI agents reviewing the Kotlin persistent HAMT port
-- Scope: `tools.datastructures.hamt` package
+- Scope: `durable7.hamt` package
 
 This workspace ports the repository HAMT map and set family to Kotlin/JVM. It provides persistent
 `PersistentHashMap<K, V>` and `PersistentHashSet<T>` values with a canonical 32-way CHAMP trie,

@@ -6,7 +6,7 @@ add_executable(
 target_link_libraries(
     fingertree_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 target_include_directories(
@@ -17,7 +17,7 @@ target_include_directories(
 
 fingertree_c_configure_target(fingertree_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.core TARGET fingertree_c_tests)
+d7_add_headless_test(NAME fingertree_c.core TARGET fingertree_c_tests)
 
 add_executable(
     rrb_vector_c_tests
@@ -27,7 +27,7 @@ add_executable(
 target_link_libraries(
     rrb_vector_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 target_include_directories(
@@ -38,7 +38,7 @@ target_include_directories(
 
 fingertree_c_configure_target(rrb_vector_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.rrb_vector TARGET rrb_vector_c_tests)
+d7_add_headless_test(NAME fingertree_c.rrb_vector TARGET rrb_vector_c_tests)
 
 add_executable(
     daba_lite_c_tests
@@ -48,7 +48,7 @@ add_executable(
 target_link_libraries(
     daba_lite_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 target_include_directories(
@@ -59,7 +59,7 @@ target_include_directories(
 
 fingertree_c_configure_target(daba_lite_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.daba_lite TARGET daba_lite_c_tests)
+d7_add_headless_test(NAME fingertree_c.daba_lite TARGET daba_lite_c_tests)
 
 add_executable(
     canonical_sorted_set_c_tests
@@ -69,7 +69,7 @@ add_executable(
 target_link_libraries(
     canonical_sorted_set_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 target_include_directories(
@@ -80,7 +80,7 @@ target_include_directories(
 
 fingertree_c_configure_target(canonical_sorted_set_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.canonical_sorted_set TARGET canonical_sorted_set_c_tests)
+d7_add_headless_test(NAME fingertree_c.canonical_sorted_set TARGET canonical_sorted_set_c_tests)
 
 add_executable(
     brodal_okasaki_heap_c_tests
@@ -90,7 +90,7 @@ add_executable(
 target_link_libraries(
     brodal_okasaki_heap_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 target_include_directories(
@@ -101,7 +101,7 @@ target_include_directories(
 
 fingertree_c_configure_target(brodal_okasaki_heap_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.brodal_okasaki_heap TARGET brodal_okasaki_heap_c_tests)
+d7_add_headless_test(NAME fingertree_c.brodal_okasaki_heap TARGET brodal_okasaki_heap_c_tests)
 
 add_executable(
     priority_search_queue_c_tests
@@ -111,7 +111,7 @@ add_executable(
 target_link_libraries(
     priority_search_queue_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 target_include_directories(
@@ -122,7 +122,7 @@ target_include_directories(
 
 fingertree_c_configure_target(priority_search_queue_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.priority_search_queue TARGET priority_search_queue_c_tests)
+d7_add_headless_test(NAME fingertree_c.priority_search_queue TARGET priority_search_queue_c_tests)
 
 add_executable(
     range_update_sequence_c_tests
@@ -132,7 +132,7 @@ add_executable(
 target_link_libraries(
     range_update_sequence_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 target_include_directories(
@@ -143,7 +143,7 @@ target_include_directories(
 
 fingertree_c_configure_target(range_update_sequence_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.range_update_sequence TARGET range_update_sequence_c_tests)
+d7_add_headless_test(NAME fingertree_c.range_update_sequence TARGET range_update_sequence_c_tests)
 
 add_executable(
     persistent_interval_map_c_tests
@@ -153,12 +153,12 @@ add_executable(
 target_link_libraries(
     persistent_interval_map_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 
 fingertree_c_configure_target(persistent_interval_map_c_tests)
 
-tds_add_headless_test(NAME fingertree_c.persistent_interval_map TARGET persistent_interval_map_c_tests)
+d7_add_headless_test(NAME fingertree_c.persistent_interval_map TARGET persistent_interval_map_c_tests)
 
 add_executable(
     persistent_chunked_bit_set_c_tests
@@ -167,7 +167,7 @@ add_executable(
 target_link_libraries(
     persistent_chunked_bit_set_c_tests
     PRIVATE
-        tools::data_structures::finger_tree_c
+        durable7::finger_tree_c
 )
 target_include_directories(
     persistent_chunked_bit_set_c_tests
@@ -175,7 +175,7 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 fingertree_c_configure_target(persistent_chunked_bit_set_c_tests)
-tds_add_headless_test(
+d7_add_headless_test(
     NAME fingertree_c.persistent_chunked_bit_set
     TARGET persistent_chunked_bit_set_c_tests
 )

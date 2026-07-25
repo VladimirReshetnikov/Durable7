@@ -4,7 +4,7 @@
 - Created (UTC): 2026-07-02T20:33:30Z
 - Repository HEAD: 7c02f68ae23244d48871317ea90d26c0defd2394
 - Audience: Maintainers validating the C# FingerTree workspace
-- Scope: Local restore, build, test, sample, benchmark, stress, and warning-policy guidance for `src/CSharp/src/Tools.DataStructures.FingerTree`
+- Scope: Local restore, build, test, sample, benchmark, stress, and warning-policy guidance for `src/CSharp/src/Durable7.FingerTree`
 
 Use this guide when changing the C# FingerTree library, tests, samples, benchmark harness, or documentation
 that makes build, validation, API, complexity, or performance claims. For semantic contracts and first-use
@@ -14,13 +14,13 @@ implicit-AVL/tag/cache invariant, and deterministic integration matrix for that 
 
 ## Build Model
 
-`DataStructures.sln` contains:
+`Durable7.sln` contains:
 
-- `src/Tools.DataStructures.FingerTree/Tools.DataStructures.FingerTree.csproj`, the public library.
-- `tests/Tools.DataStructures.FingerTree.Tests/Tools.DataStructures.FingerTree.Tests.csproj`, the
+- `src/Durable7.FingerTree/Durable7.FingerTree.csproj`, the public library.
+- `tests/Durable7.FingerTree.Tests/Durable7.FingerTree.Tests.csproj`, the
   xUnit/CsCheck test project.
-- `samples/Tools.DataStructures.FingerTree.Tour`, `Showcase`, and `Editor`, the runnable sample tours.
-- `benchmarks/Tools.DataStructures.FingerTree.Benchmarks`, the BenchmarkDotNet harness.
+- `samples/Durable7.FingerTree.Tour`, `Showcase`, and `Editor`, the runnable sample tours.
+- `benchmarks/Durable7.FingerTree.Benchmarks`, the BenchmarkDotNet harness.
 
 `Directory.Build.props` applies the workspace defaults:
 
@@ -34,16 +34,16 @@ The sample and benchmark executable projects disable XML documentation generatio
 they are not shipped API surfaces. The test project references the library and all three samples, so the sample
 programs are compiled and smoke-tested by the ordinary test suite. Benchmark execution is separate from the
 test gate; see [benchmarks.md](benchmarks.md) and the benchmark project
-[README](../../benchmarks/Tools.DataStructures.FingerTree.Benchmarks/README.md).
+[README](../../benchmarks/Durable7.FingerTree.Benchmarks/README.md).
 
 ## Commands
 
 From `src/CSharp`:
 
 ```powershell
-dotnet restore .\DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+dotnet restore .\Durable7.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build .\DataStructures.sln --no-restore --disable-build-servers -m:1 -nr:false `
+dotnet build .\Durable7.sln --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 .\test.ps1
 ```
@@ -57,15 +57,15 @@ All three phases are serialized; do not overlap them with another workspace buil
 Run individual sample tours when changing sample text or manual-demo behavior:
 
 ```powershell
-dotnet run --project samples/Tools.DataStructures.FingerTree.Tour -c Release
-dotnet run --project samples/Tools.DataStructures.FingerTree.Showcase -c Release
-dotnet run --project samples/Tools.DataStructures.FingerTree.Editor -c Release
+dotnet run --project samples/Durable7.FingerTree.Tour -c Release
+dotnet run --project samples/Durable7.FingerTree.Showcase -c Release
+dotnet run --project samples/Durable7.FingerTree.Editor -c Release
 ```
 
 Run benchmarks only when changing performance-sensitive code, benchmark code, or performance claims:
 
 ```powershell
-cd benchmarks\Tools.DataStructures.FingerTree.Benchmarks
+cd benchmarks\Durable7.FingerTree.Benchmarks
 dotnet run -c Release -- --filter * --job short
 ```
 
@@ -78,11 +78,12 @@ Release configuration is required for meaningful benchmark numbers.
 On 2026-07-17 UTC, the focused `PersistentIntervalMapTests` and `PersistentChunkedBitSetTests` lanes
 passed 9/9 and 8/8 tests, and the complete FingerTree project passed 709/709 tests in both full
 serialized Debug and Release solution gates.
-Both complete solution builds finish with zero warnings and zero errors, and both full C# gates pass
-1,503/1,503 tests. Benchmarks were not run.
+Both complete solution builds finish with zero warnings and zero errors, and both full C# gates
+currently pass 1,530/1,530 tests, of which the FingerTree project contributes 724. Benchmarks were
+not run.
 
-`tests/Tools.DataStructures.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
-[tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md) for source-file grouping, filter examples,
+`tests/Durable7.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
+[tests README](../../tests/Durable7.FingerTree.Tests/README.md) for source-file grouping, filter examples,
 sample-smoke hooks, and stress controls.
 
 During interval-map development, run its focused model/invariant lane with:
@@ -222,7 +223,7 @@ The C# reference is shipped on this deterministic, benchmark-independent evidenc
   policy callback thread safety remains the caller's responsibility.
 
 The focused run uses the filter documented in the
-[tests README](../../tests/Tools.DataStructures.FingerTree.Tests/README.md#build-and-run). The
+[tests README](../../tests/Durable7.FingerTree.Tests/README.md#build-and-run). The
 recorded shipment then runs the complete project suite and ordinary full serialized workspace gate
 in both configurations. The detailed semantic oracle is the
 [range-update sequence contract](range-update-sequence.md).

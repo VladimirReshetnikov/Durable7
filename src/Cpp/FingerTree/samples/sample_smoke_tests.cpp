@@ -1,6 +1,6 @@
 #include "sample_runs.hpp"
 
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/test_support/headless_test_process.h>
 
 #include <cstdlib>
 #include <exception>
@@ -10,7 +10,7 @@
 #include <string>
 #include <string_view>
 
-namespace samples = tools::data_structures::finger_tree::samples;
+namespace samples = durable7::finger_tree::samples;
 
 namespace {
 
@@ -38,7 +38,7 @@ template <class Run>
 
 int main()
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 

@@ -13,7 +13,7 @@
 - Zarith, Digestif, and Uutf at runtime
 - Alcotest and QCheck for tests; ocamlformat and odoc for repository validation
 
-The package constraints are authoritative in `tools-data-structures.opam`. The checked-in
+The package constraints are authoritative in `durable7.opam`. The checked-in
 `test.ps1` wrapper forces one opam/Dune job and accepts `Common`, `Numerics`, `Hamt`, `FingerTree`,
 `Ordered`, or `Tungsten` as a focused workspace.
 

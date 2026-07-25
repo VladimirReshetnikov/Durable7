@@ -5,8 +5,8 @@
 - Audience: OCaml consumers and cross-language maintainers
 - Scope: Public module inventory, language-local mappings, and implementation distinctions
 
-The `tools-data-structures` package uses Dune's qualified subdirectories. Consumers open
-`Tools_data_structures`, then the relevant `Numerics`, `Hamt`, `Finger_tree`, `Ordered`, or
+The `durable7` package uses Dune's qualified subdirectories. Consumers open
+`Durable7`, then the relevant `Numerics`, `Hamt`, `Finger_tree`, `Ordered`, or
 `Tungsten` namespace. Public immutable values return successor values; fallible indexed operations
 use `result`, absence uses `option`, and runtime hash/comparison/measurement policies are retained by
 the values that need them.

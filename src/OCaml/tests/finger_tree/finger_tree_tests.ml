@@ -1,4 +1,4 @@
-open Tools_data_structures
+open Durable7
 open Finger_tree
 
 let check_int_list label expected actual = Alcotest.(check (list int)) label expected actual

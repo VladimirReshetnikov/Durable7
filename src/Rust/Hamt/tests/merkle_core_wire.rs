@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::thread;
 
-use tools_data_structures_hamt::{
+use durable7_hamt::{
     Int32MerkleCodec, Int64MerkleCodec, MerkleCodec, MerkleCodecError, MerkleDigest,
     MerkleDigestParseError, MerkleDigestWriteError, MerkleMapDifference, MerklePolicyError,
     MerkleSearchTree, MerkleSearchTreePolicy, NullableBytesMerkleCodec, NullableUtf8MerkleCodec,

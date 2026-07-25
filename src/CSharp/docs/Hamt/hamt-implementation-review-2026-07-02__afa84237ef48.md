@@ -3,7 +3,7 @@
 - Status: Completed review with implemented improvements
 - Created (UTC): 2026-07-02T15:40:49Z
 - Repository HEAD: 95820012c35a2eb7c16ea62254ed80746694a415
-- Audience: Maintainers of `Tools.DataStructures.Hamt`
+- Audience: Maintainers of `Durable7.Hamt`
 - Scope: Review findings, implemented changes, declined findings, and validation results for
   `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>`
 
@@ -203,8 +203,8 @@ comparer over enumeration plus a `TryGetValue` retention check.
 
 ## Validation
 
-- `dotnet test DataStructures.sln` (Debug): 47/47 passed (baseline before changes: 20/20).
-- `dotnet build DataStructures.sln -c Release`: succeeded with zero warnings
+- `dotnet test Durable7.sln` (Debug): 47/47 passed (baseline before changes: 20/20).
+- `dotnet build Durable7.sln -c Release`: succeeded with zero warnings
   (`GenerateDocumentationFile=true` with CS1591/CS1573 as errors remains enforced).
 - Public API changes: additive (`TryGetKey`, set `TryGetValue`, `IsProperSubsetOf`,
   `IsProperSupersetOf`, `IReadOnlySet<T>`, set `Enumerator`) except for two pre-publication
@@ -215,7 +215,7 @@ comparer over enumeration plus a `TryGetValue` retention check.
 
 | Area | Files touched |
 | --- | --- |
-| Core implementation | `src/Tools.DataStructures.Hamt/PersistentHashMap.cs`, `src/Tools.DataStructures.Hamt/PersistentHashSet.cs` |
+| Core implementation | `src/Durable7.Hamt/PersistentHashMap.cs`, `src/Durable7.Hamt/PersistentHashSet.cs` |
 | Tests (extended) | `PersistentHashMapTests.cs`, `PersistentHashSetTests.cs`, `PersistentHashMapCollisionTests.cs`, `PersistentHashMapPropertyTests.cs` |
 | Tests (new) | `PersistentHashMapEnumeratorTests.cs`, `PersistentHamtStructureTests.cs` |
 | Documentation | `docs/api-specification.md`, `README.md`, this report |
@@ -225,7 +225,7 @@ comparer over enumeration plus a `TryGetValue` retention check.
 The remaining live coverage gap is closed by `PersistentHashSetEnumeratorTests.cs`. Four focused
 tests now pin the set wrapper's default, before-first, active, exhausted, copied, interface, and
 `Reset` states independently of the map enumerator tests. The C# HAMT project now passes 54/54 tests
-as part of the 772-test `DataStructures.sln` gate.
+as part of the 772-test `Durable7.sln` gate.
 
 The items under **Declined and deferred findings** remain deliberate, evidence-based design
 decisions rather than unresolved defects: comparer devirtualization and a transient builder remain

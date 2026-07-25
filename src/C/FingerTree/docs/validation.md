@@ -14,7 +14,7 @@ with the [API notes](api-notes.md) and [usage guide](usage.md).
 
 The workspace uses CMake presets. The `msvc-*` presets use Visual Studio's bundled Ninja by absolute path;
 the `ninja-*` presets use `cmake` and `ninja` from `PATH` for host-agnostic validation. `CMakeLists.txt` builds the
-`tools_data_structures_finger_tree_c` static library from `src/fingertree.c`,
+`durable7_finger_tree_c` static library from `src/fingertree.c`,
 `src/brodal_okasaki_heap.c`, `src/canonical_sorted_set.c`, `src/priority_search_queue.c`,
 `src/range_update_sequence.c`, `src/persistent_interval_map.c`, `src/persistent_chunked_bit_set.c`,
 `src/rrb_vector.c`, and `src/daba_lite.c`,

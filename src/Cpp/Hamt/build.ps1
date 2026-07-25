@@ -48,7 +48,7 @@ if (Test-Path -LiteralPath $resolvedPackageRoot) {
     Remove-Item -Recurse -Force -LiteralPath $resolvedPackageRoot
 }
 New-Item -ItemType Directory -Force -Path $packageIncludeDir | Out-Null
-Copy-Item -Recurse -Force -Path (Join-Path $includeDir 'Tools') -Destination $packageIncludeDir
+Copy-Item -Recurse -Force -Path (Join-Path $includeDir 'durable7') -Destination $packageIncludeDir
 
 if ($RunTests) {
     . $headlessTestHelper

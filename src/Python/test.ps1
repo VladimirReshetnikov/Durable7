@@ -95,7 +95,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Installing the built wheel failed." }
 
         $smokeScript = @'
-from vladimir_reshetnikov.data_structures import (
+from durable7 import (
     HashMapBulkBuilder,
     Interval,
     PersistentAssociation,

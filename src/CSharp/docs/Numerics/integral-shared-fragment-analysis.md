@@ -1,14 +1,14 @@
-# Tools.Numerics Integral Declaration Shared-Fragment Analysis
+# Durable7.Numerics Integral Declaration Shared-Fragment Analysis
 
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Status: Informational extraction analysis
-- Audience: Maintainers considering helper extraction or generator work in `Tools.Numerics`
+- Audience: Maintainers considering helper extraction or generator work in `Durable7.Numerics`
 - Scope: Shared declaration and implementation fragments across `Int256`/`UInt256`, `Int512`/`UInt512`, and `Int1024`/`UInt1024`
 
 ## Scope and intent
 
-This document analyzes the six fixed-width integral types in `Tools.Numerics`:
+This document analyzes the six fixed-width integral types in `Durable7.Numerics`:
 
 - `UInt256`, `Int256`
 - `UInt512`, `Int512`
@@ -26,7 +26,7 @@ The focus is maintainability-oriented refactoring opportunities, not textual/cod
 
 ## Observed structural baseline
 
-The six declaration files are intentionally parity-shaped and contain repeated wrappers around formatting, parsing, comparison, and bit operations. Existing parity tests in `Tools.Numerics.Tests` already enforce declaration similarity, which is an indicator that helper extraction opportunities are likely to be broad rather than isolated.
+The six declaration files are intentionally parity-shaped and contain repeated wrappers around formatting, parsing, comparison, and bit operations. Existing parity tests in `Durable7.Numerics.Tests` already enforce declaration similarity, which is an indicator that helper extraction opportunities are likely to be broad rather than isolated.
 
 ---
 

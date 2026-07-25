@@ -1,4 +1,4 @@
-use tools_data_structures_ordered::{OrderedMapMoveError, PersistentOrderedMap};
+use durable7_ordered::{OrderedMapMoveError, PersistentOrderedMap};
 
 #[test]
 fn construction_is_first_key_last_distinct_value_and_insertion_order() {

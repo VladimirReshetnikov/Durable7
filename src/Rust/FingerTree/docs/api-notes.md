@@ -5,8 +5,8 @@
 - Audience: Maintainers implementing and reviewing the Rust FingerTree-family port
 - Scope: Rust naming, contracts, checkpoint limitations, and intentional differences from the C# and C++ workspaces
 
-The public crate is `tools-data-structures-fingertree`, with library name
-`tools_data_structures_fingertree`.
+The public crate is `durable7-fingertree`, with library name
+`durable7_fingertree`.
 
 Current public families:
 
@@ -456,7 +456,7 @@ trait when `T` has its existing sum-policy bounds. The monoid must be associativ
 identity but need not be commutative or invertible.
 
 ```rust
-use tools_data_structures_fingertree::{DabaLite, SumMeasure};
+use durable7_fingertree::{DabaLite, SumMeasure};
 
 let mut window = DabaLite::<i64, SumMeasure<i64>>::new();
 window.insert(5);

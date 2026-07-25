@@ -55,7 +55,7 @@ should be read as provenance, not current-state instructions.
 ## Historical observed behavior
 
 Before remediation, all four set-algebra methods on `PersistentHashSet<T>` took `IEnumerable<T>` and operated element-wise
-([`PersistentHashSet.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashSet.cs)):
+([`PersistentHashSet.cs`](../../src/CSharp/src/Durable7.Hamt/PersistentHashSet.cs)):
 
 | Method | Lines | Strategy | Cost |
 | --- | --- | --- | --- |
@@ -117,7 +117,7 @@ change-tracking workloads.
 
 The repository already contained the better shape for a sibling family. `PersistentIntSet` exposes set
 algebra that takes **another set of the same type** and delegates to the reference-pruned Patricia
-core ([`PersistentIntSet.cs:57`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentIntSet.cs),
+core ([`PersistentIntSet.cs:57`](../../src/CSharp/src/Durable7.Hamt/PersistentIntSet.cs),
 `:66`, `:75`):
 
 ```csharp
@@ -127,7 +127,7 @@ public PersistentIntSet Except(PersistentIntSet other)
 ```
 
 The Patricia core short-circuits reference-equal operands and subtrees throughout
-([`PatriciaMapCore.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/Internal/PatriciaMapCore.cs):
+([`PatriciaMapCore.cs`](../../src/CSharp/src/Durable7.Hamt/Internal/PatriciaMapCore.cs):
 `ReferenceEquals` guards at the whole-tree level and recursively per subtree), so its algebra is
 proportional to the non-shared structure. `PersistentLongSet` is the 64-bit analogue.
 
@@ -140,7 +140,7 @@ surface.
 A structural combine on the HAMT is a node-layer feature, and the two pieces it needs already exist:
 
 1. **Reference-pruned lockstep traversal.** `PersistentHashMap<TKey, TValue>` already ships
-   `MapEquals` ([`PersistentHashMap.cs:412`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs))
+   `MapEquals` ([`PersistentHashMap.cs:412`](../../src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs))
    and `Diff` (`:441`), whose node walk short-circuits on `ReferenceEquals` at the root (`:448`) and at
    every aligned subtree pair (`:573`, `:641`). This is precisely the traversal a structural
    `Union`/`Intersect`/`Except` would perform — the current `Diff` produces a change list
@@ -203,10 +203,10 @@ transient bulk builder the combine's materialization path would want — worth s
 ## How to verify the resolution
 
 - Inspect the same-type map and set overloads in
-  [`PersistentHashMap.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashMap.cs) and
-  [`PersistentHashSet.cs`](../../src/CSharp/src/Tools.DataStructures.Hamt/PersistentHashSet.cs).
+  [`PersistentHashMap.cs`](../../src/CSharp/src/Durable7.Hamt/PersistentHashMap.cs) and
+  [`PersistentHashSet.cs`](../../src/CSharp/src/Durable7.Hamt/PersistentHashSet.cs).
 - Run the C# HAMT suite and its shared-ancestry structural-algebra tests documented in
-  [`src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md`](../../src/CSharp/tests/Tools.DataStructures.Hamt.Tests/README.md).
+  [`src/CSharp/tests/Durable7.Hamt.Tests/README.md`](../../src/CSharp/tests/Durable7.Hamt.Tests/README.md).
 - Run the sibling HAMT suites. Their structural tests cover cached cardinalities, collision-heavy
   truth tables, representative/bias rules, cross-policy behavior, and zero-rehash pruning; the C
   suite additionally sweeps allocation failures.

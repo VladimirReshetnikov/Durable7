@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 
-use tools_data_structures_hamt::{
+use durable7_hamt::{
     InMemoryMerkleBlockStore, Int32MerkleCodec, MerkleBlock, MerkleBlockPack, MerkleBlockStore,
     MerkleCodec, MerkleCodecError, MerkleDigest, MerkleMergeResolution, MerkleProof,
     MerkleProofKind, MerkleProofStep, MerkleSearchTree, MerkleSearchTreePolicy,
@@ -1093,7 +1093,7 @@ fn assert_proof_failure(
 }
 
 fn assert_early_proof_limit_failure(
-    result: &tools_data_structures_hamt::MerkleProofVerificationResult,
+    result: &durable7_hamt::MerkleProofVerificationResult,
     expected_query_byte_count: u64,
     key_counts: &CodecCounts,
     value_counts: &CodecCounts,

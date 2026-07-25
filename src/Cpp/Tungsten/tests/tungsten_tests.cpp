@@ -1,5 +1,5 @@
-#include <tools/data_structures/tungsten/tungsten.hpp>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/tungsten/tungsten.hpp>
+#include <durable7/test_support/headless_test_process.h>
 
 #include "../../FingerTree/tests/test_support/test_runner.hpp"
 
@@ -16,8 +16,8 @@
 #include <utility>
 #include <vector>
 
-namespace wf = tools::data_structures::tungsten;
-using namespace tools::data_structures::finger_tree::tests;
+namespace wf = durable7::tungsten;
+using namespace durable7::finger_tree::tests;
 
 namespace {
 
@@ -728,7 +728,7 @@ void add_persistent_association_tests(suite& tests)
 
 int main(const int argument_count, const char* const* arguments)
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 
@@ -736,7 +736,7 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("metadata");
     tests.add("aggregate header exposes version metadata", [] {
-        FT_REQUIRE_EQUAL(wf::library_name, std::string_view{"Tools.DataStructures.Tungsten.Cpp"});
+        FT_REQUIRE_EQUAL(wf::library_name, std::string_view{"Durable7.Tungsten.Cpp"});
         FT_REQUIRE_EQUAL(wf::version_major, 0U);
         FT_REQUIRE_EQUAL(wf::version_minor, 1U);
         FT_REQUIRE_EQUAL(wf::version_patch, 0U);

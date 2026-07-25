@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Durable7.Hamt</AssemblyName>
+    <RootNamespace>Durable7.Hamt</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Durable7.Hamt.Tests" />
+    <InternalsVisibleTo Include="Durable7.FingerTree.Benchmarks" />
+  </ItemGroup>
+</Project>

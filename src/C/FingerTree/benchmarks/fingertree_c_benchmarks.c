@@ -1,6 +1,6 @@
-#include <tools/data_structures/finger_tree/fingertree.h>
-#include <tools/data_structures/finger_tree/daba_lite.h>
-#include <tools/data_structures/finger_tree/rrb_vector.h>
+#include <durable7/finger_tree/fingertree.h>
+#include <durable7/finger_tree/daba_lite.h>
+#include <durable7/finger_tree/rrb_vector.h>
 
 #include <stdio.h>
 #include <stdlib.h>

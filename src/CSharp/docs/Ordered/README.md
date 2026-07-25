@@ -3,10 +3,10 @@
 - Status: Current documentation index
 - Created (UTC): 2026-07-15T01:28:46Z
 - Repository HEAD: 5fd1a85c5ec58886f0dbabe805552bd37ec40871
-- Audience: Users and maintainers of `Tools.DataStructures.Ordered`
+- Audience: Users and maintainers of `Durable7.Ordered`
 - Scope: The independently owned C# insertion-ordered persistent map/set/multimap workspace
 
-`Tools.DataStructures.Ordered` is the neutral owner of `PersistentOrderedMap<TKey, TValue>`,
+`Durable7.Ordered` is the neutral owner of `PersistentOrderedMap<TKey, TValue>`,
 `PersistentOrderedSet<T>`, and `PersistentOrderedMultimap<TKey, TValue>`, immutable
 insertion-ordered collections composed from the public C#
 HAMT and FingerTree libraries. It is a general
@@ -23,14 +23,14 @@ Tungsten collections.
 
 Primary code and tests:
 
-- [library project](../../src/Tools.DataStructures.Ordered/Tools.DataStructures.Ordered.csproj)
-- [`PersistentOrderedMap<TKey, TValue>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedMap.cs)
-- [`PersistentOrderedSet<T>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.cs)
-- [`PersistentOrderedMultimap<TKey, TValue>` source](../../src/Tools.DataStructures.Ordered/PersistentOrderedMultimap.cs)
-- [algebra and relations](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.Algebra.cs)
-- [invariant diagnostics](../../src/Tools.DataStructures.Ordered/PersistentOrderedSet.Diagnostics.cs)
-- [test project](../../tests/Tools.DataStructures.Ordered.Tests/Tools.DataStructures.Ordered.Tests.csproj)
-- [test-suite map](../../tests/Tools.DataStructures.Ordered.Tests/README.md)
+- [library project](../../src/Durable7.Ordered/Durable7.Ordered.csproj)
+- [`PersistentOrderedMap<TKey, TValue>` source](../../src/Durable7.Ordered/PersistentOrderedMap.cs)
+- [`PersistentOrderedSet<T>` source](../../src/Durable7.Ordered/PersistentOrderedSet.cs)
+- [`PersistentOrderedMultimap<TKey, TValue>` source](../../src/Durable7.Ordered/PersistentOrderedMultimap.cs)
+- [algebra and relations](../../src/Durable7.Ordered/PersistentOrderedSet.Algebra.cs)
+- [invariant diagnostics](../../src/Durable7.Ordered/PersistentOrderedSet.Diagnostics.cs)
+- [test project](../../tests/Durable7.Ordered.Tests/Durable7.Ordered.Tests.csproj)
+- [test-suite map](../../tests/Durable7.Ordered.Tests/README.md)
 
 The authoritative execution rationale is the repository-level
 [benchmark-independent structures proposal](../../../../docs/proposals/benchmark-independent-next-structures-2026-07-14.md).

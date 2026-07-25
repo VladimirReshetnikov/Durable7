@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from vladimir_reshetnikov.data_structures.finger_tree import (
+from durable7.finger_tree import (
     FingerTree,
     NumberSumMeasure,
     PersistentDeque,

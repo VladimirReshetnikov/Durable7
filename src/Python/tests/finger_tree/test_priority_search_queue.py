@@ -8,7 +8,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.finger_tree.priority_search_queue import (
+from durable7.finger_tree.priority_search_queue import (
     PrioritySearchEntry,
     PrioritySearchQueue,
 )

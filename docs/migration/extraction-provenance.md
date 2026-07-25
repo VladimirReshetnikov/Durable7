@@ -64,9 +64,11 @@ dotnet test .\DataStructures.sln
 
 Result: passed 346 tests, 0 failed, 0 skipped.
 
-After the 2026-07 language-first repository reorganization, the equivalent validation command is:
+After the 2026-07 language-first repository reorganization and the subsequent Durable7 rebrand,
+which renamed the solution from `DataStructures.sln` to `Durable7.sln`, the equivalent validation
+command is:
 
 ```powershell
 cd C:\DataStructures\src\CSharp
-dotnet test .\DataStructures.sln
+dotnet test .\Durable7.sln
 ```

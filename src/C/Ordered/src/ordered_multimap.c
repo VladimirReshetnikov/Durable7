@@ -1,162 +1,162 @@
-#include <tools/data_structures/ordered/ordered_multimap.h>
+#include <durable7/ordered/ordered_multimap.h>
 
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct tds_ordered_multimap_context {
+typedef struct d7_ordered_multimap_context {
     size_t references;
-    tds_ordered_policy key_policy;
-    tds_ordered_policy value_policy;
-    tds_ordered_map_policy group_policy;
-} tds_ordered_multimap_context;
+    d7_ordered_policy key_policy;
+    d7_ordered_policy value_policy;
+    d7_ordered_map_policy group_policy;
+} d7_ordered_multimap_context;
 
-static bool tds_ordered_multimap_valid(const tds_ordered_multimap* map)
+static bool d7_ordered_multimap_valid(const d7_ordered_multimap* map)
 {
     return map != NULL && map->context != NULL && map->pair_count >= 0;
 }
 
-static void tds_ordered_multimap_context_retain(
-    tds_ordered_multimap_context* context)
+static void d7_ordered_multimap_context_retain(
+    d7_ordered_multimap_context* context)
 {
     if (context != NULL) {
         ++context->references;
     }
 }
 
-static void tds_ordered_multimap_context_release(
-    tds_ordered_multimap_context* context)
+static void d7_ordered_multimap_context_release(
+    d7_ordered_multimap_context* context)
 {
     if (context != NULL && --context->references == 0u) {
         free(context);
     }
 }
 
-static void tds_ordered_multimap_group_copy(
+static void d7_ordered_multimap_group_copy(
     void* destination,
     const void* source,
     void* raw_context)
 {
     (void)raw_context;
-    /* The ft_copy_fn signature has no failure channel, and tds_ordered_set_clone writes the
+    /* The ft_copy_fn signature has no failure channel, and d7_ordered_set_clone writes the
      * destination only on success. Zero it first so a failed clone leaves a wholly
-     * uninitialized group that tds_ordered_set_destroy rejects, rather than raw heap bytes
+     * uninitialized group that d7_ordered_set_destroy rejects, rather than raw heap bytes
      * whose non-NULL field patterns would be released as live pointers. */
-    (void)memset(destination, 0, sizeof(tds_ordered_set));
-    (void)tds_ordered_set_clone(
-        (const tds_ordered_set*)source,
-        (tds_ordered_set*)destination);
+    (void)memset(destination, 0, sizeof(d7_ordered_set));
+    (void)d7_ordered_set_clone(
+        (const d7_ordered_set*)source,
+        (d7_ordered_set*)destination);
 }
 
-static void tds_ordered_multimap_group_destroy(void* value, void* raw_context)
+static void d7_ordered_multimap_group_destroy(void* value, void* raw_context)
 {
     (void)raw_context;
-    tds_ordered_set_destroy((tds_ordered_set*)value);
+    d7_ordered_set_destroy((d7_ordered_set*)value);
 }
 
-static bool tds_ordered_multimap_group_equal(
+static bool d7_ordered_multimap_group_equal(
     const void* left,
     const void* right,
     void* raw_context)
 {
     (void)raw_context;
-    return tds_ordered_set_debug_shares_index(
-        (const tds_ordered_set*)left,
-        (const tds_ordered_set*)right);
+    return d7_ordered_set_debug_shares_index(
+        (const d7_ordered_set*)left,
+        (const d7_ordered_set*)right);
 }
 
-static void tds_ordered_multimap_publish(
-    const tds_ordered_multimap* source,
-    tds_ordered_multimap* result,
-    tds_ordered_multimap* candidate)
+static void d7_ordered_multimap_publish(
+    const d7_ordered_multimap* source,
+    d7_ordered_multimap* result,
+    d7_ordered_multimap* candidate)
 {
     if (result == source) {
-        tds_ordered_multimap_destroy(result);
+        d7_ordered_multimap_destroy(result);
     }
     *result = *candidate;
     (void)memset(candidate, 0, sizeof(*candidate));
 }
 
-static tds_ordered_status tds_ordered_multimap_publish_clone(
-    const tds_ordered_multimap* source,
-    tds_ordered_multimap* result)
+static d7_ordered_status d7_ordered_multimap_publish_clone(
+    const d7_ordered_multimap* source,
+    d7_ordered_multimap* result)
 {
-    tds_ordered_multimap candidate;
-    const tds_ordered_status status =
-        tds_ordered_multimap_clone(source, &candidate);
-    if (status == TDS_ORDERED_OK) {
-        tds_ordered_multimap_publish(source, result, &candidate);
+    d7_ordered_multimap candidate;
+    const d7_ordered_status status =
+        d7_ordered_multimap_clone(source, &candidate);
+    if (status == D7_ORDERED_OK) {
+        d7_ordered_multimap_publish(source, result, &candidate);
     }
     return status;
 }
 
-tds_ordered_status tds_ordered_multimap_init(
-    tds_ordered_multimap* map,
-    const tds_ordered_policy* key_policy,
-    const tds_ordered_policy* value_policy)
+d7_ordered_status d7_ordered_multimap_init(
+    d7_ordered_multimap* map,
+    const d7_ordered_policy* key_policy,
+    const d7_ordered_policy* value_policy)
 {
     if (map == NULL || key_policy == NULL || value_policy == NULL
         || key_policy->item_type.size == 0u
         || value_policy->item_type.size == 0u
         || key_policy->hash == NULL) {
-        return TDS_ORDERED_INVALID_ARGUMENT;
+        return D7_ORDERED_INVALID_ARGUMENT;
     }
-    tds_ordered_multimap_context* context =
-        (tds_ordered_multimap_context*)malloc(sizeof(*context));
+    d7_ordered_multimap_context* context =
+        (d7_ordered_multimap_context*)malloc(sizeof(*context));
     if (context == NULL) {
-        return TDS_ORDERED_OUT_OF_MEMORY;
+        return D7_ORDERED_OUT_OF_MEMORY;
     }
     context->references = 1u;
     context->key_policy = *key_policy;
     context->value_policy = *value_policy;
     ft_value_type group_type;
-    ft_value_type_init(&group_type, sizeof(tds_ordered_set));
-    group_type.copy = tds_ordered_multimap_group_copy;
-    group_type.destroy = tds_ordered_multimap_group_destroy;
+    ft_value_type_init(&group_type, sizeof(d7_ordered_set));
+    group_type.copy = d7_ordered_multimap_group_copy;
+    group_type.destroy = d7_ordered_multimap_group_destroy;
     group_type.context = context;
-    tds_ordered_map_policy_init(
+    d7_ordered_map_policy_init(
         &context->group_policy,
         &key_policy->item_type,
         &group_type,
         key_policy->hash,
         key_policy->equal,
-        tds_ordered_multimap_group_equal,
+        d7_ordered_multimap_group_equal,
         key_policy->context);
-    const tds_ordered_status status =
-        tds_ordered_map_init(&map->groups, &context->group_policy);
-    if (status != TDS_ORDERED_OK) {
+    const d7_ordered_status status =
+        d7_ordered_map_init(&map->groups, &context->group_policy);
+    if (status != D7_ORDERED_OK) {
         free(context);
         return status;
     }
     map->pair_count = 0;
     map->context = context;
-    return TDS_ORDERED_OK;
+    return D7_ORDERED_OK;
 }
 
-tds_ordered_status tds_ordered_multimap_clone(
-    const tds_ordered_multimap* source,
-    tds_ordered_multimap* destination)
+d7_ordered_status d7_ordered_multimap_clone(
+    const d7_ordered_multimap* source,
+    d7_ordered_multimap* destination)
 {
-    if (!tds_ordered_multimap_valid(source) || destination == NULL) {
-        return TDS_ORDERED_INVALID_ARGUMENT;
+    if (!d7_ordered_multimap_valid(source) || destination == NULL) {
+        return D7_ORDERED_INVALID_ARGUMENT;
     }
     if (source == destination) {
-        return TDS_ORDERED_OK;
+        return D7_ORDERED_OK;
     }
-    const tds_ordered_status status =
-        tds_ordered_map_clone(&source->groups, &destination->groups);
-    if (status != TDS_ORDERED_OK) {
+    const d7_ordered_status status =
+        d7_ordered_map_clone(&source->groups, &destination->groups);
+    if (status != D7_ORDERED_OK) {
         return status;
     }
     destination->pair_count = source->pair_count;
     destination->context = source->context;
-    tds_ordered_multimap_context_retain(destination->context);
-    return TDS_ORDERED_OK;
+    d7_ordered_multimap_context_retain(destination->context);
+    return D7_ORDERED_OK;
 }
 
-void tds_ordered_multimap_move(
-    tds_ordered_multimap* destination,
-    tds_ordered_multimap* source)
+void d7_ordered_multimap_move(
+    d7_ordered_multimap* destination,
+    d7_ordered_multimap* source)
 {
     if (destination != NULL && source != NULL && destination != source) {
         *destination = *source;
@@ -164,298 +164,298 @@ void tds_ordered_multimap_move(
     }
 }
 
-void tds_ordered_multimap_destroy(tds_ordered_multimap* map)
+void d7_ordered_multimap_destroy(d7_ordered_multimap* map)
 {
     if (map != NULL) {
-        tds_ordered_map_destroy(&map->groups);
-        tds_ordered_multimap_context_release(map->context);
+        d7_ordered_map_destroy(&map->groups);
+        d7_ordered_multimap_context_release(map->context);
         (void)memset(map, 0, sizeof(*map));
     }
 }
 
-size_t tds_ordered_multimap_key_count(const tds_ordered_multimap* map)
+size_t d7_ordered_multimap_key_count(const d7_ordered_multimap* map)
 {
-    return tds_ordered_multimap_valid(map)
-        ? tds_ordered_map_size(&map->groups) : 0u;
+    return d7_ordered_multimap_valid(map)
+        ? d7_ordered_map_size(&map->groups) : 0u;
 }
 
-int64_t tds_ordered_multimap_pair_count(const tds_ordered_multimap* map)
+int64_t d7_ordered_multimap_pair_count(const d7_ordered_multimap* map)
 {
-    return tds_ordered_multimap_valid(map) ? map->pair_count : 0;
+    return d7_ordered_multimap_valid(map) ? map->pair_count : 0;
 }
 
-bool tds_ordered_multimap_empty(const tds_ordered_multimap* map)
+bool d7_ordered_multimap_empty(const d7_ordered_multimap* map)
 {
-    return tds_ordered_multimap_pair_count(map) == 0;
+    return d7_ordered_multimap_pair_count(map) == 0;
 }
 
-bool tds_ordered_multimap_contains_key(
-    const tds_ordered_multimap* map,
+bool d7_ordered_multimap_contains_key(
+    const d7_ordered_multimap* map,
     const void* key)
 {
-    return tds_ordered_multimap_valid(map)
-        && tds_ordered_map_contains_key(&map->groups, key);
+    return d7_ordered_multimap_valid(map)
+        && d7_ordered_map_contains_key(&map->groups, key);
 }
 
-bool tds_ordered_multimap_try_get_values(
-    const tds_ordered_multimap* map,
+bool d7_ordered_multimap_try_get_values(
+    const d7_ordered_multimap* map,
     const void* key,
-    const tds_ordered_set** values)
+    const d7_ordered_set** values)
 {
     const void* raw = NULL;
     if (values != NULL) {
         *values = NULL;
     }
-    if (!tds_ordered_multimap_valid(map)
-        || !tds_ordered_map_try_get(&map->groups, key, NULL, &raw)) {
+    if (!d7_ordered_multimap_valid(map)
+        || !d7_ordered_map_try_get(&map->groups, key, NULL, &raw)) {
         return false;
     }
     if (values != NULL) {
-        *values = (const tds_ordered_set*)raw;
+        *values = (const d7_ordered_set*)raw;
     }
     return true;
 }
 
-bool tds_ordered_multimap_contains(
-    const tds_ordered_multimap* map,
+bool d7_ordered_multimap_contains(
+    const d7_ordered_multimap* map,
     const void* key,
     const void* value)
 {
-    const tds_ordered_set* values = NULL;
-    return tds_ordered_multimap_try_get_values(map, key, &values)
-        && tds_ordered_set_contains(values, value);
+    const d7_ordered_set* values = NULL;
+    return d7_ordered_multimap_try_get_values(map, key, &values)
+        && d7_ordered_set_contains(values, value);
 }
 
-bool tds_ordered_multimap_try_get_key(
-    const tds_ordered_multimap* map,
+bool d7_ordered_multimap_try_get_key(
+    const d7_ordered_multimap* map,
     const void* equal_key,
     const void** actual_key)
 {
     const void* value = NULL;
-    return tds_ordered_multimap_valid(map)
-        && tds_ordered_map_try_get(
+    return d7_ordered_multimap_valid(map)
+        && d7_ordered_map_try_get(
             &map->groups, equal_key, actual_key, &value);
 }
 
-tds_ordered_status tds_ordered_multimap_add(
-    const tds_ordered_multimap* map,
+d7_ordered_status d7_ordered_multimap_add(
+    const d7_ordered_multimap* map,
     const void* key,
     const void* value,
-    tds_ordered_multimap* result)
+    d7_ordered_multimap* result)
 {
-    if (!tds_ordered_multimap_valid(map) || result == NULL) {
-        return TDS_ORDERED_INVALID_ARGUMENT;
+    if (!d7_ordered_multimap_valid(map) || result == NULL) {
+        return D7_ORDERED_INVALID_ARGUMENT;
     }
-    const tds_ordered_set* stored = NULL;
-    tds_ordered_set values;
-    tds_ordered_status status;
-    if (tds_ordered_multimap_try_get_values(map, key, &stored)) {
-        status = tds_ordered_set_add(stored, value, &values);
-        if (status != TDS_ORDERED_OK) {
+    const d7_ordered_set* stored = NULL;
+    d7_ordered_set values;
+    d7_ordered_status status;
+    if (d7_ordered_multimap_try_get_values(map, key, &stored)) {
+        status = d7_ordered_set_add(stored, value, &values);
+        if (status != D7_ORDERED_OK) {
             return status;
         }
-        if (tds_ordered_set_debug_shares_index(stored, &values)) {
-            tds_ordered_set_destroy(&values);
-            return tds_ordered_multimap_publish_clone(map, result);
+        if (d7_ordered_set_debug_shares_index(stored, &values)) {
+            d7_ordered_set_destroy(&values);
+            return d7_ordered_multimap_publish_clone(map, result);
         }
     } else {
-        status = tds_ordered_set_init(&values, &map->context->value_policy);
-        if (status != TDS_ORDERED_OK) {
+        status = d7_ordered_set_init(&values, &map->context->value_policy);
+        if (status != D7_ORDERED_OK) {
             return status;
         }
-        tds_ordered_set inserted;
-        status = tds_ordered_set_add(&values, value, &inserted);
-        tds_ordered_set_destroy(&values);
-        if (status != TDS_ORDERED_OK) {
+        d7_ordered_set inserted;
+        status = d7_ordered_set_add(&values, value, &inserted);
+        d7_ordered_set_destroy(&values);
+        if (status != D7_ORDERED_OK) {
             return status;
         }
         values = inserted;
     }
     if (map->pair_count == INT64_MAX) {
-        tds_ordered_set_destroy(&values);
-        return TDS_ORDERED_OVERFLOW;
+        d7_ordered_set_destroy(&values);
+        return D7_ORDERED_OVERFLOW;
     }
-    tds_ordered_map groups;
+    d7_ordered_map groups;
     status = stored == NULL
-        ? tds_ordered_map_add(&map->groups, key, &values, &groups)
-        : tds_ordered_map_set(&map->groups, key, &values, &groups);
-    tds_ordered_set_destroy(&values);
-    if (status != TDS_ORDERED_OK) {
+        ? d7_ordered_map_add(&map->groups, key, &values, &groups)
+        : d7_ordered_map_set(&map->groups, key, &values, &groups);
+    d7_ordered_set_destroy(&values);
+    if (status != D7_ORDERED_OK) {
         return status;
     }
-    tds_ordered_multimap candidate = {
+    d7_ordered_multimap candidate = {
         groups, map->pair_count + 1, map->context };
-    tds_ordered_multimap_context_retain(candidate.context);
-    tds_ordered_multimap_publish(map, result, &candidate);
-    return TDS_ORDERED_OK;
+    d7_ordered_multimap_context_retain(candidate.context);
+    d7_ordered_multimap_publish(map, result, &candidate);
+    return D7_ORDERED_OK;
 }
 
-tds_ordered_status tds_ordered_multimap_remove(
-    const tds_ordered_multimap* map,
+d7_ordered_status d7_ordered_multimap_remove(
+    const d7_ordered_multimap* map,
     const void* key,
     const void* value,
-    tds_ordered_multimap* result)
+    d7_ordered_multimap* result)
 {
-    if (!tds_ordered_multimap_valid(map) || result == NULL) {
-        return TDS_ORDERED_INVALID_ARGUMENT;
+    if (!d7_ordered_multimap_valid(map) || result == NULL) {
+        return D7_ORDERED_INVALID_ARGUMENT;
     }
-    const tds_ordered_set* stored = NULL;
-    if (!tds_ordered_multimap_try_get_values(map, key, &stored)) {
-        return tds_ordered_multimap_publish_clone(map, result);
+    const d7_ordered_set* stored = NULL;
+    if (!d7_ordered_multimap_try_get_values(map, key, &stored)) {
+        return d7_ordered_multimap_publish_clone(map, result);
     }
-    tds_ordered_set values;
+    d7_ordered_set values;
     bool removed = false;
-    tds_ordered_status status =
-        tds_ordered_set_try_remove(stored, value, &removed, &values);
-    if (status != TDS_ORDERED_OK) {
+    d7_ordered_status status =
+        d7_ordered_set_try_remove(stored, value, &removed, &values);
+    if (status != D7_ORDERED_OK) {
         return status;
     }
     if (!removed) {
-        tds_ordered_set_destroy(&values);
-        return tds_ordered_multimap_publish_clone(map, result);
+        d7_ordered_set_destroy(&values);
+        return d7_ordered_multimap_publish_clone(map, result);
     }
-    tds_ordered_map groups;
-    status = tds_ordered_set_empty(&values)
-        ? tds_ordered_map_remove(&map->groups, key, &groups)
-        : tds_ordered_map_set(&map->groups, key, &values, &groups);
-    tds_ordered_set_destroy(&values);
-    if (status != TDS_ORDERED_OK) {
+    d7_ordered_map groups;
+    status = d7_ordered_set_empty(&values)
+        ? d7_ordered_map_remove(&map->groups, key, &groups)
+        : d7_ordered_map_set(&map->groups, key, &values, &groups);
+    d7_ordered_set_destroy(&values);
+    if (status != D7_ORDERED_OK) {
         return status;
     }
-    tds_ordered_multimap candidate = {
+    d7_ordered_multimap candidate = {
         groups, map->pair_count - 1, map->context };
-    tds_ordered_multimap_context_retain(candidate.context);
-    tds_ordered_multimap_publish(map, result, &candidate);
-    return TDS_ORDERED_OK;
+    d7_ordered_multimap_context_retain(candidate.context);
+    d7_ordered_multimap_publish(map, result, &candidate);
+    return D7_ORDERED_OK;
 }
 
-tds_ordered_status tds_ordered_multimap_remove_key(
-    const tds_ordered_multimap* map,
+d7_ordered_status d7_ordered_multimap_remove_key(
+    const d7_ordered_multimap* map,
     const void* key,
-    tds_ordered_multimap* result)
+    d7_ordered_multimap* result)
 {
-    if (!tds_ordered_multimap_valid(map) || result == NULL) {
-        return TDS_ORDERED_INVALID_ARGUMENT;
+    if (!d7_ordered_multimap_valid(map) || result == NULL) {
+        return D7_ORDERED_INVALID_ARGUMENT;
     }
-    const tds_ordered_set* stored = NULL;
-    if (!tds_ordered_multimap_try_get_values(map, key, &stored)) {
-        return tds_ordered_multimap_publish_clone(map, result);
+    const d7_ordered_set* stored = NULL;
+    if (!d7_ordered_multimap_try_get_values(map, key, &stored)) {
+        return d7_ordered_multimap_publish_clone(map, result);
     }
-    const size_t removed = tds_ordered_set_size(stored);
-    tds_ordered_map groups;
-    const tds_ordered_status status =
-        tds_ordered_map_remove(&map->groups, key, &groups);
-    if (status != TDS_ORDERED_OK) {
+    const size_t removed = d7_ordered_set_size(stored);
+    d7_ordered_map groups;
+    const d7_ordered_status status =
+        d7_ordered_map_remove(&map->groups, key, &groups);
+    if (status != D7_ORDERED_OK) {
         return status;
     }
-    tds_ordered_multimap candidate = {
+    d7_ordered_multimap candidate = {
         groups, map->pair_count - (int64_t)removed, map->context };
-    tds_ordered_multimap_context_retain(candidate.context);
-    tds_ordered_multimap_publish(map, result, &candidate);
-    return TDS_ORDERED_OK;
+    d7_ordered_multimap_context_retain(candidate.context);
+    d7_ordered_multimap_publish(map, result, &candidate);
+    return D7_ORDERED_OK;
 }
 
-tds_ordered_status tds_ordered_multimap_clear(
-    const tds_ordered_multimap* map,
-    tds_ordered_multimap* result)
+d7_ordered_status d7_ordered_multimap_clear(
+    const d7_ordered_multimap* map,
+    d7_ordered_multimap* result)
 {
-    if (!tds_ordered_multimap_valid(map) || result == NULL) {
-        return TDS_ORDERED_INVALID_ARGUMENT;
+    if (!d7_ordered_multimap_valid(map) || result == NULL) {
+        return D7_ORDERED_INVALID_ARGUMENT;
     }
-    if (tds_ordered_multimap_empty(map)) {
-        return tds_ordered_multimap_publish_clone(map, result);
+    if (d7_ordered_multimap_empty(map)) {
+        return d7_ordered_multimap_publish_clone(map, result);
     }
-    tds_ordered_map groups;
-    const tds_ordered_status status =
-        tds_ordered_map_clear(&map->groups, &groups);
-    if (status != TDS_ORDERED_OK) {
+    d7_ordered_map groups;
+    const d7_ordered_status status =
+        d7_ordered_map_clear(&map->groups, &groups);
+    if (status != D7_ORDERED_OK) {
         return status;
     }
-    tds_ordered_multimap candidate = { groups, 0, map->context };
-    tds_ordered_multimap_context_retain(candidate.context);
-    tds_ordered_multimap_publish(map, result, &candidate);
-    return TDS_ORDERED_OK;
+    d7_ordered_multimap candidate = { groups, 0, map->context };
+    d7_ordered_multimap_context_retain(candidate.context);
+    d7_ordered_multimap_publish(map, result, &candidate);
+    return D7_ORDERED_OK;
 }
 
-typedef struct tds_ordered_multimap_visit_context {
-    tds_ordered_multimap_visit_fn visitor;
+typedef struct d7_ordered_multimap_visit_context {
+    d7_ordered_multimap_visit_fn visitor;
     void* visitor_context;
     const void* key;
-} tds_ordered_multimap_visit_context;
+} d7_ordered_multimap_visit_context;
 
-static void tds_ordered_multimap_visit_value(const void* value, void* raw_context)
+static void d7_ordered_multimap_visit_value(const void* value, void* raw_context)
 {
-    tds_ordered_multimap_visit_context* context =
-        (tds_ordered_multimap_visit_context*)raw_context;
+    d7_ordered_multimap_visit_context* context =
+        (d7_ordered_multimap_visit_context*)raw_context;
     context->visitor(context->key, value, context->visitor_context);
 }
 
-static void tds_ordered_multimap_visit_group(
+static void d7_ordered_multimap_visit_group(
     const void* key,
     const void* raw_values,
     void* raw_context)
 {
-    tds_ordered_multimap_visit_context* context =
-        (tds_ordered_multimap_visit_context*)raw_context;
+    d7_ordered_multimap_visit_context* context =
+        (d7_ordered_multimap_visit_context*)raw_context;
     context->key = key;
-    (void)tds_ordered_set_visit(
-        (const tds_ordered_set*)raw_values,
-        tds_ordered_multimap_visit_value,
+    (void)d7_ordered_set_visit(
+        (const d7_ordered_set*)raw_values,
+        d7_ordered_multimap_visit_value,
         context);
 }
 
-tds_ordered_status tds_ordered_multimap_visit(
-    const tds_ordered_multimap* map,
-    tds_ordered_multimap_visit_fn visitor,
+d7_ordered_status d7_ordered_multimap_visit(
+    const d7_ordered_multimap* map,
+    d7_ordered_multimap_visit_fn visitor,
     void* context)
 {
-    if (!tds_ordered_multimap_valid(map) || visitor == NULL) {
-        return TDS_ORDERED_INVALID_ARGUMENT;
+    if (!d7_ordered_multimap_valid(map) || visitor == NULL) {
+        return D7_ORDERED_INVALID_ARGUMENT;
     }
-    tds_ordered_multimap_visit_context bridge = {
+    d7_ordered_multimap_visit_context bridge = {
         visitor, context, NULL };
-    return tds_ordered_map_visit(
-        &map->groups, tds_ordered_multimap_visit_group, &bridge);
+    return d7_ordered_map_visit(
+        &map->groups, d7_ordered_multimap_visit_group, &bridge);
 }
 
-static void tds_ordered_multimap_validate_group(
+static void d7_ordered_multimap_validate_group(
     const void* key,
     const void* raw_values,
     void* raw_context)
 {
     (void)key;
     int64_t* pairs = (int64_t*)raw_context;
-    const tds_ordered_set* values = (const tds_ordered_set*)raw_values;
-    if (tds_ordered_set_empty(values)
-        || !tds_ordered_set_debug_validate(values)
-        || tds_ordered_set_size(values) > (size_t)(INT64_MAX - *pairs)) {
+    const d7_ordered_set* values = (const d7_ordered_set*)raw_values;
+    if (d7_ordered_set_empty(values)
+        || !d7_ordered_set_debug_validate(values)
+        || d7_ordered_set_size(values) > (size_t)(INT64_MAX - *pairs)) {
         *pairs = -1;
     } else {
-        *pairs += (int64_t)tds_ordered_set_size(values);
+        *pairs += (int64_t)d7_ordered_set_size(values);
     }
 }
 
-bool tds_ordered_multimap_debug_validate(const tds_ordered_multimap* map)
+bool d7_ordered_multimap_debug_validate(const d7_ordered_multimap* map)
 {
-    if (!tds_ordered_multimap_valid(map)
-        || !tds_ordered_map_debug_validate(&map->groups)) {
+    if (!d7_ordered_multimap_valid(map)
+        || !d7_ordered_map_debug_validate(&map->groups)) {
         return false;
     }
     int64_t pairs = 0;
-    if (tds_ordered_map_visit(
-            &map->groups, tds_ordered_multimap_validate_group, &pairs)
-        != TDS_ORDERED_OK) {
+    if (d7_ordered_map_visit(
+            &map->groups, d7_ordered_multimap_validate_group, &pairs)
+        != D7_ORDERED_OK) {
         return false;
     }
     return pairs == map->pair_count;
 }
 
-bool tds_ordered_multimap_debug_shares_groups(
-    const tds_ordered_multimap* left,
-    const tds_ordered_multimap* right)
+bool d7_ordered_multimap_debug_shares_groups(
+    const d7_ordered_multimap* left,
+    const d7_ordered_multimap* right)
 {
-    return tds_ordered_multimap_valid(left)
-        && tds_ordered_multimap_valid(right)
-        && tds_ordered_map_debug_shares_values(
+    return d7_ordered_multimap_valid(left)
+        && d7_ordered_multimap_valid(right)
+        && d7_ordered_map_debug_shares_values(
             &left->groups, &right->groups);
 }

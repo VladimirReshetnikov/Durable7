@@ -3,7 +3,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::thread;
 
-use tools_data_structures_range_update::{
+use durable7_range_update::{
     MeasurePolicy, RangeUpdateAlgebra, RangeUpdateError, RangeUpdateSequence,
 };
 

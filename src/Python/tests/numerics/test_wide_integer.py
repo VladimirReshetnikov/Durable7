@@ -8,7 +8,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.numerics import (
+from durable7.numerics import (
     BitConverterEx,
     FixedWidthInteger,
     Int256,

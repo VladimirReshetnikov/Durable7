@@ -8,7 +8,7 @@
 - Audience: Maintainers implementing and reviewing public C++ APIs
 - Scope: C++ naming, contracts, and intentional differences from the C# workspace
 
-The public namespace is `tools::data_structures::finger_tree`. For practical construction,
+The public namespace is `durable7::finger_tree`. For practical construction,
 update, and snapshot examples, start with the [usage guide](usage.md).
 
 ## CMake Package
@@ -16,8 +16,8 @@ update, and snapshot examples, start with the [usage guide](usage.md).
 Source-tree and installed consumers use the same namespaced target:
 
 ```cmake
-find_package(ToolsDataStructuresFingerTree 0.1 CONFIG REQUIRED)
-target_link_libraries(my_target PRIVATE tools::data_structures::finger_tree)
+find_package(Durable7FingerTree 0.1 CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE durable7::finger_tree)
 ```
 
 The target publishes the public include directory and the C++23 language requirement. MSVC-specific dialect

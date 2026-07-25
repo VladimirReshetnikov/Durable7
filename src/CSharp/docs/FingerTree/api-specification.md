@@ -6,7 +6,7 @@
 - Audience: Maintainers, reviewers, and implementers of the C# FingerTree workspace
 - Scope: Public API shape, semantic contracts, complexity targets, and collection roles for the C# FingerTree library
 - Related code:
-  - `src/CSharp/src/Tools.DataStructures.FingerTree/`
+  - `src/CSharp/src/Durable7.FingerTree/`
 - Related first-use guide:
   - [C# FingerTree usage guide](usage.md)
 - Related range-action contract:
@@ -61,12 +61,12 @@ This document specifies the public API contract for the C# FingerTree workspace.
 
 ## Public Package Shape
 
-The implementation lives under `src/CSharp/src/Tools.DataStructures.FingerTree/` with this public namespace and primary type:
+The implementation lives under `src/CSharp/src/Durable7.FingerTree/` with this public namespace and primary type:
 
 ```csharp
 using System.Diagnostics.CodeAnalysis;
 
-namespace Tools.DataStructures.FingerTree;
+namespace Durable7.FingerTree;
 
 public sealed class FingerTreeDeque<T> : IReadOnlyList<T>
 {
@@ -140,7 +140,7 @@ The type should not implement `IList<T>`, `ICollection<T>`, or non-read-only col
 Result structs make multi-value operations self-documenting and avoid public tuple field names becoming part of call-site folklore.
 
 ```csharp
-namespace Tools.DataStructures.FingerTree;
+namespace Durable7.FingerTree;
 
 public readonly record struct FingerTreeDequeSplit<T>(
     FingerTreeDeque<T> Left,

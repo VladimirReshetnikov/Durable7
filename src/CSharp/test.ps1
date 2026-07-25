@@ -2,7 +2,7 @@
 
 [CmdletBinding(PositionalBinding = $false)]
 param(
-    [string]$Project = (Join-Path $PSScriptRoot 'DataStructures.sln'),
+    [string]$Project = (Join-Path $PSScriptRoot 'Durable7.sln'),
     [string]$Configuration,
     [string]$Filter,
     [switch]$NoRestore,

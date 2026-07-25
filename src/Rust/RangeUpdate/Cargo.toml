@@ -1,5 +1,5 @@
 [package]
-name = "tools-data-structures-range-update"
+name = "durable7-range-update"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -8,8 +8,8 @@ rust-version.workspace = true
 description = "Persistent measured sequences with logarithmic lazy range updates for Rust."
 
 [lib]
-name = "tools_data_structures_range_update"
+name = "durable7_range_update"
 path = "src/lib.rs"
 
 [dependencies]
-tools-data-structures-fingertree = { path = "../FingerTree" }
+durable7-fingertree = { path = "../FingerTree" }

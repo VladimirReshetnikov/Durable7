@@ -1,6 +1,6 @@
 import pytest
 
-from vladimir_reshetnikov.data_structures.finger_tree import (
+from durable7.finger_tree import (
     DuplicateIntervalError,
     Interval,
     PersistentIntervalMap,

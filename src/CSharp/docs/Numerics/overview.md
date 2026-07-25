@@ -1,31 +1,31 @@
-# Tools.Numerics
+# Durable7.Numerics
 
 - Status: Implemented workspace
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Audience: Maintainers implementing and reviewing fixed-width and sparse integer numerics
-- Scope: Project layout, API orientation, documentation, and validation entry points for `src/CSharp/src/Tools.Numerics`
+- Scope: Project layout, API orientation, documentation, and validation entry points for `src/CSharp/src/Durable7.Numerics`
 
-`Tools.Numerics` is a fixed-width integer library for .NET that provides signed and unsigned **256-bit**, **512-bit**, and **1024-bit** numeric types with deterministic two's-complement behavior.
+`Durable7.Numerics` is a fixed-width integer library for .NET that provides signed and unsigned **256-bit**, **512-bit**, and **1024-bit** numeric types with deterministic two's-complement behavior.
 
 This package is intended for domains where integer width is part of the contract (binary protocols, deterministic serialization, reproducible overflow behavior, and cross-platform test fixtures).
 
 ## Layout
 
-- `DataStructures.sln` is the solution entry point.
+- `Durable7.sln` is the solution entry point.
 - `Directory.Build.props` applies the workspace's .NET 10, C# preview, nullable, unsafe-block, and XML-documentation warning policy.
-- `src/Tools.Numerics/` contains the public library.
-- [`tests/Tools.Numerics.Tests/`](../../tests/Tools.Numerics.Tests/README.md) contains the xUnit test project.
+- `src/Durable7.Numerics/` contains the public library.
+- [`tests/Durable7.Numerics.Tests/`](../../tests/Durable7.Numerics.Tests/README.md) contains the xUnit test project.
 - [`docs/`](README.md) contains the API reference, maintainer guidance, validation guide, and historical/design notes.
 
 ## Status at a glance
 
-- **Assembly**: `Tools.Numerics`
+- **Assembly**: `Durable7.Numerics`
 - **Target framework**: `net10.0`
 - **Language configuration**: C# preview, nullable enabled, XML documentation generation enabled and enforced as warnings-as-errors
-- **Primary namespace**: `Tools.Numerics`
+- **Primary namespace**: `Durable7.Numerics`
 
-See `Directory.Build.props` and `src/Tools.Numerics/Tools.Numerics.csproj` for authoritative build configuration details.
+See `Directory.Build.props` and `src/Durable7.Numerics/Durable7.Numerics.csproj` for authoritative build configuration details.
 
 ## Type inventory
 
@@ -48,7 +48,7 @@ Supporting helpers in the same assembly:
 
 ## Why this library exists
 
-`BigInteger` is ideal for arbitrary-precision arithmetic, but it does not encode a fixed-size overflow contract by default. `Tools.Numerics` targets the opposite design center:
+`BigInteger` is ideal for arbitrary-precision arithmetic, but it does not encode a fixed-size overflow contract by default. `Durable7.Numerics` targets the opposite design center:
 
 - numeric width is explicit and stable,
 - overflows are deterministic and testable,
@@ -153,7 +153,7 @@ The implementation uses .NET integer behavior as a design anchor. In particular,
 
 ## Tests and quality posture
 
-The companion test project [`tests/Tools.Numerics.Tests`](../../tests/Tools.Numerics.Tests/README.md) validates:
+The companion test project [`tests/Durable7.Numerics.Tests`](../../tests/Durable7.Numerics.Tests/README.md) validates:
 
 - arithmetic and checked/unchecked overflow semantics,
 - parsing/formatting (decimal + hexadecimal paths),
@@ -164,7 +164,7 @@ The companion test project [`tests/Tools.Numerics.Tests`](../../tests/Tools.Nume
 
 Use [`docs/validation.md`](validation.md) for local restore, build, and test commands.
 
-## When to use `Tools.Numerics`
+## When to use `Durable7.Numerics`
 
 Prefer this library when you need:
 
@@ -180,8 +180,8 @@ If your scenario requires mathematically unbounded precision without fixed-width
 
 During this README rewrite, the API/member-level contract matrix and failure-mode details were identified as too dense for the entry document and extracted into a dedicated technical reference:
 
-- [Tools.Numerics API and Behavior Reference](api-and-behavior-reference.md) — normative deep dive covering per-type feature matrix, checked/unchecked semantics, parse/format contract details, byte-conversion guarantees, and maintenance invariants.
-- [Tools.Numerics Wide-Integer Maintainer Guidance](wide-integer-maintainer-guidance.md) — defect-pattern-oriented playbook distilled from recent Int*/UInt* implementation and follow-up fix cycles, with pre-merge checklists designed to prevent recurrence.
+- [Durable7.Numerics API and Behavior Reference](api-and-behavior-reference.md) — normative deep dive covering per-type feature matrix, checked/unchecked semantics, parse/format contract details, byte-conversion guarantees, and maintenance invariants.
+- [Durable7.Numerics Wide-Integer Maintainer Guidance](wide-integer-maintainer-guidance.md) — defect-pattern-oriented playbook distilled from recent Int*/UInt* implementation and follow-up fix cycles, with pre-merge checklists designed to prevent recurrence.
 - [Int256 Refactoring Analysis (`c0f7869247c630aa066f6520f690920b76b0d745`)](int256-c0f786-refactoring-analysis.md) — commit-scoped historical analysis covering behavior preservation, performance implications, and readability trade-offs for the Int256 simplification pass.
 - [Integral Family Shared-Fragment Extraction Analysis](integral-shared-fragment-analysis.md) — scenario-driven analysis of extraction opportunities spanning all six integral types, signed/unsigned families, and per-bitness pairs.
 - [Bitness Code Generation Readiness and Design](bitness-code-generation-readiness-and-design.md) — generator-readiness assessment for future wider integer families.

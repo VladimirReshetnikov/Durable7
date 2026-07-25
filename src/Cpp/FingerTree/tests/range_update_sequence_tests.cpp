@@ -1,4 +1,4 @@
-#include <tools/data_structures/finger_tree/range_update_sequence.hpp>
+#include <durable7/finger_tree/range_update_sequence.hpp>
 
 #include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
@@ -18,8 +18,8 @@
 #include <utility>
 #include <vector>
 
-using namespace tools::data_structures::finger_tree;
-using namespace tools::data_structures::finger_tree::tests;
+using namespace durable7::finger_tree;
+using namespace durable7::finger_tree::tests;
 
 namespace {
 

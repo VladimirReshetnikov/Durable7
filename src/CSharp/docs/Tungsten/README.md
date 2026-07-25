@@ -3,9 +3,9 @@
 - Created (UTC): 2026-07-07T15:05:40Z
 - Repository HEAD: 754f2e474caf2419bfabd5f88565341ddadbf449
 - Audience: Maintainers, consumers, and porters of the C# Tungsten-collections library
-- Scope: Documentation index for `src/CSharp/src/Tools.DataStructures.Tungsten`
+- Scope: Documentation index for `src/CSharp/src/Durable7.Tungsten`
 
-`Tools.DataStructures.Tungsten` provides persistent collections shaped for representing Tungsten
+`Durable7.Tungsten` provides persistent collections shaped for representing Tungsten
 Language `List` and `Association` expressions: `PersistentList<T>` and
 `PersistentAssociation<TKey, TValue>`. The primary external client is the Tungsten engine
 (`C:\Smithereens\src\Tungsten`, a kernel-free Tungsten Language automation workspace). This is an
@@ -37,7 +37,7 @@ is normative for code, tests, documentation, porting, and future workspace extra
 
 ## Related Material
 
-- [Tests README](../../tests/Tools.DataStructures.Tungsten.Tests/README.md)
+- [Tests README](../../tests/Durable7.Tungsten.Tests/README.md)
 - [Derived structure catalog](../../../../docs/reference/derived-structure-catalog.md) - historical
   composition evidence behind this application-specific implementation, not a dependency recipe
   for general collections.

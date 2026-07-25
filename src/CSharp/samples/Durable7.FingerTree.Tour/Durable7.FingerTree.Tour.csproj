@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Durable7.FingerTree.Tour</AssemblyName>
+    <RootNamespace>Durable7.FingerTree.Tour</RootNamespace>
+    <!-- A runnable demo, not a shipped API surface: no XML docs to generate (the workspace default treats
+         CS1591/CS1573 as errors, which would otherwise demand docs on demo helpers). -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Durable7.FingerTree\Durable7.FingerTree.csproj" />
+  </ItemGroup>
+</Project>

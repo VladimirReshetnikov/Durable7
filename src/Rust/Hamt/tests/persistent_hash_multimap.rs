@@ -1,5 +1,5 @@
 use std::collections::hash_map::RandomState;
-use tools_data_structures_hamt::PersistentHashMultimap;
+use durable7_hamt::PersistentHashMultimap;
 
 #[test]
 fn tracks_distinct_groups_and_pairs() {

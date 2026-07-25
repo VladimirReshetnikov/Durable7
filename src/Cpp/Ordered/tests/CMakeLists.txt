@@ -11,10 +11,10 @@ add_executable(
 target_link_libraries(
     ordered_smoke_tests
     PRIVATE
-        tools::data_structures::ordered
+        durable7::ordered
         Threads::Threads
 )
 
 ordered_configure_target(ordered_smoke_tests)
 
-tds_add_headless_test(NAME ordered.smoke TARGET ordered_smoke_tests)
+d7_add_headless_test(NAME ordered.smoke TARGET ordered_smoke_tests)

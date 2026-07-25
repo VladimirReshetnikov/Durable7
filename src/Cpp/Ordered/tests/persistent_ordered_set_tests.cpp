@@ -1,5 +1,5 @@
-#include <tools/data_structures/ordered/ordered.hpp>
-#include <tools/data_structures/test_support/headless_test_process.h>
+#include <durable7/ordered/ordered.hpp>
+#include <durable7/test_support/headless_test_process.h>
 
 #include "../../FingerTree/tests/test_support/test_runner.hpp"
 
@@ -20,8 +20,8 @@
 #include <utility>
 #include <vector>
 
-namespace ordered = tools::data_structures::ordered;
-using namespace tools::data_structures::finger_tree::tests;
+namespace ordered = durable7::ordered;
+using namespace durable7::finger_tree::tests;
 
 void add_persistent_ordered_map_tests(suite& tests);
 void add_persistent_ordered_multimap_tests(suite& tests);
@@ -682,7 +682,7 @@ void add_failure_model_and_concurrency_tests(suite& tests)
 
 int main(const int argument_count, const char* const* arguments)
 {
-    if (!tds_enter_headless_test_process()) {
+    if (!d7_enter_headless_test_process()) {
         return EXIT_FAILURE;
     }
 
@@ -691,7 +691,7 @@ int main(const int argument_count, const char* const* arguments)
     tests.add("aggregate header exposes version metadata", [] {
         FT_REQUIRE_EQUAL(
             ordered::library_name,
-            std::string_view{"Tools.DataStructures.Ordered.Cpp"});
+            std::string_view{"Durable7.Ordered.Cpp"});
         FT_REQUIRE_EQUAL(ordered::version_major, 0U);
         FT_REQUIRE_EQUAL(ordered::version_minor, 1U);
         FT_REQUIRE_EQUAL(ordered::version_patch, 0U);

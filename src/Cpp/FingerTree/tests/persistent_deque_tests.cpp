@@ -1,4 +1,4 @@
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"
 #include "test_support/command_model.hpp"
@@ -17,9 +17,9 @@
 #include <string>
 #include <vector>
 
-namespace ft = tools::data_structures::finger_tree;
-namespace detail = tools::data_structures::finger_tree::detail;
-using namespace tools::data_structures::finger_tree::tests;
+namespace ft = durable7::finger_tree;
+namespace detail = durable7::finger_tree::detail;
+using namespace durable7::finger_tree::tests;
 
 namespace {
 

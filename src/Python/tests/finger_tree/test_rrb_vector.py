@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from vladimir_reshetnikov.data_structures.finger_tree.rrb_vector import RrbVector
+from durable7.finger_tree.rrb_vector import RrbVector
 
 
 def test_rrb_crosses_regular_and_relaxed_radix_boundaries() -> None:

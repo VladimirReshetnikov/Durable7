@@ -6,15 +6,15 @@
 - Audience: Maintainers implementing and reviewing public C APIs
 - Scope: C naming, contracts, ownership, and intentional differences from `src/Cpp/FingerTree`
 
-The public C API lives in `tools/data_structures/finger_tree/fingertree.h` and the focused
-`tools/data_structures/finger_tree/canonical_sorted_set.h`,
-`tools/data_structures/finger_tree/brodal_okasaki_heap.h`,
-`tools/data_structures/finger_tree/priority_search_queue.h`,
-`tools/data_structures/finger_tree/range_update_sequence.h`,
-`tools/data_structures/finger_tree/persistent_interval_map.h`,
-`tools/data_structures/finger_tree/persistent_chunked_bit_set.h`,
-`tools/data_structures/finger_tree/rrb_vector.h`, and
-`tools/data_structures/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
+The public C API lives in `durable7/finger_tree/fingertree.h` and the focused
+`durable7/finger_tree/canonical_sorted_set.h`,
+`durable7/finger_tree/brodal_okasaki_heap.h`,
+`durable7/finger_tree/priority_search_queue.h`,
+`durable7/finger_tree/range_update_sequence.h`,
+`durable7/finger_tree/persistent_interval_map.h`,
+`durable7/finger_tree/persistent_chunked_bit_set.h`,
+`durable7/finger_tree/rrb_vector.h`, and
+`durable7/finger_tree/daba_lite.h` headers. For setup and handle-lifetime examples, start with the
 [usage guide](usage.md). The API uses opaque handles plus explicit policy callbacks rather than C++ templates:
 
 `ft_persistent_chunked_bit_set` owns a measured `ft_tree` of ascending nonzero 64-bit words over

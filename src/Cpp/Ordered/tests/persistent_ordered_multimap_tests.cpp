@@ -1,4 +1,4 @@
-#include <tools/data_structures/ordered/ordered.hpp>
+#include <durable7/ordered/ordered.hpp>
 
 #include "../../FingerTree/tests/test_support/test_runner.hpp"
 
@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-namespace ordered = tools::data_structures::ordered;
-using namespace tools::data_structures::finger_tree::tests;
+namespace ordered = durable7::ordered;
+using namespace durable7::finger_tree::tests;
 
 namespace {
 

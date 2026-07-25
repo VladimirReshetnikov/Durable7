@@ -1,4 +1,4 @@
-use tools_data_structures_hamt::PersistentRelation;
+use durable7_hamt::PersistentRelation;
 
 #[test]
 fn represents_many_to_many_adjacency() {

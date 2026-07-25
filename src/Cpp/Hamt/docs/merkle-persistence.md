@@ -8,11 +8,11 @@
 
 The C++20 persistence tier is header-first and byte-compatible with the C, C#, Haskell,
 Kotlin/JVM, and Rust sibling implementations. Include
-[`merkle_persistence.hpp`](../include/Tools/DataStructures/Hamt/merkle_persistence.hpp) for blocks,
+[`merkle_persistence.hpp`](../include/durable7/hamt/merkle_persistence.hpp) for blocks,
 stores, packs, bounded load/import, and synchronization. Include
-[`merkle_proofs.hpp`](../include/Tools/DataStructures/Hamt/merkle_proofs.hpp) for proof creation,
+[`merkle_proofs.hpp`](../include/durable7/hamt/merkle_proofs.hpp) for proof creation,
 proof verification, and three-way merge. The aggregate
-[`hamt.hpp`](../include/Tools/DataStructures/Hamt/hamt.hpp) includes both.
+[`hamt.hpp`](../include/durable7/hamt/hamt.hpp) includes both.
 
 The persistence layer never treats bytes as trusted merely because they came from a block store.
 Every load/import/proof path authenticates addresses, parses strict canonical encodings, enforces

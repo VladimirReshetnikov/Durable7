@@ -3,7 +3,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use tools_data_structures_hamt::{HashBagError, PersistentHashBag};
+use durable7_hamt::{HashBagError, PersistentHashBag};
 
 #[derive(Clone, Debug)]
 struct Representative {

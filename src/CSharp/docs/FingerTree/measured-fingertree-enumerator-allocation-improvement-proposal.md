@@ -19,12 +19,12 @@ measured tree.
 
 Reviewed source:
 
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredElements.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTree.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/Internal/TreeElement.cs`
-- `src/CSharp/src/Tools.DataStructures.FingerTree/FingerTreeDeque.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredElements.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredTree.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/Measured/MeasuredTreeLevels.cs`
+- `src/CSharp/src/Durable7.FingerTree/Internal/TreeElement.cs`
+- `src/CSharp/src/Durable7.FingerTree/FingerTreeDeque.cs`
 
 Before the fix, `FingerTree<TElement, TMeasure, TMeasureOps>.GetEnumerator()` did this:
 

@@ -16,9 +16,9 @@ that consumers and tests use day to day.
 Use the aggregate header unless you are deliberately minimizing include cost:
 
 ```cpp
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 
-namespace ft = tools::data_structures::finger_tree;
+namespace ft = durable7::finger_tree;
 ```
 
 The library is header-first. Build and CTest commands are documented in [validation.md](validation.md).

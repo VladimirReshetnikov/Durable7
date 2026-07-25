@@ -1,6 +1,6 @@
 #include "sample_runs.hpp"
 
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 
 #include <array>
 #include <cstddef>
@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace tools::data_structures::finger_tree::samples::showcase {
+namespace durable7::finger_tree::samples::showcase {
 namespace {
 
 template <class Range>
@@ -125,4 +125,4 @@ void run(std::ostream& output)
     output << "Done. Each update returned a new value while retaining prior versions.\n";
 }
 
-} // namespace tools::data_structures::finger_tree::samples::showcase
+} // namespace durable7::finger_tree::samples::showcase

@@ -1,25 +1,25 @@
-# Tools.Numerics Wide-Integer Maintenance Guidance (Int*/UInt* Family)
+# Durable7.Numerics Wide-Integer Maintenance Guidance (Int*/UInt* Family)
 
 - Created (UTC): 2026-07-03T17:07:42Z
 - Repository HEAD: ef450fdd2651ca7d1862ad8eda2f2a9ae7eda722
 - Status: Normative guidance informed by recent repository history
 - Audience: Maintainers and contributors modifying `Int256`/`UInt256`, `Int512`/`UInt512`, `Int1024`/`UInt1024`, related helpers, and tests
-- Scope: Lessons learned from recent feature-and-fix cycles in `Tools.Numerics`
+- Scope: Lessons learned from recent feature-and-fix cycles in `Durable7.Numerics`
 - Related code:
-  - `src/CSharp/src/Tools.Numerics/Int256.cs`
-  - `src/CSharp/src/Tools.Numerics/UInt256.cs`
-  - `src/CSharp/src/Tools.Numerics/Int512.cs`
-  - `src/CSharp/src/Tools.Numerics/UInt512.cs`
-  - `src/CSharp/src/Tools.Numerics/Int1024.cs`
-  - `src/CSharp/src/Tools.Numerics/UInt1024.cs`
-  - `src/CSharp/src/Tools.Numerics/BitHelpers.cs`
-  - `src/CSharp/src/Tools.Numerics/BitConverterEx.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int256.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt256.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int512.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt512.cs`
+  - `src/CSharp/src/Durable7.Numerics/Int1024.cs`
+  - `src/CSharp/src/Durable7.Numerics/UInt1024.cs`
+  - `src/CSharp/src/Durable7.Numerics/BitHelpers.cs`
+  - `src/CSharp/src/Durable7.Numerics/BitConverterEx.cs`
 - Related tests:
-  - `src/CSharp/tests/Tools.Numerics.Tests/`
+  - `src/CSharp/tests/Durable7.Numerics.Tests/`
 
 ## Summary
 
-Recent `Tools.Numerics` history shows a repeating lifecycle:
+Recent `Durable7.Numerics` history shows a repeating lifecycle:
 
 1. a major width expansion or parity refactor lands,
 2. several follow-up commits repair correctness and API-shape drift,
@@ -222,7 +222,7 @@ Stop and re-verify if you see any of the following:
 
 ## Notes for maintainers
 
-The core lesson from recent history is that **family consistency is itself a correctness constraint** in `Tools.Numerics`. For these types, “compiles + mostly passes” is not sufficient. Correctness depends on synchronized behavior across:
+The core lesson from recent history is that **family consistency is itself a correctness constraint** in `Durable7.Numerics`. For these types, “compiles + mostly passes” is not sufficient. Correctness depends on synchronized behavior across:
 
 - signed/unsigned pairs,
 - all supported widths,

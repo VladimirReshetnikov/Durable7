@@ -14,19 +14,19 @@ compose only the public C++ CHAMP map and FingerTree deque. They neither referen
 the application-specific Tungsten workspace.
 
 The public headers live under
-[`include/tools/data_structures/ordered`](include/tools/data_structures/ordered):
+[`include/durable7/ordered`](include/durable7/ordered):
 
-- [`persistent_ordered_set.hpp`](include/tools/data_structures/ordered/persistent_ordered_set.hpp)
+- [`persistent_ordered_set.hpp`](include/durable7/ordered/persistent_ordered_set.hpp)
   defines construction, lookup, addition, movement, removal, ranges, reversal, stable one-shot
   sorting, receiver-policy algebra, relations, iteration, root-sharing diagnostics, and invariant
   validation.
-- [`persistent_ordered_map.hpp`](include/tools/data_structures/ordered/persistent_ordered_map.hpp)
+- [`persistent_ordered_map.hpp`](include/durable7/ordered/persistent_ordered_map.hpp)
   defines keyed and positional lookup, strict insertion, representative-preserving value updates,
   explicit movement, removal, ranges, reversal, stable sorting, policy access, and validation.
-- [`persistent_ordered_multimap.hpp`](include/tools/data_structures/ordered/persistent_ordered_multimap.hpp)
+- [`persistent_ordered_multimap.hpp`](include/durable7/ordered/persistent_ordered_multimap.hpp)
   composes ordered key groups with ordered distinct values under independent policies, preserving
   first representatives and grouped enumeration while removing empty groups.
-- [`ordered.hpp`](include/tools/data_structures/ordered/ordered.hpp) is the aggregate header and
+- [`ordered.hpp`](include/durable7/ordered/ordered.hpp) is the aggregate header and
   exposes library version metadata.
 
 Both collections retain the first key representative installed for each equality class. The map

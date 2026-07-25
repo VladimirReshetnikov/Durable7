@@ -10,7 +10,7 @@
 ## 1. Executive summary
 
 The C++ port under [`Cpp/FingerTree`](../README.md) is a **high-quality, faithful translation of the C#
-`Tools.DataStructures.FingerTree` library**. The implemented code is correct, idiomatic, and — on the most
+`Durable7.FingerTree` library**. The implemented code is correct, idiomatic, and — on the most
 dangerous part of the design (the lazy-memoized spine and its concurrency contract) — demonstrably sound. Both
 the debug and release MSVC configurations build cleanly under `/W4 /WX` and pass the bundled test suite, and every
 public header is self-contained. Independent experiments I wrote and ran corroborate every headline behavioral
@@ -154,12 +154,12 @@ completeness gap; L = hygiene/precision). No finding is a correctness defect in 
 
 **A1 [M] `try_locate` / `try_locate_by_measure` are optional-wrapped, not total — the miss-path whole-tree
 `measure_before` is discarded.**
-`finger_tree::try_locate` ([measured_finger_tree.hpp:171](../include/tools/data_structures/finger_tree/measured_finger_tree.hpp)) returns `std::optional<finger_tree_locate_result>` and yields
+`finger_tree::try_locate` ([measured_finger_tree.hpp:171](../include/durable7/finger_tree/measured_finger_tree.hpp)) returns `std::optional<finger_tree_locate_result>` and yields
 `std::nullopt` on a miss, where C# `TryLocate` (`FingerTree.cs:332-346`) returns `false` but still sets
 `measureBefore = _root.Measure`. The port plan calls this out *by name* as the single exception to the
 Try→`optional` mapping and mandates a total result `{ measure_type measure_before; std::optional<T> found; }`
 ([port-plan.md:255-259, 418-423](port-plan.md)). The same applies to `measured_rope::try_locate_by_measure`
-([measured_rope.hpp:357](../include/tools/data_structures/finger_tree/measured_rope.hpp)). *Mitigation:* in-repo
+([measured_rope.hpp:357](../include/durable7/finger_tree/measured_rope.hpp)). *Mitigation:* in-repo
 count-measure consumers compensate (`sorted_bag.hpp:206` returns `size()` on a miss), so no current behavior is
 wrong — but a general external caller using a non-count measure cannot read the full accumulated measure on a miss
 and must call `measure()` redundantly. The contract is silently narrower than C# and the plan. *Fix:* adopt the
@@ -289,7 +289,7 @@ coverage, complexity guards, and structure-level tearable concurrency tests.
 Milestone 8 now ships deterministic `showcase` and persistent text-snapshot samples with captured-output smoke
 tests plus a dependency-free benchmark harness. The short harness covers all planned families; retained branching
 measured exactly 4.00 allocations / 472 bytes per operation at sizes 100, 10,000, and 1,000,000. Install/export
-rules provide the architecture-independent `tools::data_structures::finger_tree` CMake target, version metadata,
+rules provide the architecture-independent `durable7::finger_tree` CMake target, version metadata,
 public headers, and MIT-0 license. The headless installed-consumer test requires the staged package, disables
 registries and repository developer targets, and rejects source-include leakage.
 

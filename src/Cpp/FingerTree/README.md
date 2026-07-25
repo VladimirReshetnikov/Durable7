@@ -10,7 +10,7 @@
 
 This workspace contains the C++ port of the `FingerTree` data-structure library. The port follows
 [`docs/port-plan.md`](docs/port-plan.md): a header-first library under the namespace
-`tools::data_structures::finger_tree`, CMake/Ninja build entry points for the local MSVC toolchain, and CTest
+`durable7::finger_tree`, CMake/Ninja build entry points for the local MSVC toolchain, and CTest
 validation from the first milestone onward.
 
 `persistent_interval_map<Endpoint, Value, Comparison, ValueEqual>` is the payload-bearing interval
@@ -113,7 +113,7 @@ CMake builds tests, samples, and the dependency-free benchmark harness by defaul
 surfaces with `FINGERTREE_BUILD_TESTS=OFF`, `FINGERTREE_BUILD_SAMPLES=OFF`, or
 `FINGERTREE_BUILD_BENCHMARKS=OFF`. The test suite includes a real installed-package consumer: it installs the
 headers and package metadata to a private staging prefix, configures a new project with only `find_package`, links
-`tools::data_structures::finger_tree`, and runs the resulting executable.
+`durable7::finger_tree`, and runs the resulting executable.
 
 ## Install And Consume
 
@@ -126,19 +126,19 @@ cmake --install out/build/msvc-release --prefix out/install/fingertree --config 
 An external CMake project can then consume it without a source-tree include path:
 
 ```cmake
-find_package(ToolsDataStructuresFingerTree 0.1 CONFIG REQUIRED)
-target_link_libraries(my_target PRIVATE tools::data_structures::finger_tree)
+find_package(Durable7FingerTree 0.1 CONFIG REQUIRED)
+target_link_libraries(my_target PRIVATE durable7::finger_tree)
 ```
 
-Point `CMAKE_PREFIX_PATH` or `ToolsDataStructuresFingerTree_DIR` at the installation prefix when it is outside
+Point `CMAKE_PREFIX_PATH` or `Durable7FingerTree_DIR` at the installation prefix when it is outside
 CMake's normal search locations. The installed package includes version compatibility metadata and only public
 headers as code artifacts, plus the repository MIT-0 license under the installation data directory; repository
 tests, samples, and benchmarks are never part of the consumer build.
 
 ## Layout
 
-- `include/tools/data_structures/finger_tree/` contains the public header-first library.
-- `include/tools/data_structures/finger_tree/detail/` contains implementation helpers.
+- `include/durable7/finger_tree/` contains the public header-first library.
+- `include/durable7/finger_tree/detail/` contains implementation helpers.
 - `tests/` contains the [CTest-registered native smoke runner](tests/README.md) and shared test support.
 - `samples/` contains the deterministic [showcase and persistent-snapshot tour](samples/README.md).
 - `benchmarks/` contains the [dependency-free Milestone 8 harness](benchmarks/README.md).

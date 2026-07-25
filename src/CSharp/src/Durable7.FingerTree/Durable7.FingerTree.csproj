@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Durable7.FingerTree</AssemblyName>
+    <RootNamespace>Durable7.FingerTree</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Durable7.FingerTree.Tests" />
+    <InternalsVisibleTo Include="Durable7.FingerTree.Benchmarks" />
+  </ItemGroup>
+</Project>

@@ -6,21 +6,21 @@
 - Audience: Maintainers and users exploring the C# FingerTree sample programs
 - Scope: Runnable sample tours under `src/CSharp/samples`
 
-Runnable demonstrations of `Tools.DataStructures.FingerTree`. The samples are ordinary console
+Runnable demonstrations of `Durable7.FingerTree`. The samples are ordinary console
 projects, but their main logic lives in `Run(TextWriter)` methods so the test suite can smoke-test
 the deterministic transcript markers without depending on console I/O.
 
 From `src/CSharp/samples`, run a sample with:
 
 ```powershell
-dotnet run --project .\Tools.DataStructures.FingerTree.Tour -c Release
-dotnet run --project .\Tools.DataStructures.FingerTree.Showcase -c Release
-dotnet run --project .\Tools.DataStructures.FingerTree.Editor -c Release
+dotnet run --project .\Durable7.FingerTree.Tour -c Release
+dotnet run --project .\Durable7.FingerTree.Showcase -c Release
+dotnet run --project .\Durable7.FingerTree.Editor -c Release
 ```
 
 From the workspace root `src/CSharp`, prefix the project paths with `samples\`.
 
-## `Tools.DataStructures.FingerTree.Tour`
+## `Durable7.FingerTree.Tour`
 
 A short, narrated end-to-end tour built around a persistent text buffer, in three acts:
 
@@ -33,10 +33,10 @@ A short, narrated end-to-end tour built around a persistent text buffer, in thre
 The program runs a bounded, deterministic scenario and exits.
 
 ```powershell
-dotnet run --project .\Tools.DataStructures.FingerTree.Tour -c Release
+dotnet run --project .\Durable7.FingerTree.Tour -c Release
 ```
 
-## `Tools.DataStructures.FingerTree.Showcase`
+## `Durable7.FingerTree.Showcase`
 
 The "one measured tree, many data structures" thesis, in four acts — the same general measured finger tree becomes each structure purely by choice of measure:
 
@@ -48,10 +48,10 @@ The "one measured tree, many data structures" thesis, in four acts — the same 
 The acts are seeded and reproducible. The logic is exposed as `ShowcaseProgram.Run(TextWriter)` so it is smoke-tested.
 
 ```powershell
-dotnet run --project .\Tools.DataStructures.FingerTree.Showcase -c Release
+dotnet run --project .\Durable7.FingerTree.Showcase -c Release
 ```
 
-## `Tools.DataStructures.FingerTree.Editor`
+## `Durable7.FingerTree.Editor`
 
 The editor-grade text extras, in five acts over measured text:
 
@@ -66,12 +66,12 @@ display/commit boundaries. The scenarios are deterministic, exposed through `Run
 smoke-tested. See the [C3 integration record](../docs/FingerTree/cursor-c3-sample-integration.md).
 
 ```powershell
-dotnet run --project .\Tools.DataStructures.FingerTree.Editor -c Release
+dotnet run --project .\Durable7.FingerTree.Editor -c Release
 ```
 
 ## Smoke Tests
 
-`tests/Tools.DataStructures.FingerTree.Tests/SampleSmokeTests.cs` drives `TourProgram.Run`,
+`tests/Durable7.FingerTree.Tests/SampleSmokeTests.cs` drives `TourProgram.Run`,
 `ShowcaseProgram.Run`, and `EditorProgram.Run` with a captured writer and checks transcript markers.
 Run the focused sample gate from `src/CSharp` with:
 

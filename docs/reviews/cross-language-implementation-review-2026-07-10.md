@@ -168,17 +168,17 @@ re-measure on clone.
 
 ### C Hamt
 
-**F-CH-1 (major, leak; fixed in `d8567c3`)** — `tds_hamt_set_add` skipped the aliased-release step
+**F-CH-1 (major, leak; fixed in `d8567c3`)** — `d7_hamt_set_add` skipped the aliased-release step
 every sibling mutator performs, leaking the entire previous version on each aliased add (reproduced:
 99 of 100 items never released across an aliased add loop with a counting policy).
 
-**F-CH-2 (major, data loss; fixed in `d8567c3`)** — aliased `tds_hamt_map_add` destroyed the
-caller's map on `TDS_HAMT_DUPLICATE_KEY` (reproduced: a duplicate add left the source with count 0
+**F-CH-2 (major, data loss; fixed in `d8567c3`)** — aliased `d7_hamt_map_add` destroyed the
+caller's map on `D7_HAMT_DUPLICATE_KEY` (reproduced: a duplicate add left the source with count 0
 and all entries destroyed). A rejected duplicate publishes the source root re-retained, so the
 aliased result already holds the original version; only a distinct result owns a reference to
 destroy.
 
-**F-CH-3 (minor, use-after-free; fixed in `d8567c3`)** — aliased `tds_hamt_map_try_remove` released
+**F-CH-3 (minor, use-after-free; fixed in `d8567c3`)** — aliased `d7_hamt_map_try_remove` released
 the old root before publishing `removed_value`, whose pointer refers into the old tree's nodes, so
 an owning value policy had already freed the payload the caller received. The aliased form now
 reports `removed_value = NULL`, and the API specification documents that callers needing the value
@@ -191,26 +191,26 @@ audited and found correct (the `shift >= 32` guard in merge is provably unreacha
 ### C Tungsten
 
 **F-CT-1 (minor, fixed in `e7de554`)** — out-parameters silently corrupted or leaked when `result`
-aliased the source: `tds_tungsten_list_prepare` zeroed the result before the source was read
+aliased the source: `d7_tungsten_list_prepare` zeroed the result before the source was read
 (leaking the deque rep and leaving the caller's list empty even on failure), and
-`tds_tungsten_association_take_parts` overwrote `result`'s root/index/context without releasing
+`d7_tungsten_association_take_parts` overwrote `result`'s root/index/context without releasing
 prior contents. Unlike the C HAMT, aliasing was never a supported mode here (every internal caller
 uses a distinct temporary plus move), so it is now uniformly rejected with
-`TDS_TUNGSTEN_INVALID_ARGUMENT` across all list and association entry points (including two-operand
+`D7_TUNGSTEN_INVALID_ARGUMENT` across all list and association entry points (including two-operand
 forms rejecting `result == right`), and the README documents the contract and the
 temporary-plus-move idiom for update-in-place callers.
 
-**F-CT-2 (minor, fixed in `e7de554`)** — `tds_tungsten_list_drop` returned
-`TDS_TUNGSTEN_INVALID_ARGUMENT` for an out-of-range count where `take`/`slice` and the association's
-`drop` return `TDS_TUNGSTEN_OUT_OF_RANGE`; now classified consistently.
+**F-CT-2 (minor, fixed in `e7de554`)** — `d7_tungsten_list_drop` returned
+`D7_TUNGSTEN_INVALID_ARGUMENT` for an out-of-range count where `take`/`slice` and the association's
+`drop` return `D7_TUNGSTEN_OUT_OF_RANGE`; now classified consistently.
 
-**F-CT-3 (minor, fixed in `e7de554`)** — `tds_tungsten_list_concat` checked only payload *size* before
+**F-CT-3 (minor, fixed in `e7de554`)** — `d7_tungsten_list_concat` checked only payload *size* before
 spoofing the right operand's policy pointer to share nodes under the left policy, so two lists with
 same-size payloads but different copy/destroy callbacks concatenated successfully and then released
 some shared nodes through the wrong callbacks (leak or shallow-copy double-free). The compatibility
 check now compares the full value type (size, copy, destroy, context).
 
-Stamp math (`tds_tungsten_pick_stamp` mirrors C# `TryPickStamp` exactly, including the
+Stamp math (`d7_tungsten_pick_stamp` mirrors C# `TryPickStamp` exactly, including the
 unsigned-subtraction midpoint and end guards), AVL rotations/join/split refcounts on success and OOM
 paths, and Association ordering rules 1–7 were all audited and found correct.
 

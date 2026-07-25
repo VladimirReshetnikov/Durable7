@@ -8,16 +8,16 @@ from typing import TypeVar, cast
 
 import pytest
 
-from vladimir_reshetnikov.data_structures import PersistentOrderedSet
-from vladimir_reshetnikov.data_structures.hamt import (
+from durable7 import PersistentOrderedSet
+from durable7.hamt import (
     HashPolicy,
     create_hash_policy,
     default_hash_policy,
 )
-from vladimir_reshetnikov.data_structures.ordered import (
+from durable7.ordered import (
     OrderedSetValueResult,
 )
-from vladimir_reshetnikov.data_structures.ordered import (
+from durable7.ordered import (
     persistent_ordered_set as _ordered_module,
 )
 
@@ -507,7 +507,7 @@ def test_iteration_is_version_bound_concurrently_readable_and_neutral() -> None:
     assert observed == [(sum(range(200)), 100, 100)] * 32
 
     module = __import__(
-        "vladimir_reshetnikov.data_structures.ordered.persistent_ordered_set",
+        "durable7.ordered.persistent_ordered_set",
         fromlist=["PersistentOrderedSet"],
     )
     assert "tungsten" not in getsource(module).casefold()

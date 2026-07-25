@@ -145,9 +145,9 @@ $env:BuildInParallel = 'false'
 $env:UseSharedCompilation = 'false'
 $env:RestoreDisableParallel = 'true'
 
-dotnet restore DataStructures.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
+dotnet restore Durable7.sln --disable-parallel --disable-build-servers -m:1 -nr:false `
     -p:RestoreDisableParallel=true -p:BuildInParallel=false -p:UseSharedCompilation=false
-dotnet build benchmarks\Tools.DataStructures.FingerTree.Benchmarks\Tools.DataStructures.FingerTree.Benchmarks.csproj `
+dotnet build benchmarks\Durable7.FingerTree.Benchmarks\Durable7.FingerTree.Benchmarks.csproj `
     -c Release --no-restore --disable-build-servers -m:1 -nr:false `
     -p:BuildInParallel=false -p:UseSharedCompilation=false
 
@@ -155,8 +155,8 @@ Get-ChildItem Env: | Where-Object {
     $_.Name -match '(?i)(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|CONNECTION|COOKIE|AUTH|IGCCSVC)'
 } | Remove-Item -ErrorAction SilentlyContinue
 
-Set-Location benchmarks\Tools.DataStructures.FingerTree.Benchmarks
-$driver = '.\bin\Release\net10.0\Tools.DataStructures.FingerTree.Benchmarks.dll'
+Set-Location benchmarks\Durable7.FingerTree.Benchmarks
+$driver = '.\bin\Release\net10.0\Durable7.FingerTree.Benchmarks.dll'
 $publicEnd = '*TransientLifecycleBenchmarks.SeparateNodeKernelHistory*History: ClusteredPrefix*PublicationCadence: End*Workload: N100000_E512)'
 dotnet $driver --filter $publicEnd --affinity 1 `
     --artifacts '.\BenchmarkDotNet.Artifacts\axis2-t2-public-end-full'
@@ -238,7 +238,7 @@ The C# T2 checkpoint records:
 - Release HAMT and benchmark builds with zero warnings;
 - 33 final focused public transient/API tests;
 - the existing 26 focused direct-kernel tests; and
-- the complete `Tools.DataStructures.Hamt.Tests` project: **223 passed, 0 failed**.
+- the complete `Durable7.Hamt.Tests` project: **223 passed, 0 failed**.
 
 Coverage includes exact public shape, XML documentation, factories, clean identity, no-op versions,
 comparer identity, stored representatives, nulls, equal-hash collisions, deep prefixes, stable

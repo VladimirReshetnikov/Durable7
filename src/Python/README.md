@@ -5,8 +5,8 @@
 
 This workspace is the typed Python 3.11+ port of the repository-owned HAMT, FingerTree, ordered,
 Tungsten-collection, and numerics families. The distribution is
-`vladimir-reshetnikov-data-structures`; its import namespace is
-`vladimir_reshetnikov.data_structures`.
+`durable7`; its import namespace is
+`durable7`.
 
 The port follows the semantic contracts of the established sibling workspaces while using Python
 idioms where they preserve those contracts: immutable value objects are iterable and sized,
@@ -45,7 +45,7 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
 The root namespace re-exports every public family member:
 
 ```python
-from vladimir_reshetnikov.data_structures import (
+from durable7 import (
     PersistentHashBag,
     PersistentBiMap,
     PersistentHashMap,

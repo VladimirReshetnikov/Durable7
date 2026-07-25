@@ -89,7 +89,7 @@ asserted only `left.len()` and the right half's internal consistency. Fixed by r
 boundary positions.
 
 **F-2. C# `SparseInteger.operator +` dropped the accumulated partial sum on carry**
-(`src/CSharp/src/Tools.Numerics/SparseInteger.cs`). The carry branch read the private
+(`src/CSharp/src/Durable7.Numerics/SparseInteger.cs`). The carry branch read the private
 `positions` **field** of the intermediate sum `new SparseInteger(xPositionsNew) + x1.Exp2()`;
 whenever that sum fits into `ulong` its `positions` field is `null`, so every bit accumulated
 so far was silently discarded. Runtime-verified failures: `7 + (2^64+1) = 2^64` (expected
@@ -314,7 +314,7 @@ Ranked; none are correctness bugs in shipped behavior.
 
 - `cargo test --workspace` (src/Rust): 69 tests pass (FingerTree 46, Hamt 15, Tungsten 8);
   `cargo clippy --all-targets` clean on all three crates.
-- `dotnet test DataStructures.sln` (src/CSharp): 731 tests pass (FingerTree 367,
+- `dotnet test Durable7.sln` (src/CSharp): 731 tests pass (FingerTree 367,
   Numerics 266, Hamt 50, Tungsten 48).
 - New regression tests added in this review: 13 (6 Rust, 7 C#), including two randomized
   model-based suites (SparseInteger vs `BigInteger`; measured-rope split partitioning).

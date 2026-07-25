@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from vladimir_reshetnikov.data_structures import (
+from durable7 import (
     DuplicateKeyError,
     HashPolicy,
     PersistentIndexedMap,

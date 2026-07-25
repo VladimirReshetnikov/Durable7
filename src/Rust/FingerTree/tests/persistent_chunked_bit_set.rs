@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use tools_data_structures_fingertree::PersistentChunkedBitSet;
+use durable7_fingertree::PersistentChunkedBitSet;
 
 #[test]
 fn empty_point_updates_and_largest_index_obey_domain_contract() {

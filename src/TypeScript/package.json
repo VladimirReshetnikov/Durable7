@@ -1,5 +1,5 @@
 {
-    "name": "@vladimir-reshetnikov/data-structures",
+    "name": "durable7",
     "version": "0.1.0",
     "description": "Persistent data structures and fixed-width numerics for TypeScript",
     "license": "MIT-0",

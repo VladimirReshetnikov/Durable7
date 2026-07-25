@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-03T04:37:54Z
 - Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
 - Audience: Maintainers and AI agents reviewing the Haskell finger-tree family port
-- Scope: `tools-data-structures-fingertree` package
+- Scope: `durable7-fingertree` package
 
 This package ports the repository finger-tree family to Haskell. It includes a general measured
 finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
@@ -154,13 +154,13 @@ Because a cursor is a pure value, no uninitialized, moved-from, or disposed stat
 The invalid-default contract that the C, C++, C#, and Rust ports must enforce at run time is
 discharged here by the type system — a consequence of immutability rather than an omitted check.
 
-The `Data.Structures.FingerTree` facade re-exports `RopeCursor` and every ordered-search cursor
+The `Durable7.FingerTree` facade re-exports `RopeCursor` and every ordered-search cursor
 type. The remaining cursor types — the five sequence cursors below plus `MeasuredRopeCursor` and
 `TextRopeCursor` — are reachable only through their own modules.
 
 ### General measured tree: the one true split cursor
 
-`Data.Structures.FingerTree.Measured` exports `Cursor v a` and `CursorSearch v a` (fields
+`Durable7.FingerTree.Measured` exports `Cursor v a` and `CursorSearch v a` (fields
 `cursorSearchCursor`, `cursorSearchFound`). This is the one family that is **not** a root-plus-index
 checkpoint: a cursor retains the snapshot together with the left and right trees of an actual split,
 so the ordered measure partition is already materialized.
@@ -240,7 +240,7 @@ Rope, measured-rope, and text cursors are described above and are unchanged by t
 
 ### Ordered-search cursors
 
-`Data.Structures.FingerTree.OrderedSearchCursor` holds one ordered gap cursor for each of seven
+`Durable7.FingerTree.OrderedSearchCursor` holds one ordered gap cursor for each of seven
 families: `SortedBagCursor a`, `SortedSetCursor a`, `SortedMapCursor k v`,
 `CanonicalSortedSetCursor a`, `PrioritySearchQueueCursor k p v`, `IntervalTreeCursor a`,
 `IntervalMapCursor a v`, and `ChunkedBitSetCursor`. Two shared carriers appear throughout:

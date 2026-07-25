@@ -6,7 +6,7 @@ add_executable(
 target_link_libraries(
     fingertree_benchmarks
     PRIVATE
-        tools::data_structures::finger_tree
+        durable7::finger_tree
 )
 target_include_directories(
     fingertree_benchmarks

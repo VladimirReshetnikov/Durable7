@@ -2,7 +2,7 @@
 
 - Created (UTC): 2026-07-03T00:00:00Z
 - Repository HEAD: 3f49d1a1ba71390af95f5a9389b99d2e334c8beb
-- Audience: Maintainers and reviewers of `tools-data-structures-fingertree`
+- Audience: Maintainers and reviewers of `durable7-fingertree`
 - Scope: Documentation index for the Rust FingerTree-family workspace
 
 The Rust FingerTree crate is a safe Rust checkpoint for the repository FingerTree family. Its

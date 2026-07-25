@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace DataStructures.Tests.Infrastructure;
+namespace Durable7.Tests.Infrastructure;
 
 internal static class HeadlessTestProcess
 {

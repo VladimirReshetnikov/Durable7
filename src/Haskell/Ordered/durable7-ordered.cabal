@@ -1,0 +1,34 @@
+cabal-version: 3.0
+name: durable7-ordered
+version: 0.1.0.0
+synopsis: Persistent insertion-ordered sets over CHAMP and finger trees
+description: Neutral Haskell port of the repository-owned persistent ordered-set family.
+category: Data
+license: MIT-0
+author: Vladimir Reshetnikov
+maintainer: Vladimir Reshetnikov
+build-type: Simple
+
+library
+  exposed-modules:
+    Durable7.Ordered
+    Durable7.Ordered.Cursor
+    Durable7.Ordered.PersistentOrderedSet
+    Durable7.Ordered.PersistentOrderedMap
+    Durable7.Ordered.PersistentOrderedMultimap
+  hs-source-dirs: src
+  build-depends:
+    base >=4.21 && <4.22,
+    durable7-fingertree >=0.1 && <0.2,
+    durable7-hamt >=0.1 && <0.2
+  default-language: Haskell2010
+
+test-suite ordered-test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test
+  build-depends:
+    base >=4.21 && <4.22,
+    durable7-hamt >=0.1 && <0.2,
+    durable7-ordered >=0.1 && <0.2
+  default-language: Haskell2010

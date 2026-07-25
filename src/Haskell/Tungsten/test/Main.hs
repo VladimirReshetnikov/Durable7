@@ -9,10 +9,10 @@ import Data.Char (toLower)
 import qualified Data.List as List
 import Data.Maybe (fromMaybe)
 
-import Data.Structures.Hamt.Hashable (hash)
-import Data.Structures.Hamt.HashMap (HashPolicy(..))
-import qualified Data.Structures.Tungsten.Association as Association
-import qualified Data.Structures.Tungsten.List as TungstenList
+import Durable7.Hamt.Hashable (hash)
+import Durable7.Hamt.HashMap (HashPolicy(..))
+import qualified Durable7.Tungsten.Association as Association
+import qualified Durable7.Tungsten.List as TungstenList
 
 main :: IO ()
 main = do
@@ -23,7 +23,7 @@ main = do
   testAssociationTreeBalance
   testAssociationGeneratedHistory
   testConcurrentReads
-  putStrLn "tools-data-structures-tungsten tests passed"
+  putStrLn "durable7-tungsten tests passed"
 
 testListExamples :: IO ()
 testListExamples = do

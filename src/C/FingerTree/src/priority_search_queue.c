@@ -1,4 +1,4 @@
-#include <tools/data_structures/finger_tree/priority_search_queue.h>
+#include <durable7/finger_tree/priority_search_queue.h>
 
 #include <limits.h>
 #include <stdint.h>

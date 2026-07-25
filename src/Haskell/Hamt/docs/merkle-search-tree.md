@@ -5,7 +5,7 @@
 - Audience: Maintainers implementing or reviewing the Haskell Merkle search tree
 - Scope: Canonical core, exact wire bytes, verified persistence, proofs, synchronization, and merge
 
-`Data.Structures.Hamt.MerkleSearchTree` is the pure-Haskell core/wire port of the repository's
+`Durable7.Hamt.MerkleSearchTree` is the pure-Haskell core/wire port of the repository's
 canonical Merkle search tree. It is an ordered persistent map whose shape and root address depend
 only on its policy-bound contents, not insertion history. The implementation follows the
 paper-style B=16 construction: the number of leading zero SHA-256 nibbles in a canonical key hash
@@ -13,7 +13,7 @@ chooses that key's level, and every consecutive run at the maximum level occupie
 
 ## Policy and codecs
 
-`Data.Structures.Hamt.MerkleEncoding` defines `MerkleCodec a` as a stable versioned identifier plus
+`Durable7.Hamt.MerkleEncoding` defines `MerkleCodec a` as a stable versioned identifier plus
 total encode/decode functions returning typed errors. Built-ins cover signed 32-bit and 64-bit
 big-endian integers, nullable strict UTF-8 strings, nullable strict byte strings, and exact
 RFC-4122/network-order GUID bytes. UTF-8 encoding rejects surrogate code points; decoding rejects
@@ -33,8 +33,8 @@ Patricia modules:
 
 ```haskell
 import Data.Int (Int32)
-import Data.Structures.Hamt.MerkleEncoding
-import qualified Data.Structures.Hamt.MerkleSearchTree as Merkle
+import Durable7.Hamt.MerkleEncoding
+import qualified Durable7.Hamt.MerkleSearchTree as Merkle
 
 policy <- either fail pure
   (makeMerkleSearchTreePolicy
@@ -154,7 +154,7 @@ histories.
 
 ## Pure authenticated persistence
 
-`Data.Structures.Hamt.MerklePersistence` owns the persistence tier. `MerkleBlock` pairs immutable
+`Durable7.Hamt.MerklePersistence` owns the persistence tier. `MerkleBlock` pairs immutable
 bytes with a claimed address without authenticating it; format-aware operations authenticate the
 pair. `MerkleBlockStore` is an immutable `Map`-backed snapshot. `putBlock` is idempotent for equal
 bytes and rejects a different byte string under an existing address. `saveTree` preflights the

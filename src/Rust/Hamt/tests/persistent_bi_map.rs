@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 
-use tools_data_structures_hamt::{BiMapConflict, PersistentBiMap};
+use durable7_hamt::{BiMapConflict, PersistentBiMap};
 
 #[derive(Clone, Debug)]
 struct Representative {

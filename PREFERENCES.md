@@ -4,10 +4,10 @@
 - Updated (UTC): 2026-07-02T20:58:46Z
 - Repository HEAD: d8c6160a9d3ae266e310089bfa73d71cc76ed5c3
 - Audience: Maintainers and AI agents preserving repository-specific working preferences
-- Scope: Owner and project preferences that should guide future DataStructures work
+- Scope: Owner and project preferences that should guide future Durable7 work
 
 This file records inferred project and owner preferences that are useful for future work in the standalone
-DataStructures repository. For procedural rules, use the root [README](README.md), [AGENTS.md](AGENTS.md), and
+Durable7 repository. For procedural rules, use the root [README](README.md), [AGENTS.md](AGENTS.md), and
 the [documentation maintenance guide](docs/guides/documentation-maintenance.md).
 
 - Treat documentation as living current-state engineering memory. When code moves or responsibilities change, update active README and docs links in the same sweep.

@@ -5,7 +5,7 @@
 - Scope: Ordered set, map, and grouped multimap APIs, contracts, runtime mapping, and validation
 
 `PersistentOrderedSet<T>` is the strict TypeScript port of the independently owned C# insertion-
-ordered set. It is exported from `@vladimir-reshetnikov/data-structures/ordered` and the package root.
+ordered set. It is exported from `durable7/ordered` and the package root.
 “Ordered” means insertion and explicitly requested positional order, not comparison-sorted order.
 `sort` is a stable one-shot reorder; subsequent additions append normally.
 

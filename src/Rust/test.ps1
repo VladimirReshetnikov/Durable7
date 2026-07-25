@@ -31,11 +31,11 @@ else {
 
 $selection = switch ($Workspace) {
     'All' { @('--workspace') }
-    'Hamt' { @('-p', 'tools-data-structures-hamt') }
-    'FingerTree' { @('-p', 'tools-data-structures-fingertree') }
-    'Ordered' { @('-p', 'tools-data-structures-ordered') }
-    'RangeUpdate' { @('-p', 'tools-data-structures-range-update') }
-    'Tungsten' { @('-p', 'tools-data-structures-tungsten') }
+    'Hamt' { @('-p', 'durable7-hamt') }
+    'FingerTree' { @('-p', 'durable7-fingertree') }
+    'Ordered' { @('-p', 'durable7-ordered') }
+    'RangeUpdate' { @('-p', 'durable7-range-update') }
+    'Tungsten' { @('-p', 'durable7-tungsten') }
 }
 
 $separatorIndex = [Array]::IndexOf([string[]] $CargoArguments, '--')

@@ -48,7 +48,7 @@ Documentation read:
 
 Source reviewed:
 
-- C++ public headers under `src/Cpp/FingerTree/include/tools/data_structures/finger_tree`.
+- C++ public headers under `src/Cpp/FingerTree/include/durable7/finger_tree`.
 - C++ internal headers for `detail::lazy_cell`, `detail::atomic_box`, `detail::measured_lazy_cell`,
   `detail::measured_tree`, `detail::deque_tree`, `detail::reversible_tree`, and rope chunks.
 - C++ tests under `src/Cpp/FingerTree/tests`.
@@ -67,7 +67,7 @@ Experiments and validation:
 - Ran the documented C++ debug configure/build/test after initializing a Visual Studio developer environment.
 - Ran the documented C++ release configure/build/test.
 - Repeated the release native test executable 20 times with CTest's `--repeat until-fail:20`.
-- Ran the C# baseline `dotnet test .\DataStructures.sln`.
+- Ran the C# baseline `dotnet test .\Durable7.sln`.
 - Compiled and ran a small out-of-tree C++ consumer using only the public aggregate header and `src/Cpp/FingerTree/include`.
 
 ## Validation Results
@@ -136,7 +136,7 @@ Total Test time (real) = 11.19 sec
 The C# baseline passed:
 
 ```powershell
-dotnet test .\DataStructures.sln
+dotnet test .\Durable7.sln
 ```
 
 Result:
@@ -150,7 +150,7 @@ Passed! - Failed: 0, Passed: 346, Skipped: 0, Total: 346, Duration: 27 s
 An out-of-tree consumer using:
 
 ```cpp
-#include <tools/data_structures/finger_tree/finger_tree.hpp>
+#include <durable7/finger_tree/finger_tree.hpp>
 ```
 
 compiled and ran with only:
@@ -258,7 +258,7 @@ Evidence:
   optional.
 - `src/Cpp/FingerTree/docs/port-plan.md:291` lists total `try_locate(predicate) -> locate_result<T, measure_type>` in
   the public surface checklist.
-- `src/Cpp/FingerTree/include/tools/data_structures/finger_tree/measured_finger_tree.hpp:169-178` instead implements:
+- `src/Cpp/FingerTree/include/durable7/finger_tree/measured_finger_tree.hpp:169-178` instead implements:
 
 ```cpp
 std::optional<finger_tree_locate_result<Element, MeasurePolicy>> try_locate(Predicate predicate) const
@@ -465,7 +465,7 @@ Why it matters:
 
 Recommendation:
 
-- Add install/export rules for `tools::data_structures::finger_tree`.
+- Add install/export rules for `durable7::finger_tree`.
 - Add a tiny consumer CMake project or CTest that uses only the exported target.
 - Add CI for MSVC at minimum, and clang-cl or clang/gcc if portability is a goal.
 
@@ -545,7 +545,7 @@ coverage, complexity guards, and structure-level tearable concurrency tests.
 Milestone 8 now ships deterministic `showcase` and persistent text-snapshot samples with captured-output smoke
 tests plus a dependency-free benchmark harness. The short harness covers all planned families; retained branching
 measured exactly 4.00 allocations / 472 bytes per operation at sizes 100, 10,000, and 1,000,000. Install/export
-rules provide the architecture-independent `tools::data_structures::finger_tree` CMake target, version metadata,
+rules provide the architecture-independent `durable7::finger_tree` CMake target, version metadata,
 public headers, and MIT-0 license. The headless installed-consumer test requires the staged package, disables
 registries and repository developer targets, and rejects source-include leakage.
 
