@@ -4,8 +4,8 @@ description: """
 Idiomatic OCaml ports of the repository-owned numerics, HAMT, FingerTree,
 ordered, and Tungsten collection families.
 """
-maintainer: "Vladimir Reshetnikov"
-authors: "Vladimir Reshetnikov"
+maintainer: "Durable7 maintainers"
+authors: "Durable7 contributors"
 license: "MIT-0"
 homepage: "https://github.com/VladimirReshetnikov/Durable7"
 bug-reports: "https://github.com/VladimirReshetnikov/Durable7/issues"

@@ -5,8 +5,8 @@ synopsis: Persistent CHAMP maps, sets, bags, bimaps, Patricia collections, and M
 description: Haskell port of the Durable7 HAMT, hash-bag, bimap, Patricia, and Merkle search-tree families.
 category: Data
 license: MIT-0
-author: Vladimir Reshetnikov
-maintainer: Vladimir Reshetnikov
+author: Durable7 contributors
+maintainer: Durable7 maintainers
 build-type: Simple
 
 library

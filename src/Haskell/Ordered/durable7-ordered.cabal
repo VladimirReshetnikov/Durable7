@@ -5,8 +5,8 @@ synopsis: Persistent insertion-ordered sets over CHAMP and finger trees
 description: Neutral Haskell port of the repository-owned persistent ordered-set family.
 category: Data
 license: MIT-0
-author: Vladimir Reshetnikov
-maintainer: Vladimir Reshetnikov
+author: Durable7 contributors
+maintainer: Durable7 maintainers
 build-type: Simple
 
 library

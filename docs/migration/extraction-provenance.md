@@ -8,7 +8,7 @@
 ## Source
 
 - Source repository: `C:\Tools0`
-- Source upstream: `https://github.com/VladimirReshetnikov/Tools.git`
+- Source upstream: the former Tools monorepo
 - Source HEAD before extraction: `944498b9adcccaf0993663c53f963aac006429e9`
 - Extracted path: `src/DataStructures/`
 - Destination repository: `C:\DataStructures`

@@ -9,7 +9,7 @@ description = "Persistent data structures, authenticated collections, and fixed-
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT-0"
-authors = [{ name = "Vladimir Reshetnikov" }]
+authors = [{ name = "Durable7 contributors" }]
 keywords = [
   "persistent-data-structures",
   "hamt",

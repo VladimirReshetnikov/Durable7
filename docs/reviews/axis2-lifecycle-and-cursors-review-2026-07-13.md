@@ -5,7 +5,7 @@
 - Repository HEAD (reviewed): 4376db84b198ee5be7d3ee9dc62cb3e9c8b46149
 - Audience: Maintainers studying the historical Axis 2 design review and its disposition
 - Scope: A design review of the
-  [`docs/proposals/axis2-lifecycle-and-sequence-cursors.md` revision at `4376db8`](https://github.com/VladimirReshetnikov/DataStructures/blob/4376db84b198ee5be7d3ee9dc62cb3e9c8b46149/docs/proposals/axis2-lifecycle-and-sequence-cursors.md)
+  [`docs/proposals/axis2-lifecycle-and-sequence-cursors.md`](../proposals/axis2-lifecycle-and-sequence-cursors.md) at revision `4376db8`
   — soundness, feasibility against the then-current C# representations, gaps and risks, and a
   sequencing/scoping recommendation. A companion re-sequenced alternative is proposed separately in
   [`docs/proposals/axis2-cursor-first-alternative-2026-07-13.md`](../proposals/axis2-cursor-first-alternative-2026-07-13.md).

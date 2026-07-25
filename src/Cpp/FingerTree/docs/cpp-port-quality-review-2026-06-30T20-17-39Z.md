@@ -3,7 +3,7 @@
 - Status: Completed review
 - Created (UTC): 2026-06-30T20:17:39Z
 - Repository HEAD: c63af7d8f38d10ebc623cbeee002db21588b30ed
-- Audience: Vladimir Reshetnikov and future maintainers/agents of `src/Cpp/FingerTree`
+- Audience: Durable7 maintainers and future agents of `src/Cpp/FingerTree`
 - Scope: Independent quality review of the C# → C++ port — process, code, tests, build, and documentation
 - Related: a second, fully independent review (different session, same task, concurrent) landed on
   `main` as

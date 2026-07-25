@@ -5,8 +5,8 @@ synopsis: Persistent finger-tree data structures and derived collections
 description: Haskell port of the Durable7 finger-tree family.
 category: Data
 license: MIT-0
-author: Vladimir Reshetnikov
-maintainer: Vladimir Reshetnikov
+author: Durable7 contributors
+maintainer: Durable7 maintainers
 build-type: Simple
 
 library

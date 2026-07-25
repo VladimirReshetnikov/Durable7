@@ -4,8 +4,8 @@ version: 0.1.0.0
 synopsis: Persistent Tungsten List and Association-shaped collections
 description: Haskell port of the Durable7 Tungsten collection family.
 license: MIT-0
-author: Vladimir Reshetnikov
-maintainer: Vladimir Reshetnikov
+author: Durable7 contributors
+maintainer: Durable7 maintainers
 build-type: Simple
 
 library

@@ -3,7 +3,7 @@
 - Status: Review report (independent audit of the C# → C++ port, outcome and process)
 - Created (UTC): 2026-06-30T20:06:08Z
 - Repository HEAD: c63af7d8f38d10ebc623cbeee002db21588b30ed
-- Audience: Vladimir and maintainers/AI agents continuing the C++ port
+- Audience: Durable7 maintainers and AI agents continuing the C++ port
 - Scope: Correctness, concurrency, complexity, API fidelity, test/validation completeness, build, and documentation
   of the `Cpp/FingerTree` port, plus a review of the porting *process* captured in git
 
