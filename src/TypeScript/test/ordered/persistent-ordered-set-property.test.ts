@@ -262,7 +262,6 @@ describe("Ordered package boundary and surface", () => {
             "../hamt/hash-policy.js",
             "../hamt/persistent-hamt.js",
         ]);
-        expect(imports.some((path) => path?.includes("tungsten"))).toBe(false);
     });
 
     test("package manifest exposes the neutral ordered subpath", () => {

@@ -6,7 +6,7 @@
 - Package: `durable7`
 
 This workspace is the strict TypeScript/ESM port of the repository-owned persistent collections,
-streaming structures, and Tungsten collections. It targets modern JavaScript
+and streaming structures. It targets modern JavaScript
 runtimes without native addons and publishes declaration files alongside ES modules.
 
 ## Public families
@@ -16,7 +16,6 @@ runtimes without native addons and publishes declaration files alongside ES modu
 | `durable7/hamt` | `PersistentHashMap` with one-descent factory updates, `PersistentHashSet`, `PersistentHashBag`, set-valued `PersistentHashMultimap`, bidirectional `PersistentRelation`, strict `PersistentBiMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, reusable `HashMapBulkBuilder`, map/set single-owner transients, the isolate-local snapshotting `ConcurrentHashTrie` facade, 32/64-bit Patricia maps and sets, and the exact-wire Merkle family |
 | `durable7/finger-tree` | `PersistentDeque`, general measured `FingerTree`, payload-bearing `PersistentIntervalMap`, `PersistentChunkedBitSet`, lazy algebraic `RangeUpdateSequence`, `ReversibleDeque`, `RrbVector`, sorted bag/set/map, canonical zip-zip set, measured and Brodal–Okasaki priority queues, priority-search queue, interval tree, rope/measured-rope/text cursors, and `DabaLite` |
 | `durable7/ordered` | independent insertion-ordered `PersistentOrderedSet`, `PersistentOrderedMap`, and grouped `PersistentOrderedMultimap` with positional movement/ranges, stable one-shot sorting, sparse labels, and first-representative retention |
-| `durable7/tungsten` | `PersistentList` and insertion-ordered `PersistentAssociation` |
 
 The root import re-exports all five families. See [API and semantic notes](docs/api-notes.md), the
 [range-update sequence notes](docs/range-update-sequence.md), and the

@@ -17,8 +17,7 @@ public sealed class PersistentOrderedSet<T> : IReadOnlySet<T>
 ```
 
 The type is owned by `Durable7.Ordered`, which references public HAMT and FingerTree
-projects. There is no `notnull` constraint and no dependency on Tungsten production code, tests,
-internals, semantics, or a live Tungsten oracle.
+projects. There is no `notnull` constraint.
 
 The type does not override object equality or hashing. Collection equality is explicit through
 `SetEquals`; ordered sequence equality is explicit through enumeration/`SequenceEqual`.

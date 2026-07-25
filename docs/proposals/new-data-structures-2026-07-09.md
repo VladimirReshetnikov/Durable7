@@ -14,7 +14,7 @@
 > remaining item; the body below preserves proposal-time rationale and order. B2's proposed
 > Tungsten-backed ordered set is specifically superseded by the
 > [revised benchmark-independent proposal](benchmark-independent-next-structures-2026-07-14.md) and
-> the normative [Tungsten application-leaf boundary](../reference/tungsten-application-leaf-boundary.md):
+> the normative Tungsten application-leaf boundary:
 > a general ordered set must be an independent project, implementation, contract, and test suite.
 
 ## Framing

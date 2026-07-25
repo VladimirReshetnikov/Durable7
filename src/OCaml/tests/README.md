@@ -10,8 +10,7 @@
 | `common` | 2 | Runtime hash/equality and comparison policy identity, reversal, and behavior |
 | `hamt` | 22 | CHAMP collisions, representatives, factories, detached staging builders, transient lifecycle and six set relations, set/bag/bimap/derived families, Patricia, synchronized snapshots, exact `MST2`, persistence budgets, proofs, and merge |
 | `finger_tree` | 18 | Measured/deque persistence, generated list model, sorted/priority/interval families, vector, rank/select bits, law-gated Range, generic/measured/text ropes and cursors, canonical ranks, meldable heap, priority search, DABA failure atomicity |
-| `ordered` | 6 | Neutral ordered set/map/multimap representatives, movement, ranges, receiver-policy algebra, grouped order, generated histories, Tungsten-free behavior |
-| `tungsten` | 4 | List vocabulary/model histories and Association replacement/movement/insertion/join/sort rules |
+| `ordered` | 6 | Neutral ordered set/map/multimap representatives, movement, ranges, receiver-policy algebra, grouped order, and generated histories |
 
 Run all suites with `opam exec -- dune runtest -j 1 --force`, or use `test.ps1 -Workspace <name>`
 for a focused lane. Tests remain deterministic except for QCheck's reported replay seed on failure.

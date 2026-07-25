@@ -4,7 +4,6 @@ members = [
     "FingerTree",
     "Ordered",
     "RangeUpdate",
-    "Tungsten",
 ]
 resolver = "3"
 

@@ -56,7 +56,7 @@ Durable7.Ordered
 └── Durable7.FingerTree
 ```
 
-It does not reference `Durable7.Tungsten`, link a Tungsten source file, consume Tungsten
+
 internals, or use `PersistentAssociation` as a live oracle. Sparse-label order maintenance is an
 independent Ordered implementation with its own set-specific contract, invariants, tests, and
 evolution policy. The exact label stride and relabel cadence are private implementation details.

@@ -16,7 +16,7 @@ editing sessions, `PersistentHashBag<T, S = RandomState>`,
 `PersistentIndexedMap<K, V, I, F, SK, SI>`, plus
 `BulkBuilder<K, V, S = RandomState>`, the independent one-pass scratch constructor (mutable
 unpublished nodes frozen into detached persistent nodes; used by map/set `FromIterator`, set
-intersection, set-relation probes, and Tungsten association index rebuilds). The map additionally
+intersection, set-relation probes). The map additionally
 provides one-descent `get_or_add` / `add_or_update` factories; the bag is deliberately persistent
 only and exposes neither a transient nor a public builder.
 

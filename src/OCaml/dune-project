@@ -7,4 +7,4 @@
  (name durable7)
  (synopsis "Persistent data structures and authenticated collections")
  (description
-  "Idiomatic OCaml ports of the repository-owned HAMT, FingerTree, ordered, and Tungsten collection families."))
+  "Idiomatic OCaml ports of the repository-owned HAMT, FingerTree, and ordered collection families."))

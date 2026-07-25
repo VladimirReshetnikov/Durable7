@@ -6,7 +6,7 @@
 - Audience: Maintainers and reviewers of the neutral C++ ordered collections
 - Scope: ordered-set, ordered-map, and ordered-multimap native tests
 
-The independent executable test suite uses no Tungsten production code, test oracle, linked target,
+The independent executable test suite uses
 or source. Expected results come from direct ordered unique-list models and the neutral Ordered API
 contract.
 

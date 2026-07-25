@@ -11,7 +11,6 @@ This header-first workspace owns the neutral C++ `persistent_ordered_set<T, Hash
 `persistent_ordered_multimap<Key, Value, ...>`. Membership is comparer-defined
 and hashed; enumeration follows insertion order or explicit positional movement. Both types
 compose only the public C++ CHAMP map and FingerTree deque. They neither reference nor delegate to
-the application-specific Tungsten workspace.
 
 The public headers live under
 [`include/durable7/ordered`](include/durable7/ordered):

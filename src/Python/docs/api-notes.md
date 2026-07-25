@@ -157,8 +157,7 @@ negative integers cannot leak into trie prefixes.
 ## Ordered collections
 
 `PersistentOrderedSet[T]` lives in the neutral `ordered` package and composes only
-`PersistentHashMap` with `PersistentDeque`; neither its implementation nor its semantic baseline
-depends on Tungsten. The HAMT maps each receiver-policy equivalence class to a private signed
+`PersistentHashMap` with `PersistentDeque`. The HAMT maps each receiver-policy equivalence class to a private signed
 64-bit order stamp, while the deque stores `(stamp, representative)` entries. New neighboring
 positions use sparse `2^20` labels and deterministically relabel when a gap is exhausted.
 
@@ -617,13 +616,6 @@ both orientations. `insert_range` builds its run through the deque's orientation
 helper, so a reversed receiver splices a physically reversed run and both concatenations stay on the
 sharing path rather than falling into the orientation-mismatch materialization. `reverse()` returns
 a cursor over the reversed logical version at gap `count - position`.
-
-## Tungsten
-
-Tungsten collections remain an application-specific dependency leaf. `PersistentAssociation`
-uses a CHAMP key index plus measured order sequence with sparse `2^20` stamps, midpoint insertion,
-and deterministic relabeling. Position-preserving `set_item` keeps the first stored key
-representative; append/prepend/insert move an existing key using the incoming representative.
 
 ## Merkle interoperability
 

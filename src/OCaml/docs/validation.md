@@ -15,7 +15,7 @@
 
 The package constraints are authoritative in `durable7.opam`. The checked-in
 `test.ps1` wrapper forces one opam/Dune job and accepts `Common`, `Hamt`, `FingerTree`,
-`Ordered`, or `Tungsten` as a focused workspace.
+or `Ordered` as a focused workspace.
 
 ## Full Gate
 
@@ -41,7 +41,7 @@ pages for every public interface.
 ## Evidence Boundary
 
 Routine validation covers compilation, formatting, documentation, 49 focused Alcotest cases, and
-QCheck histories in HAMT, FingerTree, Ordered, and Tungsten suites. It includes exact
+QCheck histories in HAMT, FingerTree, and Ordered suites. It includes exact
 single-entry `MST2` bytes, a pinned `ZZT2` HMAC rank vector, and multi-block authenticated
 persistence/proof checks. It does not include
 benchmarks, performance claims, or byte-level cross-process fixtures beyond the pinned Merkle golden

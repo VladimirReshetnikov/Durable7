@@ -46,7 +46,7 @@ public class OrderedSetMissingValueException(
  * [policy] defines membership, hashing, and representative equivalence. Enumeration follows
  * insertion or explicitly requested positional order. The first representative installed for an
  * equality class is retained until that class is removed. This neutral collection is implemented
- * only over the public HAMT and FingerTree APIs and has no Tungsten dependency.
+ * only over the public HAMT and FingerTree APIs.
  */
 public class PersistentOrderedSet<T> private constructor(
     private val order: FingerTree<OrderedEntry<T>, Long?>,

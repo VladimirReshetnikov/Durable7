@@ -15,7 +15,6 @@ contracts of the C# baseline where the current implementation exposes equivalent
 | [FingerTree](FingerTree/README.md) | Rust checkpoint for the FingerTree family, payload interval map, chunked bit set, positional/measured/text rope cursors, and mutable DABA Lite FIFO-window aggregator | `durable7_fingertree::{PersistentIntervalMap, PersistentChunkedBitSet, *}` | `.\test.ps1 -Workspace FingerTree` |
 | [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set, map, and grouped multimap with explicit positional movement, ranges, stable one-shot sorting, and receiver-policy set algebra | `durable7_ordered::{PersistentOrderedMap, PersistentOrderedMultimap, PersistentOrderedSet}` | `.\test.ps1 -Workspace Ordered` |
 | [RangeUpdate](RangeUpdate/README.md) | Neutral implicit-AVL sequence with ordered cached measures and algebraic lazy contiguous range updates | `durable7_range_update::{RangeUpdateAlgebra, RangeUpdateSequence}` | `.\test.ps1 -Workspace RangeUpdate` |
-| [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Rust persistent substrates | `durable7_tungsten::{PersistentList, PersistentAssociation}` | `.\test.ps1 -Workspace Tungsten` |
 
 Run the full Rust validation from this directory:
 
@@ -32,7 +31,7 @@ correctness gate.
 The wrapper finds Cargo on `PATH` or under the default rustup profile. On Windows it enables inherited
 non-interactive OS error handling before Cargo starts a test binary, so assertion, panic, loader, and crash
 failures remain console diagnostics with nonzero exits instead of opening modal UI. Use `-Workspace Hamt`,
-`-Workspace FingerTree`, `-Workspace Ordered`, `-Workspace RangeUpdate`, or `-Workspace Tungsten`
+`-Workspace FingerTree`, `-Workspace Ordered`, or `-Workspace RangeUpdate`
 for focused runs; `-Release` selects the release profile,
 and `-CargoArguments` forwards additional Cargo or test-harness options. The wrapper appends
 `--jobs 1` before the harness boundary and `--test-threads=1` after it, and also scopes

@@ -98,7 +98,6 @@ try {
 from durable7 import (
     HashMapBulkBuilder,
     Interval,
-    PersistentAssociation,
     PersistentDeque,
     PersistentHashBag,
     PersistentHashMultimap,
@@ -148,7 +147,6 @@ assert PersistentDeque.from_iterable([1, 2]).append(3).to_list() == [1, 2, 3]
 assert PersistentIntervalMap.empty().add(Interval(1, 2), "x")[Interval(1, 2)] == "x"
 assert list(PersistentOrderedMap.empty().add("a", 1).keys()) == ["a"]
 assert PersistentOrderedSet.from_values(["alpha", "beta", "alpha"]).to_list() == ["alpha", "beta"]
-assert PersistentAssociation.from_pairs([("a", 1)]).get("a") == 1
 range_sequence = RangeUpdateSequence.from_iterable([1, 2, 3], AdditiveRangeAlgebra())
 assert range_sequence.apply_range(1, 2, 10).to_list() == [1, 12, 13]
 '@

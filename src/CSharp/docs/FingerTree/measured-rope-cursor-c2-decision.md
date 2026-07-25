@@ -17,7 +17,7 @@ second text-rope family.
 
 C2 clears its separately locked local-edit, measure-seek, positional-seek, line/column, callback,
 allocation, and freshly dirty query gates. C3 sample adoption may therefore proceed. This decision
-does not authorize C4 adapters for RRB, deque, raw finger-tree, reversible-deque, or Tungsten
+does not authorize C4 adapters for RRB, deque, raw finger-tree, or reversible-deque
 families, and it does not create a sibling-language parity obligation.
 
 ## Selected representation

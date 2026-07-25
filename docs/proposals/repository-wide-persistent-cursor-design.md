@@ -1315,7 +1315,7 @@ encoding induced are recorded in the
 Neither Tungsten `PersistentList` nor `PersistentAssociation` receives a cursor. Their existing
 application-leaf operations remain the complete surface. This exclusion does not constrain cursor
 designs in repository-general HAMT, FingerTree, or Ordered substrates and does not change the
-normative [application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md).
+normative application-leaf dependency boundary.
 
 ## Numeric Exclusions
 
@@ -2123,5 +2123,5 @@ unreviewed persistent aggregates.
   cursor-as-version precedent and its proof boundary.
 - [Porting and semantic parity guide](../guides/porting-and-semantic-parity.md) for implementation and
   documentation workflow.
-- [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+- Tungsten application-leaf dependency boundary
   for the mandatory one-way dependency and authority rules.

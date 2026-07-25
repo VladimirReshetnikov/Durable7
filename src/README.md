@@ -13,15 +13,9 @@ OCaml, and TypeScript package all families into one language-local distribution.
 
 | Language root | Toolchain model | Workspaces |
 | --- | --- | --- |
-| [C](C/README.md) | Serialized MSVC/GCC/Clang builds through `build.ps1` and CMake/CTest presets | [Hamt](C/Hamt/README.md), [FingerTree + Range](C/FingerTree/README.md), [Ordered](C/Ordered/README.md), [Tungsten](C/Tungsten/README.md) |
-| [Cpp](Cpp/README.md) | Serialized MSVC/GCC/Clang builds through `build.ps1` and CMake/CTest presets | [Hamt](Cpp/Hamt/README.md), [FingerTree + Range](Cpp/FingerTree/README.md), [Ordered](Cpp/Ordered/README.md), [Tungsten](Cpp/Tungsten/README.md) |
-| [CSharp](CSharp/README.md) | One .NET 10 solution with xUnit/CsCheck validation | [HAMT](CSharp/docs/Hamt/overview.md), [FingerTree and Range-update sequence](CSharp/docs/FingerTree/overview.md), [Ordered](CSharp/docs/Ordered/overview.md), [Tungsten](CSharp/docs/Tungsten/overview.md) |
-| [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree + Range](Haskell/FingerTree/README.md), [Ordered](Haskell/Ordered/README.md), [Tungsten](Haskell/Tungsten/README.md) |
-| [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree + Range](Kotlin/FingerTree/README.md), [Ordered](Kotlin/Ordered/README.md), [Tungsten](Kotlin/Tungsten/README.md) |
-| [OCaml](OCaml/README.md) | opam/Dune package with strict warnings, ocamlformat, odoc, Alcotest, and QCheck | [HAMT, FingerTree + Range, Ordered, and Tungsten](OCaml/docs/api-notes.md#public-families) |
-| [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, Ordered, and Tungsten](Python/README.md) |
-| [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and integration tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Ordered](Rust/Ordered/README.md), [RangeUpdate](Rust/RangeUpdate/README.md), [Tungsten](Rust/Tungsten/README.md) |
-| [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, Ordered, and Tungsten](TypeScript/README.md#public-families) |
+| [OCaml](OCaml/README.md) | opam/Dune package with strict warnings, ocamlformat, odoc, Alcotest, and QCheck | [HAMT, FingerTree + Range, and Ordered](OCaml/docs/api-notes.md#public-families) |
+| [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, and Ordered](Python/README.md) |
+| [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, and Ordered](TypeScript/README.md#public-families) |
 
 The benchmark-independent rollouts now ship one-descent persistent HAMT updates,
 `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet` and `PersistentOrderedMap`, set-valued
@@ -32,17 +26,13 @@ current `PersistentOrderedMultimap`, `PersistentMapPatch`, `PersistentDirectedGr
 owns the detailed managed contracts while siblings express the same semantics through language-local
 policies and ownership; the OCaml API notes identify checkpoint implementations that do not inherit
 specialized sibling topology or complexity claims. Both complete serialized C# Debug and Release solution builds finish with
-zero warnings and zero errors, and both test gates pass 1,211/1,211. No benchmark was run, and
+zero warnings and zero errors, and both test gates pass 1,158/1,158. No benchmark was run, and
 measurements remain postponed until an isolated session. The
 [data-structure catalog](../docs/reference/data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets)
 indexes the composition-first cross-language surfaces. The earlier
 [completion audit](../docs/reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md)
 and [bimap completion audit](../docs/reviews/persistent-bimap-cross-language-completion-2026-07-15.md)
 index the preceding tranches.
-
-Across every language root, Tungsten is an application-specific leaf consumer. It may depend on
-general libraries; no general workspace may depend on it. See the normative
-[application-leaf boundary](../docs/reference/tungsten-application-leaf-boundary.md).
 
 Use the repository [onboarding guide](../docs/guides/repository-onboarding.md) when starting work in an
 unfamiliar area, the [workspace map](../docs/reference/workspace-map.md) for layout rules and port lineage,

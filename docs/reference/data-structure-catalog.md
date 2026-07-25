@@ -123,7 +123,7 @@ The established composition-first families remain:
 Every mutation publishes all indexes together or publishes nothing, preserves retained versions,
 and returns the receiver for documented logical no-ops. Policy-bearing ports retain independent
 key/value, left/right, or equality/ordering policies as appropriate. The neutral ordered map is
-independently owned and has no Tungsten dependency or Tungsten semantic baseline.
+independently owned.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -187,7 +187,7 @@ proper subrange updates and queries perform logarithmic boundary work.
 
 At the Range shipment checkpoint, both full serialized C# Debug and Release solution builds
 completed with zero warnings and zero errors and passed 1,417/1,417 tests. The current derived-
-structure checkpoint passes 1,211/1,211 in both configurations. No benchmark was run; measurement
+structure checkpoint passes 1,158/1,158 in both configurations. No benchmark was run; measurement
 remains postponed until an isolated session. The single-pass HAMT updates, hash bag, ordered set,
 and range-update sequence ship across all nine languages; the detailed earlier evidence is in the
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
@@ -319,7 +319,7 @@ surfaces require them); the C workspace exposes equivalent policy callbacks and 
 ## Insertion-Ordered Persistent Set
 
 The neutral Ordered family composes hashed membership with a persistent ordered sequence without
-depending on Tungsten. Equality policy determines membership and first representatives; enumeration
+depending on it. Equality policy determines membership and first representatives; enumeration
 preserves insertion or explicitly requested order. Duplicate additions never move or replace a
 representative. Explicit movement, positional ranges, reversal, stable one-shot sorting,
 receiver-policy set algebra, and all six set relations preserve immutable versions and documented
@@ -341,7 +341,7 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 All nine ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
 the historical pre-Range Ordered shipment checkpoint, the full
 serialized C# Release build had zero warnings and zero errors and the complete gate passed
-1,355/1,355 tests; current full-workspace evidence is the 1,211/1,211 Debug and Release derived-
+1,355/1,355 tests; current full-workspace evidence is the 1,158/1,158 Debug and Release derived-
 structure gate recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 
@@ -364,41 +364,10 @@ for the concise normative obligations.
 | Merkle search tree | All nine ports | Specialized policy-comparer order and authenticated persistent edits. |
 | CHAMP and derived unordered hash facades | No public cursor | Private lookup/edit path only; hash enumeration is not semantic order. |
 | Ctrie, graph, heaps without stable order, builders/sessions/support artifacts, DABA Lite | No persistent cursor | No stable semantic neighbor axis or not a persistent aggregate. |
-| Tungsten `List`/`Association` | No cursor | Explicitly excluded application-leaf family. |
 
 Most newly shipped cursors retain a canonical root plus a validated gap/rank and delegate edits to
 ordinary persistent operations. That is a semantic checkpoint, not a claim of C# rope's focused
 representation, memoization, allocation/callback ceilings, or local-edit amortization.
-
-## Tungsten Application Collections
-
-The Tungsten-collections workspaces are application-specific leaf consumers for the Tungsten
-project. They may change with newly discovered or reinterpreted Wolfram-kernel behavior and may
-move out of this repository. No general collection may depend on these packages/types or use them
-as a semantic baseline. A generally useful mechanism must be forked into an independently owned
-implementation with its own API, contracts, tests, and evolution policy.
-
-Within that application boundary, the workspaces compose the HAMT and FingerTree families into persistent
-collections shaped for Tungsten Language `List` and `Association` semantics: an ordered-sequence
-facade with the Tungsten `List` operation vocabulary, and an insertion-ordered map with keyed and
-positional access following the kernel-verified `Association` ordering rules (in-place update,
-move-on-`Append`/`Prepend`, first-position/last-value construction, positional slicing, stable
-sorts). The primary external client is the Tungsten engine in the Smithereens repository; the C#
-implementation is the semantic reference only for sibling Tungsten ports. The
-[derived structure catalog](derived-structure-catalog.md) records useful historical composition
-evidence, not permission to make a general structure depend on Tungsten.
-
-| Language | Public entry points | Primary references |
-| --- | --- | --- |
-| C# | `PersistentList<T>`, `PersistentAssociation<TKey, TValue>` | [Workspace](../../src/CSharp/docs/Tungsten/overview.md), [usage guide](../../src/CSharp/docs/Tungsten/usage.md), [API spec](../../src/CSharp/docs/Tungsten/api-specification.md), [list source](../../src/CSharp/src/Durable7.Tungsten/PersistentList.cs), [association source](../../src/CSharp/src/Durable7.Tungsten/PersistentAssociation.cs) |
-| C | `d7_tungsten_list`, `d7_tungsten_association`, `d7_tungsten_association_policy` | [Workspace](../../src/C/Tungsten/README.md), [public header](../../src/C/Tungsten/include/durable7/tungsten/tungsten.h), [implementation](../../src/C/Tungsten/src/tungsten.c), [tests](../../src/C/Tungsten/tests/tungsten_c_tests.c) |
-| C++ | `persistent_list<T>`, `persistent_association<Key, T, Hash, KeyEqual, ValueEqual>` | [Workspace](../../src/Cpp/Tungsten/README.md), [aggregate header](../../src/Cpp/Tungsten/include/durable7/tungsten/tungsten.hpp), [list header](../../src/Cpp/Tungsten/include/durable7/tungsten/persistent_list.hpp), [association header](../../src/Cpp/Tungsten/include/durable7/tungsten/persistent_association.hpp), [tests](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) |
-| Haskell | `PersistentList a`, `PersistentAssociation k v` | [Workspace](../../src/Haskell/Tungsten/README.md), [list source](../../src/Haskell/Tungsten/src/Durable7/Tungsten/List.hs), [association source](../../src/Haskell/Tungsten/src/Durable7/Tungsten/Association.hs), [tests](../../src/Haskell/Tungsten/test/Main.hs) |
-| Kotlin | `PersistentList<T>`, `PersistentAssociation<K, V>` | [Workspace](../../src/Kotlin/Tungsten/README.md), [source](../../src/Kotlin/Tungsten/src/durable7/tungsten/PersistentTungsten.kt), [tests](../../src/Kotlin/Tungsten/test/durable7/tungsten/TungstenTests.kt) |
-| Rust | `PersistentList<T>`, `PersistentAssociation<K, V, S>` | [Workspace](../../src/Rust/Tungsten/README.md), [source](../../src/Rust/Tungsten/src/lib.rs) |
-| OCaml | `Persistent_list`, `Persistent_association` | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/tungsten), [tests](../../src/OCaml/tests/README.md) |
-| TypeScript | `PersistentList<T>`, `PersistentAssociation<K, V>` | [Workspace](../../src/TypeScript/README.md), [list](../../src/TypeScript/src/tungsten/persistent-list.ts), [association](../../src/TypeScript/src/tungsten/persistent-association.ts), [tests](../../src/TypeScript/test/tungsten/tungsten.test.ts) |
-| Python | `PersistentList`, `PersistentAssociation` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/durable7/tungsten), [tests](../../src/Python/tests/README.md) |
 
 ## Navigation Rules
 

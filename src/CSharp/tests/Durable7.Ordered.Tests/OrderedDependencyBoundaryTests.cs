@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Durable7.Ordered.Tests;
 
-/// <summary>Executable guards for Ordered ownership, public-substrate use, and Tungsten isolation.</summary>
+/// <summary>Executable guards for Ordered ownership and public-substrate use.</summary>
 public sealed class OrderedDependencyBoundaryTests
 {
     /// <summary>Verifies product and test manifests contain only the approved project-reference edges.</summary>
@@ -47,9 +47,6 @@ public sealed class OrderedDependencyBoundaryTests
                 Assert.Equal(new[] { "Include" }, reference.Attributes().Select(attribute => attribute.Name.LocalName));
                 Assert.Empty(reference.Elements());
             }
-            Assert.DoesNotContain(
-                document.Descendants().Attributes("Include"),
-                attribute => attribute.Value.Contains("Tungsten", StringComparison.OrdinalIgnoreCase));
         }
 
         var propsDocument = XDocument.Load(buildProps);
@@ -77,7 +74,6 @@ public sealed class OrderedDependencyBoundaryTests
         var root = RepositoryRoot();
         var ordered = File.ReadAllText(Path.Combine(root, "src", "CSharp", "src", "Durable7.Ordered", "Durable7.Ordered.csproj"));
         Assert.Contains("InternalsVisibleTo Include=\"Durable7.Ordered.Tests\"", ordered, StringComparison.Ordinal);
-        Assert.DoesNotContain("Tungsten", ordered, StringComparison.OrdinalIgnoreCase);
 
         foreach (var provider in new[] { "Durable7.Hamt", "Durable7.FingerTree" })
         {
@@ -86,25 +82,9 @@ public sealed class OrderedDependencyBoundaryTests
         }
     }
 
-    /// <summary>Verifies compiled product and test assemblies have no Tungsten reference.</summary>
+    /// <summary>Verifies no exported Ordered signature leaks a substrate type.</summary>
     [Fact]
-    public void CompiledAssemblies_DoNotReferenceTungsten()
-    {
-        foreach (var assembly in new[]
-                 {
-                     typeof(PersistentOrderedSet<>).Assembly,
-                     typeof(OrderedDependencyBoundaryTests).Assembly,
-                 })
-        {
-            Assert.DoesNotContain(
-                assembly.GetReferencedAssemblies(),
-                reference => reference.Name?.Contains("Tungsten", StringComparison.OrdinalIgnoreCase) == true);
-        }
-    }
-
-    /// <summary>Verifies no exported Ordered signature leaks a substrate or application-owned type.</summary>
-    [Fact]
-    public void PublicSurface_LeaksNoFoundationOrTungstenTypes()
+    public void PublicSurface_LeaksNoFoundationTypes()
     {
         var assembly = typeof(PersistentOrderedSet<>).Assembly;
         Assert.Equal(
@@ -130,7 +110,6 @@ public sealed class OrderedDependencyBoundaryTests
             foreach (var memberType in PublicSignatureTypes(closed))
             {
                 var name = memberType.Assembly.GetName().Name ?? string.Empty;
-                Assert.DoesNotContain("Tungsten", name, StringComparison.OrdinalIgnoreCase);
                 Assert.NotEqual("Durable7.Hamt", name);
                 Assert.NotEqual("Durable7.FingerTree", name);
             }
@@ -141,9 +120,9 @@ public sealed class OrderedDependencyBoundaryTests
         }
     }
 
-    /// <summary>Verifies production and executable test sources contain no Tungsten symbol or live-oracle hook.</summary>
+    /// <summary>Verifies production and executable test sources contain no live-oracle hook.</summary>
     [Fact]
-    public void SourceTree_HasNoTungstenSymbolSourceLinkOrLiveOracle()
+    public void SourceTree_HasNoSourceLinkOrLiveOracle()
     {
         var root = RepositoryRoot();
         var productDirectory = Path.Combine(root, "src", "CSharp", "src", "Durable7.Ordered");
@@ -156,8 +135,6 @@ public sealed class OrderedDependencyBoundaryTests
         foreach (var file in files)
         {
             var source = File.ReadAllText(file);
-            Assert.DoesNotContain("Durable7.Tungsten", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("PersistentAssociation", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Assembly.Load", source, StringComparison.Ordinal);
             Assert.DoesNotContain("Process.Start", source, StringComparison.Ordinal);
         }
@@ -212,10 +189,6 @@ public sealed class OrderedDependencyBoundaryTests
 
     private static void AssertNoSourceInjectionRoutes(XDocument document)
     {
-        Assert.DoesNotContain(
-            "Tungsten",
-            document.ToString(SaveOptions.DisableFormatting),
-            StringComparison.OrdinalIgnoreCase);
         string[] forbiddenElements =
         [
             "AdditionalFiles",
@@ -234,7 +207,6 @@ public sealed class OrderedDependencyBoundaryTests
 
         foreach (var attribute in document.Root!.DescendantsAndSelf().Attributes())
         {
-            Assert.DoesNotContain("Tungsten", attribute.Value, StringComparison.OrdinalIgnoreCase);
             if (attribute.Name.LocalName == "Sdk")
                 Assert.Equal("Microsoft.NET.Sdk", attribute.Value);
             Assert.False(

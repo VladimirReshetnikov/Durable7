@@ -9,7 +9,7 @@
 range-update sequence. `RangeUpdateSequence<T, A>` combines indexed persistent edits, ordered cached
 measures, and lazy algebraic transforms over contiguous ranges. It is a neutral general-purpose
 crate: it extends the public FingerTree crate's `MeasurePolicy<T>` vocabulary, owns its own
-range-specific implicit AVL representation, and has no dependency on Tungsten production code,
+range-specific implicit AVL representation.
 tests, internals, or behavior.
 
 The normative cross-port semantic reference is the

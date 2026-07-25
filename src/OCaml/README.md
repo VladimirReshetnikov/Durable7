@@ -11,7 +11,6 @@ families retain hashing or comparison behavior, and separately identified mutabl
 editing sessions, cursors, and streaming cores.
 
 The general-purpose modules under `lib/hamt`, `lib/finger_tree`, and `lib/ordered`
-must not depend on `lib/tungsten`. Tungsten is an application-specific leaf and may consume the
 general libraries only in that direction.
 
 ## Layout
@@ -22,7 +21,6 @@ general libraries only in that direction.
 | `lib/hamt` | Persistent hash, Patricia, concurrent-snapshot, and authenticated-map families |
 | `lib/finger_tree` | Persistent sequence, sorted, priority, interval, rope, and streaming families |
 | `lib/ordered` | Independently owned insertion-ordered set, map, and grouped multimap |
-| `lib/tungsten` | Application-specific persistent List and Association collections |
 | `tests` | Alcotest examples, regression tests, models, and QCheck properties by family |
 
 ## Toolchain
@@ -42,7 +40,7 @@ opam exec -- dune build -j 1 @check @fmt @doc
 .\test.ps1
 ```
 
-Use `-Workspace Common`, `Hamt`, `FingerTree`, `Ordered`, or `Tungsten` for a focused
+Use `-Workspace Common`, `Hamt`, `FingerTree`, or `Ordered` for a focused
 test run. The launcher enforces one opam/Dune job and imports the repository's noninteractive test
 failure handling.
 
@@ -109,9 +107,8 @@ The independently owned neutral ordered family provides `Persistent_ordered_set`
 identity while array position defines order; first key/value representatives survive equivalent
 lookups and replacements. The facades own insertion, final-index movement, positional ranges,
 reversal, stable one-shot sorting, receiver-policy set algebra, independent key/value policies, and
-nested value movement. These modules depend only on general repository code and never on Tungsten.
+nested value movement. These modules depend only on general repository code.
 
-The application-leaf Tungsten layer adds `Persistent_list` over the general deque and
 `Persistent_association` with its kernel-specific ordering rules. Association replacement retains
 the stored key and position; append/prepend deliberately move an existing class and adopt the
 caller representative; indexed insertion adjusts its target after removing an earlier occurrence.

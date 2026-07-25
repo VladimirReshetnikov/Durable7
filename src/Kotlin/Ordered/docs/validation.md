@@ -56,8 +56,7 @@ Hamt/src
 FingerTree/src
 ```
 
-Do not add `Tungsten/src`, import `durable7.tungsten`, copy or link Tungsten source,
-wrap a Tungsten type, or use `PersistentAssociation` as an executable oracle. A reusable mechanism
+A reusable mechanism
 must remain independently implemented and specified here.
 
 ## Benchmark Boundary

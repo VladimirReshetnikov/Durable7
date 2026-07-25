@@ -8,7 +8,7 @@
 
 This document specifies three immutable facades built from the repository-general CHAMP family.
 They retain policies by object identity, preserve stored representatives, publish complete
-successors only after every component update succeeds, and have no Tungsten dependency.
+successors only after every component update succeeds.
 
 ## Persistent Map Patch
 

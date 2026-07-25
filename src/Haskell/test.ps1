@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'Tungsten')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered')]
     [string] $Workspace = 'All',
 
     [string[]] $CabalArguments = @()
@@ -19,7 +19,6 @@ $target = switch ($Workspace) {
     'Hamt' { 'hamt-test' }
     'FingerTree' { 'ft-test' }
     'Ordered' { 'ordered-test' }
-    'Tungsten' { 'durable7-tungsten' }
 }
 
 $cabal = Get-Command cabal -ErrorAction Stop

@@ -49,7 +49,6 @@ High-risk contracts receive direct executable coverage:
   present-null three-way merge;
 - fixed-width arithmetic, byte order, parsing/formatting, signed overflow edges, and fast-check
   differential models for all six integer widths; and
-- generated Tungsten list/association histories, key representative retention, sparse stamps, and
   relabel behavior.
 
 `npm run check`, `npm test`, and `npm run build` remain available as focused gates. Generated `dist`,

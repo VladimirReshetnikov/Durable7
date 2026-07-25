@@ -8,7 +8,6 @@
 
 This workspace owns the C17 port of the neutral persistent ordered-set and ordered-map family. It
 combines the public C CHAMP map with the public C FingerTree deque and has no source, link, API,
-test-oracle, or semantic dependency on a Tungsten workspace.
 
 ## Surface
 
@@ -51,9 +50,6 @@ durable7_ordered_c
 ├── durable7_hamt_c
 └── durable7_finger_tree_c
 ```
-
-The root C aggregator may build Ordered and Tungsten in the same invocation; that is not a runtime
-or semantic dependency. Ordered does not include, link, compile, wrap, or test against Tungsten.
 
 ## Documentation
 

@@ -7,7 +7,6 @@
 
 - [API and behavior notes](api-notes.md) specify the public surface, retained policy and
   representative rules, sparse-label representation, algebra, failure behavior, and complexity.
-- [Validation](validation.md) defines the serialized workspace gate, coverage requirements,
-  Tungsten-free dependency boundary, and benchmark exclusion.
+- [Validation](validation.md) defines the serialized workspace gate, coverage requirements, and benchmark exclusion.
 - [Workspace README](../README.md) gives the concise orientation and build entry point.
 - [Executable test map](../test/README.md) maps the dependency-free scenarios to the contract.

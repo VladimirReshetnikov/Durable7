@@ -17,7 +17,7 @@ was an application-specific realization of one composition idea; the later gener
 `PersistentOrderedMap` shipment is an independently owned neutral implementation and does not use
 Tungsten as a substrate or semantic baseline.
 The normative
-[Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) requires an
+Tungsten application-leaf dependency boundary requires an
 independently owned fork for any general reuse.
 
 The benchmark-independent implementation tranches now ship persistent one-descent HAMT updates,
@@ -28,7 +28,7 @@ The benchmark-independent implementation tranches now ship persistent one-descen
 `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet`, and the genuinely new
 non-composite `RangeUpdateSequence` core across all nine languages. C# owns the detailed managed
 contracts; siblings preserve the same logical semantics through language-local policies and
-ownership idioms. Both full serialized C# Debug and Release gates pass 1,211/1,211 tests after
+ownership idioms. Both full serialized C# Debug and Release gates pass 1,158/1,158 tests after
 builds with zero warnings and zero errors. No benchmark
 was run; see the
 [frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)
@@ -106,7 +106,7 @@ ordered key/value lookup respectively. The generic map owns a representation-neu
 the Tungsten case study independently specialized the broad composition idea for `Association`.
 *Application-specific shipment 2026-07-07*: the Tungsten workspaces own a values-in-both
 `PersistentAssociation` (plus the `PersistentList` sequence facade), with the C# workspace
-([`Durable7.Tungsten`](../../src/CSharp/docs/Tungsten/overview.md)) as the semantic
+(`Durable7.Tungsten`) as the semantic
 reference only for C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml Tungsten ports linked from the
 [data-structure catalog](data-structure-catalog.md#tungsten-application-collections). This did not
 ship the generic ordered-map candidate at that time; the later neutral shipment did. Other
@@ -191,7 +191,7 @@ Cross-cutting findings that adversarial review kept re-deriving:
 This section records application requirements and algorithmic provenance. It does not define a
 general collection contract. Tungsten may consume general structures, but a general structure must
 not depend on Tungsten code or behavior; fork any reusable mechanism independently under the
-[application-leaf boundary](tungsten-application-leaf-boundary.md).
+application-leaf boundary.
 
 The Tungsten engine (`C:\Smithereens\src\Tungsten`, a kernel-free Tungsten Language engine)
 provided an external requirements source: replacement designs for `List` (the argument sequence of
@@ -213,7 +213,7 @@ Tungsten semantics, lives in the Smithereens repository at
 `src/Tungsten/docs/reports/2026-07-03-list-association-persistent-backends.md`.
 
 The library-side outcome shipped on 2026-07-07 as the
-[C# Tungsten-collections workspace](../../src/CSharp/docs/Tungsten/overview.md): the
+C# Tungsten-collections workspace: the
 `Association` composite as specified here (stamp-sorted deque + HAMT, values in both, gapped
 labels with honest relabel contract), and the `List` facade over the finger-tree deque without
 the engine-level small/packed tiers (those stay behind the client's expression surface).

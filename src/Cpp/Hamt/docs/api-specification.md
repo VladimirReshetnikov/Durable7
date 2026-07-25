@@ -52,7 +52,7 @@ composition-first general facades. Patch before/after optionals distinguish abse
 validates every expectation before editing, and composition requires equal intermediate states.
 Graphs add missing edge endpoints and remove all incident edges with a vertex. Indexed maps retain
 the selected index representative beside each primary value and update the primary CHAMP plus
-secondary multimap together. No facade depends on Tungsten.
+secondary multimap together.
 
 The port intentionally follows C++ value semantics rather than C# reference identity. No-op updates
 return values that share the same roots as the source; `shares_root_with`,

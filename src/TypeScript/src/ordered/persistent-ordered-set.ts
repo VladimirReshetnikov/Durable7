@@ -90,7 +90,7 @@ export class OrderedSetMissingValueError extends Error {
  *
  * Membership and first-representative retention are defined by a {@link HashPolicy}; enumeration
  * follows insertion or explicitly requested order. This general-purpose type depends only on the
- * repository's HAMT and FingerTree families and is independent of Tungsten collections.
+ * repository's HAMT and FingerTree families.
  */
 export class PersistentOrderedSet<T> implements Iterable<T> {
     static readonly #sharedDefaultEmpty = new PersistentOrderedSet<unknown>(

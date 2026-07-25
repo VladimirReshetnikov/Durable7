@@ -30,7 +30,7 @@ inherit the eight established ports' implicit-AVL lazy-update bound:
 The initial findings came from a single-pass design survey conducted 2026-07-10/11, grounded against the shipped
 C# workspaces ([HAMT](../../src/CSharp/docs/Hamt/overview.md),
 [FingerTree](../../src/CSharp/docs/FingerTree/overview.md),
-[Tungsten](../../src/CSharp/docs/Tungsten/overview.md), and the
+Tungsten, and the
 [measured benchmark notes](../../src/CSharp/docs/FingerTree/benchmarks.md)) and against the derived
 structure catalog's verified composition rules. Implemented entries now record the validation and
 primary-source checks performed while they were built. Unimplemented candidates have **not** all
@@ -38,7 +38,7 @@ received that treatment: before implementing one, re-read the cited paper and ve
 claims and bounds. The [references](#references) section lists what to pull.
 
 Tungsten material in this catalog is consumer evidence and historical provenance only. Under the
-normative [application-leaf boundary](tungsten-application-leaf-boundary.md), no general candidate
+normative application-leaf boundary, no general candidate
 may depend on Tungsten code, types, internals, tests, or semantics. Reusable mechanics require an
 independently owned implementation and contract; C# Tungsten remains authoritative only for sibling
 Tungsten ports.

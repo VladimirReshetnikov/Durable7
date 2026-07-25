@@ -9,7 +9,6 @@
 insertion-ordered collections. `PersistentOrderedSet<T, S = RandomState>` combines the public CHAMP
 `PersistentHashMap<T, i64, S>` membership index with the public FingerTree `PersistentDeque`
 positional sequence. It is independently owned general-purpose code: the crate has no dependency on
-Tungsten production code, tests, internals, or behavior.
 
 `PersistentOrderedMap<K, V, S = RandomState>` uses the same sparse-stamp design. Its CHAMP stores
 key-to-stamp navigation while the positional deque owns key/value entries, so arbitrary payloads

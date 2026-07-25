@@ -21,12 +21,11 @@ Library-specific design and API documentation lives beside each workspace under 
 
 - [Reference index](reference/README.md) - durable cross-workspace reference material.
 - [Data structure catalog](reference/data-structure-catalog.md) - cross-language catalog of repository-owned data-structure families, including the strict persistent bimap and the current five-structure derived tranche in all nine languages, public entry points, and primary references.
-- [Derived structure catalog](reference/derived-structure-catalog.md) - historical verified composition survey with current disposition notes for the shipped bimap, ordered map, hash multimap/relation, and other facades, remaining candidates, and the distinction between Tungsten application evidence and independently owned general structures.
+- [Derived structure catalog](reference/derived-structure-catalog.md) - historical verified composition survey with current disposition notes for the shipped bimap, ordered map, hash multimap/relation, and other facades, remaining candidates, and remaining candidates.
 - [Frontier structure catalog](reference/frontier-structure-catalog.md) - current-state record of shipped Axis 1/selected Axis 2 work, nine-language semantic coverage and OCaml checkpoint boundaries, and remaining candidates beyond composition: new cores, hybrid/adaptive representation tiers, niche-specialized siblings, verdicts, and sequencing.
 - [Documentation navigation matrix](reference/navigation-matrix.md) - task-oriented entry points for usage, API, validation, porting, history, and maintenance work.
 - [Semantic contracts](reference/semantic-contracts.md) - shared behavior, ownership, policy, ordering, and documentation obligations across repository-owned data structures.
 - [Test suite map](reference/test-suite-map.md) - cross-workspace map of test runners, routine commands, stress knobs, sample smoke tests, and benchmark boundaries.
-- [Tungsten application-leaf dependency boundary](reference/tungsten-application-leaf-boundary.md) - normative one-way dependency, semantic-authority, independent-fork, validation, and extraction policy for the application-specific Tungsten collection family.
 - [Workspace map](reference/workspace-map.md) - language-first layout, data-structure workspace roles, port lineage, and documentation placement rules.
 
 ## Proposals

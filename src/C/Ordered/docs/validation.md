@@ -41,6 +41,5 @@ counts, nested structural validation, and ownership balance.
 ## Dependency audit
 
 Ordered may include only its own header plus the public HAMT and FingerTree headers. Its CMake target
-links only the corresponding general targets. A repository search for `Tungsten`, `tungsten`, or a
-Tungsten target under `src/C/Ordered` must return only explanatory documentation; production source,
+links only the corresponding general targets. Production source,
 tests, and manifests must contain no such dependency or oracle.

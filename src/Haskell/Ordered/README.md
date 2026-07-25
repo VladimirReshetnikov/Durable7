@@ -8,7 +8,6 @@
 This package is the independently owned Haskell port of the repository's neutral insertion-ordered
 set and map. It composes the public CHAMP map from `durable7-hamt` with the public persistent
 deque from `durable7-fingertree`; it has no dependency on the application-specific
-Tungsten package and does not use Tungsten behavior as an oracle.
 
 `Durable7.Ordered.PersistentOrderedSet` stores one ordered `Entry` per comparer equivalence
 class and one CHAMP entry from that representative to its private signed 64-bit order label. Labels

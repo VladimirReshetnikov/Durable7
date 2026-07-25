@@ -19,7 +19,7 @@ ordered/PersistentOrderedSet
 └── finger-tree/FingerTree
 ```
 
-It neither imports nor delegates to Tungsten. The CHAMP map associates each equality-policy class
+The CHAMP map associates each equality-policy class
 with a private `bigint` order-maintenance stamp. A right-biased last-stamp measure over the persistent
 FingerTree sequence supplies logarithmic stamp location and positional edits. Sparse labels use the
 C# implementation's `2^20` initial spacing and signed-64-bit relabel boundary, but labels are private

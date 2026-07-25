@@ -16,15 +16,6 @@ for shared behavior obligations across repository-owned data structures. Use
 matrix. Use [the porting and semantic parity guide](porting-and-semantic-parity.md) when a behavior or
 public API change may need to cross C#, C++, C, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml workspaces.
 
-## Tungsten Dependency Check
-
-Tungsten workspaces are application-specific leaves and may move or change with new kernel evidence.
-Before adding a project/package reference or choosing a semantic baseline, verify that no general or
-non-Tungsten workspace points to Tungsten. Reusable mechanics must be forked into a separately owned
-implementation with independent API, tests, documentation, and evolution. C# Tungsten governs only
-the sibling Tungsten ports; do not use its tests as a live oracle for a general collection. Follow
-the normative [application-leaf boundary](../reference/tungsten-application-leaf-boundary.md).
-
 ## C# and .NET validation
 
 Use the real .NET SDK in the local Windows environment:

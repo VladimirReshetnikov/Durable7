@@ -7,7 +7,7 @@
 
 The C++ root contains value-semantics ports of repository-owned persistent data structures. The root
 `build.ps1` delegates to the family-local build systems: the HAMT C++20 script and the FingerTree,
-Ordered, and Tungsten CMake/CTest presets.
+and Ordered CMake/CTest presets.
 
 The root wrapper runs selected workspaces sequentially. Every CMake build preset, CTest preset, and
 wrapper invocation fixes its job count at one; the direct HAMT compiler/test steps are already serial.
@@ -17,7 +17,6 @@ wrapper invocation fixes its job count at one; the direct HAMT compiler/test ste
 | [Hamt](Hamt/README.md) | C++20 CHAMP collections, strict patches, directed graphs, indexed maps, Patricia, and exact-wire Merkle | [aggregate header](Hamt/include/durable7/hamt/hamt.hpp), [API spec](Hamt/docs/api-specification.md) | `.\build.ps1 -Workspace Hamt -RunTests`; see [validation](Hamt/docs/validation.md) and [tests](Hamt/tests/README.md) |
 | [FingerTree](FingerTree/README.md) | C++23 measured-tree family, chunked bit set, RRB, DABA Lite, priority/interval, ropes, and cursors | [aggregate header](FingerTree/include/durable7/finger_tree/finger_tree.hpp), [API notes](FingerTree/docs/api-notes.md) | `.\build.ps1 -Workspace FingerTree -RunTests`; see [validation](FingerTree/docs/validation.md) and [tests](FingerTree/tests/README.md) |
 | [Ordered](Ordered/README.md) | Neutral C++23 insertion-ordered set, map, and grouped multimap | [aggregate header](Ordered/include/durable7/ordered/ordered.hpp), [API notes](Ordered/docs/api-notes.md) | `.\build.ps1 -Workspace Ordered -RunTests`; see [validation](Ordered/docs/validation.md) and [tests](Ordered/tests/README.md) |
-| [Tungsten](Tungsten/README.md) | Application-specific C++23 leaf port of Tungsten `List` and `Association` | [aggregate header](Tungsten/include/durable7/tungsten/tungsten.hpp), [list header](Tungsten/include/durable7/tungsten/persistent_list.hpp), [association header](Tungsten/include/durable7/tungsten/persistent_association.hpp) | `.\build.ps1 -Workspace Tungsten -RunTests` |
 
 Use the parent [source index](../README.md) for the full language list, the repository
 [workspace map](../../docs/reference/workspace-map.md) for cross-language port lineage, and the

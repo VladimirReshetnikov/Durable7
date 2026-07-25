@@ -25,10 +25,6 @@
         "./ordered": {
             "types": "./dist/ordered/index.d.ts",
             "import": "./dist/ordered/index.js"
-        },
-        "./tungsten": {
-            "types": "./dist/tungsten/index.d.ts",
-            "import": "./dist/tungsten/index.js"
         }
     },
     "scripts": {

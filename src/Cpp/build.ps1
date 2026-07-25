@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'Tungsten')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered')]
     [string[]] $Workspace = @('All'),
 
     [ValidateSet('Debug', 'Release')]
@@ -60,30 +60,6 @@ function Invoke-FingerTreeBuild {
     }
 }
 
-function Invoke-TungstenBuild {
-    $preset = if ($Configuration -eq 'Release') { 'msvc-release' } else { 'msvc-debug' }
-    $steps = @(
-        "call `"$VisualStudioDevCmd`" -arch=x64 -host_arch=x64",
-        "`"$CMake`" --preset $preset",
-        "`"$CMake`" --build --preset $preset --parallel 1"
-    )
-
-    if ($RunTests) {
-        $steps += "`"$CTest`" --preset $preset --parallel 1 --output-on-failure"
-    }
-
-    Push-Location -LiteralPath (Join-Path $PSScriptRoot 'Tungsten')
-    try {
-        & cmd.exe /d /c ($steps -join ' && ')
-        if ($LASTEXITCODE -ne 0) {
-            throw "C++ Tungsten build failed with exit code $LASTEXITCODE."
-        }
-    }
-    finally {
-        Pop-Location
-    }
-}
-
 function Invoke-OrderedBuild {
     $preset = if ($Configuration -eq 'Release') { 'msvc-release' } else { 'msvc-debug' }
     $steps = @(
@@ -108,13 +84,12 @@ function Invoke-OrderedBuild {
     }
 }
 
-$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree', 'Ordered', 'Tungsten') } else { $Workspace }
+$selected = if ($Workspace -contains 'All') { @('Hamt', 'FingerTree', 'Ordered') } else { $Workspace }
 
 foreach ($item in $selected) {
     switch ($item) {
         'Hamt' { Invoke-HamtBuild }
         'FingerTree' { Invoke-FingerTreeBuild }
         'Ordered' { Invoke-OrderedBuild }
-        'Tungsten' { Invoke-TungstenBuild }
     }
 }

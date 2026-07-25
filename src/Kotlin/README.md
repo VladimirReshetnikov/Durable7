@@ -14,7 +14,6 @@ where the language surfaces line up.
 | [Hamt](Hamt/README.md) | Persistent CHAMP collections plus strict patches, directed graphs, indexed maps, Ctrie, Patricia, and Merkle | `PersistentHashMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap` | `.\build.ps1 -Workspace Hamt` |
 | [FingerTree](FingerTree/README.md) | Persistent measured-tree family, sparse chunked bit set, cursors, RRB, priority cores, and DABA Lite | `durable7.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
 | [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set, map, and grouped multimap | `PersistentOrderedSet`, `PersistentOrderedMap`, `PersistentOrderedMultimap` | `.\build.ps1 -Workspace Ordered` |
-| [Tungsten](Tungsten/README.md) | Application-specific leaf port of Tungsten `List` and `Association` over Kotlin persistent substrates | `durable7.tungsten.PersistentList`, `PersistentAssociation` | `.\build.ps1 -Workspace Tungsten` |
 
 Run the full Kotlin validation from this directory:
 
@@ -34,7 +33,6 @@ and starts every test JVM with `-Djava.awt.headless=true`. Assertion, exception,
 remain console diagnostics with nonzero exits instead of opening modal UI.
 
 The Ordered workspace compiles against the public source roots of both Hamt and FingerTree. It does
-not compile, reference, wrap, or otherwise depend on the application-specific Tungsten workspace.
 Its `PersistentOrderedSet<T>` retains the caller's runtime `HashPolicy<T>`, keeps the first stored
 representative of each equality class (including nullable representatives), and maintains an
 independently owned sparse-`Long` order index with deterministic relabel fallback.

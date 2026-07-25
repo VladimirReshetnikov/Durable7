@@ -26,7 +26,7 @@ The twelve named scenarios form four layers:
 Every layer calls the public Ordered-owned `validateStructure()` diagnostic. The tests intentionally
 use constant-hash collision policies, object-distinct equivalent representatives, nullable values,
 semantically different policy objects, and unpublished rebuild failures. They do not import or
-compile Tungsten and do not execute benchmarks.
+do not execute benchmarks.
 
 The ordered-map scenario additionally covers payload replacement without movement, retained source
 values, order/value root sharing, explicit movement, stable entry sorting, range extraction, and

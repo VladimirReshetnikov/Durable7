@@ -26,7 +26,6 @@ Tests are grouped by shipped collection family:
 - `ordered/`: the neutral HAMT-plus-deque persistent ordered set, map, and grouped multimap, including representative
   and policy retention, explicit movement, sparse-stamp relabeling, ranges, stable sorting, dual
   indexes, eager set algebra and relations, failure atomicity, concurrency, and generated histories.
-- `tungsten/`: application-leaf persistent list and insertion-ordered association semantics.
 
 Hypothesis stateful/model tests supplement example and adversarial tests. Tests use public APIs
 except where white-box structural assertions are necessary to establish sharing or invariants.

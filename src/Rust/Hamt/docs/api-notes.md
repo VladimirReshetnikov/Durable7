@@ -245,7 +245,7 @@ value retained on an equal replacement), `to_immutable` freezes a detached snaps
 builder usable, and `into_immutable` consumes the builder by moving nodes without cloning. Map and
 set `FromIterator`, set intersection, and the receiver-policy probe sets built by the binary set
 relations route through the builder; incremental updates on existing collections keep their
-structural-sharing paths. The Tungsten association's relabel/sort/reverse and small-side
+structural-sharing paths. Relabel/sort/reverse and small-side
 `get_range` index rebuilds consume the builder as well.
 
 Rust-specific differences:

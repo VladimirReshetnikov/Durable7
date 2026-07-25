@@ -3,8 +3,7 @@
 - Created (UTC): 2026-07-15T00:31:34Z
 - Repository HEAD: fa29fbb535a231b166e75ea873d56f170a609a87
 
-This workspace is the typed Python 3.11+ port of the repository-owned HAMT, FingerTree, ordered,
-and Tungsten-collection families. The distribution is
+This workspace is the typed Python 3.11+ port of the repository-owned HAMT, FingerTree, and ordered families. The distribution is
 `durable7`; its import namespace is
 `durable7`.
 
@@ -36,8 +35,6 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
   independently composed from the HAMT and persistent deque. They retain first representatives,
   receiver `HashPolicy` identity, insertion order, explicit positional movement, sparse labels,
   ranges, and stable one-shot sorting; the set also provides receiver-ordered algebra. Neither
-  depends on the application-specific Tungsten family.
-- `tungsten` is the application-specific leaf containing `PersistentList` and insertion-ordered
   `PersistentAssociation`; general-purpose package code never depends on it.
 
 The root namespace re-exports every public family member:

@@ -19,8 +19,7 @@ Ordered
 └── FingerTree/src
 ```
 
-It neither compiles nor references `Tungsten`, and it does not wrap `PersistentAssociation` or use
-kernel-derived Tungsten behavior as its semantic baseline. The order-maintenance implementation,
+The order-maintenance implementation,
 API, diagnostics, tests, and evolution policy are independently owned here.
 
 ## Capabilities

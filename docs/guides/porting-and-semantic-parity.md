@@ -15,27 +15,11 @@ Semantic parity does not mean identical names or identical type-system shapes. I
 observable contracts are preserved where the languages expose equivalent capabilities, and that
 intentional differences are explicit in the local API notes.
 
-## Tungsten Is An Application-Specific Leaf
-
-Tungsten collections are governed by the Tungsten project and observed Wolfram-kernel behavior.
-They may change when that behavior is newly discovered or reinterpreted, and the workspaces may
-eventually move out of this repository. C# Tungsten documentation is authoritative only for sibling
-Tungsten ports.
-
-Tungsten may portably consume general HAMT/FingerTree families, but no general-purpose collection or
-non-Tungsten workspace may depend on a Tungsten package/type or use its contract as a baseline. A
-generally useful mechanism must be forked into an independently owned implementation with its own
-API, contracts, tests, and parity decision. Kernel-driven changes then flow across Tungsten ports
-only; neither the fork nor any general family inherits them automatically.
-See the detailed
-[Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
-before extracting or generalizing a Tungsten mechanism.
-
 ## Authoritative Inputs
 
 | Input | Use it for |
 | --- | --- |
-| Managed API specs under `src/CSharp/*/docs` | Primary semantic contract for the owning general collection family. Tungsten specs are authoritative only inside the sibling Tungsten port lineage. |
+| Managed API specs under `src/CSharp/*/docs` | Primary semantic contract for the owning general collection family. |
 | Native API specs and public headers under `src/C/*` and `src/Cpp/*` | Idiomatic C and C++ surface shape, ownership model, and local divergences. |
 | Kotlin API notes under `src/Kotlin/*/docs` | Kotlin/JVM value semantics, null/result shapes, tool bootstrap, persistent representation, complexity, and intentional engine differences. |
 | Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
@@ -244,8 +228,7 @@ FingerTree lineage:
 
 Ordered-set lineage:
 
-This is a neutral general composition lineage, independent of the application-specific Tungsten
-family. The ports compose public HAMT membership/stamp indexes with public persistent ordered
+This is a neutral general composition lineage. The ports compose public HAMT membership/stamp indexes with public persistent ordered
 sequences and own their contracts, sparse-label mechanics, tests, and evolution separately.
 
 1. [C# Ordered](../../src/CSharp/docs/Ordered/overview.md) is the semantic reference for
@@ -265,33 +248,7 @@ sequences and own their contracts, sparse-label mechanics, tests, and evolution 
    with persistent values, explicit movement, positional operations, stable sorting, and retained
    first representatives.
 
-No Ordered port references a Tungsten package, type, source file, test oracle, or privileged API.
-Port Ordered changes among these neutral workspaces only when the general contract changes; do not
-propagate a kernel-driven Tungsten change into this lineage.
-
-Tungsten collections lineage:
-
-This is a family-local application lineage, not a general collection lineage. Its behavior may
-change with new kernel evidence. Port changes within it across sibling Tungsten workspaces; fork any
-generally useful mechanism into a separately owned family instead of importing, wrapping, or
-refactoring Tungsten into a dependency.
-
-1. [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) are the baseline only for
-   sibling Tungsten ports of the `PersistentList<T>` facade and kernel-verified
-   `PersistentAssociation<TKey, TValue>` ordering rules.
-2. [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) ports the family to C++23 value types over
-   the C++ HAMT and FingerTree substrates.
-3. [`src/C/Tungsten`](../../src/C/Tungsten/README.md) ports the family to type-erased C value structs
-   with explicit clone/dispose ownership, C HAMT lookup, and an internal stamp-ordered AVL sequence.
-4. [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md), [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md),
-   and [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) port the same behavior to their
-   language-local immutable value, policy, and test-runner shapes.
-5. [`src/TypeScript`](../../src/TypeScript/README.md) and [`src/Python`](../../src/Python/README.md)
-   port the same application-leaf `PersistentList`/`PersistentAssociation` vocabulary into their
-   language-local packages.
-6. [`src/OCaml`](../../src/OCaml/README.md) ports that vocabulary into a separate application-leaf
-   library that depends on the general OCaml HAMT and FingerTree libraries; no dependency points
-   back from a general library into Tungsten.
+Port Ordered changes among these neutral workspaces only when the general contract changes.
 
 A port can still reveal a baseline bug. When that happens, fix or document the baseline contract
 first, then carry the corrected semantics through the sibling workspaces that expose the same
@@ -484,7 +441,6 @@ Validation guides:
 For `PersistentOrderedSet` changes, verify the shared general contract across all nine languages:
 
 - neutral package ownership and a one-way dependency on public HAMT/FingerTree substrates, with no
-  production, test, documentation-oracle, or privileged-access dependency on Tungsten;
 - one stored representative and one strictly ordered stamp per equality class, with exact agreement
   between the hash index and ordered sequence;
 - first-occurrence construction, addition that never moves an existing class, explicit movement
@@ -494,7 +450,6 @@ For `PersistentOrderedSet` changes, verify the shared general contract across al
 - receiver-policy union/intersection/difference/symmetric-difference order and all six set relations,
   including eager normalization of foreign-policy arguments;
 - sparse-label exhaustion and relabel histories under branching persistence, without promising a
-  Tungsten constant or cross-branch amortized bound;
 - presence-safe lookup/removal result shapes for stored `undefined`/`None` values; and
 - retained-version immutability, callback-failure atomicity, invariant validation, generated
   comparer-aware histories, and language-appropriate concurrent-read evidence.

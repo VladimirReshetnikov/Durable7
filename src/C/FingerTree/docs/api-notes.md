@@ -303,7 +303,7 @@ range/threshold visitor is the complete bounded-query surface for this checkpoin
 ## Persistent Range-Update Sequence Contract
 
 `ft_range_update_sequence` is the neutral C port of the benchmark-independent range-update core. It is not a
-wrapper around either measured finger-tree engine and has no Tungsten dependency. Its immutable nodes form an
+wrapper around either measured finger-tree engine. Its immutable nodes form an
 implicit-key AVL tree and store one owned element, child references, checked `size_t` height/count metadata, an
 owned ordered measure, and an optional owned pending tag. A policy handle owns copied empty-measure and
 identity-tag representatives and is retained by every sequence version.

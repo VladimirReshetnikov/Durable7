@@ -47,7 +47,6 @@ behavior change through sibling workspaces.
 | Version-bound cursor | An immutable working value that owns one persistent sequence version and a position within it; navigation and editing never redirect it to a different version implicitly. |
 | Checkpoint port | A port that preserves observable API semantics and tests while documenting a remaining representation or asymptotic parity boundary. |
 | Facade | A public collection built on a shared core engine, such as sorted sets on measured trees or text ropes on measured ropes. |
-| Application-specific leaf | A workspace that may consume general libraries but cannot be a dependency or semantic baseline for general-purpose structures. Reusable mechanisms leave it only through an independently owned fork. Tungsten is the repository's current example. |
 
 ## HAMT Map And Set
 
@@ -294,7 +293,7 @@ is the detailed managed reference.
 
 `PersistentOrderedSet` ships in neutral Ordered modules across all nine languages. It composes
 a persistent HAMT membership/stamp index with a persistent ordered sequence and must not depend on
-the application-specific Tungsten family. Shared obligations are:
+Shared obligations are:
 
 - equality/hash policy defines membership, duplicate collapse, stored representatives, algebra,
   and relations; the exact receiver policy is retained by every result, including empties;
@@ -337,7 +336,7 @@ class. Shared obligations are:
   identity no-ops; already-positioned movement is likewise a documented no-op where exposed, while
   callback, allocation, or comparison failure publishes neither index.
 
-The general map is independently owned by each neutral Ordered workspace. Tungsten
+The general map is independently owned by each neutral Ordered workspace.
 `PersistentAssociation` supplied historical design evidence only and is neither a dependency nor a
 semantic authority. See the C# [Ordered API specification](../../src/CSharp/docs/Ordered/api-specification.md)
 and the [cross-language catalog](data-structure-catalog.md#derived-persistent-maps-relations-and-sparse-bit-sets).
@@ -366,7 +365,7 @@ language-local naming, result, ownership, and policy shapes. Their shared obliga
   scanning to the largest index.
 
 Every composite publishes all constituent indexes together or publishes no successor. The general
-families depend only on general HAMT, Ordered, and FingerTree substrates; none references Tungsten
+families depend only on general HAMT, Ordered, and FingerTree substrates
 or adopts its behavior as a semantic baseline. The detailed managed contracts are the
 [derived HAMT structures](../../src/CSharp/docs/Hamt/derived-persistent-structures.md),
 [ordered multimap](../../src/CSharp/docs/Ordered/persistent-ordered-multimap.md), and
@@ -516,8 +515,6 @@ deterministic:
 | `SymmetricExcept` | Receiver-only classes in receiver order, then argument-only classes in normalized argument order |
 
 The workspace is independently owned and depends only on the public C# HAMT and FingerTree projects.
-Neither production nor tests may reference `Durable7.Tungsten`, consume Tungsten source
-or internals, use `PersistentAssociation` as a live oracle, or adopt Tungsten as semantic authority.
 Similar sparse-order mechanics are provenance, not shared ownership. C, C++, Haskell, Kotlin,
 Rust, TypeScript, Python, and OCaml ship neutral sibling implementations derived from this Ordered
 contract through language-local ownership and policy models.
@@ -639,7 +636,7 @@ they make no C# focused-rope locality, callback, allocation, memoization, or ben
 CHAMP maps/sets and their bag, bimap, hash multimap/relation, patch, and indexed-map compositions
 keep edit paths private because hash traversal has no public semantic neighbor. Ctrie live
 views, graphs, measured priority queues, Brodal–Okasaki heaps, DABA Lite, builders, sessions, stores,
-proofs, packs, and all Tungsten collections intentionally expose no persistent cursor.
+proofs, and packs intentionally expose no persistent cursor.
 
 ## Ropes And Text
 
@@ -813,44 +810,6 @@ are specified by their [TypeScript API notes](../../src/TypeScript/docs/api-note
 [Python API notes](../../src/Python/docs/api-notes.md), and
 [OCaml API notes](../../src/OCaml/docs/api-notes.md), respectively.
 
-## Tungsten Collections
-
-This section is a contract only among the application-specific Tungsten ports. Tungsten collections
-serve the Tungsten project, may change as Wolfram-kernel behavior is newly discovered or
-reinterpreted, and may move out of this repository. They are leaf consumers: general collections
-must not reference their packages/types, use their implementation, or inherit their semantics.
-If a mechanism deserves general use, fork it under a separate owner with independent contracts and
-tests; do not make the fork track later Tungsten changes automatically.
-The detailed [application-leaf boundary](tungsten-application-leaf-boundary.md) controls what counts
-as a dependency, an independent fork, harmless provenance, and sufficient validation.
-
-Tungsten collections compose HAMT keyed lookup with persistent ordered storage into a sequence facade
-(`PersistentList`) and an insertion-ordered map (`PersistentAssociation`) whose ordering behavior
-matches the kernel-verified Tungsten Language rules.
-
-Shared obligations:
-
-- Indexing is zero-based; every documented Tungsten correspondence names the one-based operation it
-  mirrors.
-- The association's ordering rules are normative and test-locked: duplicate construction keys keep
-  first position with last value; `SetItem` updates in place; `Append`/`Prepend` move an existing
-  key to the end/front; `Insert` of an existing key wins position and value with the index read
-  before the old occurrence is removed; `Join` keeps the receiver's positions with the argument's
-  values; `Sort`/`KeySort` are stable and produce ordinary associations.
-- Keyed and ordered reads are both first-class: keyed lookup must not enumerate, and ordered
-  enumeration must not hash.
-- Key equality is the factory-supplied comparer; derived associations preserve it, and stored-key
-  retention follows the HAMT contract (in-place updates keep the stored key instance; re-adds
-  store the supplied instance).
-- Observably unchanged writes preserve identity or root sharing where that is part of the local
-  language contract; in value-shaped ports, they must remain semantically unchanged without
-  weakening persistence.
-- Order-maintenance labels (stamps) are an implementation detail; ports must reproduce the honest
-  cost contract — gap-exhaustion relabeling is per produced version and not amortized under
-  branching persistence — without exposing labels in the API.
-- Absent-key reads are exceptions or `false`/miss results, never sentinel entries; mapping absence
-  to `Missing[...]`-style values is a client concern.
-
 ## Ownership And Lifetime By Language
 
 | Language | Ownership model | Documentation focus |
@@ -871,9 +830,6 @@ When adding a new collection, helper, builder, or facade, add docs that answer:
 
 - What is the public entry point and which namespace, module, header, package, or crate exports it?
 - Which workspace owns it, and does every dependency point toward a repository-general substrate?
-- If the design was inspired by Tungsten, where is the independently owned fork and what
-  Tungsten-specific guarantees were retained or deliberately dropped? A new general surface may
-  not use Tungsten as its implementation or semantic baseline.
 - Which existing family is the semantic baseline?
 - Which operations preserve persistence and structural sharing?
 - Which policies are stored, inherited, or supplied per operation?

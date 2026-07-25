@@ -239,4 +239,3 @@ agreement, strict stamps, bidirectional index coverage, stamp agreement, and rep
 equivalence, returning `PersistentOrderedSetStatistics` or a typed invariant error.
 
 The implementation uses safe Rust only. It references the public HAMT and FingerTree crates and
-never references the application-specific Tungsten crate.

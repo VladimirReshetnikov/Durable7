@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Common', 'Numerics', 'Hamt', 'FingerTree', 'Ordered', 'Tungsten')]
+    [ValidateSet('All', 'Common', 'Hamt', 'FingerTree', 'Ordered')]
     [string] $Workspace = 'All',
 
     [string[]] $DuneArguments = @()
@@ -18,11 +18,9 @@ $opam = Get-Command opam -ErrorAction Stop
 $target = switch ($Workspace) {
     'All' { $null }
     'Common' { 'tests/common' }
-    'Numerics' { 'tests/numerics' }
     'Hamt' { 'tests/hamt' }
     'FingerTree' { 'tests/finger_tree' }
     'Ordered' { 'tests/ordered' }
-    'Tungsten' { 'tests/tungsten' }
 }
 
 $arguments = @('exec', '--', 'dune', 'runtest')

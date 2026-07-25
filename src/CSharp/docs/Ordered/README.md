@@ -11,7 +11,6 @@
 insertion-ordered collections composed from the public C#
 HAMT and FingerTree libraries. It is a general
 collection project: neither its production contract nor its tests depend on the application-specific
-Tungsten collections.
 
 | Document | Use it for |
 | --- | --- |
@@ -35,4 +34,3 @@ Primary code and tests:
 The authoritative execution rationale is the repository-level
 [benchmark-independent structures proposal](../../../../docs/proposals/benchmark-independent-next-structures-2026-07-14.md).
 The normative ownership rule is the
-[Tungsten application-leaf boundary](../../../../docs/reference/tungsten-application-leaf-boundary.md).

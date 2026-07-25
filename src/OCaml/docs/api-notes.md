@@ -7,7 +7,7 @@
 
 The `durable7` package uses Dune's qualified subdirectories. Consumers open
 `Durable7`, then the relevant `Hamt`, `Finger_tree`, `Ordered`, or
-`Tungsten` namespace. Public immutable values return successor values; fallible indexed operations
+namespace. Public immutable values return successor values; fallible indexed operations
 use `result`, absence uses `option`, and runtime hash/comparison/measurement policies are retained by
 the values that need them.
 
@@ -18,7 +18,6 @@ the values that need them.
 | `Hamt` | `Persistent_hamt`, `Persistent_hash_set`, `Persistent_hash_bag`, `Persistent_bi_map`, `Persistent_hash_multimap`, `Persistent_relation`, `Persistent_map_patch`, `Persistent_directed_graph`, `Persistent_indexed_map`, `Persistent_patricia`, `Concurrent_hash_trie`, `Merkle_encoding`, `Merkle_search_tree`, `Merkle_persistence`, `Merkle_proof_merge` |
 | `Finger_tree` | `Measures`, `Measured_tree`, `Persistent_deque`, `Measured_sequence`, `Reversible_deque`, `Sorted_bag`, `Sorted_set`, `Sorted_map`, `Priority_queue`, `Interval_tree`, `Persistent_interval_map`, `Rrb_vector`, `Persistent_chunked_bit_set`, `Range_update_sequence`, `Rope`, `Rope_cursor`, `Measured_rope`, `Text_rope`, `Text_rope_cursor`, `Ordered_search_cursor`, `Canonical_sorted_set`, `Brodal_okasaki_heap`, `Priority_search_queue`, `Daba_lite` |
 | `Ordered` | `Persistent_ordered_set`, `Persistent_ordered_map`, `Persistent_ordered_multimap`, `Persistent_ordered_cursor` |
-| `Tungsten` | `Persistent_list`, `Persistent_association` |
 
 ## Persistent Cursors
 
@@ -350,7 +349,7 @@ encoding, not of the surrounding immutability model.
 
 - `Common.Hash_policy` and `Common.Comparator` use object identity when a cross-value operation
   requires the exact same policy. Equivalent keys retain their first stored representative unless a
-  contract, such as Tungsten Association movement, deliberately adopts the caller representative.
+  contract deliberately adopts the caller representative.
 - The HAMT transient is one-way and rejects access after publication. Changed edits remain
   persistent path copies; OCaml makes no owner-token in-place performance claim. Its reusable
   `Bulk_builder` likewise retains path copies while providing detached freezes; it makes no
@@ -374,7 +373,6 @@ encoding, not of the surrounding immutability model.
 - `Brodal_okasaki_heap` and `Daba_lite` preserve the public semantic and failure-atomic contracts,
   but the initial simple OCaml storage does not claim the specialized sibling cores' worst-case
   asymptotic or callback bounds.
-- `Tungsten` is an application leaf. No module in `Hamt`, `Finger_tree`, or `Ordered`
   imports it or treats it as a semantic baseline.
 
 The shared semantic authority remains the repository

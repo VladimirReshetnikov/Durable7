@@ -16,8 +16,8 @@ counts. Nested edits preserve C++ value semantics, immutable roots, and exceptio
 
 ## Persistent Ordered Map
 
-`persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>` adds payload-bearing keyed entries
-without adopting Tungsten semantics. A persistent deque owns `(stamp, key, value)` entries while a
+`persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>` adds payload-bearing keyed entries.
+A persistent deque owns `(stamp, key, value)` entries while a
 CHAMP map stores only `key -> stamp`; arbitrary payloads are therefore not duplicated in the hash
 index. Construction retains the first key representative and position and the last distinct value.
 `set_item` retains the stored key, label, and position, and an equal-value update shares the complete
@@ -50,7 +50,6 @@ Hash-compatible equality remains the caller's obligation. Policy accessors retur
 and `const KeyEqual&` from the retained CHAMP index.
 
 The neutral Ordered target includes only public HAMT and FingerTree headers. It does not include,
-link, wrap, subclass, source-share with, or test against a Tungsten artifact.
 
 ## Construction And Lookup
 

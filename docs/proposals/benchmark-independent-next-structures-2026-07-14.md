@@ -102,7 +102,7 @@ This proposal follows the repository documents in this authority order:
    Tungsten consumer case study is design provenance only, never semantic or dependency authority
    for a general collection.
 5. The normative
-   [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+   Tungsten application-leaf dependency boundary
    controls ownership, dependency direction, independent-fork requirements, test-oracle isolation,
    and future extraction.
 
@@ -1366,7 +1366,7 @@ new reclamation architecture remains parked.
 - [Axis 2 final plan](axis2-lifecycle-and-sequence-cursors.md)
 - [Persistent GUID-set design study](persistent-guid-set-design-study-2026-07-12.md)
 - [Semantic contracts](../reference/semantic-contracts.md)
-- [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+- Tungsten application-leaf dependency boundary
 - [Porting and semantic parity](../guides/porting-and-semantic-parity.md)
 - [C# Ordered documentation](../../src/CSharp/docs/Ordered/README.md)
 - [C# Ordered validation](../../src/CSharp/docs/Ordered/validation.md)
@@ -1383,7 +1383,7 @@ new reclamation architecture remains parked.
 - The derived catalog remains the broad composition survey. This proposal selects a small subset and
   resolves additional API and ordering details. Its Tungsten case study is historical design evidence,
   not authority to depend on an application workspace.
-- The [Tungsten application-leaf dependency boundary](../reference/tungsten-application-leaf-boundary.md)
+- The Tungsten application-leaf dependency boundary
   is normative for ownership and dependency direction. This proposal's independent Ordered design
   is subordinate to that policy.
 - The Axis 2 final plan remains authoritative for frozen F0–F3 and C4 gating. None of those phases is

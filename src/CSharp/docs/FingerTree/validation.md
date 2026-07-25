@@ -79,7 +79,7 @@ On 2026-07-17 UTC, the focused `PersistentIntervalMapTests` and `PersistentChunk
 passed 9/9 and 8/8 tests, and the complete FingerTree project passed 709/709 tests in both full
 serialized Debug and Release solution gates.
 Both complete solution builds finish with zero warnings and zero errors, and both full C# gates
-currently pass 1,211/1,211 tests, of which the FingerTree project contributes 724. Benchmarks were
+currently pass 1,158/1,158 tests, of which the FingerTree project contributes 724. Benchmarks were
 not run.
 
 `tests/Durable7.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the

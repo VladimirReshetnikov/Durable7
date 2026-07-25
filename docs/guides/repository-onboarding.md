@@ -36,17 +36,6 @@ link to it from broader indexes. For example, C# FingerTree complexity promises 
 FingerTree API specification; the repository catalog should say the surface exists and point at that
 specification.
 
-### Tungsten is a leaf, not a foundation
-
-Treat every Tungsten workspace as an application-specific consumer that may move out of this
-repository or change with new Wolfram-kernel evidence. It may depend on general HAMT/FingerTree
-families. No general or non-Tungsten workspace may depend on Tungsten code, types, internals, or
-semantics. When reusing an attractive mechanism, create an independently owned implementation and
-state its own contract, tests, dependency direction, and deliberately retained or relaxed
-guarantees. Do not use Tungsten as a wrapper substrate or live test oracle. Consult the normative
-[application-leaf boundary](../reference/tungsten-application-leaf-boundary.md) before generalizing
-or relocating Tungsten work.
-
 ## Task Classification
 
 Classify the task before editing. The classification determines which docs and tests are relevant.
@@ -144,7 +133,6 @@ what those documents prove is useful for maintainers.
 
 - Treat C# as the broadest semantic baseline for HAMT and FingerTree unless a local API
   spec explicitly states otherwise.
-- Treat C# Tungsten as a baseline only for sibling Tungsten ports. General collections must fork
   useful mechanics and choose their contracts independently.
 - Treat C and C++ docs as authoritative for ownership, callback, RAII, and native build details.
 - Treat Haskell, Kotlin, Rust, TypeScript, Python, and OCaml docs as authoritative for idiomatic result

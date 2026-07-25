@@ -80,14 +80,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "durable7-tungsten"
-version = "0.1.0"
-dependencies = [
- "durable7-fingertree",
- "durable7-hamt",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"

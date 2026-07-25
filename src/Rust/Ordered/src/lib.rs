@@ -120,7 +120,7 @@ impl std::error::Error for PersistentOrderedSetInvariantError {}
 /// class is removed.
 ///
 /// This is a neutral general-purpose collection. Its only implementation substrates are the
-/// repository's public HAMT and FingerTree crates; it has no Tungsten dependency or semantic
+/// repository's public HAMT and FingerTree crates
 /// baseline.
 pub struct PersistentOrderedSet<T, S = RandomState> {
     order: PersistentDeque<Entry<T>>,

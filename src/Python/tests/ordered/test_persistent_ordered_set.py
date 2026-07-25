@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from inspect import getsource
 from typing import TypeVar, cast
 
 import pytest
@@ -505,9 +504,3 @@ def test_iteration_is_version_bound_concurrently_readable_and_neutral() -> None:
     with ThreadPoolExecutor(max_workers=8) as executor:
         observed = list(executor.map(lambda _index: checksum(source), range(32)))
     assert observed == [(sum(range(200)), 100, 100)] * 32
-
-    module = __import__(
-        "durable7.ordered.persistent_ordered_set",
-        fromlist=["PersistentOrderedSet"],
-    )
-    assert "tungsten" not in getsource(module).casefold()

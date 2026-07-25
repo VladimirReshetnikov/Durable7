@@ -12,7 +12,7 @@ values retain their own first-insertion order. Enumeration is therefore key-grou
 preserve one global interleaved pair-arrival history.
 
 The implementation composes `PersistentOrderedMap<TKey, PersistentOrderedSet<TValue>>`. This is a
-neutral general-purpose collection and has no Tungsten dependency or semantic baseline.
+neutral general-purpose collection.
 
 ## Semantic Contract
 

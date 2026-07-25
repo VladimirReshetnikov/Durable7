@@ -63,10 +63,10 @@ servers, and compiler sharing disabled:
   Ordered 62, and Tungsten 52.
 
 The later derived-structure integration gate on 2026-07-17 UTC adds seven focused ordered-map and
-seven focused ordered-multimap tests. The complete Ordered project passes 81/81 tests in both full
+seven focused ordered-multimap tests. The complete Ordered project passes 80/80 tests in both full
 serialized Debug and Release solution gates. Both builds finish with zero warnings and zero errors,
 and both full C# gates pass
-1,211/1,211 tests: HAMT 354, FingerTree 724, Ordered 81, and Tungsten 52. This is the
+1,158/1,158 tests: HAMT 354, FingerTree 724, and Ordered 80. This is the
 complete C# tranche evidence; the final cross-language shipment record will supersede it after all
 ports are complete.
 
@@ -112,9 +112,7 @@ The Ordered suite independently covers:
 
 Validation rejects:
 
-- an Ordered production or test project reference to `Durable7.Tungsten`;
-- a compiled Ordered assembly reference to Tungsten;
-- a Tungsten namespace/type use, nested or linked Tungsten source file, unapproved package, analyzer,
+- an unapproved package, analyzer,
   additional-file, project-as-analyzer, import, target, task, SDK, or other manifest generator route;
 - a new Ordered friend grant in HAMT or FingerTree; and
 - a live `PersistentAssociation` test oracle.

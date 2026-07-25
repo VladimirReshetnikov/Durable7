@@ -113,4 +113,4 @@ tags are cloneable through their policy-trait bounds.
 
 The representation is independently owned by this neutral crate. It uses the public ordered-measure
 contract but does not wrap the general FingerTree engine, because logarithmic lazy range actions
-require their own cached logical-measure/pending-tag invariant. It never references Tungsten.
+require their own cached logical-measure/pending-tag invariant.

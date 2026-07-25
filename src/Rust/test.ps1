@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'RangeUpdate', 'Tungsten')]
+    [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'RangeUpdate')]
     [string] $Workspace = 'All',
 
     [switch] $Release,
@@ -35,7 +35,6 @@ $selection = switch ($Workspace) {
     'FingerTree' { @('-p', 'durable7-fingertree') }
     'Ordered' { @('-p', 'durable7-ordered') }
     'RangeUpdate' { @('-p', 'durable7-range-update') }
-    'Tungsten' { @('-p', 'durable7-tungsten') }
 }
 
 $separatorIndex = [Array]::IndexOf([string[]] $CargoArguments, '--')

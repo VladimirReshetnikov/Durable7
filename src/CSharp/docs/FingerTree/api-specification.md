@@ -621,8 +621,7 @@ measured rope.
 
 The [C2 shipment decision](measured-rope-cursor-c2-decision.md) owns the exact 16/256 representation,
 callback ceilings, source-versus-prepared split policy, benchmark thresholds, and validation
-evidence. No bookmark or rebase cursor is implied by this surface, and Tungsten collection cursors
-are excluded rather than implied or deferred.
+evidence. No bookmark or rebase cursor is implied by this surface.
 
 The deque, RRB, reversible-deque, and raw-finger-tree cursors that later shipped under the
 [repository-wide persistent cursor design](../../../../docs/proposals/repository-wide-persistent-cursor-design.md)

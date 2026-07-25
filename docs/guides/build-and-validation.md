@@ -35,21 +35,16 @@ entry points for unattended validation.
 | [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Hamt/validation.md) | [Tests](../../src/CSharp/tests/Durable7.Hamt.Tests/README.md) | .NET library build, XML-doc warning gate, one-descent map-factory, hash-bag, and strict-bimap contracts, xUnit tests, CsCheck model tests |
 | [C# FingerTree](../../src/CSharp/docs/FingerTree/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/FingerTree/validation.md) | [Tests](../../src/CSharp/tests/Durable7.FingerTree.Tests/README.md) | .NET library, samples, benchmark project build, stress controls, xUnit/CsCheck suites |
 | [C# Ordered](../../src/CSharp/docs/Ordered/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Ordered/validation.md) | [Tests](../../src/CSharp/tests/Durable7.Ordered.Tests/README.md) | Neutral ordered-set project, independent HAMT/FingerTree composition, dependency-boundary audit, examples, invariants, comparer-aware CsCheck histories, and concurrent retained-version reads |
-| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | `.\test.ps1` from `src/CSharp` | [Validation](../../src/CSharp/docs/Tungsten/validation.md) | [Tests](../../src/CSharp/tests/Durable7.Tungsten.Tests/README.md) | .NET library build, XML-doc warning gate, kernel-verified ordering examples, CsCheck ordered-model histories |
-| [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/C` | [README](../../src/C/Tungsten/README.md) | [Tests](../../src/C/Tungsten/tests/tungsten_c_tests.c) | C17 MSVC Debug/Release CTest executable, list examples, Association ordering rules, custom policies, relabel stress, generated histories |
-| [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten -RunTests` from `src/Cpp` | [README](../../src/Cpp/Tungsten/README.md) | [Tests](../../src/Cpp/Tungsten/tests/tungsten_tests.cpp) | C++23 CTest executable, examples, policy tests, relabel stress, generated histories |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/C` | [Validation](../../src/C/Hamt/docs/validation.md) | [Tests](../../src/C/Hamt/tests/README.md) | C17 MSVC, GCC, and Clang builds; warning policy; deterministic HAMT/bag/bimap/Patricia/Merkle tests and native failpoints |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | `.\build.ps1 -Workspace Hamt -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/Hamt/docs/validation.md) | [Tests](../../src/Cpp/Hamt/tests/README.md) | C++20 MSVC, GCC, and Clang builds; CHAMP/bag/bimap/Patricia models; exact Merkle wire, histories, failures, validation, readers, and copied-header consumer |
 | [`src/Kotlin/Hamt`](../../src/Kotlin/Hamt/README.md) | `.\build.ps1 -Workspace Hamt` from `src/Kotlin` | [Validation](../../src/Kotlin/Hamt/docs/validation.md) | [Tests](../../src/Kotlin/Hamt/tests/README.md) | Kotlin/JVM HAMT build, tool bootstrap, deterministic CHAMP/bag/bimap/Ctrie/Patricia/Merkle tests |
 | [`src/Rust/Hamt`](../../src/Rust/Hamt/README.md) | `.\test.ps1 -Workspace Hamt` from `src/Rust` | [Validation](../../src/Rust/Hamt/docs/validation.md) | [Tests](../../src/Rust/Hamt/tests/README.md) | Safe Rust crate, structural CHAMP/bag/bimap/Patricia tests, collision/set-algebra coverage, and Merkle persistence/proof gates |
 | [`src/C/FingerTree`](../../src/C/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/C` | [Validation](../../src/C/FingerTree/docs/validation.md) | [Tests](../../src/C/FingerTree/tests/README.md) | C11 MSVC, GCC, and Clang builds; positional/measured/text cursor ownership, ordered-measure, search, model, and concurrency gates; tests, samples, benchmark harness entry points |
 | [`src/Cpp/FingerTree`](../../src/Cpp/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree -RunTests` from `src/Cpp` | [Validation](../../src/Cpp/FingerTree/docs/validation.md) | [Tests](../../src/Cpp/FingerTree/tests/README.md) | C++23 MSVC, GCC, and Clang CTest lanes; positional/measured/text cursor models, search/failure/overflow gates, and concurrent reads; stress controls; deterministic samples; dependency-free benchmarks; installed-package consumer |
-| [`src/Haskell`](../../src/Haskell/README.md) | `.\test.ps1` from `src/Haskell` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | Single-job GHC/cabal build, dependency-light HAMT/hash-bag/bimap, FingerTree positional/measured/text-cursor, and Tungsten executable tests |
+| [`src/Haskell`](../../src/Haskell/README.md) | `.\test.ps1` from `src/Haskell` | [Haskell README](../../src/Haskell/README.md) | [HAMT tests](../../src/Haskell/Hamt/test/README.md), [FingerTree tests](../../src/Haskell/FingerTree/test/README.md) | Single-job GHC/cabal build, dependency-light HAMT/hash-bag/bimap, and FingerTree positional/measured/text-cursor executable tests |
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | `.\build.ps1 -Workspace FingerTree` from `src/Kotlin` | [Validation](../../src/Kotlin/FingerTree/docs/validation.md) | [Tests](../../src/Kotlin/FingerTree/tests/README.md) | Kotlin/JVM positional/measured/text cursor gap/model/ordered-measure/search/failure/UTF-16/overflow gates plus measured-tree tests across deque, reversible deque, sorted, cached priority, max-high interval, rope/text, AVL/share invariants, and generated/large stress |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | `.\test.ps1 -Workspace FingerTree` from `src/Rust` | [Validation](../../src/Rust/FingerTree/docs/validation.md) | [Tests](../../src/Rust/FingerTree/tests/README.md) | Safe Rust checkpoint crate with positional/measured/text cursor gap, measure, search, model, and overflow gates plus structurally shared storage and cached-measure tests across deque, reversible deque, sorted, priority, interval, rope, measured tree, measured rope, and text helpers |
-| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | `.\build.ps1 -Workspace Tungsten` from `src/Kotlin` | [README](../../src/Kotlin/Tungsten/README.md) | [Tests](../../src/Kotlin/Tungsten/test/durable7/tungsten/TungstenTests.kt) | Kotlin/JVM executable tests for Tungsten list and association semantics |
-| [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | `.\test.ps1 -Workspace Tungsten` from `src/Rust` | [README](../../src/Rust/Tungsten/README.md) | [Source tests](../../src/Rust/Tungsten/src/lib.rs) | Safe Rust crate tests for Tungsten list and association semantics |
-| [`src/OCaml`](../../src/OCaml/README.md) | `opam exec -- dune build -j 1 @check @fmt @doc` then `opam exec -- dune runtest -j 1 --force` from `src/OCaml` | [Validation](../../src/OCaml/docs/validation.md) | [Tests](../../src/OCaml/tests/README.md) | Qualified package build with strict warnings, ocamlformat and odoc gates, plus 52 Alcotest/QCheck cases spanning every collection family |
+| [`src/OCaml`](../../src/OCaml/README.md) | `opam exec -- dune build -j 1 @check @fmt @doc` then `opam exec -- dune runtest -j 1 --force` from `src/OCaml` | [Validation](../../src/OCaml/docs/validation.md) | [Tests](../../src/OCaml/tests/README.md) | Qualified package build with strict warnings, ocamlformat and odoc gates, plus 48 Alcotest/QCheck cases spanning every collection family |
 | [`src/TypeScript`](../../src/TypeScript/README.md) | `.\test.ps1` or `npm run validate` from `src/TypeScript` | [Validation](../../src/TypeScript/docs/validation.md) | [Tests](../../src/TypeScript/test/README.md) | Strict declaration checking; Vitest/fast-check coverage for one-descent HAMT factories, construction-only bulk building, hash bags, strict bimaps, complete transient-set relations, presence-safe rope-cursor peeks, and the neutral ordered set; exact `MST2`/`MSP2` vectors; ESM/declaration build; package surface |
 | [`src/Python`](../../src/Python/README.md) | `.\test.ps1` from `src/Python` | [Validation](../../src/Python/docs/validation.md) | [Tests](../../src/Python/tests/README.md) | Python 3.11+ Ruff and strict Mypy gates; pytest/Hypothesis coverage for one-descent HAMT factories, construction-only bulk building, hash bags, strict bimaps, complete transient-set relations, presence-safe rope-cursor peeks, and the neutral ordered set; exact `MST2`/`MSP2` vectors and all seven verification budgets; source/wheel builds, metadata checks, and installed-wheel smoke validation |
 
@@ -99,8 +94,6 @@ validation guides define family-specific coverage and optional stress/benchmark 
 - [C# FingerTree tests](../../src/CSharp/tests/Durable7.FingerTree.Tests/README.md)
 - [C# Ordered validation](../../src/CSharp/docs/Ordered/validation.md)
 - [C# Ordered tests](../../src/CSharp/tests/Durable7.Ordered.Tests/README.md)
-- [C# Tungsten collections validation](../../src/CSharp/docs/Tungsten/validation.md)
-- [C# Tungsten collections tests](../../src/CSharp/tests/Durable7.Tungsten.Tests/README.md)
 
 ## TypeScript Workspace
 
@@ -171,7 +164,6 @@ Local guides:
 - [Rust HAMT tests](../../src/Rust/Hamt/tests/README.md)
 - [Rust FingerTree validation](../../src/Rust/FingerTree/docs/validation.md)
 - [Rust FingerTree tests](../../src/Rust/FingerTree/tests/README.md)
-- [Rust Tungsten README](../../src/Rust/Tungsten/README.md)
 
 ## HAMT Native Ports
 
@@ -199,21 +191,6 @@ For C or C++ HAMT source, header, test, or behavior-documentation changes, also 
 GCC and Clang and execute each compiler's produced test binary. Use the workspace validation guides for exact
 commands; a typical Windows direct lane uses the installed compiler paths explicitly when the current shell has
 not reloaded `PATH`.
-
-## Tungsten Native Ports
-
-```powershell
-cd C:\DataStructures\src\C
-.\build.ps1 -Workspace Tungsten -RunTests
-.\build.ps1 -Workspace Tungsten -Configuration Release -RunTests
-
-cd C:\DataStructures\src\Cpp
-.\build.ps1 -Workspace Tungsten -RunTests
-```
-
-The Tungsten native workspaces use one-job CMake build and CTest presets. The C port links the existing C HAMT and
-C FingerTree implementations and validates both Debug and Release MSVC lanes for parity-sensitive changes.
-The C++ port is header-first and shares the C++ HAMT/FingerTree substrates.
 
 ## FingerTree Native Ports
 
@@ -303,14 +280,13 @@ cd C:\DataStructures\src\Haskell
 ```
 
 The wrapper applies non-interactive Windows error handling before Cabal starts a test executable. Use
-`-Workspace Hamt`, `-Workspace FingerTree`, or `-Workspace Tungsten` for a focused run, and pass additional
+`-Workspace Hamt` or `-Workspace FingerTree` for a focused run, and pass additional
 Cabal options through `-CabalArguments`. The wrapper appends `--jobs=1` after caller options, so a
 workspace validation run uses one Cabal build job. The cabal project builds three Haskell packages
 and runs their dependency-light test executables:
 
 - [Haskell HAMT tests](../../src/Haskell/Hamt/test/README.md)
 - [Haskell FingerTree tests](../../src/Haskell/FingerTree/test/README.md)
-- [Haskell Tungsten README](../../src/Haskell/Tungsten/README.md)
 
 ## Kotlin Workspaces
 
@@ -319,7 +295,6 @@ cd C:\DataStructures\src\Kotlin
 .\build.ps1
 .\build.ps1 -Workspace Hamt
 .\build.ps1 -Workspace FingerTree
-.\build.ps1 -Workspace Tungsten
 ```
 
 The Kotlin build script compiles each workspace with the Kotlin command-line compiler and runs
@@ -335,7 +310,6 @@ Local guides:
 - [Kotlin HAMT tests](../../src/Kotlin/Hamt/tests/README.md)
 - [Kotlin FingerTree validation](../../src/Kotlin/FingerTree/docs/validation.md)
 - [Kotlin FingerTree tests](../../src/Kotlin/FingerTree/tests/README.md)
-- [Kotlin Tungsten README](../../src/Kotlin/Tungsten/README.md)
 
 ## Benchmarks
 

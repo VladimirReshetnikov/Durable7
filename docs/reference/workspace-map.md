@@ -17,12 +17,10 @@ src/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Tungsten/
 ├── Cpp/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Tungsten/
 ├── CSharp/
 │   ├── README.md
 │   ├── Durable7.sln
@@ -32,24 +30,20 @@ src/
 │   │   ├── FingerTree/
 │   │   ├── Hamt/
 │   │   ├── Ordered/
-│   │   └── Tungsten/
 │   ├── samples/
 │   ├── src/
 │   │   ├── Durable7.FingerTree/
 │   │   ├── Durable7.Hamt/
 │   │   ├── Durable7.Ordered/
-│   │   ├── Durable7.Tungsten/
 │   └── tests/
 ├── Haskell/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Tungsten/
 ├── Kotlin/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Tungsten/
 ├── OCaml/
 │   ├── README.md
 │   ├── dune-project
@@ -68,7 +62,6 @@ src/
 │   ├── README.md
 │   ├── FingerTree/
 │   ├── Hamt/
-│   └── Tungsten/
 └── TypeScript/
     ├── README.md
     ├── docs/
@@ -94,33 +87,14 @@ ordering, and documentation obligations that should remain recognizable across l
 
 ## Dependency Direction
 
-Tungsten is an application-specific leaf family for the Tungsten project, not a repository-general
-foundation. It may consume HAMT, FingerTree, and other general libraries; dependency arrows must
-never point from a general or non-Tungsten workspace to a Tungsten package, type, or implementation.
-This boundary keeps the general families independent if kernel discoveries change Tungsten behavior
-or the Tungsten workspaces move out of this repository.
-
-A generally useful Tungsten mechanism must be forked into a separately owned workspace with an
-independent API, contract, test suite, and evolution policy. The fork may deliberately relax
-Tungsten-specific fidelity or complexity guarantees. Provenance and translated tests are welcome;
-a project reference, wrapper, shared implementation owner, or Tungsten semantic baseline is not.
-See the detailed
-[Tungsten application-leaf dependency boundary](tungsten-application-leaf-boundary.md) for the
-normative code, test, documentation, porting, and extraction rules.
-
-`Durable7.Ordered` is an independently owned general workspace created under that rule.
-Its dependency graph is deliberately limited to public general substrates:
+`Durable7.Ordered` is an independently owned general workspace. Its dependency graph is
+deliberately limited to public general substrates:
 
 ```text
 Durable7.Ordered
 ├── Durable7.Hamt
 └── Durable7.FingerTree
 ```
-
-There is no Ordered-to-Tungsten project, source, test-oracle, or semantic-authority edge. Ordered and
-Tungsten are separately owned sibling consumers of HAMT/FingerTree mechanics; similarity in sparse
-order labels does not create shared ownership or permission for either family to define the other's
-contract.
 
 ## Workspace Roles
 
@@ -145,15 +119,9 @@ contract.
 | [`src/Kotlin/FingerTree`](../../src/Kotlin/FingerTree/README.md) | Kotlin/JVM persistent measured-tree/RRB/canonical-set/Range/optimal-priority family plus managed DABA Lite | `src/durable7/fingertree/`, `test/durable7/fingertree/` | [`docs`](../../src/Kotlin/FingerTree/docs/README.md) |
 | [`src/Rust/FingerTree`](../../src/Rust/FingerTree/README.md) | Rust FingerTree/RRB/canonical-set checkpoint with non-`Clone` Brodal/PSQ cores plus single-threaded DABA Lite | `Cargo.toml`, `src/` | [`docs`](../../src/Rust/FingerTree/docs/README.md) |
 | [`src/Rust/RangeUpdate`](../../src/Rust/RangeUpdate/README.md) | Safe Rust implicit-AVL range-update sequence crate | `Cargo.toml`, `src/`, `tests/` | [`docs`](../../src/Rust/RangeUpdate/docs/README.md) |
-| [C# Tungsten collections](../../src/CSharp/docs/Tungsten/overview.md) | Application-specific leaf collections for the Tungsten project; canonical only within the sibling Tungsten port family and not a general collection foundation | `Durable7.sln`, `src/Durable7.Tungsten/`, `tests/Durable7.Tungsten.Tests/` | [`docs`](../../src/CSharp/docs/Tungsten/README.md) |
-| [`src/C/Tungsten`](../../src/C/Tungsten/README.md) | C17 Tungsten `List` and `Association` port | `include/durable7/tungsten/tungsten.h`, `CMakePresets.json` | [`README`](../../src/C/Tungsten/README.md) |
-| [`src/Cpp/Tungsten`](../../src/Cpp/Tungsten/README.md) | C++23 Tungsten `List` and `Association` port | `include/durable7/tungsten/`, `CMakePresets.json` | [`README`](../../src/Cpp/Tungsten/README.md) |
-| [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `durable7-tungsten.cabal`, `src/Durable7/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
-| [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/durable7/tungsten/`, `test/durable7/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
-| [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
-| [`src/OCaml`](../../src/OCaml/README.md) | Qualified Dune package covering HAMT/Merkle, FingerTree/Range, neutral Ordered, and application-leaf Tungsten | `dune-project`, `durable7.opam`, `lib/`, `tests/`, `test.ps1` | [API notes](../../src/OCaml/docs/api-notes.md), [validation](../../src/OCaml/docs/validation.md), [tests](../../src/OCaml/tests/README.md) |
-| [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of the current HAMT/FingerTree-derived/Range/Ordered surfaces plus application-leaf Tungsten | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
-| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Range/Ordered surfaces plus application-leaf Tungsten | `pyproject.toml`, `src/durable7/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
+| [`src/OCaml`](../../src/OCaml/README.md) | Qualified Dune package covering HAMT/Merkle, FingerTree/Range and neutral Ordered | `dune-project`, `durable7.opam`, `lib/`, `tests/`, `test.ps1` | [API notes](../../src/OCaml/docs/api-notes.md), [validation](../../src/OCaml/docs/validation.md), [tests](../../src/OCaml/tests/README.md) |
+| [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of the current HAMT/FingerTree-derived/Range/Ordered surfaces | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
+| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Range/Ordered surfaces | `pyproject.toml`, `src/durable7/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
 
 ## Port Lineage
 
@@ -240,36 +208,19 @@ Ordered-set lineage:
 1. C# Ordered (`src/CSharp/src/Durable7.Ordered`) owns the neutral
    `PersistentOrderedSet<T>` contract, dual-index invariants, sparse labels, explicit movement,
    positional ranges, stable one-shot sort, receiver-policy algebra, and the enforced absence of a
-   Tungsten dependency. Deterministic relabel fallback, eager failure behavior, focused serialized
+   Deterministic relabel fallback, eager failure behavior, focused serialized
    Debug/Release lanes, and the full serialized C# Release gate are locked by its hardened tests.
 2. `src/TypeScript/src/ordered` ports the same observable contract to strict ESM with a runtime
    `HashPolicy`, persistent measured sequence, bigint-private labels, typed lookup/removal
    results, and a public invariant diagnostic used by package tests.
 3. `src/Python/src/durable7/ordered` ports it to typed Python with a
    retained `HashPolicy`, persistent deque order index, presence-safe dataclass results, and
-   Python-native exceptions. Neither sibling package imports or delegates to its Tungsten module.
+   Python-native exceptions.
 4. `src/C/Ordered`, `src/Cpp/Ordered`, `src/Haskell/Ordered`, `src/Kotlin/Ordered`, and
    `src/Rust/Ordered` complete the neutral sibling family through their language-local ownership
-   models, never through Tungsten.
+   models.
 5. `src/OCaml/lib/ordered` provides the same neutral family through OCaml persistent values and
-   retained policy records, with no dependency on `src/OCaml/lib/tungsten`.
-
-Tungsten collections lineage:
-
-This lineage is application-local. It establishes parity only among the Tungsten ports; it creates
-no dependency or semantic obligation for a general collection. New kernel evidence may revise the
-whole lineage, and any generally useful mechanism must move by an independently owned fork rather
-than by making another family depend on Tungsten.
-
-1. C# Tungsten collections (`src/CSharp/src/Durable7.Tungsten`) define the managed
-   Tungsten-port contract: `PersistentList<T>` over the FingerTree deque and
-   `PersistentAssociation<TKey, TValue>` composed per the historical
-   [derived structure catalog](derived-structure-catalog.md) case study, with the kernel-verified
-   Tungsten ordering rules as the family-local fidelity spec.
-2. `src/Cpp/Tungsten`, `src/C/Tungsten`, `src/Haskell/Tungsten`, `src/Kotlin/Tungsten`,
-   `src/Rust/Tungsten`, `src/TypeScript`, `src/Python`, and `src/OCaml` port the same public family to their language-local ownership and policy
-   models while preserving the substrate composition, sparse-stamp relabel behavior, and
-   average/worst-case operation bounds.
+   retained policy records.
 
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the
@@ -302,5 +253,5 @@ Workspace-level docs live near the code they describe:
 - Use `Hamt` for hash-array mapped trie workspaces, matching the public project names.
 - Use `FingerTree` for the measured finger-tree family, including derived collections and ropes.
 - Use `Ordered` for independently owned insertion/explicit-position ordered general collections;
-  do not place comparison-sorted collections or application-specific Tungsten surfaces there.
+  do not place comparison-sorted collections there.
 - Write current paths in active documentation. Put historical paths only in explicit provenance or review reports.

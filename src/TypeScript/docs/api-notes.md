@@ -14,8 +14,7 @@ collections are reference objects. Signed 64-bit keys and values use `bigint`; 3
 
 `PersistentHashMap` follows JavaScript `Map`-style default key equivalence: SameValueZero for
 primitives and identity for objects. Callers can supply a `HashPolicy` for structural keys. Equivalent
-replacement retains the stored key representative across the HAMT, Patricia, sorted, Merkle, and
-Tungsten families.
+replacement retains the stored key representative across the HAMT, Patricia, sorted, Merkle, and families.
 
 ## HAMT maps, bags, multimaps, relations, bimaps, derived facades, builders, and sessions
 
@@ -107,8 +106,7 @@ enumerating its argument.
 ## Independent insertion-ordered collections
 
 `PersistentOrderedSet<T>` is a neutral general-purpose family exported through the `ordered`
-subpath. It composes only the public CHAMP map and FingerTree families and never imports or delegates
-to Tungsten. A `HashPolicy<T>` defines equality classes; the set retains the first representative,
+subpath. It composes only the public CHAMP map and FingerTree families. A `HashPolicy<T>` defines equality classes; the set retains the first representative,
 insertion or explicitly requested order, private sparse `bigint` labels, positional lookup/removal/
 ranges, explicit final-index movement, reversal, and stable one-shot sorting.
 
@@ -458,7 +456,7 @@ is documented in the [range-update sequence notes](range-update-sequence.md).
 CHAMP maps and sets and every hash composite built on them (bag, bimap, multimap, relation, patch,
 directed graph, indexed map), `ConcurrentHashTrie` and its snapshots, the measured priority queue, the
 Brodal–Okasaki heap, `DabaLite`, the bulk builders and transient sessions, Merkle blocks, packs,
-proofs and stores, and both Tungsten collections expose no cursor. Hash
+proofs, and stores expose no cursor. Hash
 enumeration has no semantic neighbor, heap topology is private and unstable under meld and
 delete-minimum, and the remaining types are mutable lifecycles or scalars rather than persistent
 aggregates. Adding any of these surfaces requires a new applicability decision rather than reusing the

@@ -7,8 +7,7 @@
 - Scope: xUnit/CsCheck coverage for the persistent ordered map, set, and multimap
 
 The test project directly references only `Durable7.Ordered`; HAMT and FingerTree arrive
-through the production project's public dependency graph. The suite is independent of Tungsten code,
-tests, internals, and runtime behavior.
+through the production project's public dependency graph.
 
 | File | Coverage |
 | --- | --- |
@@ -51,8 +50,8 @@ The ordered-set shipment's serialized Debug and Release lanes each discovered an
 warnings or errors. The complete serialized C# Release solution built with zero warnings or errors
 and passed all 1,355 tests: Numerics 319, HAMT 292, FingerTree 630, Ordered 62, and Tungsten 52.
 
-The subsequent ordered-map and ordered-multimap development lanes pass 81 of 81 tests in Debug and
-Release. The complete serialized C# gates pass 1,211/1,211 tests after zero-warning, zero-error
+The subsequent ordered-map and ordered-multimap development lanes pass 80 of 80 tests in Debug and
+Release. The complete serialized C# gates pass 1,158/1,158 tests after zero-warning, zero-error
 builds.
 
 Benchmarks are deliberately outside this suite and remain postponed to an isolated machine run.
