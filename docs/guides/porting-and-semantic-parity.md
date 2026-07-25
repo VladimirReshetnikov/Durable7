@@ -39,9 +39,9 @@ before extracting or generalizing a Tungsten mechanism.
 | Native API specs and public headers under `src/C/*` and `src/Cpp/*` | Idiomatic C and C++ surface shape, ownership model, and local divergences. |
 | Kotlin API notes under `src/Kotlin/*/docs` | Kotlin/JVM value semantics, null/result shapes, tool bootstrap, persistent representation, complexity, and intentional engine differences. |
 | Rust API notes under `src/Rust/*/docs` | Rust value semantics, `Result`/`Option` shape, Cargo validation, and checkpoint divergences. |
-| [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) | Strict ESM value semantics, JavaScript runtime mappings, isolate-local concurrency, `bigint` numerics, and intentional engine differences. |
-| [Python API notes](../../src/Python/docs/api-notes.md) | Python 3.11+ naming and result shapes, measured-AVL checkpoints, lock-coordinated concurrency, Unicode-code-point text positions, and bigint-backed numerics. |
-| [OCaml API notes](../../src/OCaml/docs/api-notes.md) | OCaml module/functor shape, Zarith numerics, mutex-backed snapshots, Unicode-scalar text positions, and documented algorithmic checkpoint boundaries. |
+| [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) | Strict ESM value semantics, JavaScript runtime mappings, isolate-local concurrency, and intentional engine differences. |
+| [Python API notes](../../src/Python/docs/api-notes.md) | Python 3.11+ naming and result shapes, measured-AVL checkpoints, lock-coordinated concurrency, and Unicode-code-point text positions. |
+| [OCaml API notes](../../src/OCaml/docs/api-notes.md) | OCaml module/functor shape, mutex-backed snapshots, Unicode-scalar text positions, and documented algorithmic checkpoint boundaries. |
 | [Data structure catalog](../reference/data-structure-catalog.md) | Cross-language inventory of public data-structure entry points. |
 | [Workspace map](../reference/workspace-map.md) | Port lineage, path conventions, and documentation placement. |
 | [Build and validation guide](build-and-validation.md) plus workspace validation guides | Commands that prove the affected workspaces still build and pass tests, and the local warning policy, coverage map, stress controls, benchmark boundary, and evidence wording for each workspace. |

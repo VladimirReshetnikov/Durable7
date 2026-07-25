@@ -60,7 +60,6 @@ Classify the task before editing. The classification determines which docs and t
 | Internal implementation change | Workspace README and local docs | Public API docs if contracts may be affected, tests | Usually local validation guide or implementation notes only when behavior or evidence changes | Workspace tests; stress or benchmarks when the hot path changes |
 | Source move or workspace addition | [Workspace map](../reference/workspace-map.md), [source index](../../src/README.md) | Build scripts, docs indexes, migration records | Root README, source index, workspace map, validation guide, catalog | Commands for moved workspace plus docs checks |
 | New sample, benchmark, or test suite | [Test suite map](../reference/test-suite-map.md) | Local validation guide and README | Local tests/samples/benchmarks README, test suite map, validation guide | Runner command and any benchmark command used |
-| External reference curation | External index in the owning workspace | License/provenance notes | External README and repository external-material policy if shape changes | Link check scoped to touched files |
 
 If the task spans multiple rows, use the stricter row. A public behavior change with docs updates is
 not "documentation-only"; it needs implementation evidence.
@@ -143,7 +142,7 @@ what those documents prove is useful for maintainers.
 
 ## Cross-Workspace Rules Of Thumb
 
-- Treat C# as the broadest semantic baseline for HAMT, FingerTree, and Numerics unless a local API
+- Treat C# as the broadest semantic baseline for HAMT and FingerTree unless a local API
   spec explicitly states otherwise.
 - Treat C# Tungsten as a baseline only for sibling Tungsten ports. General collections must fork
   useful mechanics and choose their contracts independently.

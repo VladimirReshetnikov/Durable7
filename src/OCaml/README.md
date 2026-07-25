@@ -5,12 +5,12 @@
 - Audience: Maintainers and AI agents working on OCaml ports of repository-owned data structures
 - Scope: OCaml package layout, policy foundations, build entry points, and validation
 
-This workspace is the OCaml port of the repository-owned persistent data structures and numerics.
+This workspace is the OCaml port of the repository-owned persistent data structures.
 It uses immutable OCaml values for published snapshots, runtime policy records where the source
 families retain hashing or comparison behavior, and separately identified mutable builders,
 editing sessions, cursors, and streaming cores.
 
-The general-purpose modules under `lib/numerics`, `lib/hamt`, `lib/finger_tree`, and `lib/ordered`
+The general-purpose modules under `lib/hamt`, `lib/finger_tree`, and `lib/ordered`
 must not depend on `lib/tungsten`. Tungsten is an application-specific leaf and may consume the
 general libraries only in that direction.
 
@@ -19,7 +19,6 @@ general libraries only in that direction.
 | Path | Responsibility |
 | --- | --- |
 | `lib/common` | Runtime hashing and comparison policies shared by the general families |
-| `lib/numerics` | Fixed-width and sparse integer values |
 | `lib/hamt` | Persistent hash, Patricia, concurrent-snapshot, and authenticated-map families |
 | `lib/finger_tree` | Persistent sequence, sorted, priority, interval, rope, and streaming families |
 | `lib/ordered` | Independently owned insertion-ordered set, map, and grouped multimap |
@@ -43,15 +42,9 @@ opam exec -- dune build -j 1 @check @fmt @doc
 .\test.ps1
 ```
 
-Use `-Workspace Common`, `Numerics`, `Hamt`, `FingerTree`, `Ordered`, or `Tungsten` for a focused
+Use `-Workspace Common`, `Hamt`, `FingerTree`, `Ordered`, or `Tungsten` for a focused
 test run. The launcher enforces one opam/Dune job and imports the repository's noninteractive test
 failure handling.
-
-The shipped numerics modules expose `UInt256`/`Int256`, `UInt512`/`Int512`,
-`UInt1024`/`Int1024`, `Bit_converter_ex`, and non-negative `Sparse_integer` values. The fixed-width
-modules preserve modulo arithmetic, checked overflow, signed truncating division, width-constrained
-bit operations, and exact 32/64/128-byte two's-complement conversion. Zarith is an implementation
-substrate only; the public fixed-width contract never widens at runtime.
 
 The HAMT core is a persistent 32-way bitmap-indexed trie with immutable equal-hash collision
 buckets. `Persistent_hamt` retains key representatives and policies, exposes one-descent
@@ -125,6 +118,6 @@ caller representative; indexed insertion adjusts its target after removing an ea
 Join, key selection, ranges, reversal, and stable key/value sorting follow the same sibling contract.
 No general module imports this leaf namespace.
 
-All repository-owned collection and numerics families now have OCaml modules and focused tests in
+All repository-owned collection families now have OCaml modules and focused tests in
 this workspace. Repository-level navigation and validation documents identify any language-local
 implementation distinctions and the exact commands used to validate the port.

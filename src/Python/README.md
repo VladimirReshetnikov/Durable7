@@ -4,14 +4,13 @@
 - Repository HEAD: fa29fbb535a231b166e75ea873d56f170a609a87
 
 This workspace is the typed Python 3.11+ port of the repository-owned HAMT, FingerTree, ordered,
-Tungsten-collection, and numerics families. The distribution is
+and Tungsten-collection families. The distribution is
 `durable7`; its import namespace is
 `durable7`.
 
 The port follows the semantic contracts of the established sibling workspaces while using Python
 idioms where they preserve those contracts: immutable value objects are iterable and sized,
-fallible lookups expose both Python conveniences and explicit presence-preserving methods, and the
-fixed-width integer wrappers implement normal numeric operators. The Merkle workspace retains the
+and fallible lookups expose both Python conveniences and explicit presence-preserving methods. The Merkle workspace retains the
 exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used across languages.
 
 ## Package families
@@ -38,7 +37,6 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
   receiver `HashPolicy` identity, insertion order, explicit positional movement, sparse labels,
   ranges, and stable one-shot sorting; the set also provides receiver-ordered algebra. Neither
   depends on the application-specific Tungsten family.
-- `numerics` contains the signed and unsigned 256/512/1024-bit wrappers plus `SparseInteger`.
 - `tungsten` is the application-specific leaf containing `PersistentList` and insertion-ordered
   `PersistentAssociation`; general-purpose package code never depends on it.
 
@@ -52,7 +50,6 @@ from durable7 import (
     PersistentOrderedSet,
     RangeUpdateSequence,
     TextRope,
-    UInt256,
 )
 
 snapshot = PersistentHashMap.empty().put("answer", 42)
@@ -60,7 +57,6 @@ bag = PersistentHashBag.from_values(["alpha", "alpha", "beta"])
 bimap = PersistentBiMap.empty().add("answer", 42)
 ordered = PersistentOrderedSet.from_values(["alpha", "beta", "alpha"])
 text = TextRope.from_text("alpha\nbeta")
-wrapped = UInt256(-1)
 
 
 class AdditiveRangeAlgebra:

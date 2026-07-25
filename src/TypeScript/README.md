@@ -1,4 +1,4 @@
-# TypeScript data structures and numerics
+# TypeScript data structures
 
 - Created (UTC): 2026-07-15T00:12:55Z
 - Repository HEAD: 6bf20605073b1750d871d4bd53ef75fcfe25484c
@@ -6,7 +6,7 @@
 - Package: `durable7`
 
 This workspace is the strict TypeScript/ESM port of the repository-owned persistent collections,
-streaming structures, Tungsten collections, and fixed-width numerics. It targets modern JavaScript
+streaming structures, and Tungsten collections. It targets modern JavaScript
 runtimes without native addons and publishes declaration files alongside ES modules.
 
 ## Public families
@@ -17,7 +17,6 @@ runtimes without native addons and publishes declaration files alongside ES modu
 | `durable7/finger-tree` | `PersistentDeque`, general measured `FingerTree`, payload-bearing `PersistentIntervalMap`, `PersistentChunkedBitSet`, lazy algebraic `RangeUpdateSequence`, `ReversibleDeque`, `RrbVector`, sorted bag/set/map, canonical zip-zip set, measured and Brodal–Okasaki priority queues, priority-search queue, interval tree, rope/measured-rope/text cursors, and `DabaLite` |
 | `durable7/ordered` | independent insertion-ordered `PersistentOrderedSet`, `PersistentOrderedMap`, and grouped `PersistentOrderedMultimap` with positional movement/ranges, stable one-shot sorting, sparse labels, and first-representative retention |
 | `durable7/tungsten` | `PersistentList` and insertion-ordered `PersistentAssociation` |
-| `durable7/numerics` | signed and unsigned 256/512/1024-bit integers, `SparseInteger`, and `BitConverterEx` |
 
 The root import re-exports all five families. See [API and semantic notes](docs/api-notes.md), the
 [range-update sequence notes](docs/range-update-sequence.md), and the
@@ -40,13 +39,12 @@ and focused commands are in [test/README.md](test/README.md); validation expecta
 ## Package use
 
 ```ts
-import { PersistentBiMap, PersistentHashMap, Rope, UInt256 } from "durable7";
+import { PersistentBiMap, PersistentHashMap, Rope } from "durable7";
 
 const map = PersistentHashMap.empty<string, number>().put("answer", 42);
 const bimap = PersistentBiMap.empty<string, number>().add("answer", 42);
 const cached = map.getOrAdd("second answer", () => 43);
 const edited = Rope.fromText("abc").getCursor(1).insert("X").snapshot();
-const wrapped = UInt256.maxValue.add(new UInt256(1));
 console.log(bimap.inverse.get(42));
 ```
 

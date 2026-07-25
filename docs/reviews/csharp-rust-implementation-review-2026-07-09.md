@@ -11,7 +11,7 @@
 > completion (`ac16eed`), C# Numerics contract work (`44a1b6a`, `20eb680`, `b8c580c`), and coverage
 > closure (`3303967`, `129522c`). Current implementations are indexed by the
 > [Rust FingerTree README](../../src/Rust/FingerTree/README.md) and the
-> [C# Numerics overview](../../src/CSharp/docs/Numerics/overview.md); none of the historical
+> C# Numerics overview (since removed from the repository); none of the historical
 > follow-up list is still pending.
 
 ## Summary

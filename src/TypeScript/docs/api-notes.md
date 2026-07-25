@@ -458,7 +458,7 @@ is documented in the [range-update sequence notes](range-update-sequence.md).
 CHAMP maps and sets and every hash composite built on them (bag, bimap, multimap, relation, patch,
 directed graph, indexed map), `ConcurrentHashTrie` and its snapshots, the measured priority queue, the
 Brodal–Okasaki heap, `DabaLite`, the bulk builders and transient sessions, Merkle blocks, packs,
-proofs and stores, the numerics types, and both Tungsten collections expose no cursor. Hash
+proofs and stores, and both Tungsten collections expose no cursor. Hash
 enumeration has no semantic neighbor, heap topology is private and unstable under meld and
 delete-minimum, and the remaining types are mutable lifecycles or scalars rather than persistent
 aggregates. Adding any of these surfaces requires a new applicability decision rather than reusing the
@@ -497,16 +497,6 @@ finite budgets before publication.
 The store API is synchronous because Node's in-memory and common embedded stores are synchronous.
 Custom remote stores should stage blocks asynchronously outside the tree, then call verified import
 or load against a synchronous snapshot.
-
-## Numerics
-
-`UInt256` through `Int1024` store canonical wrapped `bigint` values. Arithmetic methods reproduce
-fixed-width two's-complement wrapping; checked factories and operations reject overflow. Shifts,
-rotates, bitwise operations, signed division corner cases, radix parsing, formatting, and endian
-conversion are differential-tested against native `bigint` models. `SparseInteger` preserves the
-nonnegative arbitrary-precision semantic surface using native `bigint`; unlike the C# implementation,
-it does not need a recursive sparse representation because JavaScript already supplies arbitrary-
-precision integers.
 
 ## Deliberate non-ports
 

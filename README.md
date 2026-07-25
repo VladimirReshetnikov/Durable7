@@ -1,7 +1,7 @@
 # Durable7
 
 **Durable7** is a library of persistent data structures, authenticated
-collections, and fixed-width numerics, shipped as semantically aligned ports across nine languages.
+collections, shipped as semantically aligned ports across nine languages.
 
 ## Where to start
 
@@ -97,7 +97,6 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
     │   ├── docs/
     │   │   ├── FingerTree/
     │   │   ├── Hamt/
-    │   │   ├── Numerics/
     │   │   ├── Ordered/
     │   │   └── Tungsten/
     │   ├── samples/
@@ -109,13 +108,11 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
     │   │   ├── Durable7.Hamt/
     │   │   ├── Durable7.Ordered/
     │   │   ├── Durable7.Tungsten/
-    │   │   └── Durable7.Numerics/
     │   └── tests/
     │       ├── Durable7.FingerTree.Tests/
     │       ├── Durable7.Hamt.Tests/
     │       ├── Durable7.Ordered.Tests/
     │       ├── Durable7.Tungsten.Tests/
-    │       └── Durable7.Numerics.Tests/
     ├── Haskell/
     │   ├── README.md
     │   ├── cabal.project
@@ -164,7 +161,6 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
     │   │   ├── common/
     │   │   ├── finger_tree/
     │   │   ├── hamt/
-    │   │   ├── numerics/
     │   │   ├── ordered/
     │   │   └── tungsten/
     │   └── tests/
@@ -178,7 +174,6 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
     │   │   └── durable7/
     │   │       ├── finger_tree/
     │   │       ├── hamt/
-    │   │       ├── numerics/
     │   │       ├── ordered/
     │   │       └── tungsten/
     │   └── tests/
@@ -213,7 +208,6 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
         ├── src/
         │   ├── finger-tree/
         │   ├── hamt/
-        │   ├── numerics/
         │   ├── ordered/
         │   └── tungsten/
         └── test/
@@ -231,14 +225,14 @@ All nine ports ship the shared persistent-cursor tier for Patricia maps/sets; me
 positional sequence families; sorted, canonical, priority-search, interval, and sparse-bit
 collections; neutral Ordered set/map/multimap; and authenticated Merkle search trees. Public
 cursors are immutable version-bound gaps or ordered search locations. Unordered CHAMP composites,
-live Ctries, graphs, non-search heaps, lifecycle/support objects, numerics, DABA Lite, and Tungsten
+live Ctries, graphs, non-search heaps, lifecycle/support objects, DABA Lite, and Tungsten
 collections intentionally have no public cursor. The
 [repository-wide cursor design](docs/proposals/repository-wide-persistent-cursor-design.md) is the
 exhaustive applicability, API, ownership, complexity, and validation contract.
 
 - [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Durable7.Hamt](src/CSharp/src/Durable7.Hamt/Durable7.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>`, strict `PersistentBiMap<TKey, TValue>`, set-valued `PersistentHashMultimap<TKey, TValue>`, bidirectional `PersistentRelation<TLeft, TRight>`, strict `PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and `PersistentIndexedMap<TKey, TValue, TIndexKey>` add composition-first families with retained policies and atomic multi-index publication. These derived families ship across all nine languages. All eight siblings expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
-- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Durable7.FingerTree](src/CSharp/src/Durable7.FingerTree/Durable7.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,530/1,530 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
-- [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Durable7.Ordered](src/CSharp/src/Durable7.Ordered/Durable7.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces, and the project and its tests have no Tungsten dependency or Tungsten semantic baseline. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. The current complete serialized C# Debug and Release gates each pass 1,530/1,530 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
+- [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Durable7.FingerTree](src/CSharp/src/Durable7.FingerTree/Durable7.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,211/1,211 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
+- [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Durable7.Ordered](src/CSharp/src/Durable7.Ordered/Durable7.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces, and the project and its tests have no Tungsten dependency or Tungsten semantic baseline. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. The current complete serialized C# Debug and Release gates each pass 1,211/1,211 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
 - [C# Tungsten collections](src/CSharp/docs/Tungsten/overview.md) is a .NET 10 application-specific leaf library under [src/CSharp/src/Durable7.Tungsten](src/CSharp/src/Durable7.Tungsten/Durable7.Tungsten.csproj) composing the HAMT and FingerTree families into persistent collections for the Tungsten project: `PersistentList<T>` (the `List` operation vocabulary over the catenable deque) and `PersistentAssociation<TKey, TValue>` (an insertion-ordered map with keyed and positional access following the kernel-verified `Association` ordering rules). The primary external client is the Tungsten engine in the Smithereens repository; the C# implementation is the semantic reference only for sibling Tungsten ports and is never a foundation for general collections.
 - [src/C/Hamt](src/C/Hamt/README.md) is a C17 port of the persistent HAMT library. It provides type-erased
   `d7_hamt_map`, `d7_hamt_set`, `d7_hamt_bag`, strict `d7_hamt_bi_map`, set-valued
@@ -268,7 +262,7 @@ exhaustive applicability, API, ownership, complexity, and validation contract.
 - [src/Kotlin/Hamt](src/Kotlin/Hamt/README.md) is a Kotlin/JVM persistent-map workspace. It provides CHAMP hash maps/sets, a checked hash bag, strict `PersistentBiMap`, set-valued `PersistentHashMultimap`, bidirectional `PersistentRelation`, runtime-consumed version-view-bound `Transient` sessions, the managed Ctrie, Patricia integer maps/sets, and a wire-compatible Merkle search tree with bounded verified persistence, `MSP2` proofs, frontier synchronization, and typed three-way merge.
 - [src/Kotlin/FingerTree](src/Kotlin/FingerTree/README.md) is a Kotlin/JVM port of the FingerTree-family collections and newer sequence/streaming cores. Its immutable measured AVL, RRB, canonical zip-zip-tree, bootstrapped skew-binomial heap, and winner-cached AVL substrates provide structurally shared deque, measured sequence, vector, sorted bag/set/map, policy-canonical sorted set, both measured and worst-case-optimal meldable priority queues, a keyed priority-search queue, max-high interval tree, positional/measured ropes, snapshot-plus-gap positional and measured cursors, and a UTF-16 text cursor that retains the `TextRope` facade; the separate mutable DABA Lite core maintains FIFO monoid aggregates with worst-case bounded callbacks.
 - [src/Kotlin/Tungsten](src/Kotlin/Tungsten/README.md) is the Kotlin/JVM Tungsten-collections port. It exposes `PersistentList<T>` and `PersistentAssociation<K, V>` with immutable snapshots, runtime `HashPolicy` support, sparse stamps, and generated-history executable tests.
-- [src/OCaml](src/OCaml/README.md) is the opam/Dune port of every repository-owned family: fixed-width and sparse numerics; CHAMP/derived HAMT, Patricia, synchronized snapshots, and exact `MST2` Merkle persistence/proofs; measured, sorted, priority, interval, vector, bit-set, Range, rope/cursor, canonical-set, heap/search, and DABA collections; neutral ordered set/map/multimap; and application-leaf Tungsten List/Association. Strict warnings, ocamlformat, odoc, Alcotest, QCheck, and one-worker validation define its gate; [API notes](src/OCaml/docs/api-notes.md) record intentional OCaml implementation distinctions.
+- [src/OCaml](src/OCaml/README.md) is the opam/Dune port of every repository-owned family: CHAMP/derived HAMT, Patricia, synchronized snapshots, and exact `MST2` Merkle persistence/proofs; measured, sorted, priority, interval, vector, bit-set, Range, rope/cursor, canonical-set, heap/search, and DABA collections; neutral ordered set/map/multimap; and application-leaf Tungsten List/Association. Strict warnings, ocamlformat, odoc, Alcotest, QCheck, and one-worker validation define its gate; [API notes](src/OCaml/docs/api-notes.md) record intentional OCaml implementation distinctions.
 - [src/Rust/Hamt](src/Rust/Hamt/README.md) is a safe Rust persistent-map workspace. It provides
   CHAMP hash maps/sets, a checked hash bag, strict `PersistentBiMap`, set-valued
   `PersistentHashMultimap`, bidirectional `PersistentRelation`, ownership-consuming `TransientHashMap`/`TransientHashSet` sessions, and
@@ -293,7 +287,7 @@ exhaustive applicability, API, ownership, complexity, and validation contract.
   strict bimap, set-valued multimap, bidirectional relation, construction-only bulk builder, and
   complete transient-set relations—measured sequence and derived FingerTree collections,
   RRB/canonical-set/Brodal/priority-search/DABA cores, positional/measured/text rope cursors,
-  the neutral insertion-ordered set, Tungsten `List`/`Association`, and fixed-width numerics. Its `MST2`/`MSP2` wire is byte-identical
+  the neutral insertion-ordered set, Tungsten `List`/`Association`. Its `MST2`/`MSP2` wire is byte-identical
   to the sibling ports; runtime-specific concurrency and owner-token performance distinctions are
   documented locally.
 - [src/Python](src/Python/README.md) is the typed Python 3.11+ distribution. It packages CHAMP with
@@ -302,7 +296,7 @@ exhaustive applicability, API, ownership, complexity, and validation contract.
   one-way sessions, a lock-coordinated concurrent facade, Patricia maps/sets, the exact
   `MST2`/`MSP2` Merkle tier with seven verification budgets, measured-AVL and RRB sequence families,
   canonical zip-zip/Brodal/priority-search/DABA cores, code-point-indexed rope cursors, the
-  neutral insertion-ordered set, application-leaf Tungsten `List`/`Association`, and bigint-backed fixed-width/sparse numerics.
+  neutral insertion-ordered set, application-leaf Tungsten `List`/`Association`.
   Ruff, strict Mypy, pytest/Hypothesis, source/wheel builds, metadata checks, and an installed-wheel
   smoke test form its validation gate.
 
@@ -385,9 +379,8 @@ Release configuration is required for meaningful benchmark numbers.
 - [docs/reference/README.md](docs/reference/README.md) indexes durable cross-workspace reference material.
 - [docs/reference/data-structure-catalog.md](docs/reference/data-structure-catalog.md) catalogs repository-owned data-structure families, public entry points, and primary references across C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python.
 - [docs/reference/navigation-matrix.md](docs/reference/navigation-matrix.md) maps common tasks to the right usage, API, validation, porting, history, and maintenance documents.
-- [docs/reference/semantic-contracts.md](docs/reference/semantic-contracts.md) summarizes shared behavior, ownership, policy, ordering, and documentation obligations for repository-owned numerics and data structures.
+- [docs/reference/semantic-contracts.md](docs/reference/semantic-contracts.md) summarizes shared behavior, ownership, policy, ordering, and documentation obligations for repository-owned data structures.
 - [docs/reference/workspace-map.md](docs/reference/workspace-map.md) explains the language-first, library-family layout and port lineage.
-- [src/CSharp/docs/Numerics/README.md](src/CSharp/docs/Numerics/README.md) indexes the Numerics library's API and behavior reference, validation guide, maintainer guidance, and design notes.
 - [src/CSharp/docs/Hamt/README.md](src/CSharp/docs/Hamt/README.md) indexes the HAMT library's usage guide, API specification, validation guide, and implementation review.
 - [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide, API specification, and validation guide.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage

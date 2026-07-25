@@ -27,7 +27,6 @@ Tests are grouped by shipped collection family:
   and policy retention, explicit movement, sparse-stamp relabeling, ranges, stable sorting, dual
   indexes, eager set algebra and relations, failure atomicity, concurrency, and generated histories.
 - `tungsten/`: application-leaf persistent list and insertion-ordered association semantics.
-- `numerics/`: every 256/512/1024-bit signed and unsigned wrapper, sparse integers, and byte helpers.
 
 Hypothesis stateful/model tests supplement example and adversarial tests. Tests use public APIs
 except where white-box structural assertions are necessary to establish sharing or invariants.

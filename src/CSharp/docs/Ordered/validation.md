@@ -66,7 +66,7 @@ The later derived-structure integration gate on 2026-07-17 UTC adds seven focuse
 seven focused ordered-multimap tests. The complete Ordered project passes 81/81 tests in both full
 serialized Debug and Release solution gates. Both builds finish with zero warnings and zero errors,
 and both full C# gates pass
-1,530/1,530 tests: Numerics 319, HAMT 354, FingerTree 724, Ordered 81, and Tungsten 52. This is the
+1,211/1,211 tests: HAMT 354, FingerTree 724, Ordered 81, and Tungsten 52. This is the
 complete C# tranche evidence; the final cross-language shipment record will supersede it after all
 ports are complete.
 

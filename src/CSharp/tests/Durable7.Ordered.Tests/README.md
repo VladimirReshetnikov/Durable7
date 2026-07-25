@@ -52,7 +52,7 @@ warnings or errors. The complete serialized C# Release solution built with zero 
 and passed all 1,355 tests: Numerics 319, HAMT 292, FingerTree 630, Ordered 62, and Tungsten 52.
 
 The subsequent ordered-map and ordered-multimap development lanes pass 81 of 81 tests in Debug and
-Release. The complete serialized C# gates pass 1,530/1,530 tests after zero-warning, zero-error
+Release. The complete serialized C# gates pass 1,211/1,211 tests after zero-warning, zero-error
 builds.
 
 Benchmarks are deliberately outside this suite and remain postponed to an isolated machine run.

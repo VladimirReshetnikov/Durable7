@@ -9,7 +9,6 @@
 | Finger-tree family | `core.test.ts`, `persistent-interval-map.test.ts`, `persistent-chunked-bit-set.test.ts`, `rope-daba.test.ts`, `rrb-vector.test.ts`, `canonical-sorted-set.test.ts`, `brodal-okasaki-heap.test.ts`, `priority-search-queue.test.ts`, `range-update-algebra.test.ts`, `range-update-sequence.test.ts`, `range-update-sequence-lazy.test.ts`, `range-update-sequence-model.test.ts`, `range-update-sequence-failure.test.ts`, `range-update-sequence-diagnostics.test.ts`, `range-update-sequence-iterator.test.ts` |
 | Ordered collections | `persistent-ordered-map.test.ts`, `persistent-ordered-multimap.test.ts`, `persistent-ordered-set.test.ts`, `persistent-ordered-set-algebra.test.ts`, `persistent-ordered-set-property.test.ts` |
 | Tungsten | `tungsten.test.ts` |
-| Numerics | `wide-integer.test.ts` |
 
 Run everything with `npm test`, one file with `npx vitest run test/<path>.test.ts`, or a test-name
 subset with `npx vitest run -t "pattern"`. Property suites use fixed fast-check defaults and print a

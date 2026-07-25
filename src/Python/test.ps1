@@ -109,7 +109,6 @@ from durable7 import (
     PersistentOrderedSet,
     PersistentRelation,
     RangeUpdateSequence,
-    UInt256,
 )
 
 class AdditiveRangeAlgebra:
@@ -152,7 +151,6 @@ assert PersistentOrderedSet.from_values(["alpha", "beta", "alpha"]).to_list() ==
 assert PersistentAssociation.from_pairs([("a", 1)]).get("a") == 1
 range_sequence = RangeUpdateSequence.from_iterable([1, 2, 3], AdditiveRangeAlgebra())
 assert range_sequence.apply_range(1, 2, 10).to_list() == [1, 12, 13]
-assert int(UInt256(-1)) == 2**256 - 1
 '@
         & $smokePython -c $smokeScript
         if ($LASTEXITCODE -ne 0) { throw "Installed-wheel smoke test failed." }

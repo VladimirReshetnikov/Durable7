@@ -31,7 +31,6 @@ src/
 │   ├── docs/
 │   │   ├── FingerTree/
 │   │   ├── Hamt/
-│   │   ├── Numerics/
 │   │   ├── Ordered/
 │   │   └── Tungsten/
 │   ├── samples/
@@ -40,7 +39,6 @@ src/
 │   │   ├── Durable7.Hamt/
 │   │   ├── Durable7.Ordered/
 │   │   ├── Durable7.Tungsten/
-│   │   └── Durable7.Numerics/
 │   └── tests/
 ├── Haskell/
 │   ├── README.md
@@ -128,7 +126,6 @@ contract.
 
 | Workspace | Role | Main entry points | Local docs |
 | --- | --- | --- | --- |
-| [C# Numerics](../../src/CSharp/docs/Numerics/overview.md) | Managed fixed-width and sparse integer numerics library | `Durable7.sln`, `src/Durable7.Numerics/`, `tests/Durable7.Numerics.Tests/` | [`docs`](../../src/CSharp/docs/Numerics/README.md) |
 | [C# HAMT](../../src/CSharp/docs/Hamt/overview.md) | Canonical managed persistent hash map/set, multiplicity bag, strict bimap, Ctrie, Patricia, and Merkle library | `Durable7.sln`, `src/Durable7.Hamt/`, `tests/Durable7.Hamt.Tests/` | [`docs`](../../src/CSharp/docs/Hamt/README.md) |
 | [`src/C/Hamt`](../../src/C/Hamt/README.md) | C17 HAMT/bag/bimap/Patricia port and complete type-erased wire-compatible Merkle search tree | `include/durable7/hamt/*.h`, `build.ps1` | [`docs`](../../src/C/Hamt/docs/README.md), [Merkle guide](../../src/C/Hamt/docs/merkle-search-tree.md) |
 | [`src/Cpp/Hamt`](../../src/Cpp/Hamt/README.md) | C++20 HAMT/bag/bimap/Patricia port and complete wire-compatible Merkle search tree | `include/durable7/hamt/*.hpp`, `build.ps1` | [`docs`](../../src/Cpp/Hamt/docs/README.md), [Merkle core](../../src/Cpp/Hamt/docs/merkle-search-tree.md), [persistence](../../src/Cpp/Hamt/docs/merkle-persistence.md) |
@@ -154,9 +151,9 @@ contract.
 | [`src/Haskell/Tungsten`](../../src/Haskell/Tungsten/README.md) | Haskell Tungsten `List` and `Association` port | `durable7-tungsten.cabal`, `src/Durable7/Tungsten/` | [`README`](../../src/Haskell/Tungsten/README.md) |
 | [`src/Kotlin/Tungsten`](../../src/Kotlin/Tungsten/README.md) | Kotlin/JVM Tungsten `List` and `Association` port | `src/durable7/tungsten/`, `test/durable7/tungsten/` | [`README`](../../src/Kotlin/Tungsten/README.md) |
 | [`src/Rust/Tungsten`](../../src/Rust/Tungsten/README.md) | Safe Rust Tungsten `List` and `Association` crate | `Cargo.toml`, `src/lib.rs` | [`README`](../../src/Rust/Tungsten/README.md) |
-| [`src/OCaml`](../../src/OCaml/README.md) | Qualified Dune package covering Numerics, HAMT/Merkle, FingerTree/Range, neutral Ordered, and application-leaf Tungsten | `dune-project`, `durable7.opam`, `lib/`, `tests/`, `test.ps1` | [API notes](../../src/OCaml/docs/api-notes.md), [validation](../../src/OCaml/docs/validation.md), [tests](../../src/OCaml/tests/README.md) |
-| [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of the current HAMT/FingerTree-derived/Range/Ordered/Numerics surfaces plus application-leaf Tungsten | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
-| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Range/Ordered/Numerics surfaces plus application-leaf Tungsten | `pyproject.toml`, `src/durable7/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
+| [`src/OCaml`](../../src/OCaml/README.md) | Qualified Dune package covering HAMT/Merkle, FingerTree/Range, neutral Ordered, and application-leaf Tungsten | `dune-project`, `durable7.opam`, `lib/`, `tests/`, `test.ps1` | [API notes](../../src/OCaml/docs/api-notes.md), [validation](../../src/OCaml/docs/validation.md), [tests](../../src/OCaml/tests/README.md) |
+| [`src/TypeScript`](../../src/TypeScript/README.md) | Strict TypeScript/ESM port of the current HAMT/FingerTree-derived/Range/Ordered surfaces plus application-leaf Tungsten | `package.json`, `src/`, `test.ps1` | [API notes](../../src/TypeScript/docs/api-notes.md), [validation](../../src/TypeScript/docs/validation.md) |
+| [`src/Python`](../../src/Python/README.md) | Typed Python 3.11+ port of the current HAMT/FingerTree-derived/Range/Ordered surfaces plus application-leaf Tungsten | `pyproject.toml`, `src/durable7/`, `tests/`, `test.ps1` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [tests](../../src/Python/tests/README.md) |
 
 ## Port Lineage
 
@@ -274,11 +271,6 @@ than by making another family depend on Tungsten.
    models while preserving the substrate composition, sparse-stamp relabel behavior, and
    average/worst-case operation bounds.
 
-Numerics originates in `src/CSharp/src/Durable7.Numerics`; `src/TypeScript/src/numerics`,
-`src/Python/src/durable7/numerics`, and `src/OCaml/lib/numerics` port the six fixed-width types,
-binary/format semantics, `SparseInteger`, and `BitConverterEx` over their native arbitrary-precision
-integer substrates.
-
 When porting behavior across languages, prefer the managed workspace for the semantic contract, the adjacent
 native workspace for local idioms, and the local tests for the exact validation shape. Use the
 [porting and semantic parity guide](../guides/porting-and-semantic-parity.md) for the cross-language
@@ -307,7 +299,6 @@ Workspace-level docs live near the code they describe:
 
 - Use `CSharp`, not `Cs`, for the managed language root.
 - Use `Cpp`, not `C++`, in paths so shell tooling and URLs stay simple.
-- Use `Numerics` for fixed-width and sparse integer numeric workspaces.
 - Use `Hamt` for hash-array mapped trie workspaces, matching the public project names.
 - Use `FingerTree` for the measured finger-tree family, including derived collections and ropes.
 - Use `Ordered` for independently owned insertion/explicit-position ordered general collections;

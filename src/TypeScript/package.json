@@ -1,7 +1,7 @@
 {
     "name": "durable7",
     "version": "0.1.0",
-    "description": "Persistent data structures and fixed-width numerics for TypeScript",
+    "description": "Persistent data structures for TypeScript",
     "license": "MIT-0",
     "type": "module",
     "sideEffects": false,
@@ -29,10 +29,6 @@
         "./tungsten": {
             "types": "./dist/tungsten/index.d.ts",
             "import": "./dist/tungsten/index.js"
-        },
-        "./numerics": {
-            "types": "./dist/numerics/index.d.ts",
-            "import": "./dist/numerics/index.js"
         }
     },
     "scripts": {

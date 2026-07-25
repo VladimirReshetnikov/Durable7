@@ -3,7 +3,7 @@
 - Created (UTC): 2026-07-03T23:50:37Z
 - Repository HEAD: 96a766f45fa42b5bd14c5ae3173956300cbff21b
 - Audience: Maintainers and AI agents preserving cross-workspace behavior
-- Scope: Shared contracts for repository-owned numerics, HAMT, Ordered, FingerTree-family structures, ownership models, and documentation obligations
+- Scope: Shared contracts for repository-owned HAMT, Ordered, FingerTree-family structures, ownership models, and documentation obligations
 
 This reference summarizes the behavioral contracts that should stay recognizable across the repository's
 language workspaces. It is not a replacement for the workspace API specifications, public headers, XML
@@ -12,7 +12,6 @@ intended semantics across C#, C, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, 
 
 Authoritative local documents remain:
 
-- [C# Numerics API and behavior reference](../../src/CSharp/docs/Numerics/api-and-behavior-reference.md)
 - [C# HAMT API specification](../../src/CSharp/docs/Hamt/api-specification.md)
 - [C HAMT API specification](../../src/C/Hamt/docs/api-specification.md)
 - [C++ HAMT API specification](../../src/Cpp/Hamt/docs/api-specification.md)
@@ -49,40 +48,6 @@ behavior change through sibling workspaces.
 | Checkpoint port | A port that preserves observable API semantics and tests while documenting a remaining representation or asymptotic parity boundary. |
 | Facade | A public collection built on a shared core engine, such as sorted sets on measured trees or text ropes on measured ropes. |
 | Application-specific leaf | A workspace that may consume general libraries but cannot be a dependency or semantic baseline for general-purpose structures. Reusable mechanisms leave it only through an independently owned fork. Tungsten is the repository's current example. |
-
-## Fixed-Width Integer Numerics
-
-`Durable7.Numerics` in C# is the semantic reference; OCaml, TypeScript, and Python expose sibling ports
-of its fixed-width signed and unsigned integers plus sparse integer helpers. OCaml uses Zarith,
-TypeScript uses `bigint`, and Python uses arbitrary-precision `int`, behind explicit fixed-width
-normalization and validation.
-
-Public entry points:
-
-- `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`
-- `SparseInteger`
-- `BitConverterEx`
-
-Shared obligations:
-
-- Fixed-width values have deterministic two's-complement binary representations.
-- Signed and unsigned types must agree on bit width, limb layout, conversion behavior, parse/format
-  behavior, and edge-case validation where their public surfaces overlap.
-- Binary conversion APIs must define byte order, exact byte counts, signedness, and validation order
-  for null, index, range, and remaining-length failures.
-- Arithmetic, comparison, parsing, formatting, and conversion docs should state whether behavior is
-  checked, wrapping, sign-extending, truncating, or exception-throwing.
-- Declaration parity tests are part of the contract: adding a member to one wide integer family usually
-  means either adding the sibling member or documenting why parity is intentionally broken.
-
-Primary evidence:
-
-- [Numerics validation](../../src/CSharp/docs/Numerics/validation.md)
-- [Numerics tests README](../../src/CSharp/tests/Durable7.Numerics.Tests/README.md)
-- [Wide-integer maintainer guidance](../../src/CSharp/docs/Numerics/wide-integer-maintainer-guidance.md)
-- [OCaml API notes](../../src/OCaml/docs/api-notes.md) and [validation](../../src/OCaml/docs/validation.md)
-- [TypeScript API notes](../../src/TypeScript/docs/api-notes.md) and [validation](../../src/TypeScript/docs/validation.md)
-- [Python API notes](../../src/Python/docs/api-notes.md) and [validation](../../src/Python/docs/validation.md)
 
 ## HAMT Map And Set
 
@@ -672,7 +637,7 @@ precedence, and failure atomicity. Most new ports are semantic snapshot-plus-gap
 they make no C# focused-rope locality, callback, allocation, memoization, or benchmark claim.
 
 CHAMP maps/sets and their bag, bimap, hash multimap/relation, patch, and indexed-map compositions
-keep edit paths private because hash traversal has no public semantic neighbor. Numerics, Ctrie live
+keep edit paths private because hash traversal has no public semantic neighbor. Ctrie live
 views, graphs, measured priority queues, Brodal–Okasaki heaps, DABA Lite, builders, sessions, stores,
 proofs, packs, and all Tungsten collections intentionally expose no persistent cursor.
 
@@ -902,7 +867,7 @@ Shared obligations:
 
 ## What A New Public Surface Must Document
 
-When adding a new collection, numeric type, helper, builder, or facade, add docs that answer:
+When adding a new collection, helper, builder, or facade, add docs that answer:
 
 - What is the public entry point and which namespace, module, header, package, or crate exports it?
 - Which workspace owns it, and does every dependency point toward a repository-general substrate?

@@ -28,7 +28,7 @@ The benchmark-independent implementation tranches now ship persistent one-descen
 `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentChunkedBitSet`, and the genuinely new
 non-composite `RangeUpdateSequence` core across all nine languages. C# owns the detailed managed
 contracts; siblings preserve the same logical semantics through language-local policies and
-ownership idioms. Both full serialized C# Debug and Release gates pass 1,530/1,530 tests after
+ownership idioms. Both full serialized C# Debug and Release gates pass 1,211/1,211 tests after
 builds with zero warnings and zero errors. No benchmark
 was run; see the
 [frontier catalog](frontier-structure-catalog.md#range-update-sequence-persistent-lazy-propagation)

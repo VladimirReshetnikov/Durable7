@@ -1380,7 +1380,7 @@ New rules this survey adds to the derived catalog's seven:
    machines) may start before a pinned, versioned hash-and-encoding policy exists.
 7. **Ephemeral members must say so.** DABA Lite and the Ctrie are (in whole or part) mutable;
    admitting deliberately mutable members into a persistence-first library requires the docs to
-   segregate them as sharply as the external-material policy segregates licenses.
+   segregate them sharply and state the mutability at every entry point.
 
 ## Implementation Status And Remaining Sequencing
 

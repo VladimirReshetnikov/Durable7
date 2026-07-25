@@ -11,7 +11,7 @@ Use [the repository onboarding guide](repository-onboarding.md) as the end-to-en
 the owning workspace, documentation layer, and validation evidence. Use
 [the workspace map](../reference/workspace-map.md) for the language-first layout, port lineage, and
 documentation placement rules. Use [the semantic contracts reference](../reference/semantic-contracts.md)
-for shared behavior obligations across repository-owned numerics and data structures. Use
+for shared behavior obligations across repository-owned data structures. Use
 [the build and validation guide](build-and-validation.md) for the complete cross-repository validation
 matrix. Use [the porting and semantic parity guide](porting-and-semantic-parity.md) when a behavior or
 public API change may need to cross C#, C++, C, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml workspaces.

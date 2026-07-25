@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "durable7"
 version = "0.1.0"
-description = "Persistent data structures, authenticated collections, and fixed-width numerics"
+description = "Persistent data structures and authenticated collections"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT-0"
@@ -15,7 +15,6 @@ keywords = [
   "hamt",
   "finger-tree",
   "merkle-tree",
-  "numerics",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",

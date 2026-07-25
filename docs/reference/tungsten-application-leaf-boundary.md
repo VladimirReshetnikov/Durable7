@@ -88,7 +88,7 @@ Tungsten's API names, edge cases, exact constants, tests, or future changes auth
 
 Tungsten workspaces may:
 
-- reference general HAMT, FingerTree, numerics, or future repository-general packages;
+- reference general HAMT, FingerTree, or future repository-general packages;
 - use those packages' public APIs and documented contracts;
 - port Tungsten behavior among the sibling Tungsten workspaces;
 - cite general algorithms, papers, and repository catalogs;

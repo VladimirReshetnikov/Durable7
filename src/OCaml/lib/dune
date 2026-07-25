@@ -3,7 +3,7 @@
 (library
  (name durable7)
  (public_name durable7)
- (libraries zarith digestif threads uutf)
+ (libraries digestif threads uutf)
  (flags
   (:standard
    -safe-string

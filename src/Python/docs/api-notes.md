@@ -618,18 +618,12 @@ helper, so a reversed receiver splices a physically reversed run and both concat
 sharing path rather than falling into the orientation-mismatch materialization. `reverse()` returns
 a cursor over the reversed logical version at gap `count - position`.
 
-## Tungsten and numerics
+## Tungsten
 
 Tungsten collections remain an application-specific dependency leaf. `PersistentAssociation`
 uses a CHAMP key index plus measured order sequence with sparse `2^20` stamps, midpoint insertion,
 and deterministic relabeling. Position-preserving `set_item` keeps the first stored key
 representative; append/prepend/insert move an existing key using the incoming representative.
-
-The six fixed-width integer classes wrap construction and ordinary operators modulo their width,
-while `parse` and `checked_*` methods reject out-of-range results. Signed division truncates toward
-zero and remainder has the dividend's sign, including explicit minimum-value divided by `-1`
-overflow. Exact-width byte conversion is deterministic in either byte order. Python `int` is also
-the direct arbitrary-precision substrate for non-negative `SparseInteger`.
 
 ## Merkle interoperability
 

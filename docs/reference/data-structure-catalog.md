@@ -2,8 +2,8 @@
 
 - Created (UTC): 2026-07-02T19:53:11Z
 - Repository HEAD: 1d90612aed11f273521046015c9d63bb7c993bba
-- Audience: Maintainers and AI agents comparing data-structure and numerics surfaces across languages
-- Scope: Repository-owned data-structure families, adjacent numerics libraries, public entry points, and primary reference links
+- Audience: Maintainers and AI agents comparing data-structure surfaces across languages
+- Scope: Repository-owned data-structure families, public entry points, and primary reference links
 
 This catalog is the cross-workspace orientation layer. It answers "which public library surfaces exist in
 which language, and where do I start?" The workspace API specifications and headers remain the
@@ -13,20 +13,6 @@ Use this together with the [workspace map](workspace-map.md): the map explains t
 layout, while this catalog maps each public library family across that layout. Use the
 [semantic contracts reference](semantic-contracts.md) when reviewing behavior that should remain
 recognizable across language ports.
-
-## Fixed-Width Integer Numerics
-
-`Durable7.Numerics` is the C# reference workspace for fixed-width and sparse integer values; OCaml,
-TypeScript, and Python port the same semantic family over arbitrary-precision integer substrates. The family provides
-deterministic two's-complement arithmetic, parse/format behavior, binary conversion APIs, and declaration-parity
-guardrails for the wide-integer family.
-
-| Language | Public entry points | Primary references |
-| --- | --- | --- |
-| C# | `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`, `SparseInteger`, `BitConverterEx` | [Workspace](../../src/CSharp/docs/Numerics/overview.md), [API and behavior reference](../../src/CSharp/docs/Numerics/api-and-behavior-reference.md), [validation](../../src/CSharp/docs/Numerics/validation.md), [wide-integer guidance](../../src/CSharp/docs/Numerics/wide-integer-maintainer-guidance.md), [tests](../../src/CSharp/tests/Durable7.Numerics.Tests/README.md) |
-| OCaml | `Wide_integer.UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `Sparse_integer`, `Bit_converter_ex` | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/numerics), [tests](../../src/OCaml/tests/README.md) |
-| TypeScript | `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`, `SparseInteger`, `BitConverterEx` | [Workspace](../../src/TypeScript/README.md), [API notes](../../src/TypeScript/docs/api-notes.md), [tests](../../src/TypeScript/test/README.md) |
-| Python | `UInt256`, `Int256`, `UInt512`, `Int512`, `UInt1024`, `Int1024`, `FixedWidthInteger`, `SparseInteger`, `BitConverterEx` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [source](../../src/Python/src/durable7/numerics), [tests](../../src/Python/tests/README.md) |
 
 ## HAMT Map And Set
 
@@ -201,7 +187,7 @@ proper subrange updates and queries perform logarithmic boundary work.
 
 At the Range shipment checkpoint, both full serialized C# Debug and Release solution builds
 completed with zero warnings and zero errors and passed 1,417/1,417 tests. The current derived-
-structure checkpoint passes 1,530/1,530 in both configurations. No benchmark was run; measurement
+structure checkpoint passes 1,211/1,211 in both configurations. No benchmark was run; measurement
 remains postponed until an isolated session. The single-pass HAMT updates, hash bag, ordered set,
 and range-update sequence ship across all nine languages; the detailed earlier evidence is in the
 [cross-language completion audit](../reviews/benchmark-independent-structures-cross-language-completion-2026-07-15.md).
@@ -355,7 +341,7 @@ applying shortcuts, retaining receiver representatives and first normalized argu
 All nine ports ship. The C# focused single-worker Debug and Release lanes each pass 62 tests. At
 the historical pre-Range Ordered shipment checkpoint, the full
 serialized C# Release build had zero warnings and zero errors and the complete gate passed
-1,355/1,355 tests; current full-workspace evidence is the 1,530/1,530 Debug and Release derived-
+1,355/1,355 tests; current full-workspace evidence is the 1,211/1,211 Debug and Release derived-
 structure gate recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 
@@ -377,7 +363,7 @@ for the concise normative obligations.
 | Neutral Ordered set/map/multimap | All nine ports | Explicit position; multimap additionally exposes nested group/value positions. |
 | Merkle search tree | All nine ports | Specialized policy-comparer order and authenticated persistent edits. |
 | CHAMP and derived unordered hash facades | No public cursor | Private lookup/edit path only; hash enumeration is not semantic order. |
-| Numerics, Ctrie, graph, heaps without stable order, builders/sessions/support artifacts, DABA Lite | No persistent cursor | No stable semantic neighbor axis or not a persistent aggregate. |
+| Ctrie, graph, heaps without stable order, builders/sessions/support artifacts, DABA Lite | No persistent cursor | No stable semantic neighbor axis or not a persistent aggregate. |
 | Tungsten `List`/`Association` | No cursor | Explicitly excluded application-leaf family. |
 
 Most newly shipped cursors retain a canonical root plus a validated gap/rank and delegate edits to
