@@ -2,7 +2,7 @@ cabal-version: 3.0
 name: durable7-hamt
 version: 0.1.0.0
 synopsis: Persistent CHAMP maps, sets, bags, bimaps, Patricia collections, and Merkle maps
-description: Haskell port of the DataStructures repository HAMT, hash-bag, bimap, Patricia, and Merkle search-tree families.
+description: Haskell port of the Durable7 HAMT, hash-bag, bimap, Patricia, and Merkle search-tree families.
 category: Data
 license: MIT-0
 author: Vladimir Reshetnikov

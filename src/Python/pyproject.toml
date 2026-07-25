@@ -29,7 +29,7 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/VladimirReshetnikov/DataStructures"
+Repository = "https://github.com/VladimirReshetnikov/Durable7"
 
 [tool.setuptools.packages.find]
 where = ["src"]

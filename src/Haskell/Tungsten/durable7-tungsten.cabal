@@ -2,7 +2,7 @@ cabal-version: 3.0
 name: durable7-tungsten
 version: 0.1.0.0
 synopsis: Persistent Tungsten List and Association-shaped collections
-description: Haskell port of the DataStructures repository Tungsten collection family.
+description: Haskell port of the Durable7 Tungsten collection family.
 license: MIT-0
 author: Vladimir Reshetnikov
 maintainer: Vladimir Reshetnikov
