@@ -11,7 +11,8 @@ collections, and fixed-width numerics, shipped as semantically aligned ports acr
 `Durable7` is the single brand for every port: C# namespaces are `Durable7.*`, C++ and OCaml use
 `durable7`, C uses the `d7_` identifier prefix and `durable7/` include roots, Haskell modules are
 `Durable7.*`, and the Kotlin, Rust, TypeScript, and Python packages are all named `durable7`. The
-former `Tools`, `Tools.DataStructures`, and `tds_` names are retired and must not reappear.
+pre-rebrand namespace roots and the old C identifier prefix are retired: no new code, documentation,
+build script, or package metadata may reintroduce them.
 
 This repository contains the Durable7 workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical. The Tools-side handoff is recorded by [`5fc4054da`](https://github.com/VladimirReshetnikov/Tools/commit/5fc4054da), which removes the former subtree and points the Tools indexes here.
 
