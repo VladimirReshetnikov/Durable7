@@ -302,7 +302,6 @@ Workspace-level docs live near the code they describe:
 - Build entry points and quick orientation belong in the language-root or family-root `README.md`, whichever owns
   the build entry point.
 - Long-lived repository-wide reports belong under `docs/`, not inside one language workspace.
-- External study material remains segregated under [`src/CSharp/docs/FingerTree/external`](../../src/CSharp/docs/FingerTree/external/README.md).
 
 ## Naming And Path Conventions
 

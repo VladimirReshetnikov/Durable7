@@ -6,7 +6,7 @@
 - Scope: Documentation placement, writing standards, metadata, and validation
 
 This repository treats documentation as engineering memory. Keep it current-state oriented, close to
-the code it explains, and explicit about historical or external material.
+the code it explains, and explicit about historical material.
 
 ## Documentation Layers
 
@@ -22,7 +22,6 @@ Use the narrowest layer that owns the information:
 | Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/docs/FingerTree/api-specification.md` |
 | Workspace `tests/` README | Local test runner shape, test-file grouping, direct executable path, filters, stress knobs | `src/CSharp/tests/Durable7.FingerTree.Tests/README.md` |
 | Workspace `samples/` or `benchmarks/` README | Runnable sample programs, expected transcript markers, benchmark workloads, output shape | `src/C/FingerTree/samples/README.md` |
-| Workspace `docs/external/` | External study material and source snapshots | Papers, source snapshots, article copies |
 
 When a change crosses boundaries, update every layer whose readers would otherwise be misled. A path
 move usually touches root guidance, repository reference docs, workspace README files, and any active
@@ -53,7 +52,6 @@ Use this checklist when changing repository behavior:
 | Test runner, test-file, sample-smoke, or stress-control change | Workspace tests README, workspace validation guide, [`test-suite-map.md`](../reference/test-suite-map.md), [`build-and-validation.md`](build-and-validation.md) if commands changed |
 | Build/test command change | Root `README.md`, [`build-and-validation.md`](build-and-validation.md), [`test-suite-map.md`](../reference/test-suite-map.md), affected workspace README, validation docs |
 | Benchmark result or benchmark harness change | Workspace benchmark README, benchmark notes, [`test-suite-map.md`](../reference/test-suite-map.md), root benchmark summary if claims changed |
-| External reference addition | External index, license/provenance note, root external-material policy if the shape changes |
 | New long-lived report | Correct `docs/` bucket or workspace `docs/`, provenance metadata, collision-safe filename if needed |
 | Tungsten-inspired general structure | Root dependency boundary, owning general workspace docs, independent API/semantic/validation docs, catalogs; use Tungsten only as provenance |
 
@@ -72,8 +70,6 @@ Write docs as contracts and maps, not as narration of what a command happens to 
   independent fork must document its own owner, contracts, tests, and any relaxed guarantees. The
   detailed [application-leaf boundary](../reference/tungsten-application-leaf-boundary.md) is the
   normative documentation checklist.
-- Keep external study material clearly segregated. Repository-owned docs may summarize it, but should
-  not imply that external material is covered by this repository's MIT-0 license.
 - Do not include secrets, access tokens, machine-local credentials, or transient absolute paths except
   for intentional local environment guidance such as `C:\DataStructures` or toolchain locations.
 
@@ -123,8 +119,6 @@ from a content hash. Do this for review reports, defect reports, and generated a
 - Use the current language-first paths under `src/C`, `src/Cpp`, and `src/CSharp`.
 - Use `CSharp` and `Cpp` in paths; reserve `C#` and `C++` for prose.
 - Avoid ranges in Markdown links. Link to a file or an exact line only when the renderer supports it.
-- Exclude `src/CSharp/docs/FingerTree/external` from repository-owned link/content checks unless the
-  task is explicitly about external material.
 
 ## Validation
 
@@ -132,7 +126,7 @@ For documentation-only changes, at minimum run this current-state scan, excludin
 provenance where old extraction paths are intentional:
 
 ```powershell
-rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/docs/FingerTree/external/**" --glob "!*.pdf"
+rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!*.pdf"
 git diff --check
 ```
 
@@ -150,6 +144,5 @@ Before committing docs:
   stress, sample-smoke, or benchmark boundaries matter?
 - Does each new document live in the right layer?
 - Are active docs current-state, and are historical notes explicitly historical?
-- Are external sources and repository-owned material separated?
 - Do links resolve after the move?
 - Does the validation evidence match the scope of the claim?

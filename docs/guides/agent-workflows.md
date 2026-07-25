@@ -98,10 +98,6 @@ Every new long-lived document should include:
 - Repository HEAD: <40-hex-sha>
 ```
 
-## External references
-
-`src/CSharp/docs/FingerTree/external` is external study material. Do not make substantive edits there unless the task explicitly concerns curation or provenance. Keep license and authorship distinctions visible.
-
 ## History filtering
 
 For future repository extraction or path-history work, use `git-filter-repo` through the Python module:

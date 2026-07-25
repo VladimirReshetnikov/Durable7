@@ -159,7 +159,6 @@ For a cross-family checklist before drilling into a local spec, start with the
 | --- | --- | --- |
 | Repository extraction record | [docs/migration](../migration/README.md) | Preserve source-repo, filter-repo, and commit-map provenance |
 | C++ FingerTree port reports | [src/Cpp/FingerTree/docs](../../src/Cpp/FingerTree/docs/README.md) | Retain independent review findings and correction context |
-| C# FingerTree external references | [external index](../../src/CSharp/docs/FingerTree/external/README.md) | Study source papers and snapshots; not repository-owned license material |
 | C# FingerTree design notes | [PDF](../../src/CSharp/docs/FingerTree/FingerTree-Design-Notes.pdf) / [TeX](../../src/CSharp/docs/FingerTree/FingerTree-Design-Notes.tex) | Architecture, algorithms, concurrency, and test-strategy tour |
 
 ## Maintenance Rule

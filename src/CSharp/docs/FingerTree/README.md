@@ -48,12 +48,3 @@ project.
 - [Benchmarks](benchmarks.md) — curated BenchmarkDotNet results comparing the structures against the BCL persistent collections.
 - [Persistence and concurrency](persistence-and-concurrency.md) — a worked guide to cheap snapshots, structural-sharing undo/redo, and lock-free multi-threaded access.
 
-## External reference material
-
-The papers, articles, and source snapshot used as study references are **external, pre-existing material this
-project did not author**. They are segregated under [`external/`](external/README.md) and are **not** covered by
-this repository's license — each retains its own copyright and license (see that index):
-
-- [Finger trees: a simple general-purpose data structure](<external/Finger trees - a simple general-purpose data structure/Finger trees - a simple general-purpose data structure.md>) — Hinze & Paterson 2006, the original measured-finger-tree reference (`.tex` alongside, `.pdf` one directory up).
-- [Finger Trees Explained Anew, and Slightly Simplified](<external/Finger Trees Explained Anew, and Slightly Simplified.md>) — Claessen 2020, the simplified digit/node shape the tuned deque follows (`.tex`/`.pdf` alongside).
-- [Haskell containers 0.8 `Data.Sequence.Internal`](external/containers-0.8/src/Data/Sequence/Internal.hs) — a production reference for strictness, splitting, indexing, and edge-case handling (it uses the original 1-through-4 digit representation rather than the simplified 1-through-3).

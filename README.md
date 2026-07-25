@@ -392,7 +392,7 @@ Release configuration is required for meaningful benchmark numbers.
 - [src/C/Hamt/docs/README.md](src/C/Hamt/docs/README.md) indexes the C HAMT port's usage guide, API specification, and validation guide.
 - [src/Cpp/Hamt/docs/README.md](src/Cpp/Hamt/docs/README.md) indexes the C++ HAMT port's usage
   guide, API specification, exact-wire Merkle specification, and validation guide.
-- [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, benchmark notes, and external references.
+- [src/CSharp/docs/FingerTree/README.md](src/CSharp/docs/FingerTree/README.md) indexes the library's usage guide, specifications, validation guide, design notes, and benchmark notes.
 - [src/CSharp/docs/Ordered/README.md](src/CSharp/docs/Ordered/README.md) indexes the neutral, independently owned insertion-ordered set's overview, usage guide, API specification, validation guide, Tungsten-free contract, project, and tests.
 - [src/CSharp/docs/Tungsten/README.md](src/CSharp/docs/Tungsten/README.md) indexes the Tungsten-collections library's overview, usage guide, API specification, and validation guide.
 - [src/C/Tungsten/README.md](src/C/Tungsten/README.md) indexes the C Tungsten-collections port.

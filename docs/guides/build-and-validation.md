@@ -362,14 +362,14 @@ Use `rg` for stale path and accidental-rewrite scans. This current-state scan ex
 provenance, where old extraction paths are intentional historical evidence:
 
 ```powershell
-rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!src/CSharp/docs/FingerTree/external/**" --glob "!*.pdf"
+rg -n "C:\\DataStructures\\(Hamt|HamtC|HamtCpp|FingerTree|C\\FingerTree|Cpp\\FingerTree)|sr[s]rc|iladimi[r]|T[i]alue|MS[i]C|[i]ersion|docs/agent-workflows\\.md" README.md docs src --glob "!docs/migration/**" --glob "!*.pdf"
 ```
 
 For repository-owned Markdown links:
 
 ```powershell
 $root = (Resolve-Path .).Path
-$files = rg --files -g '*.md' --glob '!src/CSharp/docs/FingerTree/external/**'
+$files = rg --files -g '*.md'
 $missing = New-Object System.Collections.Generic.List[string]
 $linkPattern = '!{0,1}\[[^\]]+\]\((?<target>[^)]+)\)'
 foreach ($file in $files) {
