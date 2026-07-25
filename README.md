@@ -1,45 +1,7 @@
 # Durable7
 
-- Status: Active standalone repository
-- Created (UTC): 2026-06-30T01:28:46Z
-- Repository HEAD: d8c6160a9d3ae266e310089bfa73d71cc76ed5c3
-- Audience: Maintainers and AI coding agents working on repository-owned data structures and numerics
-- Scope: Repository layout, build entry points, and agent guidance
-
-**Durable7** is Vladimir Reshetnikov's library of persistent data structures, authenticated
+**Durable7** is a library of persistent data structures, authenticated
 collections, and fixed-width numerics, shipped as semantically aligned ports across nine languages.
-`Durable7` is the single brand for every port: C# namespaces are `Durable7.*`, C++ and OCaml use
-`durable7`, C uses the `d7_` identifier prefix and `durable7/` include roots, Haskell modules are
-`Durable7.*`, and the Kotlin, Rust, TypeScript, and Python packages are all named `durable7`. The
-pre-rebrand namespace roots and the old C identifier prefix are retired: no new code, documentation,
-build script, or package metadata may reintroduce them.
-
-This repository contains the Durable7 workspaces and design references. It was extracted from `C:\Tools0\src\DataStructures` / `VladimirReshetnikov/Tools` with path-local Git history preserved as precisely as practical. The Tools-side handoff is recorded by [`5fc4054da`](https://github.com/VladimirReshetnikov/Tools/commit/5fc4054da), which removes the former subtree and points the Tools indexes here.
-
-This document is the canonical repository guidance for Vladimir and the AI coding agents that help him. `AGENTS.md` and `CLAUDE.md` point here, so keep shared project and agent instructions in this file.
-
-## Tungsten Dependency Boundary
-
-Tungsten collections are application-specific leaf consumers for the Tungsten project, an
-alternative interpreter for Wolfram Language. Their behavior may change as Wolfram-kernel behavior
-is newly discovered, reinterpreted, or changed, and the Tungsten workspaces may move out of this
-repository.
-
-Dependency direction is therefore one-way:
-
-- Tungsten may consume repository-general HAMT, FingerTree, and other data-structure libraries.
-- No general-purpose collection, new data structure, or non-Tungsten project may reference a
-  Tungsten package or type, use Tungsten as its implementation substrate, or adopt Tungsten behavior
-  as its semantic baseline.
-- If a Tungsten mechanism is attractive generally, fork it into an independently owned
-  implementation with its own API, contracts, tests, and evolution policy. General code must not
-  wrap, delegate to, subclass, or remain constrained by the Tungsten implementation.
-- Kernel-driven Tungsten changes flow only through the sibling Tungsten ports. They do not
-  automatically flow into an independent general-purpose fork.
-
-The detailed normative policy, including allowed references, fork requirements, extraction rules,
-and a worked ordered-set example, is the
-[Tungsten application-leaf dependency boundary](docs/reference/tungsten-application-leaf-boundary.md).
 
 ## Where to start
 
@@ -274,7 +236,6 @@ collections intentionally have no public cursor. The
 [repository-wide cursor design](docs/proposals/repository-wide-persistent-cursor-design.md) is the
 exhaustive applicability, API, ownership, complexity, and validation contract.
 
-- [C# Numerics](src/CSharp/docs/Numerics/overview.md) is a .NET 10 fixed-width and sparse integer numerics library under [src/CSharp/src/Durable7.Numerics](src/CSharp/src/Durable7.Numerics/Durable7.Numerics.csproj). It provides `UInt256`/`Int256`, `UInt512`/`Int512`, `UInt1024`/`Int1024`, `SparseInteger`, deterministic two's-complement and binary conversion semantics, declaration-parity guardrails, and xUnit tests.
 - [C# HAMT](src/CSharp/docs/Hamt/overview.md) is a .NET 10 hash-trie library under [src/CSharp/src/Durable7.Hamt](src/CSharp/src/Durable7.Hamt/Durable7.Hamt.csproj). Its canonical CHAMP `PersistentHashMap<TKey, TValue>` and `PersistentHashSet<T>` preserve comparers, stored representatives, and structural sharing; the map exposes one-descent persistent `GetOrAdd`/`AddOrUpdate`, and both collections expose optimized single-owner `Transient` sessions with owner-token in-place edits, O(1) adoption, and one-way O(1) publication. `PersistentHashBag<T>`, strict `PersistentBiMap<TKey, TValue>`, set-valued `PersistentHashMultimap<TKey, TValue>`, bidirectional `PersistentRelation<TLeft, TRight>`, strict `PersistentMapPatch<TKey, TValue>`, `PersistentDirectedGraph<TVertex>`, and `PersistentIndexedMap<TKey, TValue, TIndexKey>` add composition-first families with retained policies and atomic multi-index publication. These derived families ship across all nine languages. All eight siblings expose the same semantic edit-then-publish lifecycle through language-local sessions whose changed point edits remain persistent path copies and carry no performance claim. The workspace also owns the lock-free snapshotting Ctrie, 32/64-bit Patricia maps and sets, and the policy-bound Merkle search tree; xUnit/CsCheck suites cover persistent, transient, and concurrent behavior.
 - [C# FingerTree](src/CSharp/docs/FingerTree/overview.md) is a .NET 10 persistent-sequence library under [src/CSharp/src/Durable7.FingerTree](src/CSharp/src/Durable7.FingerTree/Durable7.FingerTree.csproj): two finger-tree engines (a tuned catenable deque and a general monoid-measured tree), a full derived collection family including payload-bearing `PersistentIntervalMap<TEndpoint, TValue>`, sparse rank/select `PersistentChunkedBitSet`, RRB vectors, ropes/text with version-bound cursors, and the independently implemented implicit-AVL `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>`. The range-update sibling combines indexed persistent edits with lazy logarithmic range updates and range measures under the law-gated `IRangeUpdateAlgebra`; its cached logical-measure and pending-tag invariant is specified in the [range-update contract](src/CSharp/docs/FingerTree/range-update-sequence.md). Language-local IntervalMap, chunked-bit-set, and Range siblings ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. Both complete serialized C# Debug and Release solution builds finish with zero warnings and zero errors, and both full test gates pass 1,530/1,530 tests. It also ships navigable design notes, three runnable samples, and example/property/model/concurrency suites. Benchmarks were not run for this shipment and remain postponed until an isolated session.
 - [C# Ordered collections](src/CSharp/docs/Ordered/overview.md) is an independently owned neutral .NET 10 general-purpose library under [src/CSharp/src/Durable7.Ordered](src/CSharp/src/Durable7.Ordered/Durable7.Ordered.csproj). `PersistentOrderedSet<T>`, `PersistentOrderedMap<TKey, TValue>`, and `PersistentOrderedMultimap<TKey, TValue>` separate equality-defined identity from insertion and explicit-position order, retain first key/value representatives, and own explicit movement, positional range, stable one-shot sort, sparse-label, relabel, and grouped-order contracts; the set additionally owns receiver-policy algebra. Their indexes compose public CHAMP and FingerTree surfaces, and the project and its tests have no Tungsten dependency or Tungsten semantic baseline. Neutral sibling ports ship in C, C++, Haskell, Kotlin, Rust, TypeScript, Python, and OCaml. The current complete serialized C# Debug and Release gates each pass 1,530/1,530 tests with zero build warnings or errors. Benchmarks remain postponed until they can run in isolation.
@@ -460,21 +421,6 @@ Release configuration is required for meaningful benchmark numbers.
   [API notes](src/OCaml/docs/api-notes.md), [validation](src/OCaml/docs/validation.md), and the
   [test map](src/OCaml/tests/README.md) document its qualified modules and gates.
 
-The large `TECHNICAL_DOCUMENTATION_STANDARD.md` and `XML_DOCUMENTATION_STANDARD.md` files from Tools are intentionally not part of this repository. Keep documentation thorough and current-state oriented, and write XML documentation in semantic terms: contracts, invariants, ordering, failure behavior, complexity, allocation behavior, and examples where they help.
-
-Every new long-lived document should include header provenance metadata:
-
-```markdown
-- Created (UTC): YYYY-MM-DDTHH:MM:SSZ
-- Repository HEAD: <40-hex-sha>
-```
-
-Use `git rev-parse HEAD` for the repository HEAD. When creating reports where filename collisions are likely, append a `__xxxxxxxxxxxx` suffix using 12 lowercase hex digits from a content hash.
-
-## External reference material
-
-Files under [src/CSharp/docs/FingerTree/external](src/CSharp/docs/FingerTree/external/README.md) are external, pre-existing study material. They are not authored by this project and are not covered by this repository's MIT-0 license; each item keeps its own copyright and license.
-
 ## Local environment
 
 The expected local Windows environment includes:
@@ -507,34 +453,6 @@ The expected local Windows environment includes:
 Use `dotnet` directly for C# restore/build operations and `src/CSharp/test.ps1` for unattended
 test validation in this local environment.
 
-## Cross-repo toolbox
-
-Reusable automation (web mining, browser CDP capture, PDF/OCR, git/GitHub tooling, Windows GUI
-control, agent-log processing, installers) lives in the sibling **Scriptorium** repo
-(`C:\Scriptorium`; <https://github.com/VladimirReshetnikov/Scriptorium>) — see its `TOOLS.md`
-index. **Before writing a new automation script, grep `..\Scriptorium\TOOLS.md`.** Repo-agnostic
-scripts are born there and called in place, never copied here. `src/CSharp/docs/FingerTree/build-design-notes.ps1` is a thin wrapper over Scriptorium's `render/Build-LatexDoc.ps1`.
-## Agent working guidelines
-
-When starting on a task, read `AGENTS.md` first; in this repository it points to this file. Read the relevant workspace README and local docs before editing source.
-
-Default to acting autonomously and carrying work through implementation, validation, and a clear status report. Vladimir prefers substantial, production-ready work over narrow prototype changes. Be supportive, direct, and technically honest.
-
-Search with `rg` first for repository content. Preserve existing architecture, naming, and style unless the task calls for changing them. Keep edits scoped to the project boundary implied by the task, but update nearby docs when paths, responsibilities, or contracts change.
-
-The worktree may contain changes from Vladimir or other tools. Do not revert changes you did not make unless explicitly asked. If unrelated changes are present, work around them. If they affect the task, understand them and build on them.
-
-## Version control
-
-Commit self-contained changes on `main` after validation. This repository currently has `origin`
-configured; push to `origin/main` unless Vladimir explicitly asks not to.
-
-Commit messages should describe the logical change and end with a `Co-Authored-By` trailer for the AI assistant when applicable.
-
-## Work estimates
-
-Do not express estimates in calendar or person-time units. Use velocity-independent units such as files touched, lines changed, test count, affected projects, binary size, or number of API members/call sites.
-
 ## Licensing
 
-Unless a more specific license file is present, repository-owned content is licensed under MIT-0. External material under `src/CSharp/docs/FingerTree/external` retains its own copyright and license.
+Unless a more specific license file is present, repository-owned content is licensed under MIT-0.
