@@ -1,3 +1,7 @@
+/*
+ * Tests for the persistent multiset.
+ */
+
 #include <durable7/hamt/persistent_hash_bag.h>
 #include <durable7/test_support/headless_test_process.h>
 

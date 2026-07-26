@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent bidirectional map.
+ */
+
 #include <durable7/hamt/persistent_bi_map.h>
 
 #include <stdlib.h>

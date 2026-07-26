@@ -1,3 +1,7 @@
+/*
+ * Tests for the persistent bidirectional map, including the conflict rules.
+ */
+
 #include <durable7/hamt/persistent_bi_map.h>
 #include <durable7/test_support/headless_test_process.h>
 

@@ -1,3 +1,7 @@
+/*
+ * Tests for the collections derived from the hash map: relation, graph, indexed map, and patch.
+ */
+
 #include <durable7/hamt/persistent_directed_graph.h>
 #include <durable7/hamt/persistent_indexed_map.h>
 #include <durable7/hamt/persistent_map_patch.h>

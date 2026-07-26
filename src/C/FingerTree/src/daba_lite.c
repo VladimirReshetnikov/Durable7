@@ -1,3 +1,7 @@
+/*
+ * Implementation of the DABA Lite sliding-window aggregate.
+ */
+
 #include <durable7/finger_tree/daba_lite.h>
 
 #include <stddef.h>

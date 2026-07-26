@@ -1,3 +1,7 @@
+/*
+ * Implementation of the insertion-ordered persistent map.
+ */
+
 #include <durable7/ordered/ordered_map.h>
 
 #include <stdlib.h>

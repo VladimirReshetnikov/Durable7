@@ -1,3 +1,7 @@
+/*
+ * Tests for the insertion-ordered persistent multimap.
+ */
+
 #include <durable7/ordered/ordered_multimap.h>
 #include <durable7/test_support/headless_test_process.h>
 

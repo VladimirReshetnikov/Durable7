@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent Patricia maps and sets.
+ */
+
 #include <durable7/hamt/patricia.h>
 
 #include <assert.h>

@@ -1,3 +1,8 @@
+/*
+ * Tests for the insertion-ordered persistent map, including that a value replacement keeps the
+ * entry's position.
+ */
+
 #include <durable7/ordered/ordered_map.h>
 #include <durable7/test_support/headless_test_process.h>
 

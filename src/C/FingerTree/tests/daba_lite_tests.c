@@ -1,3 +1,7 @@
+/*
+ * Tests for the DABA Lite sliding-window aggregate.
+ */
+
 #include <durable7/finger_tree/daba_lite.h>
 #include <durable7/test_support/headless_test_process.h>
 

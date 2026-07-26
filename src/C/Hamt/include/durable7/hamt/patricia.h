@@ -1,3 +1,13 @@
+/*
+ * Persistent Patricia (big-endian radix) maps and sets over 32- and 64-bit integer keys.
+ *
+ * Branch nodes store a common prefix and a discriminating bit, so a lookup is bounded by the key
+ * width rather than by the entry count, and keys are visited in signed numeric order. The four
+ * collections are declared through macros because their operations differ only in key type. Every
+ * operation returns a new version and leaves its inputs valid, sharing unchanged structure, so an
+ * edit copies a path rather than the whole collection.
+ */
+
 #ifndef DURABLE7_HAMT_PATRICIA_H
 #define DURABLE7_HAMT_PATRICIA_H
 
@@ -19,9 +29,13 @@ typedef struct d7_patricia_map {
     size_t count;
     d7_patricia_value_policy policy;
 } d7_patricia_map;
+/* A persistent Patricia map over signed 32-bit keys. */
 typedef d7_patricia_map d7_int_map;
+/* A persistent Patricia map over signed 64-bit keys. */
 typedef d7_patricia_map d7_long_map;
+/* A persistent Patricia set over signed 32-bit keys. */
 typedef struct d7_int_set { d7_int_map map; } d7_int_set;
+/* A persistent Patricia set over signed 64-bit keys. */
 typedef struct d7_long_set { d7_long_map map; } d7_long_set;
 
 /* Immutable cursors own one exact ref-counted collection version. Their position is an
@@ -32,9 +46,13 @@ typedef struct d7_patricia_map_cursor {
     d7_patricia_map map;
     size_t position;
 } d7_patricia_map_cursor;
+/* A gap cursor over one 32-bit Patricia map version. */
 typedef d7_patricia_map_cursor d7_int_map_cursor;
+/* A gap cursor over one 64-bit Patricia map version. */
 typedef d7_patricia_map_cursor d7_long_map_cursor;
+/* A gap cursor over one 32-bit Patricia set version. */
 typedef struct d7_int_set_cursor { d7_int_map_cursor inner; } d7_int_set_cursor;
+/* A gap cursor over one 64-bit Patricia set version. */
 typedef struct d7_long_set_cursor { d7_long_map_cursor inner; } d7_long_set_cursor;
 
 typedef void (*d7_int_map_visitor)(int32_t key, const void *value, void *context);
@@ -46,8 +64,14 @@ typedef const void *(*d7_long_map_combine_fn)(
 typedef void (*d7_int_set_visitor)(int32_t value, void *context);
 typedef void (*d7_long_set_visitor)(int64_t value, void *context);
 
+/* The default value policy: values are compared by pointer and neither retained nor released. */
 d7_patricia_value_policy d7_patricia_value_policy_default(void);
 
+/* Declares one Patricia map's whole API. The four collections differ only in key type, so their
+ * prototypes are written once here and instantiated per key width rather than repeated.
+ *
+ * `prefix` names the resulting functions, `map_type` the handle, `key_type` the integer key, and
+ * `visitor_type` and `combine_type` the callbacks its iteration and merging operations take. */
 #define D7_DECLARE_PATRICIA_MAP(prefix, map_type, key_type, visitor_type, combine_type) \
     map_type prefix##_create(const d7_patricia_value_policy *policy); \
     map_type prefix##_clone(const map_type *map); \
@@ -67,6 +91,8 @@ d7_patricia_value_policy d7_patricia_value_policy_default(void);
 D7_DECLARE_PATRICIA_MAP(d7_int_map, d7_int_map, int32_t, d7_int_map_visitor, d7_int_map_combine_fn);
 D7_DECLARE_PATRICIA_MAP(d7_long_map, d7_long_map, int64_t, d7_long_map_visitor, d7_long_map_combine_fn);
 
+/* Declares one Patricia map cursor's whole API: gap positioning, bound searches, movement, and the
+ * reads at either side of the gap. */
 #define D7_DECLARE_PATRICIA_MAP_CURSOR(prefix, map_type, cursor_type, key_type) \
     d7_hamt_status prefix##_cursor_create(const map_type *map, size_t position, cursor_type *result); \
     d7_hamt_status prefix##_cursor_at_start(const map_type *map, cursor_type *result); \
@@ -95,6 +121,7 @@ D7_DECLARE_PATRICIA_MAP(d7_long_map, d7_long_map, int64_t, d7_long_map_visitor, 
 D7_DECLARE_PATRICIA_MAP_CURSOR(d7_int_map, d7_int_map, d7_int_map_cursor, int32_t);
 D7_DECLARE_PATRICIA_MAP_CURSOR(d7_long_map, d7_long_map, d7_long_map_cursor, int64_t);
 
+/* Declares one Patricia set's whole API, including its set algebra. */
 #define D7_DECLARE_PATRICIA_SET(prefix, set_type, key_type, visitor_type) \
     set_type prefix##_create(void); \
     set_type prefix##_clone(const set_type *set); \
@@ -111,6 +138,7 @@ D7_DECLARE_PATRICIA_MAP_CURSOR(d7_long_map, d7_long_map, d7_long_map_cursor, int
 D7_DECLARE_PATRICIA_SET(d7_int_set, d7_int_set, int32_t, d7_int_set_visitor);
 D7_DECLARE_PATRICIA_SET(d7_long_set, d7_long_set, int64_t, d7_long_set_visitor);
 
+/* Declares one Patricia set cursor's whole API. */
 #define D7_DECLARE_PATRICIA_SET_CURSOR(prefix, set_type, cursor_type, key_type) \
     d7_hamt_status prefix##_cursor_create(const set_type *set, size_t position, cursor_type *result); \
     d7_hamt_status prefix##_cursor_at_start(const set_type *set, cursor_type *result); \

@@ -1,3 +1,7 @@
+/*
+ * Benchmarks for the FingerTree C API.
+ */
+
 #include <durable7/finger_tree/fingertree.h>
 #include <durable7/finger_tree/daba_lite.h>
 #include <durable7/finger_tree/rrb_vector.h>

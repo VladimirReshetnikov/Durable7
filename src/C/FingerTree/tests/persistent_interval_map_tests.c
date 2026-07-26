@@ -1,3 +1,7 @@
+/*
+ * Tests for the interval-keyed persistent map, including overlap and containment queries.
+ */
+
 #include <durable7/finger_tree/persistent_interval_map.h>
 #include <durable7/test_support/headless_test_process.h>
 

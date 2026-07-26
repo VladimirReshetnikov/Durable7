@@ -1,3 +1,10 @@
+/*
+ * Implementation of the chunked persistent bit set.
+ *
+ * Point edits split one measured route and rebuild it; algebra merges only the word streams both
+ * operands actually represent, so absent chunks cost nothing.
+ */
+
 #include <durable7/finger_tree/persistent_chunked_bit_set.h>
 
 #include <limits.h>

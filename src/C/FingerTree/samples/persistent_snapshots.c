@@ -1,3 +1,7 @@
+/*
+ * A sample showing that older versions stay valid and readable after later edits.
+ */
+
 #include <durable7/finger_tree/fingertree.h>
 
 #include <stdio.h>

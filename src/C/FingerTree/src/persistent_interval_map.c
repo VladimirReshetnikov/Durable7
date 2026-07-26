@@ -1,3 +1,7 @@
+/*
+ * Implementation of the interval-keyed persistent map.
+ */
+
 #include <durable7/finger_tree/persistent_interval_map.h>
 
 #include <stdatomic.h>

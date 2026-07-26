@@ -1,3 +1,7 @@
+/*
+ * Tests for the relaxed radix-balanced persistent vector.
+ */
+
 #include <durable7/finger_tree/rrb_vector.h>
 #include <durable7/test_support/headless_test_process.h>
 

@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent directed graph.
+ */
+
 #include <durable7/hamt/persistent_directed_graph.h>
 
 #include <string.h>

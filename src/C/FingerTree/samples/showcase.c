@@ -1,3 +1,7 @@
+/*
+ * A sample walking through the FingerTree C API's main collections.
+ */
+
 #include <durable7/finger_tree/fingertree.h>
 
 #include <stdbool.h>

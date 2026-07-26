@@ -1,3 +1,7 @@
+/*
+ * Tests for the persistent Patricia maps and sets, including signed key ordering.
+ */
+
 #include <durable7/hamt/patricia.h>
 
 #include <limits.h>

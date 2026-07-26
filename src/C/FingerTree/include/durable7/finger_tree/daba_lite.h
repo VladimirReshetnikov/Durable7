@@ -1,3 +1,10 @@
+/*
+ * DABA Lite: a sliding-window aggregate with worst-case constant time per operation.
+ *
+ * Maintains the combined measure of a FIFO window under insertion and eviction without ever
+ * recomputing it from scratch, so no single operation pays for the whole window.
+ */
+
 #ifndef DURABLE7_FINGER_TREE_C_DABA_LITE_H
 #define DURABLE7_FINGER_TREE_C_DABA_LITE_H
 
@@ -59,17 +66,22 @@ typedef struct ft_daba_lite_statistics {
     size_t slack_slot_count;
 } ft_daba_lite_statistics;
 
+/* Fills a sliding-window aggregate policy with its defaults. */
 void ft_daba_policy_init(
     ft_daba_policy* policy,
     const ft_value_type* value_type,
     const ft_measure_policy* monoid);
 
+/* Initializes an empty window using the supplied policies, which it retains. */
 ft_status ft_daba_lite_create(ft_daba_lite* daba, const ft_daba_policy* policy);
 /* Transfers a handle into an uninitialized or disposed destination. */
 void ft_daba_lite_move(ft_daba_lite* destination, ft_daba_lite* source);
+/* Releases this handle's reference. Other versions sharing the same nodes stay valid. */
 void ft_daba_lite_destroy(ft_daba_lite* daba);
 
+/* Number of elements in the window. */
 size_t ft_daba_lite_size(const ft_daba_lite* daba);
+/* Whether the window holds no elements. */
 bool ft_daba_lite_empty(const ft_daba_lite* daba);
 
 /* Constructs an owned aggregate value in an uninitialized destination. The
@@ -85,6 +97,7 @@ ft_status ft_daba_lite_insert(ft_daba_lite* daba, const void* value);
 
 /* Evict invokes combine at most twice. */
 ft_status ft_daba_lite_evict(ft_daba_lite* daba);
+/* Removes the oldest element from the window, reporting whether there was one. */
 ft_status ft_daba_lite_try_evict(ft_daba_lite* daba, bool* evicted);
 
 /* Deterministically destroys n live positions and c active blocks. This is

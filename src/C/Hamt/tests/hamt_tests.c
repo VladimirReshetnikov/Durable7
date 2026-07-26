@@ -1,3 +1,10 @@
+/*
+ * Tests for the persistent hash map and set.
+ *
+ * Covers policy retention, representative choice, structural sharing on no-op edits, and the
+ * transient session lifecycle.
+ */
+
 #include <durable7/hamt/hamt.h>
 #include <durable7/test_support/headless_test_process.h>
 

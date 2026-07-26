@@ -1,3 +1,10 @@
+/*
+ * Tests for the lazily range-updating persistent sequence.
+ *
+ * Checks the tag algebra's laws as well as the operations, since a tag that does not compose
+ * associatively or distribute over the measure produces wrong answers only after a push-down.
+ */
+
 #include <durable7/finger_tree/range_update_sequence.h>
 #include <durable7/test_support/headless_test_process.h>
 

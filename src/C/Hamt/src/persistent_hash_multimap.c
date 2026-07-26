@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent multimap.
+ */
+
 #include <durable7/hamt/persistent_hash_multimap.h>
 
 #include <limits.h>

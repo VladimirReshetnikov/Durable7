@@ -1,3 +1,11 @@
+/*
+ * Implementation of the relaxed radix-balanced persistent vector.
+ *
+ * A node is regular when its subtree sizes follow the radix, and relaxed otherwise; a relaxed node
+ * carries a size table so indexing can still descend directly. Concatenation rebalances only the
+ * seam between the two operands.
+ */
+
 #include <durable7/finger_tree/rrb_vector.h>
 
 #include <limits.h>

@@ -1,3 +1,12 @@
+/*
+ * Implementation of the measured finger tree and the collections layered on it.
+ *
+ * Nodes are reference-counted, so a version that goes out of scope releases only the nodes no other
+ * version still holds. Deep nodes use shared lazy middle cells: a push cell caches its resulting
+ * middle measure without forcing, and a pop cell forces only once a later operation needs the
+ * repaired middle.
+ */
+
 #include <durable7/finger_tree/fingertree.h>
 
 #include <limits.h>

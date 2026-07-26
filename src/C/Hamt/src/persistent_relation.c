@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent many-to-many relation.
+ */
+
 #include <durable7/hamt/persistent_relation.h>
 
 #include <string.h>

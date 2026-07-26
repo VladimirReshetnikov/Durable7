@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent priority search queue.
+ */
+
 #include <durable7/finger_tree/priority_search_queue.h>
 
 #include <limits.h>

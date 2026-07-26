@@ -1,3 +1,7 @@
+/*
+ * Tests for the insertion-ordered collections' cursors.
+ */
+
 #include <durable7/ordered/ordered_cursor.h>
 #include <durable7/test_support/headless_test_process.h>
 

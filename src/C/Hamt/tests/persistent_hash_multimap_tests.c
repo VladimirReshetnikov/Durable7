@@ -1,3 +1,7 @@
+/*
+ * Tests for the persistent multimap.
+ */
+
 #include <durable7/hamt/persistent_hash_multimap.h>
 #include <durable7/hamt/persistent_relation.h>
 #include <durable7/test_support/headless_test_process.h>

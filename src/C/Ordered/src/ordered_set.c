@@ -1,3 +1,7 @@
+/*
+ * Implementation of the insertion-ordered persistent set.
+ */
+
 #include <durable7/ordered/ordered_set.h>
 
 #include <limits.h>

@@ -1,3 +1,7 @@
+/*
+ * Tests for the chunked persistent bit set, including rank, select, and set algebra.
+ */
+
 #include <durable7/finger_tree/persistent_chunked_bit_set.h>
 
 #include <stdint.h>

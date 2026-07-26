@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent Brodal-Okasaki heap.
+ */
+
 #include <durable7/finger_tree/brodal_okasaki_heap.h>
 
 #include <limits.h>

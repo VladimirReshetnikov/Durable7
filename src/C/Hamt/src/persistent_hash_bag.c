@@ -1,3 +1,7 @@
+/*
+ * Implementation of the persistent multiset.
+ */
+
 #include <durable7/hamt/persistent_hash_bag.h>
 
 #include <limits.h>

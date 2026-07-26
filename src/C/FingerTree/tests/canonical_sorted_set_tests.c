@@ -1,3 +1,10 @@
+/*
+ * Tests for the canonical sorted set.
+ *
+ * The central property is history independence: sets reaching the same contents by different
+ * sequences of edits must be structurally identical.
+ */
+
 #include <durable7/finger_tree/canonical_sorted_set.h>
 #include <durable7/test_support/headless_test_process.h>
 

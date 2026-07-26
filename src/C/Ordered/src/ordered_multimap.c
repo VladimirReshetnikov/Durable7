@@ -1,3 +1,7 @@
+/*
+ * Implementation of the insertion-ordered persistent multimap.
+ */
+
 #include <durable7/ordered/ordered_multimap.h>
 
 #include <limits.h>

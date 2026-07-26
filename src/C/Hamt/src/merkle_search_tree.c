@@ -1,3 +1,11 @@
+/*
+ * Implementation of the Merkle search tree: encoding, verification, and synchronization.
+ *
+ * Block encoding is canonical and injective, because a second encoding of the same contents would
+ * produce a second digest and defeat the whole comparison scheme. Decoding rejects noncanonical
+ * input rather than accepting it leniently.
+ */
+
 #include <durable7/hamt/merkle_search_tree.h>
 
 #include <limits.h>

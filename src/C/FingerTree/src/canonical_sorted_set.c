@@ -1,3 +1,11 @@
+/*
+ * Implementation of the canonical (history-independent) sorted set.
+ *
+ * Insertion and removal restore the shape the ranks dictate, so the result depends on the contents
+ * alone. The policy is a reference-counted identity: every set built from it retains it, and sets
+ * built from different policies are not comparable.
+ */
+
 #include <durable7/finger_tree/canonical_sorted_set.h>
 
 #include <limits.h>

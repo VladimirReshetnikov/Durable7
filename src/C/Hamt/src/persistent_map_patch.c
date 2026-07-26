@@ -1,3 +1,7 @@
+/*
+ * Implementation of the invertible map patch.
+ */
+
 #include <durable7/hamt/persistent_map_patch.h>
 
 #include <stdatomic.h>

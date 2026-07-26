@@ -1,3 +1,7 @@
+/*
+ * Implementation of the secondary-indexed persistent map.
+ */
+
 #include <durable7/hamt/persistent_indexed_map.h>
 
 #include <stdatomic.h>

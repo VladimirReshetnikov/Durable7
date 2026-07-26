@@ -1,3 +1,7 @@
+/*
+ * Tests for the persistent priority search queue, covering both of its orders.
+ */
+
 #include <durable7/finger_tree/priority_search_queue.h>
 #include <durable7/test_support/headless_test_process.h>
 

@@ -1,3 +1,7 @@
+/*
+ * Implementation of the insertion-ordered collections' cursors.
+ */
+
 #include <durable7/ordered/ordered_cursor.h>
 
 #include <string.h>

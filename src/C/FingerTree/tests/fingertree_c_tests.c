@@ -1,3 +1,10 @@
+/*
+ * Tests for the measured finger tree and the collections built on it.
+ *
+ * Covers the split contract, structural sharing, cursor semantics, and that every operation leaves
+ * its inputs valid.
+ */
+
 #include <durable7/finger_tree/fingertree.h>
 #include <durable7/test_support/headless_test_process.h>
 

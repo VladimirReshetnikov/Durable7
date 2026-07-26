@@ -1,3 +1,11 @@
+/*
+ * Implementation of the CHAMP-backed persistent hash map and set.
+ *
+ * Each node carries two bitmaps, one for inline entries and one for child nodes, so a node's arrays
+ * hold no empty slots and iteration order is canonical. Nodes are reference-counted and collapse
+ * back to inline entries on removal, which keeps a node's shape a function of its contents.
+ */
+
 #include <durable7/hamt/hamt.h>
 
 #include <assert.h>

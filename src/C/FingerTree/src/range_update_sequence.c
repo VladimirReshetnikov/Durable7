@@ -1,3 +1,10 @@
+/*
+ * Implementation of the lazily range-updating persistent sequence.
+ *
+ * Pending tags are pushed down only when a read needs to see through them, which is what keeps a
+ * range update proportional to the height rather than to the range.
+ */
+
 #include <durable7/finger_tree/range_update_sequence.h>
 
 #include <stdint.h>

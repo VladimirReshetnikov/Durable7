@@ -1,3 +1,7 @@
+/*
+ * Tests for the persistent Brodal-Okasaki heap.
+ */
+
 #include <durable7/finger_tree/brodal_okasaki_heap.h>
 #include <durable7/test_support/headless_test_process.h>
 
