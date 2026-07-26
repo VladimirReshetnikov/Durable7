@@ -1,3 +1,6 @@
+(** Implementation of the stable persistent priority queue retaining insertion order among equal
+    priorities. *)
+
 type ('element, 'priority) entry = { value : 'element; priority : 'priority }
 
 type ('element, 'priority) t = {

@@ -1,3 +1,5 @@
+(** Implementation of the immutable snapshot-plus-position cursor for a generic rope. *)
+
 type 'element t = { snapshot : 'element Rope.t; cursor_position : int }
 
 let create ?(position = 0) snapshot =

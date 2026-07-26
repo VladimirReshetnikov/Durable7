@@ -1,3 +1,6 @@
+(** Implementation of the persistent order-statistic sorted map with first-key representative
+    retention. *)
+
 type ('key, 'value) entry = { key : 'key; value : 'value }
 type ('key, 'value) t = { order : 'key Common.Comparator.t; entries : ('key, 'value) entry array }
 

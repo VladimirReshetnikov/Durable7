@@ -1,3 +1,8 @@
+(** Implementation of the persistent payload-bearing interval map with exact-interval uniqueness.
+
+    Same cached-maximum-endpoint descent as the interval tree, with a payload per interval and
+    exact-interval keys. *)
+
 type ('endpoint, 'value) entry = { low : 'endpoint; high : 'endpoint; value : 'value }
 
 type ('endpoint, 'value) t = {

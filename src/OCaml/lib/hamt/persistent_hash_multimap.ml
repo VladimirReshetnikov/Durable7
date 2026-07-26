@@ -1,3 +1,5 @@
+(** Implementation of the set-valued persistent hash multimap. *)
+
 type ('key, 'value) entry = { key : 'key; value : 'value }
 
 type ('key, 'value) t = {

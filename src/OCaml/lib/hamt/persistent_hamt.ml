@@ -1,3 +1,8 @@
+(** Implementation of the persistent 32-way hash-array mapped trie.
+
+    Each node carries two bitmaps, one for inline entries and one for children, so a node's arrays
+    hold no empty slots and its shape is a function of its contents. *)
+
 exception Duplicate_key
 exception Transient_consumed
 

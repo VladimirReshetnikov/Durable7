@@ -1,3 +1,5 @@
+(** Implementation of the monoidal measurement policies used by persistent sequence structures. *)
+
 type 'measure monoid = { monoid_empty : 'measure; monoid_append : 'measure -> 'measure -> 'measure }
 
 type ('element, 'measure) policy = {

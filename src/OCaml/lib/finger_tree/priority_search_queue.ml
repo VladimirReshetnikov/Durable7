@@ -1,3 +1,9 @@
+(** Implementation of the persistent key-ordered priority-search queue with a cached priority-then-
+    key winner.
+
+    A pennant tournament tree carries the key order and the priority winner at once, so neither
+    question is answered by scanning the other order. *)
+
 type ('key, 'priority, 'value) entry = { key : 'key; priority : 'priority; value : 'value }
 
 type ('key, 'priority, 'value) t = {

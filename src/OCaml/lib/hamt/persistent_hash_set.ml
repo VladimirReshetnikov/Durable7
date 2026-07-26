@@ -1,3 +1,5 @@
+(** Implementation of the persistent set over the shared HAMT map core. *)
+
 type 'element t = ('element, unit) Persistent_hamt.map
 
 let empty policy = Persistent_hamt.empty policy

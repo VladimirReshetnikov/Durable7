@@ -1,3 +1,8 @@
+(** Implementation of the verified persistence, packs, and synchronization for MST2 blocks.
+
+    Every block is checked against the digest it was fetched by, and every verification is charged
+    against a caller-supplied budget so crafted input cannot force unbounded work. *)
+
 module Digest_order = struct
   type t = Merkle_encoding.digest
 

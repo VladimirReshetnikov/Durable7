@@ -1,3 +1,6 @@
+(** Implementation of the runtime hashing and equality policy retained by persistent hash
+    collections. *)
+
 type 'a t = { hash : 'a -> int; equal : 'a -> 'a -> bool }
 
 let create ~hash ~equal = { hash; equal }

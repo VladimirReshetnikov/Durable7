@@ -1,3 +1,5 @@
+(** Implementation of the persistent multiset with positive per-class multiplicities. *)
+
 type 'element entry = { element : 'element; multiplicity : int }
 type 'element t = { counts : ('element, int) Persistent_hamt.map; expanded_count : int64 }
 

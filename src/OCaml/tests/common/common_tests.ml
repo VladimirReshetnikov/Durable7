@@ -1,3 +1,5 @@
+(** Tests for the shared ordering and hashing policies. *)
+
 open Durable7
 
 let test_hash_policy () =

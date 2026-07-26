@@ -1,3 +1,5 @@
+(** Implementation of the size-measured persistent double-ended sequence. *)
+
 type 'element t = Empty | Tree of ('element, int) Measured_tree.t
 type 'element cursor = { cursor_snapshot : 'element t; cursor_position : int }
 

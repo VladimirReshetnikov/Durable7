@@ -1,3 +1,8 @@
+(** Implementation of the persistent many-to-many relation with forward and reverse indexes.
+
+    Forward and reverse are maintained as exact inverses, so inverting the relation reuses both
+    existing indexes rather than rebuilding. *)
+
 type ('left, 'right) entry = { left : 'left; right : 'right }
 
 type ('left, 'right) t = {

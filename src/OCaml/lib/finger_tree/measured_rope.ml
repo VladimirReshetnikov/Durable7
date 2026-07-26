@@ -1,3 +1,8 @@
+(** Implementation of the monoid-measured persistent rope and snapshot cursor.
+
+    Elements are stored in chunked leaves, which keeps the node count proportional to the size
+    divided by the chunk size rather than to the size. *)
+
 type ('element, 'measure) t = ('element, 'measure) Measured_sequence.t
 type ('element, 'measure) cursor = { snapshot : ('element, 'measure) t; position : int }
 

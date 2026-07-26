@@ -1,3 +1,8 @@
+(** Tests for the measured tree and the collections built on it.
+
+    Covers the split contract, structural sharing, cursor semantics, and that every operation leaves
+    its inputs valid. *)
+
 open Durable7
 open Finger_tree
 

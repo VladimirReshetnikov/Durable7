@@ -1,3 +1,9 @@
+(** Implementation of the neutral persistent insertion-ordered map with retained key
+    representatives.
+
+    Replacing an entry's value leaves its position alone, which is what distinguishes this from a
+    map rebuilt in iteration order. *)
+
 type ('key, 'value) entry = { key : 'key; value : 'value }
 
 type ('key, 'value) t = {

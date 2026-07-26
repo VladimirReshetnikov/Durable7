@@ -1,3 +1,8 @@
+(** Implementation of the persistent closed-interval collection ordered by low endpoint.
+
+    Each subtree caches the largest high endpoint below it, so a query descends only into subtrees
+    that can still contain a match. *)
+
 type 'endpoint interval = { interval_low : 'endpoint; interval_high : 'endpoint }
 
 type 'endpoint t = {

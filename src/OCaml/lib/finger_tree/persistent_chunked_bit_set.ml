@@ -1,3 +1,8 @@
+(** Implementation of the sparse persistent non-negative bit set with rank/select queries.
+
+    Only nonzero 64-bit words are represented, so runs of zeros cost nothing, and cached population
+    counts turn rank and select into a descent. *)
+
 module Bit_set = Set.Make (Int)
 
 type t = Bit_set.t

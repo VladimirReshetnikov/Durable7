@@ -1,3 +1,8 @@
+(** Implementation of the persistent meldable minimum heap surface.
+
+    Melding links two forests rather than merging their contents, which is what keeps it constant
+    time in the worst case rather than only amortized. *)
+
 type 'element t = { order : 'element Common.Comparator.t; values : 'element list }
 type statistics = { count : int; root_forest_length : int; maximum_rank : int; maximum_depth : int }
 

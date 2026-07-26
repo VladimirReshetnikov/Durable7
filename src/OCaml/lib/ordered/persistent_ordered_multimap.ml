@@ -1,3 +1,5 @@
+(** Implementation of the neutral grouped insertion-ordered persistent multimap. *)
+
 type ('key, 'value) entry = { key : 'key; value : 'value }
 
 type ('key, 'value) t = {

@@ -1,3 +1,8 @@
+(** Implementation of the mutable FIFO monoid aggregator with failure-atomic publication.
+
+    The window's aggregate is maintained under insertion and eviction without ever recomputing it
+    from scratch, so no single operation pays for the whole window. *)
+
 type 'value t = {
   identity : 'value;
   combine : 'value -> 'value -> 'value;

@@ -1,3 +1,8 @@
+(** Implementation of the canonical immutable B=16 Merkle search tree with exact MST2 blocks.
+
+    Block encoding is canonical and injective, because a second encoding of the same contents would
+    produce a second digest and defeat comparison by digest. *)
+
 type ('key, 'value) entry = { key : 'key; value : 'value }
 type block = { digest : Merkle_encoding.digest; content : bytes }
 

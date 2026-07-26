@@ -1,3 +1,5 @@
+(** Implementation of the immutable snapshot-bound cursor for UTF-8 text ropes. *)
+
 type t = { snapshot : Text_rope.t; cursor_position : int }
 
 let create ?(position = 0) snapshot =

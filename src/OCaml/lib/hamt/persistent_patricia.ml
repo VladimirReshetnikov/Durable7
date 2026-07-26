@@ -1,3 +1,8 @@
+(** Implementation of the persistent big-endian Patricia maps and sets for fixed-width integer keys.
+
+    Branch nodes store a common prefix and a discriminating bit, so a lookup is bounded by the key
+    width rather than by the entry count. *)
+
 module type Key = sig
   type t
 

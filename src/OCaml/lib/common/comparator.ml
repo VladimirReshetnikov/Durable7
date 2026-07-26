@@ -1,3 +1,5 @@
+(** Implementation of the runtime ordering policy retained by sorted and ordered collections. *)
+
 type 'a t = { compare : 'a -> 'a -> int }
 
 let create compare = { compare }

@@ -1,3 +1,8 @@
+(** Implementation of the mSP2 proof envelopes and present-value-safe typed three-way merge.
+
+    A proof carries only the blocks a verifier must descend into, taking the rest on their
+    digests. *)
+
 type ('key, 'value) query =
   | Membership of 'key * 'value
   | Nonmembership of 'key

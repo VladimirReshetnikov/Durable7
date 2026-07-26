@@ -1,3 +1,5 @@
+(** Implementation of the strict persistent bidirectional map. *)
+
 type ('key, 'value) conflict = Key_conflict | Value_conflict
 
 type ('key, 'value) t = {

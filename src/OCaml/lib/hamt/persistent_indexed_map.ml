@@ -1,3 +1,5 @@
+(** Implementation of the persistent primary map with one maintained nonunique secondary index. *)
+
 type ('key, 'value) entry = { key : 'key; value : 'value }
 type ('value, 'index) indexed_value = { row_value : 'value; index_key : 'index }
 

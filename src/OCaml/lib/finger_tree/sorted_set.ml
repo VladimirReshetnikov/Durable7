@@ -1,3 +1,5 @@
+(** Implementation of the persistent rank-addressable sorted set with representative retention. *)
+
 type 'element t = { order : 'element Common.Comparator.t; values : 'element array }
 
 let compare set = Common.Comparator.compare set.order

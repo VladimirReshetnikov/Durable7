@@ -44,6 +44,7 @@ end
 module type Set = sig
   type element
   type t
+(** The interface the Patricia sets share, since they differ only in key width. *)
 
   val empty : t
   val count : t -> int
@@ -78,6 +79,14 @@ module type Set = sig
 end
 
 module Int32_map : Map with type key = int32
+(** A persistent Patricia map over 32-bit keys. Branch nodes store a common prefix and a
+    discriminating bit, so a lookup is bounded by the key width rather than by the entry count. *)
+
 module Int64_map : Map with type key = int64
+(** A persistent Patricia map over 64-bit keys. *)
+
 module Int32_set : Set with type element = int32
+(** A persistent Patricia set over 32-bit keys. *)
+
 module Int64_set : Set with type element = int64
+(** A persistent Patricia set over 64-bit keys. *)

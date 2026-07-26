@@ -1,3 +1,5 @@
+(** Implementation of the public facade for general monoid-measured persistent sequences. *)
+
 type ('element, 'measure) t = ('element, 'measure) Measured_tree.t
 
 let empty = Measured_tree.empty

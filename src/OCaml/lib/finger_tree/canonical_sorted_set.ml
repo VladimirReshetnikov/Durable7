@@ -1,3 +1,8 @@
+(** Implementation of the persistent sorted set with policy-canonical deterministic ranks.
+
+    Ranks are derived from the elements themselves, so the shape depends only on the contents and
+    two sets built by different edit sequences are structurally identical. *)
+
 type rank = { geometric : int; secondary : int64; content : int64 }
 
 type 'element rank_policy = {

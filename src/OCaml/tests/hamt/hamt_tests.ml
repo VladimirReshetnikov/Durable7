@@ -1,3 +1,6 @@
+(** Tests for the persistent hash trie and everything derived from it, including the Merkle search
+    tree's wire format. *)
+
 open Durable7
 open Hamt
 

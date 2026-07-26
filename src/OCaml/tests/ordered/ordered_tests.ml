@@ -1,3 +1,5 @@
+(** Tests for the insertion-ordered collections and their cursors. *)
+
 open Durable7
 open Ordered
 

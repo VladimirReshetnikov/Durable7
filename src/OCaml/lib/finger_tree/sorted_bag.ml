@@ -1,3 +1,5 @@
+(** Implementation of the persistent order-statistic sorted multiset. *)
+
 type 'element t = { order : 'element Common.Comparator.t; values : 'element array }
 
 let compare bag = Common.Comparator.compare bag.order

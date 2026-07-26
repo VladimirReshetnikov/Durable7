@@ -1,3 +1,8 @@
+(** Implementation of the uTF-8 text rope indexed by Unicode scalar value.
+
+    Newline counts are cached in the measure, which is what makes converting between a character
+    offset and a line/column position logarithmic rather than a scan. *)
+
 type t = Uchar.t Rope.t
 
 let empty = Rope.empty

@@ -1,3 +1,8 @@
+(** Implementation of the canonical codecs, SHA-256 digests, and policy framing for the MST2 wire.
+
+    Decoding rejects noncanonical input rather than accepting it leniently, for the same reason
+    encoding must be injective. *)
+
 type digest = string
 
 let digest_bytes digest = Bytes.of_string digest

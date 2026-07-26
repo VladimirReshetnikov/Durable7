@@ -1,3 +1,8 @@
+(** Implementation of the synchronized live map over immutable HAMT roots.
+
+    Mutation swaps an immutable root under a lock, so a reader holding an earlier root keeps a
+    consistent view without blocking the writer. *)
+
 type ('key, 'value) snapshot = {
   snapshot_root : ('key, 'value) Persistent_hamt.map;
   snapshot_generation_value : int64;

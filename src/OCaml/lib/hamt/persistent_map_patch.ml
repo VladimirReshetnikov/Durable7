@@ -1,3 +1,5 @@
+(** Implementation of the strict presence-aware persistent map patches. *)
+
 type 'value state = Absent | Present of 'value
 type ('key, 'value) entry = { patch_key : 'key; before : 'value state; after : 'value state }
 

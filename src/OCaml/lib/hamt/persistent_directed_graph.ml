@@ -1,3 +1,7 @@
+(** Implementation of the persistent directed graph with explicit isolated vertices.
+
+    Successors and predecessors are both indexed, so neither direction is a scan. *)
+
 type 'vertex edge = { source : 'vertex; target : 'vertex }
 
 type 'vertex t = {

@@ -1,3 +1,8 @@
+(** Implementation of the persistent generic rope with indexed split/concat editing.
+
+    Elements are stored in chunked leaves; adjacent small chunks are coalesced so repeated edits do
+    not leave the structure fragmented. *)
+
 type 'element t = 'element Rrb_vector.t
 
 let empty = Rrb_vector.empty

@@ -1,3 +1,6 @@
+(** Implementation of the immutable snapshot-plus-gap cursors for neutral insertion-ordered
+    collections. *)
+
 type 'cursor search = { found : bool; search_cursor : 'cursor }
 type 'cursor insertion = { added : bool; insertion_cursor : 'cursor }
 

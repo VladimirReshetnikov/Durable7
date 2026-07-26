@@ -1,3 +1,8 @@
+(** Implementation of the persistent deque with an O(1) logical reversal bit.
+
+    Reversal flips an orientation bit and shares the tree; every read consults that bit rather than
+    the stored order. *)
+
 type 'element t = { deque : 'element Persistent_deque.t; reversed : bool }
 type 'element cursor = { cursor_snapshot : 'element t; cursor_position : int }
 

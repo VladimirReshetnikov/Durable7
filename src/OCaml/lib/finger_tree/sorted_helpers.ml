@@ -1,3 +1,5 @@
+(** Implementation of the internal immutable-array operations shared by sorted facades. *)
+
 let bound move_right compare value values =
   let low = ref 0 in
   let high = ref (Array.length values) in

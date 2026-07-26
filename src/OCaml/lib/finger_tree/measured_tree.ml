@@ -1,3 +1,9 @@
+(** Implementation of the structurally shared persistent sequence with cached monoidal measurements.
+
+    Nodes cache their subtree's combined measure, so a split can skip a subtree on that cached value
+    alone instead of visiting the elements under it. Versions share every node an edit did not
+    touch. *)
+
 type ('element, 'measure) node =
   | Empty
   | Leaf of 'element * 'measure

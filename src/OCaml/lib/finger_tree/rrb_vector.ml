@@ -1,3 +1,8 @@
+(** Implementation of the persistent indexed vector facade over the shared balanced sequence.
+
+    Radix addressing gives effectively constant-time indexing, and allowing nodes to be slightly
+    underfull is what makes concatenation and splitting logarithmic. *)
+
 type 'element t = 'element Persistent_deque.t
 type 'element cursor = { cursor_snapshot : 'element t; cursor_position : int }
 type statistics = { count : int; estimated_leaves : int; depth : int }

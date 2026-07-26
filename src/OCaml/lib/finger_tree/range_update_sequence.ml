@@ -1,3 +1,9 @@
+(** Implementation of the law-gated persistent sequence with range updates and cached range
+    measures.
+
+    A range update is recorded as a tag at the covering nodes and pushed down only when a read needs
+    to see through it, so the cost tracks the height and not the range. *)
+
 type ('element, 'measure, 'tag) algebra = {
   id : string;
   identity : 'measure;

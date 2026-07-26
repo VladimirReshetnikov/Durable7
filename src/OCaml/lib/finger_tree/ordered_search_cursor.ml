@@ -1,3 +1,6 @@
+(** Implementation of the immutable root-plus-rank gap cursors for ordered persistent
+    collections. *)
+
 type 'cursor search = { found : bool; search_cursor : 'cursor }
 type 'cursor insertion = { added : bool; insertion_cursor : 'cursor }
 

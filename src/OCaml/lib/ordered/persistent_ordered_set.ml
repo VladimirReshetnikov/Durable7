@@ -1,3 +1,9 @@
+(** Implementation of the neutral persistent insertion-ordered set with explicit positional
+    movement.
+
+    A hashed index answers membership and a separate order index gives the sequence, so neither
+    question is answered by scanning for the other. *)
+
 type 'element t = { equality : 'element Common.Hash_policy.t; values : 'element array }
 
 let empty equality = { equality; values = [||] }
