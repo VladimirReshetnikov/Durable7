@@ -1,3 +1,7 @@
+/**
+ * Tests for the sequence core: deque and reversible-deque operations, measured splitting and
+ * locating, and structure sharing between versions.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import {

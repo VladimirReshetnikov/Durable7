@@ -1,3 +1,7 @@
+/**
+ * Tests the property the structure exists for: a deferred tag must be indistinguishable from an
+ * applied one across every read path.
+ */
 import { describe, expect, it } from "vitest";
 import { RangeUpdateSequence } from "../../src/finger-tree/range-update-sequence.js";
 import {

@@ -1,3 +1,10 @@
+/**
+ * Strict persistent bidirectional map.
+ *
+ * Maintains a one-to-one correspondence by composing a forward map with an inverse one, each under
+ * its own hash policy. Strict: an insertion whose key or value is already represented is rejected
+ * rather than silently displacing the existing pair.
+ */
 import { defaultHashPolicy, type HashPolicy } from "./hash-policy.js";
 import { type HamtEntry, PersistentHashMap } from "./persistent-hamt.js";
 
@@ -18,6 +25,10 @@ export type BiMapRemoveResult<K, V, T> =
 
 /** Raised when strict addition or replacement violates one side of the bijection. */
 export class BiMapConflictError extends Error {
+    /**
+     * Which side of the bijection was already represented. The key domain is reported in preference
+     * to the value domain when both conflict.
+     */
     public readonly conflict: "key" | "value";
 
     public constructor(conflict: "key" | "value") {
@@ -61,9 +72,13 @@ export class PersistentBiMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return result;
     }
 
+    /** Number of pairs. */
     public get size(): number { return this.#forward.size; }
+    /** Whether the bimap holds no pairs. */
     public get isEmpty(): boolean { return this.#forward.isEmpty; }
+    /** The retained hash policy defining key equivalence. */
     public get keyPolicy(): HashPolicy<K> { return this.#forward.policy; }
+    /** The retained hash policy defining value equivalence. */
     public get valuePolicy(): HashPolicy<V> { return this.#inverse.policy; }
 
     /** Returns a cached O(1) facade over the existing inverse and forward roots. */
@@ -75,7 +90,11 @@ export class PersistentBiMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return inverse;
     }
 
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.#forward.containsKey(key); }
+    /**
+     * Whether the value is represented. Constant time, because the inverse map answers it directly.
+     */
     public containsValue(value: V): boolean { return this.#inverse.containsKey(value); }
 
     /** Returns the stored value representative for a key class. */
@@ -125,6 +144,7 @@ export class PersistentBiMap<K, V> implements Iterable<HamtEntry<K, V>> {
         );
     }
 
+    /** Remove the pair holding that key from both directions. */
     public removeKey(key: K): PersistentBiMap<K, V> { return this.tryRemoveKey(key).map; }
 
     /** Attempts removal through the key domain and returns the opposite stored representative. */
@@ -143,6 +163,7 @@ export class PersistentBiMap<K, V> implements Iterable<HamtEntry<K, V>> {
         };
     }
 
+    /** Remove the pair holding that value from both directions. */
     public removeValue(value: V): PersistentBiMap<K, V> { return this.tryRemoveValue(value).map; }
 
     /** Attempts removal through the value domain and returns the opposite stored representative. */
@@ -161,12 +182,16 @@ export class PersistentBiMap<K, V> implements Iterable<HamtEntry<K, V>> {
         };
     }
 
+    /** An empty bimap retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentBiMap<K, V> {
         return this.isEmpty ? this : PersistentBiMap.empty(this.keyPolicy, this.valuePolicy);
     }
 
+    /** Iterate the keys. */
     public keys(): IterableIterator<K> { return this.#forward.keys(); }
+    /** Iterate the values. */
     public values(): IterableIterator<V> { return this.#forward.values(); }
+    /** Iterate the pairs. */
     public entries(): IterableIterator<HamtEntry<K, V>> { return this.#forward.entries(); }
     public [Symbol.iterator](): IterableIterator<HamtEntry<K, V>> { return this.entries(); }
 

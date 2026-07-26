@@ -1,3 +1,11 @@
+/**
+ * Persistent Brodal-Okasaki meldable priority queue.
+ *
+ * A bootstrapped skew-binomial forest: the minimum is held outside the forest, so peeking reads a
+ * field and melding is one root comparison plus a link. Ordering comes from a retained comparator,
+ * and melding heaps built with different comparators is rejected rather than silently reordering
+ * elements.
+ */
 import { defaultComparator, type Comparator } from "./ordering.js";
 
 class Tree<T> {
@@ -7,18 +15,26 @@ class Forest<T> {
     public constructor(public readonly head: Tree<T>, public readonly tail: Forest<T> | undefined) {}
 }
 interface SplitForest<T> { readonly zeros: Forest<T> | undefined; readonly trees: Forest<T> | undefined; readonly embeddedForest: Forest<T> | undefined }
+/** Shape measurements returned by a successful structural audit. */
 export interface BrodalOkasakiHeapStatistics { readonly count: number; readonly rootForestLength: number; readonly maximumRank: number; readonly maximumDepth: number }
+/** The smallest element together with the heap that remains once it is removed. */
 export interface BrodalMinimumView<T> { readonly minimum: T; readonly remainder: BrodalOkasakiHeap<T> }
 
 /** Immutable bootstrapped skew-binomial min-heap. */
 export class BrodalOkasakiHeap<T> implements Iterable<T> {
     readonly #root: Tree<T> | undefined;
+    /** Number of elements. */
     public readonly count: number;
+    /** The retained comparator defining the ordering. */
     public readonly comparator: Comparator<T>;
     private constructor(root: Tree<T> | undefined, count: number, comparator: Comparator<T>) { this.#root = root; this.count = count; this.comparator = comparator; }
+    /** The empty heap, retaining the supplied policy objects. */
     public static empty<T>(comparator: Comparator<T> = defaultComparator): BrodalOkasakiHeap<T> { return new BrodalOkasakiHeap(undefined, 0, comparator); }
+    /** Build a heap from the given elements. */
     public static from<T>(items: Iterable<T>, comparator: Comparator<T> = defaultComparator): BrodalOkasakiHeap<T> { let result = this.empty(comparator); for (const item of items) result = result.insert(item); return result; }
+    /** Whether the heap holds no elements. */
     public get isEmpty(): boolean { return this.#root === undefined; }
+    /** The smallest-priority entry, read from the cached root winner rather than searched for. */
     public get minimum(): T { if (this.#root === undefined) throw new RangeError("The heap is empty."); return this.#root.value; }
     #le(left: T, right: T): boolean { return this.comparator(left, right) <= 0; }
     #skewLink(zero: Tree<T>, first: Tree<T>, second: Tree<T>): Tree<T> {
@@ -33,6 +49,7 @@ export class BrodalOkasakiHeap<T> implements Iterable<T> {
             ? new Forest(this.#skewLink(tree, forest.head, tail.head), tail.tail)
             : new Forest(tree, forest);
     }
+    /** A heap with the element inserted at the given index. */
     public insert(item: T): BrodalOkasakiHeap<T> {
         if (this.#root === undefined) return new BrodalOkasakiHeap(new Tree(0, item, undefined), 1, this.comparator);
         const root = this.#le(item, this.#root.value)
@@ -40,6 +57,7 @@ export class BrodalOkasakiHeap<T> implements Iterable<T> {
             : new Tree(0, this.#root.value, this.#skewInsert(new Tree(0, item, undefined), this.#root.children));
         return new BrodalOkasakiHeap(root, this.count + 1, this.comparator);
     }
+    /** A queue holding every entry of both. Both must retain the same comparator object. */
     public meld(other: BrodalOkasakiHeap<T>): BrodalOkasakiHeap<T> {
         if (this.comparator !== other.comparator) throw new TypeError("Heap melding requires the same comparator object.");
         if (this.#root === undefined) return other; if (other.#root === undefined) return this;
@@ -48,6 +66,7 @@ export class BrodalOkasakiHeap<T> implements Iterable<T> {
             : new Tree(0, other.#root.value, this.#skewInsert(this.#root, other.#root.children));
         return new BrodalOkasakiHeap(root, this.count + other.count, this.comparator);
     }
+    /** The smallest-priority entry together with the queue that remains once it is removed. */
     public minimumView(): BrodalMinimumView<T> | undefined { return this.#root === undefined ? undefined : { minimum: this.#root.value, remainder: this.deleteMinimum() }; }
     #link(first: Tree<T>, second: Tree<T>): Tree<T> {
         if (first.rank !== second.rank) throw new Error("Invalid binomial-link ranks.");
@@ -95,6 +114,7 @@ export class BrodalOkasakiHeap<T> implements Iterable<T> {
         return this.#insertRanked(this.#link(left.head, right.head), this.#unionUnique(left.tail, right.tail));
     }
     #skewMeld(left: Forest<T> | undefined, right: Forest<T> | undefined): Forest<T> | undefined { return this.#unionUnique(this.#uniquify(left), this.#uniquify(right)); }
+    /** Remove the smallest-priority entry, returning it with the remaining queue. */
     public deleteMinimum(): BrodalOkasakiHeap<T> {
         if (this.#root === undefined) throw new RangeError("The heap is empty.");
         if (this.#root.children === undefined) return BrodalOkasakiHeap.empty(this.comparator);
@@ -124,6 +144,10 @@ export class BrodalOkasakiHeap<T> implements Iterable<T> {
         while (forest !== undefined) { const rank = forest.head.rank; if (rank < previous || rank < 0) throw new Error("Invalid heap forest rank order."); if (rank === previous) { if (length !== 1 || duplicate) throw new Error("Only first two skew ranks may match."); duplicate = true; } previous = rank; length++; forest = forest.tail; }
         return length;
     }
+    /**
+     * Walk the whole heap and check its invariants, throwing on the first violation. A defensive
+     * audit, not part of normal use.
+     */
     public validateStructure(): BrodalOkasakiHeapStatistics {
         if (this.#root === undefined) { if (this.count !== 0) throw new Error("Empty heap count mismatch."); return { count: 0, rootForestLength: 0, maximumRank: 0, maximumDepth: 0 }; }
         if (this.#root.rank !== 0) throw new Error("Global heap root must have rank zero.");
@@ -133,6 +157,10 @@ export class BrodalOkasakiHeap<T> implements Iterable<T> {
         if (count !== this.count) throw new Error("Heap logical count mismatch.");
         return { count, rootForestLength, maximumRank, maximumDepth };
     }
+    /**
+     * Number of tree nodes the two heaps have in common by identity, used to show that a derived
+     * version really shares structure rather than having been rebuilt.
+     */
     public sharedTreeCount(other: BrodalOkasakiHeap<T>): number {
         const nodes = new Set<Tree<T>>(); const collect = (root: Tree<T> | undefined, destination: Set<Tree<T>>): void => { const pending = root === undefined ? [] : [root]; while (pending.length !== 0) { const tree = pending.pop()!; if (destination.has(tree)) continue; destination.add(tree); let forest = tree.children; while (forest !== undefined) { pending.push(forest.head); forest = forest.tail; } } };
         collect(this.#root, nodes); const otherNodes = new Set<Tree<T>>(); collect(other.#root, otherNodes); let count = 0; for (const node of otherNodes) if (nodes.has(node)) count++; return count;

@@ -1,3 +1,7 @@
+/**
+ * Tests for the many-to-many relation: agreement between forward and reverse adjacency, and
+ * inversion exchanging the existing indexes.
+ */
 import { describe, expect, it } from "vitest";
 
 import { createHashPolicy, PersistentRelation } from "../../src/hamt/index.js";

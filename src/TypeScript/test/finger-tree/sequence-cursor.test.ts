@@ -1,3 +1,7 @@
+/**
+ * Cross-structure tests for the positional sequence cursors, asserting one shared gap vocabulary
+ * and that each retained cursor keeps its own version.
+ */
 import { describe, expect, it } from "vitest";
 import {
     FingerTree,

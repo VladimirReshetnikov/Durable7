@@ -1,3 +1,10 @@
+/**
+ * Persistent multiset with explicit per-class multiplicities.
+ *
+ * Each equivalence class is stored once with a positive count, so memory follows the number of
+ * distinct classes and adding many copies is constant work. Counting domains are checked rather
+ * than allowed to wrap.
+ */
 import { attachBulkBuilderCombiner } from "./bulk-builder-internals.js";
 import { defaultHashPolicy, type HashPolicy } from "./hash-policy.js";
 import { PersistentHashMap, type HamtEntry } from "./persistent-hamt.js";
@@ -32,6 +39,10 @@ export class PersistentHashBag<T> implements Iterable<T> {
     );
 
     readonly #counts: PersistentHashMap<T, number>;
+    /**
+     * Total number of occurrences, summed across classes, in a domain wide enough that summing in-
+     * range classes cannot overflow.
+     */
     public readonly totalCount: bigint;
 
     private constructor(counts: PersistentHashMap<T, number>, totalCount: bigint) {
@@ -63,13 +74,19 @@ export class PersistentHashBag<T> implements Iterable<T> {
         return PersistentHashBag.wrap(builder.toImmutable(), totalCount);
     }
 
+    /** Number of distinct equivalence classes, ignoring multiplicities. */
     public get distinctCount(): number { return this.#counts.size; }
+    /** Whether the bag holds no occurrences. */
     public get isEmpty(): boolean { return this.#counts.isEmpty; }
+    /** The retained policy defining equivalence. */
     public get policy(): HashPolicy<T> { return this.#counts.policy; }
 
+    /** Whether the occurrence is present. */
     public contains(item: T): boolean { return this.#counts.containsKey(item); }
+    /** The multiplicity of the occurrence, or zero when absent. */
     public countOf(item: T): number { return this.#counts.getEntry(item)?.value ?? 0; }
 
+    /** The stored value representative, reported presence-safely. */
     public tryGetValue(equalValue: T): HashBagLookup<T> {
         const entry = this.#counts.getEntry(equalValue);
         return entry === undefined
@@ -77,8 +94,12 @@ export class PersistentHashBag<T> implements Iterable<T> {
             : { found: true, value: entry.key };
     }
 
+    /** A bag containing the given occurrence; returns the receiver when it is already present. */
     public add(item: T): PersistentHashBag<T> { return this.addCopies(item, 1); }
 
+    /**
+     * A bag with the given number of additional occurrences; a count of zero returns the receiver.
+     */
     public addCopies(item: T, count: number): PersistentHashBag<T> {
         validateCopyCount(count);
         if (count === 0) return this;
@@ -91,8 +112,13 @@ export class PersistentHashBag<T> implements Iterable<T> {
         return this.withCounts(result.map, totalCount);
     }
 
+    /** A bag without that occurrence; returns the receiver when it is absent. */
     public remove(item: T): PersistentHashBag<T> { return this.removeCopies(item, 1); }
 
+    /**
+     * A bag with the given number of occurrences removed; removing at least the current
+     * multiplicity drops the class entirely.
+     */
     public removeCopies(item: T, count: number): PersistentHashBag<T> {
         validateCopyCount(count);
         if (count === 0) return this;
@@ -112,6 +138,7 @@ export class PersistentHashBag<T> implements Iterable<T> {
         );
     }
 
+    /** A bag without that class, whatever its multiplicity. */
     public removeAll(item: T): PersistentHashBag<T> {
         const removed = this.#counts.tryRemoveEntry(item);
         return removed === undefined
@@ -119,6 +146,7 @@ export class PersistentHashBag<T> implements Iterable<T> {
             : this.withCounts(removed.map, this.totalCount - BigInt(removed.entry.value));
     }
 
+    /** An empty bag retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentHashBag<T> { return this.withCounts(this.#counts.clear(), 0n); }
 
     /** Multiset union: each receiver-policy class receives the larger multiplicity. */
@@ -141,7 +169,9 @@ export class PersistentHashBag<T> implements Iterable<T> {
         return this.combine(other, "sum");
     }
 
+    /** Iterate the stored representatives once each, ignoring multiplicities. */
     public distinctItems(): IterableIterator<T> { return this.#counts.keys(); }
+    /** Iterate the occurrences. */
     public entries(): IterableIterator<HamtEntry<T, number>> { return this.#counts.entries(); }
 
     /** Materializes expanded enumeration after checking JavaScript's array-length limit. */

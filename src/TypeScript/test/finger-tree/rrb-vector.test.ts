@@ -1,3 +1,7 @@
+/**
+ * Tests for the relaxed radix-balanced vector, covering sequences that straddle the regular and
+ * relaxed layout boundaries and agreement with an array reference model.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import { RrbVector } from "../../src/finger-tree/index.js";

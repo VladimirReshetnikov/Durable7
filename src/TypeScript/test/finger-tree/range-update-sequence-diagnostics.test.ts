@@ -1,3 +1,7 @@
+/**
+ * Tests asserting the range-update sequence stays within its documented node-visit and callback
+ * budgets.
+ */
 import { describe, expect, it } from "vitest";
 import * as FingerTree from "../../src/finger-tree/index.js";
 import { RangeUpdateSequence } from "../../src/finger-tree/range-update-sequence.js";

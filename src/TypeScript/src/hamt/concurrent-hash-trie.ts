@@ -1,3 +1,10 @@
+/**
+ * Snapshotting hash-trie facade over immutable CHAMP roots.
+ *
+ * Mutations publish a new immutable root and snapshots capture the current one in constant time, so
+ * a snapshot is unaffected by every later mutation. Scoped to one JavaScript isolate; it makes no
+ * cross-worker progress claim.
+ */
 import { defaultHashPolicy, type HashPolicy } from "./hash-policy.js";
 import { PersistentHashMap, type HamtEntry } from "./persistent-hamt.js";
 
@@ -6,11 +13,20 @@ export class ConcurrentHashTrieSnapshot<K, V> implements Iterable<HamtEntry<K, V
     readonly #map: PersistentHashMap<K, V>;
 
     public constructor(map: PersistentHashMap<K, V>) { this.#map = map; }
+    /** Number of entries. */
     public get size(): number { return this.#map.size; }
+    /** Whether the trie holds no entries. */
     public get isEmpty(): boolean { return this.#map.isEmpty; }
+    /** The value stored for the key, or `undefined` when absent. */
     public get(key: K): V | undefined { return this.#map.get(key); }
+    /** The stored key representative and value, or `undefined` when absent. */
     public getEntry(key: K): HamtEntry<K, V> | undefined { return this.#map.getEntry(key); }
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.#map.containsKey(key); }
+    /**
+     * The captured root as an ordinary persistent map, in constant time. This is the bridge out of
+     * the mutable facade: the result is a value that never changes.
+     */
     public toPersistentHashMap(): PersistentHashMap<K, V> { return this.#map; }
     public [Symbol.iterator](): IterableIterator<HamtEntry<K, V>> { return this.#map[Symbol.iterator](); }
 }
@@ -26,6 +42,7 @@ export class ConcurrentHashTrieSnapshot<K, V> implements Iterable<HamtEntry<K, V
 export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
     #map: PersistentHashMap<K, V>;
     #generation = 0;
+    /** The retained policy defining equivalence. */
     public readonly policy: HashPolicy<K>;
 
     public constructor(policy: HashPolicy<K> = defaultHashPolicy<K>()) {
@@ -33,13 +50,23 @@ export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
         this.#map = PersistentHashMap.empty<K, V>(policy);
     }
 
+    /**
+     * Monotone counter incremented on every published root, so a caller can detect that some
+     * mutation occurred without comparing contents.
+     */
     public get generation(): number { return this.#generation; }
+    /** Number of entries. */
     public get size(): number { return this.#map.size; }
+    /** Whether the trie holds no entries. */
     public get isEmpty(): boolean { return this.#map.isEmpty; }
+    /** The value stored for the key, or `undefined` when absent. */
     public get(key: K): V | undefined { return this.#map.get(key); }
+    /** The stored key representative and value, or `undefined` when absent. */
     public getEntry(key: K): HamtEntry<K, V> | undefined { return this.#map.getEntry(key); }
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.#map.containsKey(key); }
 
+    /** A map with the key bound to the value, adding or replacing as needed. */
     public set(key: K, value: V): void {
         while (true) {
             const observed = this.#map;
@@ -48,6 +75,7 @@ export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
         }
     }
 
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(key: K, value: V): boolean {
         while (true) {
             const observed = this.#map;
@@ -99,6 +127,7 @@ export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
         }
     }
 
+    /** A trie without that entry; returns the receiver when it is absent. */
     public remove(key: K): HamtEntry<K, V> | undefined {
         while (true) {
             const observed = this.#map;
@@ -111,6 +140,7 @@ export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
         }
     }
 
+    /** An empty trie retaining the same policies; returns the receiver when already empty. */
     public clear(): void {
         while (true) {
             const observed = this.#map;
@@ -118,6 +148,7 @@ export class ConcurrentHashTrie<K, V> implements Iterable<HamtEntry<K, V>> {
         }
     }
 
+    /** The trie version this cursor is positioned in. */
     public snapshot(): ConcurrentHashTrieSnapshot<K, V> {
         return new ConcurrentHashTrieSnapshot(this.#map);
     }

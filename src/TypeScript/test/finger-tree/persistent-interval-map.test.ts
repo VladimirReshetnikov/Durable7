@@ -1,3 +1,7 @@
+/**
+ * Tests for the interval-keyed map: lexicographic key ordering, overlap not implying key equality,
+ * strict insertion, and stabbing and overlap queries driven by the cached maximum endpoint.
+ */
 import { describe, expect, it } from "vitest";
 
 import {

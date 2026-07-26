@@ -1,3 +1,10 @@
+/**
+ * The measured implicit AVL sequence that most of this package is built on.
+ *
+ * Caches a monoidal measure at every node, so choosing a different measure specializes the same
+ * tree into a different structure: counting gives positional access, summing gives cumulative-
+ * weight search, tracking a maximum gives a priority queue.
+ */
 import type { MeasurePolicy } from "./measures.js";
 
 interface SequenceNode<T, M> {
@@ -154,21 +161,30 @@ function* iterateNodes<T, M>(root: SequenceNode<T, M>): Generator<T, void> {
     }
 }
 
+/** The two sequences produced by a split; both share structure with the original. */
 export interface SequenceSplit<T, M> {
+    /** The elements before the split point. */
     readonly left: MeasuredSequence<T, M>;
+    /** The elements at and after the split point. */
     readonly right: MeasuredSequence<T, M>;
 }
 
+/** Where a measure-directed search landed, reported without splitting the sequence. */
 export interface SequenceLocate<T, M> {
+    /** The located element's index, or the length on a miss. */
     readonly index: number;
+    /** The combined measure of every element before the gap. */
     readonly measureBefore: M;
+    /** The value. */
     readonly value: T | undefined;
+    /** Whether a prefix actually satisfied the predicate. */
     readonly found: boolean;
 }
 
 /** Internal persistent measured AVL sequence shared by TypeScript collection facades. */
 export class MeasuredSequence<T, M> implements Iterable<T> {
     readonly #root: SequenceNode<T, M> | undefined;
+    /** The retained policy defining equivalence. */
     public readonly policy: MeasurePolicy<T, M>;
 
     private constructor(root: SequenceNode<T, M> | undefined, policy: MeasurePolicy<T, M>) {
@@ -176,16 +192,24 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         this.policy = policy;
     }
 
+    /** The empty sequence, retaining the supplied policy objects. */
     public static empty<T, M>(policy: MeasurePolicy<T, M>): MeasuredSequence<T, M> { return new MeasuredSequence(undefined, policy); }
+    /** Build a sequence from the given elements. */
     public static from<T, M>(values: Iterable<T>, policy: MeasurePolicy<T, M>): MeasuredSequence<T, M> {
         const materialized = Array.from(values);
         return new MeasuredSequence(buildBalanced(materialized, 0, materialized.length, policy), policy);
     }
+    /** Number of elements. */
     public get size(): number { return size(this.#root); }
+    /** Whether the sequence holds no elements. */
     public get isEmpty(): boolean { return this.#root === undefined; }
+    /** The combined measure of every element, read from the cached root measure. */
     public get measure(): M { return this.#root?.measure ?? this.policy.identity; }
+    /** The first element, or `undefined` when empty. */
     public front(): T | undefined { return this.at(0); }
+    /** The last element, or `undefined` when empty. */
     public back(): T | undefined { return this.at(this.size - 1); }
+    /** The element at the given index, or `undefined` when out of range. */
     public at(index: number): T | undefined {
         if (!Number.isInteger(index) || index < 0 || index >= this.size) return undefined;
         let current = this.#root;
@@ -198,14 +222,24 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         }
         return undefined;
     }
+    /** A sequence with the value added at the front. */
     public prepend(value: T): MeasuredSequence<T, M> { return new MeasuredSequence(join(undefined, value, this.#root, this.policy), this.policy); }
+    /** A sequence with the value added at the back. */
     public append(value: T): MeasuredSequence<T, M> { return new MeasuredSequence(join(this.#root, value, undefined, this.policy), this.policy); }
+    /**
+     * This sequence's elements followed by the other's, joining the two trees rather than copying
+     * either.
+     */
     public concat(other: MeasuredSequence<T, M>): MeasuredSequence<T, M> {
         if (this.policy !== other.policy) throw new TypeError("Sequences must retain the same measure policy object.");
         if (other.isEmpty) return this;
         if (this.isEmpty) return other;
         return new MeasuredSequence(concatNodes(this.#root, other.#root, this.policy), this.policy);
     }
+    /**
+     * The elements before the index and those from it on; both halves share structure with the
+     * receiver.
+     */
     public splitAt(index: number): SequenceSplit<T, M> | undefined {
         if (!Number.isInteger(index) || index < 0 || index > this.size) return undefined;
         if (index === 0) return { left: MeasuredSequence.empty(this.policy), right: this };
@@ -213,10 +247,12 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         const split = splitNodes(this.#root, index, this.policy);
         return { left: new MeasuredSequence(split.left, this.policy), right: new MeasuredSequence(split.right, this.policy) };
     }
+    /** A sequence with the value inserted so that it ends up at the given index. */
     public insertAt(index: number, value: T): MeasuredSequence<T, M> | undefined {
         const split = this.splitAt(index);
         return split === undefined ? undefined : split.left.append(value).concat(split.right);
     }
+    /** A sequence with the element at the given index replaced. */
     public setAt(index: number, value: T): MeasuredSequence<T, M> | undefined {
         if (!Number.isInteger(index) || index < 0 || index >= this.size) return undefined;
         const current = this.at(index);
@@ -225,12 +261,17 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         const second = first.right.splitAt(1)!;
         return first.left.append(value).concat(second.right);
     }
+    /** A sequence without the element at the given index. */
     public removeAt(index: number): MeasuredSequence<T, M> | undefined {
         if (!Number.isInteger(index) || index < 0 || index >= this.size) return undefined;
         const first = this.splitAt(index)!;
         const second = first.right.splitAt(1)!;
         return first.left.concat(second.right);
     }
+    /**
+     * The combined measure of the first `count` elements, summed from cached node measures rather
+     * than element by element.
+     */
     public prefixMeasure(count: number): M | undefined {
         if (!Number.isInteger(count) || count < 0 || count > this.size) return undefined;
         let result = this.policy.identity;
@@ -249,6 +290,11 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         }
         return result;
     }
+    /**
+     * Find the first position whose inclusive prefix measure satisfies the predicate. Because every
+     * node caches its measure, the search descends without visiting the elements it skips. The
+     * predicate is expected to be monotone.
+     */
     public locate(predicate: (prefix: M) => boolean): SequenceLocate<T, M> {
         let before = this.policy.identity;
         let index = 0;
@@ -265,6 +311,10 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         }
         return { index: this.size, measureBefore: before, value: undefined, found: false };
     }
+    /**
+     * Index of the first element not ordering below the probe, assuming the sequence is already
+     * sorted by the given comparison.
+     */
     public lowerBound(probe: T, comparator: (value: T, probe: T) => number): number {
         let current = this.#root;
         let base = 0;
@@ -281,6 +331,10 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         }
         return result;
     }
+    /**
+     * Index just past the elements equivalent to the probe, assuming the sequence is already
+     * sorted.
+     */
     public upperBound(probe: T, comparator: (value: T, probe: T) => number): number {
         let current = this.#root;
         let base = 0;
@@ -297,6 +351,10 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         }
         return result;
     }
+    /**
+     * Whether the two sequences have any node in common by identity, used to show that a derived
+     * version really shares structure.
+     */
     public sharesStructureWith(other: MeasuredSequence<T, M>): boolean {
         if (this.#root === other.#root) return true;
         if (this.#root === undefined || other.#root === undefined) return false;
@@ -317,6 +375,7 @@ export class MeasuredSequence<T, M> implements Iterable<T> {
         }
         return false;
     }
+    /** Copy the elements into an array, in order. */
     public toArray(): T[] { return Array.from(this); }
     public [Symbol.iterator](): IterableIterator<T> { return this.#root === undefined ? [][Symbol.iterator]() : iterateNodes(this.#root); }
 }

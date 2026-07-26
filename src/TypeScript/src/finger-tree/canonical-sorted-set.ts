@@ -1,3 +1,11 @@
+/**
+ * Canonical persistent sorted set built on a zip-zip tree.
+ *
+ * History independent: two sets holding the same elements under the same policy have the same
+ * shape, whatever sequence of edits produced them. Shape follows per-element ranks derived by keyed
+ * hashing rather than insertion order, which is what makes the set structurally comparable across
+ * versions and across ports.
+ */
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { defaultHash } from "../hamt/hash-policy.js";
 import { defaultComparator, type Comparator } from "./ordering.js";
@@ -16,7 +24,9 @@ function mix64(value: bigint): bigint {
 
 /** Comparator and keyed deterministic rank policy for canonical zip-zip sets. */
 export class ZipTreeRankPolicy<T> {
+    /** The retained comparator defining the ordering. */
     public readonly comparator: Comparator<T>;
+    /** The seed fixing this policy's rank key, or none when the key was generated randomly. */
     public readonly seed: bigint | undefined;
     readonly #rankHash: (value: T) => bigint;
     readonly #rankKey: Uint8Array;
@@ -25,6 +35,11 @@ export class ZipTreeRankPolicy<T> {
         this.comparator = comparator; this.#rankHash = rankHash; this.#rankKey = rankKey.slice(); this.seed = seed;
     }
 
+    /**
+     * A policy with a randomly generated rank key unless a seed fixes one. Supplying a comparator
+     * obliges the caller to supply a matching rank hash, since the default hash only knows the
+     * default ordering.
+     */
     public static create<T>(options: {
         readonly comparator?: Comparator<T>;
         readonly rankHash?: (value: T) => bigint | number;
@@ -40,6 +55,10 @@ export class ZipTreeRankPolicy<T> {
         return new ZipTreeRankPolicy(comparator, rankHash, rankKey, seed);
     }
 
+    /**
+     * A policy from an explicit rank key. This is how two processes agree on one canonical shape:
+     * the same key and comparator yield identical trees for identical contents.
+     */
     public static createKeyed<T>(rankKey: Uint8Array, options: {
         readonly comparator?: Comparator<T>;
         readonly rankHash?: (value: T) => bigint | number;
@@ -164,37 +183,69 @@ function* iterate<T>(root: Node<T>): Generator<T, void> {
     }
 }
 
+/**
+ * A membership result carrying the stored representative; on a miss it echoes the probe, so callers
+ * always have a value to work with.
+ */
 export interface CanonicalSetLookup<T> { readonly found: boolean; readonly value: T }
+/**
+ * Shape measurements returned by a successful structural audit, including how often the geometric
+ * rank tied and secondary ranks had to decide.
+ */
 export interface CanonicalSortedSetStatistics { readonly count: number; readonly height: number; readonly maximumGeometricRank: number; readonly priorityCollisionCount: number }
+/**
+ * The outcome of seeking a cursor. On a miss the cursor sits where the element would be inserted.
+ */
 export interface CanonicalCursorSearch<T> { readonly found: boolean; readonly cursor: CanonicalSortedSetCursor<T> }
 
 /** Immutable policy-canonical Cartesian search tree. */
 export class CanonicalSortedSet<T> implements Iterable<T> {
     readonly #root: Node<T> | undefined;
+    /** The retained policy defining equivalence. */
     public readonly policy: ZipTreeRankPolicy<T>;
     private constructor(root: Node<T> | undefined, policy: ZipTreeRankPolicy<T>) { this.#root = root; this.policy = policy; }
+    /** The empty set, retaining the supplied policy objects. */
     public static empty<T>(policy: ZipTreeRankPolicy<T>): CanonicalSortedSet<T> { return new CanonicalSortedSet(undefined, policy); }
+    /** Build a set from the given elements. */
     public static from<T>(values: Iterable<T>, policy: ZipTreeRankPolicy<T>): CanonicalSortedSet<T> { let result = CanonicalSortedSet.empty(policy); for (const value of values) result = result.add(value); return result; }
+    /** Number of elements. */
     public get size(): number { return this.#root?.count ?? 0; }
+    /** Number of elements. */
     public get count(): number { return this.size; }
+    /** Whether the set holds no elements. */
     public get isEmpty(): boolean { return this.#root === undefined; }
+    /** Tree height, exposed for structural diagnostics. */
     public get height(): number { return this.#root?.height ?? 0; }
+    /**
+     * A digest identifying this set's contents. Because the shape is canonical, two sets under the
+     * same policy hold the same elements exactly when their digests agree, so this compares whole
+     * sets in constant time.
+     */
     public get contentHash(): bigint { return this.#root?.digest() ?? 0n; }
     #find(value: T): Node<T> | undefined { let cursor = this.#root; while (cursor !== undefined) { const comparison = this.policy.comparator(value, cursor.item); if (comparison === 0) return cursor; cursor = comparison < 0 ? cursor.left : cursor.right; } return undefined; }
+    /** Whether the element is present. */
     public contains(value: T): boolean { return this.#find(value) !== undefined; }
+    /** The stored value representative, reported presence-safely. */
     public tryGetValue(value: T): CanonicalSetLookup<T> { const found = this.#find(value); return found === undefined ? { found: false, value } : { found: true, value: found.item }; }
+    /** A set containing the given element; returns the receiver when it is already present. */
     public add(value: T): CanonicalSortedSet<T> {
         const rank = this.policy.rank(value);
         const existing = this.#find(value);
         if (existing !== undefined) { if (!rankEqual(existing.rank, rank)) throw new Error("The rank hash is not constant on comparator equivalence classes."); return this; }
         return new CanonicalSortedSet(insert(this.#root, new Node(value, rank, undefined, undefined), this.policy.comparator), this.policy);
     }
+    /** A set without that element; returns the receiver when it is absent. */
     public remove(value: T): CanonicalSortedSet<T> { const result = remove(this.#root, value, this.policy.comparator); return result.removed ? new CanonicalSortedSet(result.root, this.policy) : this; }
+    /** An empty set retaining the same policies; returns the receiver when already empty. */
     public clear(): CanonicalSortedSet<T> { return this.isEmpty ? this : CanonicalSortedSet.empty(this.policy); }
     #compatible(other: CanonicalSortedSet<T>): void { if (this.policy !== other.policy) throw new TypeError("Canonical set algebra requires the same rank-policy object."); }
+    /** The elements of both sets. */
     public union(other: CanonicalSortedSet<T>): CanonicalSortedSet<T> { this.#compatible(other); if (this.#root === other.#root) return this; let result: CanonicalSortedSet<T> = this; for (const value of other) result = result.add(value); return result; }
+    /** The elements present in both sets. */
     public intersect(other: CanonicalSortedSet<T>): CanonicalSortedSet<T> { this.#compatible(other); if (this.#root === other.#root) return this; let result = CanonicalSortedSet.empty<T>(this.policy); for (const value of this) if (other.contains(value)) result = result.add(value); return result.setEquals(this) ? this : result; }
+    /** This set's elements that are absent from the other. */
     public except(other: CanonicalSortedSet<T>): CanonicalSortedSet<T> { this.#compatible(other); if (this.#root === other.#root) return this.clear(); let result: CanonicalSortedSet<T> = this; for (const value of other) result = result.remove(value); return result; }
+    /** Whether both sets hold the same elements. */
     public setEquals(values: Iterable<T>): boolean {
         if (values instanceof CanonicalSortedSet && values.policy === this.policy) {
             if (this === values) return true;
@@ -204,14 +255,26 @@ export class CanonicalSortedSet<T> implements Iterable<T> {
         const left = this[Symbol.iterator](); const right = other[Symbol.iterator]();
         while (true) { const a = left.next(); const b = right.next(); if (a.done || b.done) return a.done === b.done; if (this.policy.comparator(a.value, b.value) !== 0) return false; }
     }
+    /** Whether every element of this set also occurs in the other. */
     public isSubsetOf(values: Iterable<T>): boolean { const other = CanonicalSortedSet.from(values, this.policy); if (this.size > other.size) return false; for (const value of this) if (!other.contains(value)) return false; return true; }
+    /** Whether this set is a subset of the other and the other holds an element it lacks. */
     public isProperSubsetOf(values: Iterable<T>): boolean { const other = CanonicalSortedSet.from(values, this.policy); return this.size < other.size && this.isSubsetOf(other); }
+    /** Whether every element of the other occurs in this set. */
     public isSupersetOf(values: Iterable<T>): boolean { for (const value of values) if (!this.contains(value)) return false; return true; }
+    /** Whether this set is a superset of the other and holds an element the other lacks. */
     public isProperSupersetOf(values: Iterable<T>): boolean { const other = CanonicalSortedSet.from(values, this.policy); return this.size > other.size && this.isSupersetOf(other); }
+    /** Whether the two sets share at least one element. */
     public overlaps(values: Iterable<T>): boolean { for (const value of values) if (this.contains(value)) return true; return false; }
+    /** A cursor at the given gap of the set. */
     public cursorAt(position = 0): CanonicalSortedSetCursor<T> { return new CanonicalSortedSetCursor(this, position); }
+    /** A cursor before the first entry not below the probe, where it would be inserted. */
     public cursorAtLowerBound(value: T): CanonicalSortedSetCursor<T> { return this.cursorAt(this.#boundRank(value, false)); }
+    /** A cursor after any entry equivalent to the probe. */
     public cursorAtUpperBound(value: T): CanonicalSortedSetCursor<T> { return this.cursorAt(this.#boundRank(value, true)); }
+    /**
+     * Seek to the probe and report whether it is present. On a miss the cursor sits where the probe
+     * would be inserted and remains usable.
+     */
     public findCursor(value: T): CanonicalCursorSearch<T> {
         const cursor = this.cursorAtLowerBound(value);
         const next = cursor.peekNext();
@@ -226,6 +289,10 @@ export class CanonicalSortedSet<T> implements Iterable<T> {
         }
         return rank;
     }
+    /**
+     * Whether both sets share a node by identity. A representation test used to confirm a no-op
+     * avoided copying, not an equality test.
+     */
     public sharesStorageWith(other: CanonicalSortedSet<T>): boolean {
         if (this.#root === undefined || other.#root === undefined) return false; if (this.#root === other.#root) return true;
         const nodes = new Set<Node<T>>(); const first = [this.#root];
@@ -233,6 +300,10 @@ export class CanonicalSortedSet<T> implements Iterable<T> {
         const second = [other.#root]; while (second.length !== 0) { const node = second.pop()!; if (nodes.has(node)) return true; if (node.left !== undefined) second.push(node.left); if (node.right !== undefined) second.push(node.right); }
         return false;
     }
+    /**
+     * Walk the whole set and check its invariants, throwing on the first violation. A defensive
+     * audit, not part of normal use.
+     */
     public validateStructure(): CanonicalSortedSetStatistics {
         if (this.#root === undefined) return { count: 0, height: 0, maximumGeometricRank: 0, priorityCollisionCount: 0 };
         const pending: Array<readonly [Node<T>, T | undefined, T | undefined, number]> = [[this.#root, undefined, undefined, 1]];
@@ -260,16 +331,31 @@ export class CanonicalSortedSetCursor<T> {
     public constructor(public readonly set: CanonicalSortedSet<T>, public readonly position = 0) {
         if (!Number.isInteger(position) || position < 0 || position > set.size) throw new RangeError("Cursor position is outside the canonical sorted set.");
     }
+    /** Number of elements. */
     public get size(): number { return this.set.size; }
+    /** Whether the gap precedes the first element. */
     public get isAtStart(): boolean { return this.position === 0; }
+    /** Whether the gap follows the last element. */
     public get isAtEnd(): boolean { return this.position === this.size; }
+    /** The element immediately before the gap, or `undefined` at the start. */
     public peekPrevious(): { readonly value: T } | undefined { return this.isAtStart ? undefined : { value: Array.from(this.set)[this.position - 1]! }; }
+    /** The element immediately after the gap, or `undefined` at the end. */
     public peekNext(): { readonly value: T } | undefined { return this.isAtEnd ? undefined : { value: Array.from(this.set)[this.position]! }; }
+    /**
+     * A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+     * the same version.
+     */
     public movePrevious(): CanonicalSortedSetCursor<T> { if (this.isAtStart) throw new RangeError("Cursor is already at the start."); return new CanonicalSortedSetCursor(this.set, this.position - 1); }
+    /** A cursor one position later. The receiver is unchanged. */
     public moveNext(): CanonicalSortedSetCursor<T> { if (this.isAtEnd) throw new RangeError("Cursor is already at the end."); return new CanonicalSortedSetCursor(this.set, this.position + 1); }
+    /** A cursor at the given rank within the same set version. */
     public seekRank(position: number): CanonicalSortedSetCursor<T> { return position === this.position ? this : new CanonicalSortedSetCursor(this.set, position); }
+    /** A set containing the given element; returns the receiver when it is already present. */
     public add(value: T): CanonicalSortedSetCursor<T> { const location = this.set.cursorAtLowerBound(value); return new CanonicalSortedSetCursor(this.set.add(value), location.position + 1); }
+    /** Remove the element before the gap and return a cursor in its place. */
     public deletePrevious(): CanonicalSortedSetCursor<T> { const item = this.peekPrevious(); if (item === undefined) throw new RangeError("No item precedes the cursor."); return new CanonicalSortedSetCursor(this.set.remove(item.value), this.position - 1); }
+    /** Remove the element after the gap and return a cursor in its place. */
     public deleteNext(): CanonicalSortedSetCursor<T> { const item = this.peekNext(); if (item === undefined) throw new RangeError("No item follows the cursor."); return new CanonicalSortedSetCursor(this.set.remove(item.value), this.position); }
+    /** The set version this cursor is positioned in. */
     public snapshot(): CanonicalSortedSet<T> { return this.set; }
 }

@@ -1,3 +1,10 @@
+/**
+ * Persistent many-to-many relation with both directions materialized.
+ *
+ * Keeps two mutually inverse multimaps updated and published together, so asking which left values
+ * relate to a right value is as cheap as the forward question and inversion is constant time. The
+ * cost is roughly two entries per logical pair.
+ */
 import { defaultHashPolicy, type HashPolicy } from "./hash-policy.js";
 import {
     type HashMultimapEntry,
@@ -7,7 +14,9 @@ import { PersistentHashSet } from "./persistent-hamt.js";
 
 /** One stored representative pair from a many-to-many relation. */
 export interface RelationEntry<L, R> {
+    /** The pair's left value. */
     readonly left: L;
+    /** The pair's right value. */
     readonly right: R;
 }
 
@@ -30,6 +39,7 @@ export class PersistentRelation<L, R> implements Iterable<RelationEntry<L, R>> {
         this.#reverse = reverse;
     }
 
+    /** The empty relation, retaining the supplied policy objects. */
     public static empty<L, R>(
         leftPolicy: HashPolicy<L> = defaultHashPolicy<L>(),
         rightPolicy: HashPolicy<R> = defaultHashPolicy<R>(),
@@ -40,6 +50,7 @@ export class PersistentRelation<L, R> implements Iterable<RelationEntry<L, R>> {
         );
     }
 
+    /** Build a relation from the given pairs. */
     public static from<L, R>(
         entries: Iterable<readonly [L, R]>,
         leftPolicy: HashPolicy<L> = defaultHashPolicy<L>(),
@@ -51,11 +62,17 @@ export class PersistentRelation<L, R> implements Iterable<RelationEntry<L, R>> {
         return result;
     }
 
+    /** Number of pairs, maintained incrementally rather than derived by summing groups. */
     public get pairCount(): number { return this.#forward.pairCount; }
+    /** Number of distinct left values participating in at least one pair. */
     public get leftCount(): number { return this.#forward.keyCount; }
+    /** Number of distinct right values participating in at least one pair. */
     public get rightCount(): number { return this.#reverse.keyCount; }
+    /** Whether the relation holds no pairs. */
     public get isEmpty(): boolean { return this.#forward.isEmpty; }
+    /** The retained hash policy defining left-value equivalence. */
     public get leftPolicy(): HashPolicy<L> { return this.#forward.keyPolicy; }
+    /** The retained hash policy defining right-value equivalence. */
     public get rightPolicy(): HashPolicy<R> { return this.#reverse.keyPolicy; }
 
     /** Returns a cached O(1) facade over the already-built reverse and forward roots. */
@@ -67,11 +84,19 @@ export class PersistentRelation<L, R> implements Iterable<RelationEntry<L, R>> {
         return inverse;
     }
 
+    /** Whether the pair is present. */
     public contains(left: L, right: R): boolean { return this.#forward.contains(left, right); }
+    /** Whether the left value participates in at least one pair. */
     public containsLeft(left: L): boolean { return this.#forward.containsKey(left); }
+    /**
+     * Whether the right value participates in at least one pair. As cheap as the forward question,
+     * because the reverse index is materialized.
+     */
     public containsRight(right: R): boolean { return this.#reverse.containsKey(right); }
 
+    /** The right values related to the given left value. */
     public getRights(left: L): PersistentHashSet<R> { return this.#forward.getValues(left); }
+    /** The left values related to the given right value. */
     public getLefts(right: R): PersistentHashSet<L> { return this.#reverse.getValues(right); }
 
     /** Adds a pair while reusing each domain's global first representative. */
@@ -86,6 +111,7 @@ export class PersistentRelation<L, R> implements Iterable<RelationEntry<L, R>> {
         );
     }
 
+    /** A relation without that pair; returns the receiver when it is absent. */
     public remove(left: L, right: R): PersistentRelation<L, R> {
         const storedLeft = this.#forward.getStoredKey(left);
         const storedRight = this.#reverse.getStoredKey(right);
@@ -118,6 +144,7 @@ export class PersistentRelation<L, R> implements Iterable<RelationEntry<L, R>> {
         return new PersistentRelation(forward, this.#reverse.removeKey(storedRight));
     }
 
+    /** An empty relation retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentRelation<L, R> {
         return this.isEmpty ? this : PersistentRelation.empty(this.leftPolicy, this.rightPolicy);
     }

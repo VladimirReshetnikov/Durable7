@@ -1,3 +1,7 @@
+/**
+ * Tests for the strict map patch: all-or-nothing application, inversion restoring the source, and
+ * composition matching sequential application.
+ */
 import { describe, expect, it } from "vitest";
 
 import {

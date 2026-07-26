@@ -1,3 +1,7 @@
+/**
+ * Tests for the insertion-ordered map: first key representative and position retained while
+ * payloads are replaced, plus explicit movement and its failure cases.
+ */
 import { describe, expect, it } from "vitest";
 
 import {

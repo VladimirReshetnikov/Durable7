@@ -1,3 +1,10 @@
+/**
+ * DABA Lite: a FIFO sliding-window aggregate with worst-case constant work per operation.
+ *
+ * Keeps the monoid combination of a FIFO window current under pushes and evictions without
+ * recomputing it, by performing one bounded step of an incremental reversal per call. Unlike the
+ * rest of this package it is deliberately mutable.
+ */
 import type { Monoid } from "./measures.js";
 
 const chunkCapacity = 64;
@@ -51,15 +58,29 @@ class ChunkedQueue<T> {
     }
 }
 
+/**
+ * Cursor positions and chunk occupancy returned by a structural audit. The interior lengths
+ * describe how far the incremental reversal has progressed, which is what the worst-case bounds are
+ * stated in terms of.
+ */
 export interface DabaLiteStatistics {
+    /** Number of values. */
     readonly count: number;
+    /** Distance from the window front to the first interior cursor. */
     readonly frontLength: number;
+    /** Distance covered by the back aggregate. */
     readonly backLength: number;
+    /** Length of the left partial-reversal region. */
     readonly leftLength: number;
+    /** Length of the right partial-reversal region. */
     readonly rightLength: number;
+    /** Length of the region the running accumulator covers. */
     readonly accumulatorLength: number;
+    /** Number of blocks the tree encodes into. */
     readonly blockCount: number;
+    /** Total slots across the allocated chunks. */
     readonly allocatedSlotCapacity: number;
+    /** Allocated slots not currently holding a value. */
     readonly slackSlotCount: number;
 }
 
@@ -85,10 +106,17 @@ export class DabaLite<T> {
         this.#aggregateB = monoid.identity;
     }
 
+    /** Number of values. */
     public get count(): number { return this.#count; }
+    /** Whether the window holds no values. */
     public get isEmpty(): boolean { return this.#count === 0; }
+    /**
+     * The combination of every value in the window, in order. At most one combine, because the
+     * incremental reversal keeps both halves summarized.
+     */
     public get aggregate(): T { return this.#count === 0 ? this.#monoid.identity : this.#monoid.combine(this.#queue.read(this.#f), this.#aggregateB); }
 
+    /** A window with the value inserted at the given index. */
     public insert(value: T): void {
         if (this.#count === Number.MAX_SAFE_INTEGER) throw new RangeError("The DABA Lite window is too large.");
         const oldEnd = this.#e;
@@ -114,8 +142,13 @@ export class DabaLite<T> {
         }
     }
 
+    /** Remove the value at the front of the window, throwing when it is empty. */
     public evict(): void { if (!this.tryEvict()) throw new Error("Cannot evict from an empty DABA Lite window."); }
 
+    /**
+     * Remove the front value, reporting whether there was one. A monoid callback that throws leaves
+     * the window unchanged.
+     */
     public tryEvict(): boolean {
         if (this.#count === 0) return false;
         const oldFront = this.#f;
@@ -129,6 +162,7 @@ export class DabaLite<T> {
         return true;
     }
 
+    /** An empty window retaining the same policies; returns the receiver when already empty. */
     public clear(): void {
         if (this.#count === 0) return;
         const identity = this.#monoid.identity;
@@ -137,6 +171,10 @@ export class DabaLite<T> {
         this.#aggregateRA = identity; this.#aggregateB = identity; this.#count = 0;
     }
 
+    /**
+     * Walk the whole window and check its invariants, throwing on the first violation. A defensive
+     * audit, not part of normal use.
+     */
     public validateStructure(): DabaLiteStatistics {
         for (const [name, cursor] of [["F", this.#f], ["L", this.#l], ["R", this.#r], ["A", this.#a], ["B", this.#b], ["E", this.#e]] as const) {
             if (cursor.index < 0 || cursor.index >= chunkCapacity) throw new Error(`The DABA Lite ${name} cursor has an invalid index.`);

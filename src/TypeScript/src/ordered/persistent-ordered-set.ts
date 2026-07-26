@@ -1,3 +1,10 @@
+/**
+ * Persistent insertion-ordered set with explicit repositioning and stable sorting.
+ *
+ * Pairs a hash index from element to order stamp with an ordered sequence of stamped entries, so
+ * membership stays constant time while iteration follows insertion order. Stamps are spaced apart,
+ * which lets a move usually pick a stamp between its neighbors instead of restamping everything.
+ */
 import { FingerTree } from "../finger-tree/core.js";
 import { type MeasurePolicy } from "../finger-tree/measures.js";
 import { defaultComparator, type Comparator } from "../finger-tree/ordering.js";
@@ -68,12 +75,18 @@ export type OrderedSetCursorPeek<T> =
 
 /** Result of a removal attempt; misses retain the exact receiver. */
 export interface OrderedSetRemoveResult<T> {
+    /**
+     * Whether an element was actually removed; keeps a removed `undefined` distinct from nothing
+     * having matched.
+     */
     readonly removed: boolean;
+    /** A map with the key bound to the value, adding or replacing as needed. */
     readonly set: PersistentOrderedSet<T>;
 }
 
 /** Public diagnostics for the independently owned order/membership invariants. */
 export interface PersistentOrderedSetStatistics {
+    /** Number of elements. */
     readonly count: number;
 }
 
@@ -156,9 +169,13 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return PersistentOrderedSet.from(items, policy);
     }
 
+    /** Number of elements. */
     public get size(): number { return this.#order.size; }
+    /** Number of elements. */
     public get count(): number { return this.size; }
+    /** Whether the set holds no elements. */
     public get isEmpty(): boolean { return this.#order.isEmpty; }
+    /** The retained policy defining equivalence. */
     public get policy(): HashPolicy<T> { return this.#stamps.policy; }
 
     /** Gets the first representative, throwing when the set is empty. */
@@ -175,6 +192,7 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return entry.item;
     }
 
+    /** Whether the element is present. */
     public contains(item: T): boolean { return this.#stamps.containsKey(item); }
 
     /** Returns the stored first representative on a hit and echoes the lookup value on a miss. */
@@ -185,11 +203,13 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
             : { found: true, value: entry.key };
     }
 
+    /** The element at the given ordinal rank, or `undefined` when out of range. */
     public getAt(index: number): T {
         requireElementIndex(index, this.size);
         return this.#order.get(index)!.item;
     }
 
+    /** The ordinal rank of the element, or `-1` when absent. */
     public indexOf(equalValue: T): number {
         const entry = this.#stamps.getEntry(equalValue);
         return entry === undefined ? -1 : this.indexOfStamp(entry.value);
@@ -224,10 +244,12 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return this.insertCore(index, item);
     }
 
+    /** Move a stored representative to the front, keeping the representative itself. */
     public moveToFirst(equalValue: T): PersistentOrderedSet<T> {
         return this.moveExisting(0, equalValue);
     }
 
+    /** Move a stored representative to the back, keeping the representative itself. */
     public moveToLast(equalValue: T): PersistentOrderedSet<T> {
         return this.moveExisting(this.size - 1, equalValue);
     }
@@ -238,6 +260,7 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return this.moveExisting(index, equalValue);
     }
 
+    /** A set without that element; returns the receiver when it is absent. */
     public remove(equalValue: T): PersistentOrderedSet<T> {
         return this.tryRemove(equalValue).set;
     }
@@ -253,6 +276,7 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return { removed: true, set: PersistentOrderedSet.wrap(order, removed.map) };
     }
 
+    /** A set without the element at the given index. */
     public removeAt(index: number): PersistentOrderedSet<T> {
         requireElementIndex(index, this.size);
         const entry = this.#order.get(index)!;
@@ -263,16 +287,19 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return PersistentOrderedSet.wrap(this.#order.removeAt(index)!, removed.map);
     }
 
+    /** A set without its first element. */
     public removeFirst(): PersistentOrderedSet<T> {
         if (this.isEmpty) throw new Error("The ordered set is empty.");
         return this.removeAt(0);
     }
 
+    /** A set without its last element. */
     public removeLast(): PersistentOrderedSet<T> {
         if (this.isEmpty) throw new Error("The ordered set is empty.");
         return this.removeAt(this.size - 1);
     }
 
+    /** An empty set retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentOrderedSet<T> {
         return this.isEmpty ? this : PersistentOrderedSet.empty(this.policy);
     }
@@ -301,16 +328,19 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return new PersistentOrderedSet(kept, stamps);
     }
 
+    /** The first `count` elements as a new set, preserving their order. */
     public take(count: number): PersistentOrderedSet<T> {
         requireCount(count, this.size);
         return this.getRange(0, count);
     }
 
+    /** Every element after the first `count`, preserving their order. */
     public drop(count: number): PersistentOrderedSet<T> {
         requireCount(count, this.size);
         return this.getRange(count, this.size - count);
     }
 
+    /** A set with the order reversed. */
     public reverse(): PersistentOrderedSet<T> {
         if (this.size <= 1) return this;
         return PersistentOrderedSet.buildFromItems(this.toArray().reverse(), this.policy);
@@ -384,37 +414,44 @@ export class PersistentOrderedSet<T> implements Iterable<T> {
         return PersistentOrderedSet.buildFromItems(result, this.policy);
     }
 
+    /** Whether every element of this set also occurs in the other. */
     public isSubsetOf(other: Iterable<T>): boolean {
         const argument = this.normalize(other);
         return this.size <= argument.items.length && this.everyReceiverOccursIn(argument.membership);
     }
 
+    /** Whether this set is a subset of the other and the other holds an element it lacks. */
     public isProperSubsetOf(other: Iterable<T>): boolean {
         const argument = this.normalize(other);
         return this.size < argument.items.length && this.everyReceiverOccursIn(argument.membership);
     }
 
+    /** Whether every element of the other occurs in this set. */
     public isSupersetOf(other: Iterable<T>): boolean {
         const argument = this.normalize(other);
         return this.size >= argument.items.length && this.everyArgumentOccursHere(argument.items);
     }
 
+    /** Whether this set is a superset of the other and holds an element the other lacks. */
     public isProperSupersetOf(other: Iterable<T>): boolean {
         const argument = this.normalize(other);
         return this.size > argument.items.length && this.everyArgumentOccursHere(argument.items);
     }
 
+    /** Whether the two sets share at least one element. */
     public overlaps(other: Iterable<T>): boolean {
         const argument = this.normalize(other);
         for (const item of argument.items) if (this.#stamps.containsKey(item)) return true;
         return false;
     }
 
+    /** Whether both sets hold the same elements. */
     public setEquals(other: Iterable<T>): boolean {
         const argument = this.normalize(other);
         return this.size === argument.items.length && this.everyArgumentOccursHere(argument.items);
     }
 
+    /** Copy the elements into an array, in order. */
     public toArray(): T[] { return Array.from(this); }
 
     public *[Symbol.iterator](): IterableIterator<T> {
@@ -606,32 +643,46 @@ export class PersistentOrderedSetCursor<T> {
         requireInsertionIndex(position, snapshot.size);
     }
 
+    /** Number of elements. */
     public get size(): number { return this.snapshot.size; }
+    /** Whether the gap precedes the first element. */
     public get isAtStart(): boolean { return this.position === 0; }
+    /** Whether the gap follows the last element. */
     public get isAtEnd(): boolean { return this.position === this.size; }
 
+    /**
+     * The element before the gap, reported presence-safely so a stored `undefined` stays distinct
+     * from "nothing there".
+     */
     public tryPeekPrevious(): OrderedSetCursorPeek<T> {
         return this.isAtStart
             ? { found: false }
             : { found: true, value: this.snapshot.getAt(this.position - 1) };
     }
 
+    /** The element after the gap, reported presence-safely. */
     public tryPeekNext(): OrderedSetCursorPeek<T> {
         return this.isAtEnd
             ? { found: false }
             : { found: true, value: this.snapshot.getAt(this.position) };
     }
 
+    /**
+     * A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+     * the same version.
+     */
     public movePrevious(): PersistentOrderedSetCursor<T> {
         if (this.isAtStart) throw new RangeError("The ordered-set cursor is already at the start.");
         return new PersistentOrderedSetCursor(this.snapshot, this.position - 1);
     }
 
+    /** A cursor one position later. The receiver is unchanged. */
     public moveNext(): PersistentOrderedSetCursor<T> {
         if (this.isAtEnd) throw new RangeError("The ordered-set cursor is already at the end.");
         return new PersistentOrderedSetCursor(this.snapshot, this.position + 1);
     }
 
+    /** A cursor at the given position within the same set version. */
     public seek(position: number): PersistentOrderedSetCursor<T> {
         return position === this.position ? this : new PersistentOrderedSetCursor(this.snapshot, position);
     }
@@ -644,6 +695,10 @@ export class PersistentOrderedSetCursor<T> {
             : new PersistentOrderedSetCursor(snapshot, this.position + 1);
     }
 
+    /**
+     * Insert, reporting whether an entry was added. On a duplicate the returned cursor focuses the
+     * retained entry.
+     */
     public tryInsert(item: T): {
         readonly inserted: boolean;
         readonly cursor: PersistentOrderedSetCursor<T>;
@@ -652,6 +707,7 @@ export class PersistentOrderedSetCursor<T> {
         return { inserted: cursor !== this, cursor };
     }
 
+    /** Remove the element before the gap and return a cursor in its place. */
     public deletePrevious(): PersistentOrderedSetCursor<T> {
         if (this.isAtStart) throw new RangeError("The ordered-set cursor has no previous representative.");
         return new PersistentOrderedSetCursor(
@@ -660,6 +716,7 @@ export class PersistentOrderedSetCursor<T> {
         );
     }
 
+    /** Remove the element after the gap and return a cursor in its place. */
     public deleteNext(): PersistentOrderedSetCursor<T> {
         if (this.isAtEnd) throw new RangeError("The ordered-set cursor has no next representative.");
         return new PersistentOrderedSetCursor(this.snapshot.removeAt(this.position), this.position);

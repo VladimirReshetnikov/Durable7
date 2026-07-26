@@ -1,3 +1,7 @@
+/**
+ * Tests for the integer Patricia tries: ascending traversal, structural merges, and the key-width
+ * bound on every operation.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import {

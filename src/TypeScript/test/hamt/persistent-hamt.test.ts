@@ -1,3 +1,7 @@
+/**
+ * Tests for the CHAMP map and set: policy-bound equivalence, first-representative retention, no-op
+ * root sharing, and structural set algebra.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import {

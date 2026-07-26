@@ -1,3 +1,7 @@
+/**
+ * Cross-family tests for the insertion-ordered cursors, asserting that an insertion result reports
+ * whether an entry was added rather than whether one was already present.
+ */
 import { describe, expect, it } from "vitest";
 
 import {

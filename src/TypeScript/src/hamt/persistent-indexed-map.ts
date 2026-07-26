@@ -1,3 +1,10 @@
+/**
+ * Persistent map with one automatically maintained secondary index.
+ *
+ * A primary map plus a derived nonunique index keyed by a caller-supplied projection. Every
+ * mutation updates both and publishes only when both are complete, so the index cannot drift from
+ * the primary map the way a hand-maintained side table can.
+ */
 import { defaultHashPolicy, sameValueZero, type HashPolicy } from "./hash-policy.js";
 import { PersistentHashMultimap } from "./persistent-hash-multimap.js";
 import { DuplicateKeyError, PersistentHashMap, PersistentHashSet } from "./persistent-hamt.js";
@@ -9,7 +16,9 @@ interface IndexedValue<V, I> {
 
 /** One primary-key/value row from a persistent indexed map. */
 export interface IndexedMapEntry<K, V> {
+    /** The key. */
     readonly key: K;
+    /** The value. */
     readonly value: V;
 }
 
@@ -20,7 +29,9 @@ export type IndexedMapLookup<K, V> =
 
 /** Nonthrowing strict-add result. */
 export interface IndexedMapAddResult<K, V, I> {
+    /** Whether a new entry was published. */
     readonly added: boolean;
+    /** The resulting collection. */
     readonly map: PersistentIndexedMap<K, V, I>;
 }
 
@@ -39,6 +50,7 @@ export class PersistentIndexedMap<K, V, I> implements Iterable<IndexedMapEntry<K
         this.#index = index;
     }
 
+    /** The empty map, retaining the supplied policy objects. */
     public static empty<K, V, I>(
         indexSelector: (key: K, value: V) => I,
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
@@ -54,6 +66,7 @@ export class PersistentIndexedMap<K, V, I> implements Iterable<IndexedMapEntry<K
         );
     }
 
+    /** Build a map from the given entries. */
     public static from<K, V, I>(
         entries: Iterable<readonly [K, V]>,
         indexSelector: (key: K, value: V) => I,
@@ -67,16 +80,30 @@ export class PersistentIndexedMap<K, V, I> implements Iterable<IndexedMapEntry<K
         return result;
     }
 
+    /** Number of entries. */
     public get size(): number { return this.#primary.size; }
+    /** Number of entries. */
     public get count(): number { return this.size; }
+    /**
+     * Number of distinct index keys; never more than the entry count, since the index is nonunique.
+     */
     public get indexKeyCount(): number { return this.#index.keyCount; }
+    /** Whether the map holds no entries. */
     public get isEmpty(): boolean { return this.#primary.isEmpty; }
+    /** The retained hash policy defining key equivalence. */
     public get keyPolicy(): HashPolicy<K> { return this.#primary.policy; }
+    /** The retained hash policy defining index-key equivalence. */
     public get indexPolicy(): HashPolicy<I> { return this.#index.keyPolicy; }
 
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.#primary.containsKey(key); }
+    /** The value stored for the key, or `undefined` when absent. */
     public get(key: K): V | undefined { return this.#primary.getEntry(key)?.value.value; }
 
+    /**
+     * The stored entry, reported presence-safely so a stored `undefined` stays distinct from
+     * absence.
+     */
     public tryGetEntry(key: K): IndexedMapLookup<K, V> {
         const entry = this.#primary.getEntry(key);
         return entry === undefined
@@ -84,11 +111,25 @@ export class PersistentIndexedMap<K, V, I> implements Iterable<IndexedMapEntry<K
             : { found: true, entry: { key: entry.key, value: entry.value.value } };
     }
 
+    /**
+     * The stored key representative, which is the first inserted for its class and survives value
+     * replacement.
+     */
     public getStoredKey(key: K): K | undefined { return this.#primary.getEntry(key)?.key; }
+    /**
+     * The index key currently filed for that primary key, as recorded at write time rather than by
+     * re-running the selector.
+     */
     public getIndexKey(key: K): I | undefined { return this.#primary.getEntry(key)?.value.indexKey; }
+    /**
+     * The primary keys filed under that index key. This is the point of the secondary index: the
+     * lookup does not scan the primary map.
+     */
     public getKeys(indexKey: I): PersistentHashSet<K> { return this.#index.getValues(indexKey); }
+    /** Whether at least one entry is filed under that index key. */
     public containsIndexKey(indexKey: I): boolean { return this.#index.containsKey(indexKey); }
 
+    /** A map containing the given entry; returns the receiver when it is already present. */
     public add(key: K, value: V): PersistentIndexedMap<K, V, I> {
         if (this.#primary.containsKey(key)) throw new DuplicateKeyError();
         const selected = this.indexSelector(key, value);
@@ -102,10 +143,12 @@ export class PersistentIndexedMap<K, V, I> implements Iterable<IndexedMapEntry<K
         );
     }
 
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(key: K, value: V): IndexedMapAddResult<K, V, I> {
         return this.#primary.containsKey(key) ? { added: false, map: this } : { added: true, map: this.add(key, value) };
     }
 
+    /** A map with the key bound to the value, adding or replacing as needed. */
     public set(key: K, value: V): PersistentIndexedMap<K, V, I> {
         const current = this.#primary.getEntry(key);
         if (current === undefined) return this.add(key, value);
@@ -126,6 +169,7 @@ export class PersistentIndexedMap<K, V, I> implements Iterable<IndexedMapEntry<K
         );
     }
 
+    /** A map without that entry; returns the receiver when it is absent. */
     public remove(key: K): PersistentIndexedMap<K, V, I> {
         const current = this.#primary.getEntry(key);
         if (current === undefined) return this;
@@ -137,22 +181,32 @@ export class PersistentIndexedMap<K, V, I> implements Iterable<IndexedMapEntry<K
         );
     }
 
+    /** An empty map retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentIndexedMap<K, V, I> {
         return this.isEmpty
             ? this
             : PersistentIndexedMap.empty(this.indexSelector, this.keyPolicy, this.valueEquals, this.indexPolicy);
     }
 
+    /** Iterate the keys. */
     public keys(): IterableIterator<K> { return this.#primary.keys(); }
     public *values(): Generator<V, void> { for (const entry of this.#primary) yield entry.value.value; }
     public *[Symbol.iterator](): IterableIterator<IndexedMapEntry<K, V>> {
         for (const entry of this.#primary) yield { key: entry.key, value: entry.value.value };
     }
 
+    /**
+     * Whether both maps share the primary and index representations. A representation test, not an
+     * equality test.
+     */
     public sharesRootsWith(other: PersistentIndexedMap<K, V, I>): boolean {
         return this.#primary.sharesRootWith(other.#primary) && this.#index.sharesRootWith(other.#index);
     }
 
+    /**
+     * Walk the whole map and check its invariants, throwing on the first violation. A defensive
+     * audit, not part of normal use.
+     */
     public validateStructure(): { readonly count: number; readonly indexKeyCount: number } {
         if (!this.#index.validateStructure() || this.#primary.size !== this.#index.pairCount) {
             throw new Error("The indexed map's primary and secondary counts disagree.");

@@ -1,3 +1,7 @@
+/**
+ * Compares the range-update sequence against an eager reference model under generated edit
+ * histories.
+ */
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { RangeUpdateSequence } from "../../src/finger-tree/range-update-sequence.js";

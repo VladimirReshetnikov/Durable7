@@ -1,3 +1,6 @@
+/**
+ * Public entry point for the finger-tree family: sequences, ropes, ordered and priority structures.
+ */
 export * from "./ordering.js";
 export * from "./measures.js";
 export * from "./core.js";

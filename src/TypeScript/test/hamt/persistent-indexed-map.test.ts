@@ -1,3 +1,7 @@
+/**
+ * Tests that the secondary index cannot drift from the primary map, counting index-selector
+ * invocations across adds, no-op writes, changes, and removals.
+ */
 import { describe, expect, it } from "vitest";
 
 import { createHashPolicy, DuplicateKeyError, PersistentIndexedMap } from "../../src/hamt/index.js";

@@ -1,3 +1,7 @@
+/**
+ * Tests for the insertion-ordered set: representative retention, explicit movement against
+ * resulting positions, order-stamp relabeling, and stable sorting.
+ */
 import { describe, expect, test } from "vitest";
 import {
     OrderedSetMissingValueError,

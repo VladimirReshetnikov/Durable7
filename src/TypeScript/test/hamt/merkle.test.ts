@@ -1,3 +1,7 @@
+/**
+ * Wire-format conformance tests for the Merkle search tree, plus proofs, storage, synchronization,
+ * and merge. These are the tests that keep this port byte-identical to its siblings.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import {

@@ -1,3 +1,7 @@
+/**
+ * Tests that a range-update sequence is left unchanged when a caller-supplied algebra callback
+ * throws.
+ */
 import { describe, expect, it } from "vitest";
 import { RangeUpdateSequence } from "../../src/finger-tree/range-update-sequence.js";
 import {

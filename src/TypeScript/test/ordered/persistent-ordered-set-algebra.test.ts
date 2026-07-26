@@ -1,3 +1,7 @@
+/**
+ * Tests for insertion-ordered set algebra, checking that results are judged under the receiver's
+ * policy and keep the receiver's representatives and order.
+ */
 import { describe, expect, test } from "vitest";
 import { PersistentOrderedSet } from "../../src/ordered/index.js";
 import {

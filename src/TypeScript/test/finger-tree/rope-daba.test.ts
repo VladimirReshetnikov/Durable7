@@ -1,3 +1,7 @@
+/**
+ * Tests for the rope layers and the DABA Lite sliding-window aggregate, including chunk handling,
+ * text line navigation, and worst-case callback bounds.
+ */
 import { describe, expect, test } from "vitest";
 import {
     DabaLite,

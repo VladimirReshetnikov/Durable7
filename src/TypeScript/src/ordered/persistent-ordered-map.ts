@@ -1,3 +1,10 @@
+/**
+ * Persistent insertion-ordered map with explicit repositioning.
+ *
+ * Separates identity, decided by hashing and equality, from position, which follows insertion order
+ * unless the caller moves an entry. Re-adding an existing key keeps its position and stored key
+ * representative while replacing the payload.
+ */
 import { FingerTree } from "../finger-tree/core.js";
 import type { MeasurePolicy } from "../finger-tree/measures.js";
 import type { Comparator } from "../finger-tree/ordering.js";
@@ -17,7 +24,9 @@ interface StoredOrderedMapEntry<K, V> {
 
 /** One stored key/value representative in explicit map order. */
 export interface OrderedMapEntry<K, V> {
+    /** The key. */
     readonly key: K;
+    /** The value. */
     readonly value: V;
 }
 
@@ -28,7 +37,9 @@ export type OrderedMapLookup<K, V> =
 
 /** Nonthrowing strict-add result. */
 export interface OrderedMapAddResult<K, V> {
+    /** Whether a new entry was published, as opposed to an equivalent key already being present. */
     readonly added: boolean;
+    /** The resulting collection. */
     readonly map: PersistentOrderedMap<K, V>;
 }
 
@@ -91,6 +102,7 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         this.#stamps = stamps;
     }
 
+    /** The empty map, retaining the supplied policy objects. */
     public static empty<K, V>(
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
         valueEquals: (left: V, right: V) => boolean = sameValueZero,
@@ -114,30 +126,42 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         return result;
     }
 
+    /** Number of entries. */
     public get size(): number { return this.#order.size; }
+    /** Number of entries. */
     public get count(): number { return this.size; }
+    /** Whether the map holds no entries. */
     public get isEmpty(): boolean { return this.#order.isEmpty; }
+    /** The retained hash policy defining key equivalence. */
     public get keyPolicy(): HashPolicy<K> { return this.#stamps.policy; }
 
+    /** The first entry in order, or `undefined` when empty. */
     public get first(): OrderedMapEntry<K, V> {
         const entry = this.#order.front();
         if (entry === undefined) throw new Error("The ordered map is empty.");
         return { key: entry.key, value: entry.value };
     }
 
+    /** The last entry in order, or `undefined` when empty. */
     public get last(): OrderedMapEntry<K, V> {
         const entry = this.#order.back();
         if (entry === undefined) throw new Error("The ordered map is empty.");
         return { key: entry.key, value: entry.value };
     }
 
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.#stamps.containsKey(key); }
 
+    /** The value stored for the key, or `undefined` when absent. */
     public get(key: K): V | undefined {
         const lookup = this.tryGetEntry(key);
         return lookup.found ? lookup.entry.value : undefined;
     }
 
+    /**
+     * The stored entry, reported presence-safely so a stored `undefined` stays distinct from
+     * absence.
+     */
     public tryGetEntry(key: K): OrderedMapLookup<K, V> {
         const indexed = this.#stamps.getEntry(key);
         if (indexed === undefined) return { found: false };
@@ -146,14 +170,20 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         return { found: true, entry: { key: entry.key, value: entry.value } };
     }
 
+    /**
+     * The stored key representative, which is the first inserted for its class and survives value
+     * replacement.
+     */
     public getStoredKey(key: K): K | undefined { return this.#stamps.getEntry(key)?.key; }
 
+    /** The entry at the given ordinal rank, or `undefined` when out of range. */
     public entryAt(index: number): OrderedMapEntry<K, V> {
         requireElementIndex(index, this.size);
         const entry = this.#order.get(index)!;
         return { key: entry.key, value: entry.value };
     }
 
+    /** The ordinal rank of the key, or `-1` when absent. */
     public indexOfKey(key: K): number {
         const indexed = this.#stamps.getEntry(key);
         return indexed === undefined ? -1 : this.indexOfStamp(indexed.value);
@@ -176,22 +206,26 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         };
     }
 
+    /** A map containing the given entry; returns the receiver when it is already present. */
     public add(key: K, value: V): PersistentOrderedMap<K, V> {
         const result = this.tryAdd(key, value);
         if (!result.added) throw new DuplicateKeyError();
         return result.map;
     }
 
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(key: K, value: V): OrderedMapAddResult<K, V> {
         return this.insertCore(this.size, key, value);
     }
 
+    /** Insert a new entry at the front; an existing key is rejected rather than moved. */
     public addFirst(key: K, value: V): PersistentOrderedMap<K, V> {
         const result = this.insertCore(0, key, value);
         if (!result.added) throw new DuplicateKeyError();
         return result.map;
     }
 
+    /** A map with the entry inserted at the given index. */
     public insert(index: number, key: K, value: V): PersistentOrderedMap<K, V> {
         requireInsertionIndex(index, this.size);
         const result = this.insertCore(index, key, value);
@@ -213,20 +247,28 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         );
     }
 
+    /** Move the key's entry to the front, keeping its key representative and value. */
     public moveToFirst(key: K): PersistentOrderedMap<K, V> { return this.moveExisting(0, key); }
 
+    /** Move the key's entry to the back, keeping its key representative and value. */
     public moveToLast(key: K): PersistentOrderedMap<K, V> {
         if (this.isEmpty) throw new OrderedMapMissingKeyError();
         return this.moveExisting(this.size - 1, key);
     }
 
+    /**
+     * Move the key's entry so that it ends up at the given ordinal position. The index names a
+     * position in the resulting map, which is what makes a move to the end well defined.
+     */
     public moveTo(index: number, key: K): PersistentOrderedMap<K, V> {
         requireElementIndex(index, this.size);
         return this.moveExisting(index, key);
     }
 
+    /** A map without that entry; returns the receiver when it is absent. */
     public remove(key: K): PersistentOrderedMap<K, V> { return this.tryRemove(key).map; }
 
+    /** Remove the entry and report what was removed, or `undefined` when absent. */
     public tryRemove(key: K): OrderedMapRemoveResult<K, V> {
         const removed = this.#stamps.tryRemoveEntry(key);
         if (removed === undefined) return { removed: false, map: this };
@@ -239,6 +281,7 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         };
     }
 
+    /** A map without the entry at the given index. */
     public removeAt(index: number): PersistentOrderedMap<K, V> {
         requireElementIndex(index, this.size);
         const entry = this.#order.get(index)!;
@@ -249,20 +292,24 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         return PersistentOrderedMap.wrap(this.#order.removeAt(index)!, removed.map, this.valueEquals);
     }
 
+    /** A map without its first entry. */
     public removeFirst(): PersistentOrderedMap<K, V> {
         if (this.isEmpty) throw new Error("The ordered map is empty.");
         return this.removeAt(0);
     }
 
+    /** A map without its last entry. */
     public removeLast(): PersistentOrderedMap<K, V> {
         if (this.isEmpty) throw new Error("The ordered map is empty.");
         return this.removeAt(this.size - 1);
     }
 
+    /** An empty map retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentOrderedMap<K, V> {
         return this.isEmpty ? this : PersistentOrderedMap.empty(this.keyPolicy, this.valueEquals);
     }
 
+    /** The given run of entries as a new map, preserving their order. */
     public getRange(index: number, count: number): PersistentOrderedMap<K, V> {
         requireInsertionIndex(index, this.size);
         if (!Number.isInteger(count) || count < 0 || count > this.size - index) {
@@ -286,16 +333,19 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         return new PersistentOrderedMap(kept, stamps, this.valueEquals);
     }
 
+    /** The first `count` entries as a new map, preserving their order. */
     public take(count: number): PersistentOrderedMap<K, V> {
         if (!Number.isInteger(count) || count < 0 || count > this.size) throw new RangeError("count is outside the map.");
         return this.getRange(0, count);
     }
 
+    /** Every entry after the first `count`, preserving their order. */
     public drop(count: number): PersistentOrderedMap<K, V> {
         if (!Number.isInteger(count) || count < 0 || count > this.size) throw new RangeError("count is outside the map.");
         return this.getRange(count, this.size - count);
     }
 
+    /** A map with the order reversed. */
     public reverse(): PersistentOrderedMap<K, V> {
         if (this.size <= 1) return this;
         return PersistentOrderedMap.buildFromDistinct(
@@ -322,6 +372,7 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         );
     }
 
+    /** Copy the entries into an array, in order. */
     public toArray(): OrderedMapEntry<K, V>[] { return Array.from(this); }
     public *keys(): Generator<K, void> { for (const entry of this.#order) yield entry.key; }
     public *values(): Generator<V, void> { for (const entry of this.#order) yield entry.value; }
@@ -329,10 +380,19 @@ export class PersistentOrderedMap<K, V> implements Iterable<OrderedMapEntry<K, V
         for (const entry of this.#order) yield { key: entry.key, value: entry.value };
     }
 
+    /**
+     * Whether both maps reference the same order sequence. A value-only replacement can leave the
+     * order shared while the membership index changes, so this is finer-grained than comparing
+     * both.
+     */
     public sharesOrderStorageWith(other: PersistentOrderedMap<K, V>): boolean {
         return this.#order.sharesStorageWith(other.#order);
     }
 
+    /**
+     * Whether both maps reference the same membership index, the counterpart of
+     * `sharesOrderStorageWith`.
+     */
     public sharesMembershipRootWith(other: PersistentOrderedMap<K, V>): boolean {
         return this.#stamps.sharesRootWith(other.#stamps);
     }
@@ -485,32 +545,44 @@ export class PersistentOrderedMapCursor<K, V> {
         requireInsertionIndex(position, snapshot.size);
     }
 
+    /** Number of entries. */
     public get size(): number { return this.snapshot.size; }
+    /** Whether the gap precedes the first entry. */
     public get isAtStart(): boolean { return this.position === 0; }
+    /** Whether the gap follows the last entry. */
     public get isAtEnd(): boolean { return this.position === this.size; }
 
+    /** The entry before the gap, reported presence-safely. */
     public tryPeekPrevious(): OrderedMapEntry<K, V> | undefined {
         return this.isAtStart ? undefined : this.snapshot.entryAt(this.position - 1);
     }
 
+    /** The entry after the gap, reported presence-safely. */
     public tryPeekNext(): OrderedMapEntry<K, V> | undefined {
         return this.isAtEnd ? undefined : this.snapshot.entryAt(this.position);
     }
 
+    /**
+     * A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+     * the same version.
+     */
     public movePrevious(): PersistentOrderedMapCursor<K, V> {
         if (this.isAtStart) throw new RangeError("The ordered-map cursor is already at the start.");
         return new PersistentOrderedMapCursor(this.snapshot, this.position - 1);
     }
 
+    /** A cursor one position later. The receiver is unchanged. */
     public moveNext(): PersistentOrderedMapCursor<K, V> {
         if (this.isAtEnd) throw new RangeError("The ordered-map cursor is already at the end.");
         return new PersistentOrderedMapCursor(this.snapshot, this.position + 1);
     }
 
+    /** A cursor at the given position within the same map version. */
     public seek(position: number): PersistentOrderedMapCursor<K, V> {
         return position === this.position ? this : new PersistentOrderedMapCursor(this.snapshot, position);
     }
 
+    /** Insert at the gap and return a cursor positioned after the new entry. */
     public insert(key: K, value: V): PersistentOrderedMapCursor<K, V> {
         return new PersistentOrderedMapCursor(
             this.snapshot.insert(this.position, key, value),
@@ -518,6 +590,10 @@ export class PersistentOrderedMapCursor<K, V> {
         );
     }
 
+    /**
+     * Insert, reporting whether an entry was added. On a duplicate the returned cursor focuses the
+     * retained entry.
+     */
     public tryInsert(key: K, value: V): {
         readonly inserted: boolean;
         readonly cursor: PersistentOrderedMapCursor<K, V>;
@@ -528,12 +604,14 @@ export class PersistentOrderedMapCursor<K, V> {
             : { inserted: true, cursor: this.insert(key, value) };
     }
 
+    /** Replace the value of the entry after the gap, keeping its key and position. */
     public setNextValue(value: V): PersistentOrderedMapCursor<K, V> {
         const entry = this.tryPeekNext();
         if (entry === undefined) throw new RangeError("The ordered-map cursor has no next entry.");
         return new PersistentOrderedMapCursor(this.snapshot.set(entry.key, value), this.position);
     }
 
+    /** Remove the entry before the gap and return a cursor in its place. */
     public deletePrevious(): PersistentOrderedMapCursor<K, V> {
         if (this.isAtStart) throw new RangeError("The ordered-map cursor has no previous entry.");
         return new PersistentOrderedMapCursor(
@@ -542,6 +620,7 @@ export class PersistentOrderedMapCursor<K, V> {
         );
     }
 
+    /** Remove the entry after the gap and return a cursor in its place. */
     public deleteNext(): PersistentOrderedMapCursor<K, V> {
         if (this.isAtEnd) throw new RangeError("The ordered-map cursor has no next entry.");
         return new PersistentOrderedMapCursor(this.snapshot.removeAt(this.position), this.position);

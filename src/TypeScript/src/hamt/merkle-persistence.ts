@@ -1,3 +1,10 @@
+/**
+ * Block storage and verification for Merkle search trees.
+ *
+ * A tree decomposes into content-addressed blocks; loading one re-derives every block's digest from
+ * its bytes, so a corrupted or substituted block is rejected rather than trusted. Verification runs
+ * against an explicit budget so untrusted input cannot force unbounded work.
+ */
 import { MerkleDigest, MerkleSearchTreePolicy } from "./merkle-encoding.js";
 import { MerkleSearchTree, type MerkleNode, type MerkleStoredEntry } from "./merkle-search-tree.js";
 
@@ -5,36 +12,58 @@ function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+/**
+ * Why untrusted persistence input was rejected. Naming the cause lets a caller tell corrupt or
+ * over-budget input from input that merely belongs to a different policy domain.
+ */
 export type MerklePersistenceFailure =
   | "conflicting-block" | "missing-block" | "digest-mismatch" | "invalid-block"
   | "policy-mismatch" | "budget-exceeded" | "cycle" | "invalid-structure";
 
+/** A typed rejection of untrusted Merkle persistence input. */
 export class MerklePersistenceError extends Error {
   constructor(readonly kind: MerklePersistenceFailure, message: string) { super(message); this.name = "MerklePersistenceError"; }
 }
 
+/** One content-addressed block: its digest and the exact bytes that hash to it. */
 export class MerkleBlock {
   readonly #content: Uint8Array;
   constructor(readonly digest: MerkleDigest, content: Uint8Array) { this.#content = content.slice(); }
+  /** The block's exact bytes. */
   get content(): Uint8Array { return this.#content.slice(); }
+  /** Whether both blocks have the same digest and bytes. */
   equals(other: MerkleBlock): boolean { return this.digest.equals(other.digest) && bytesEqual(this.#content, other.#content); }
 }
 
+/**
+ * A content-addressed store holding the blocks a Merkle tree decomposes into. Blocks are immutable
+ * and keyed by their own digest, so a store never reconciles two versions of one block: either the
+ * bytes match what is stored or the input is bad.
+ */
 export interface MerkleBlockStore {
+  /** The value stored for the key, or `undefined` when absent. */
   get(digest: MerkleDigest): MerkleBlock | undefined;
+  /** A collection containing the given element, keeping the stored representative when present. */
   put(block: MerkleBlock): boolean;
+  /** Whether the key is present. */
   has(digest: MerkleDigest): boolean;
+  /** Every stored digest. */
   digests(): readonly MerkleDigest[];
 }
 
+/** An in-memory block store with atomic multi-block publication. */
 export class InMemoryMerkleBlockStore implements MerkleBlockStore {
   readonly #blocks = new Map<string, MerkleBlock>();
+  /** Number of elements. */
   get count(): number { return this.#blocks.size; }
+  /** The value stored for the key, or `undefined` when absent. */
   get(digest: MerkleDigest): MerkleBlock | undefined {
     const block = this.#blocks.get(digest.toString());
     return block === undefined ? undefined : new MerkleBlock(block.digest, block.content);
   }
+  /** Whether the key is present. */
   has(digest: MerkleDigest): boolean { return this.#blocks.has(digest.toString()); }
+  /** A collection containing the given element, keeping the stored representative when present. */
   put(block: MerkleBlock): boolean {
     const key = block.digest.toString(), existing = this.#blocks.get(key);
     if (existing !== undefined) {
@@ -44,10 +73,17 @@ export class InMemoryMerkleBlockStore implements MerkleBlockStore {
     this.#blocks.set(key, new MerkleBlock(block.digest, block.content));
     return true;
   }
+  /** Every stored digest. */
   digests(): readonly MerkleDigest[] { return [...this.#blocks.values()].map(block => block.digest).sort((a, b) => a.compareTo(b)); }
 }
 
+/**
+ * A transferable bundle of blocks tagged with the tree they describe. The algorithm and domain
+ * identifiers travel with the blocks so a receiver can reject a pack built under a different
+ * policy.
+ */
 export class MerkleBlockPack {
+  /** The blocks carried by the pack, deduplicated by digest. */
   readonly blocks: readonly MerkleBlock[];
   constructor(
     readonly algorithmId: string,
@@ -63,9 +99,11 @@ export class MerkleBlockPack {
     }
     this.blocks = [...unique.values()];
   }
+  /** Number of blocks the tree encodes into. */
   get blockCount(): number { return this.blocks.length; }
 }
 
+/** Overrides for the verification ceilings; anything omitted keeps its default. */
 export interface MerkleVerificationBudgetOptions {
   readonly maximumBlocks?: number;
   readonly maximumTotalBytes?: number;
@@ -76,13 +114,25 @@ export interface MerkleVerificationBudgetOptions {
   readonly maximumQueryBytes?: number;
 }
 
+/**
+ * Ceilings bounding the work untrusted Merkle input may force. Without them a crafted pack or proof
+ * could demand unbounded memory or time, so every limit is charged during verification and
+ * exceeding one fails the operation.
+ */
 export class MerkleVerificationBudget {
+  /** Most blocks a single verification may account for. */
   readonly maximumBlocks: number;
+  /** Most bytes a single verification may account for. */
   readonly maximumTotalBytes: number;
+  /** Largest single block that will be accepted. */
   readonly maximumBlockBytes: number;
+  /** Deepest chain of blocks that will be followed, bounding what a crafted input can force. */
   readonly maximumDepth: number;
+  /** Most decoded entries a single verification may account for. */
   readonly maximumEntries: number;
+  /** Most children a single block may declare. */
   readonly maximumChildrenPerBlock: number;
+  /** Largest proof query that will be accepted. */
   readonly maximumQueryBytes: number;
   constructor(options: MerkleVerificationBudgetOptions = {}) {
     this.maximumBlocks = options.maximumBlocks ?? 1_000_000;
@@ -99,9 +149,13 @@ export class MerkleVerificationBudget {
 
 /** @internal */
 export interface DecodedMerkleBlock<K, V> {
+  /** The block's level in the canonical wide tree. */
   readonly level: number;
+  /** Number of elements. */
   readonly count: number;
+  /** Iterate the elements. */
   readonly entries: readonly MerkleStoredEntry<K, V>[];
+  /** The digests of the block's children. */
   readonly children: readonly MerkleDigest[];
 }
 
@@ -118,9 +172,12 @@ class Reader {
 
 /** @internal */
 export class MerkleVerificationContext {
+  /** Digests already accounted for, so a shared subtree is not charged twice. */
   readonly seen: Set<string> = new Set<string>();
+  /** How many blocks have been charged so far. */
   blocks = 0; bytes = 0; entries = 0;
   constructor(readonly budget: MerkleVerificationBudget) {}
+  /** Charge one block against the budget, reporting whether it had not already been counted. */
   account(block: MerkleBlock, depth: number): boolean {
     const key = block.digest.toString();
     if (depth > this.budget.maximumDepth) throw new MerklePersistenceError("budget-exceeded", "Maximum Merkle depth exceeded.");
@@ -197,6 +254,10 @@ function loadWithStore<K, V>(rootHash: MerkleDigest, policy: MerkleSearchTreePol
   return tree;
 }
 
+/**
+ * Bundle a tree's blocks into a pack, or just the requested digests. Requesting a digest the tree
+ * lacks is rejected rather than silently omitted.
+ */
 export function exportMerklePack<K, V>(tree: MerkleSearchTree<K, V>, digests?: Iterable<MerkleDigest>): MerkleBlockPack {
   const blocks = [...tree.blocksPreorder()].map(block => new MerkleBlock(block.digest, block.bytes));
   if (digests === undefined) return new MerkleBlockPack(MerkleSearchTreePolicy.algorithmId, tree.policy.domainDigest, tree.rootHash, blocks);
@@ -206,16 +267,28 @@ export function exportMerklePack<K, V>(tree: MerkleSearchTree<K, V>, digests?: I
   return new MerkleBlockPack(MerkleSearchTreePolicy.algorithmId, tree.policy.domainDigest, tree.rootHash, requested);
 }
 
+/**
+ * Write every block of the tree into the store, reporting how many were newly written. Conflicting
+ * bytes at an existing digest abort before anything is published.
+ */
 export function saveMerkleTree<K, V>(tree: MerkleSearchTree<K, V>, store: MerkleBlockStore): number {
   const blocks = exportMerklePack(tree).blocks;
   for (const block of blocks) { const previous = store.get(block.digest); if (previous !== undefined && !previous.equals(block)) throw new MerklePersistenceError("conflicting-block", `Store conflicts at ${block.digest}.`); }
   let written = 0; for (const block of blocks) if (store.put(block)) written++; return written;
 }
 
+/**
+ * Rebuild the tree with the given root digest from the store, verifying every block. Each digest is
+ * recomputed from its bytes, so a corrupted or substituted block is rejected rather than trusted.
+ */
 export function loadMerkleTree<K, V>(rootHash: MerkleDigest, policy: MerkleSearchTreePolicy<K, V>, store: MerkleBlockStore, budget: MerkleVerificationBudget = new MerkleVerificationBudget()): MerkleSearchTree<K, V> {
   return loadWithStore(rootHash, policy, store, budget);
 }
 
+/**
+ * Verify a received pack and publish its blocks, returning the tree it describes. The pack is
+ * verified in full before anything is written, so a bad pack leaves the destination untouched.
+ */
 export function importMerklePack<K, V>(pack: MerkleBlockPack, policy: MerkleSearchTreePolicy<K, V>, destination: MerkleBlockStore = new InMemoryMerkleBlockStore(), budget: MerkleVerificationBudget = new MerkleVerificationBudget()): MerkleSearchTree<K, V> {
   ensureEnvelope(pack.algorithmId, pack.domainDigest, policy);
   const staged = new Map<string, MerkleBlock>();
@@ -233,15 +306,30 @@ export function importMerklePack<K, V>(pack: MerkleBlockPack, policy: MerkleSear
   return tree;
 }
 
+/**
+ * What a receiver still needs in order to reach a target root. The examined counts report how much
+ * of the tree the comparison had to walk, which stays small when the two sides mostly agree.
+ */
 export interface MerkleSyncPlan {
+  /** The root the receiver is being brought to. */
   readonly targetRoot: MerkleDigest;
+  /** Whether the receiver already holds the target root, making the transfer empty. */
   readonly rootsMatch: boolean;
+  /** The blocks the receiver is missing. */
   readonly requestedDigests: readonly MerkleDigest[];
+  /** How many blocks the comparison had to inspect. */
   readonly examinedBlocks: number;
+  /** How many bytes the comparison had to inspect. */
   readonly examinedBytes: number;
+  /** Whether the receiver is missing anything at all. */
   readonly requiresBlocks: boolean;
 }
 
+/**
+ * Bundle exactly the blocks the receiver does not already hold. A subtree the receiver already has
+ * is skipped whole on one digest lookup, so the pack is proportional to the difference rather than
+ * to the tree.
+ */
 export function createMerkleSyncPack<K, V>(tree: MerkleSearchTree<K, V>, receiver: MerkleBlockStore): MerkleBlockPack {
   const missing: MerkleBlock[] = [];
   const walk = (node: MerkleNode<K, V> | undefined): void => {
@@ -252,6 +340,10 @@ export function createMerkleSyncPack<K, V>(tree: MerkleSearchTree<K, V>, receive
   return new MerkleBlockPack(MerkleSearchTreePolicy.algorithmId, tree.policy.domainDigest, tree.rootHash, missing);
 }
 
+/**
+ * Work out which blocks a receiver needs, without sending any. Descends only where the roots
+ * disagree, so matching subtrees cost one digest comparison regardless of size.
+ */
 export function planMerkleSync<K, V>(target: MerkleSearchTree<K, V>, publishedLocal: MerkleSearchTree<K, V>, receiver: MerkleBlockStore): MerkleSyncPlan {
   if (!target.policy.compatibleWith(publishedLocal.policy)) throw new MerklePersistenceError("policy-mismatch", "Cannot synchronize different Merkle domains.");
   const requested: MerkleDigest[] = []; let examinedBlocks = 0, examinedBytes = 0;

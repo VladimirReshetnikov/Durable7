@@ -1,3 +1,7 @@
+/**
+ * Tests for the directed graph: isolated vertices, self loops, endpoint representative reuse, and
+ * the distinct semantics of edge versus vertex removal.
+ */
 import { describe, expect, it } from "vitest";
 
 import { createHashPolicy, PersistentDirectedGraph } from "../../src/hamt/index.js";

@@ -1,3 +1,7 @@
+/**
+ * Tests for the history-independent canonical sorted set. The defining property under test is
+ * convergence: sets built by different edit histories must reach one identical shape.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import { CanonicalSortedSet, ZipTreeRankPolicy } from "../../src/finger-tree/index.js";

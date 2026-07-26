@@ -1,3 +1,7 @@
+/**
+ * Cross-structure tests asserting that the ordered and query cursors share one vocabulary: where a
+ * seek lands on a miss, what a peek reports, and that retained cursors keep their own version.
+ */
 import { describe, expect, test } from "vitest";
 
 import {

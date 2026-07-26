@@ -1,3 +1,10 @@
+/**
+ * Strict, invertible, composable patches over persistent hash maps.
+ *
+ * Each entry records a key with its expected prior state and its intended result. Recording both
+ * endpoints is what makes application strict - it preflights every entry and applies all or none -
+ * and what lets a patch be inverted or composed.
+ */
 import { defaultHashPolicy, sameValueZero, type HashPolicy } from "./hash-policy.js";
 import { DuplicateKeyError, PersistentHashMap } from "./persistent-hamt.js";
 
@@ -8,8 +15,14 @@ export type MapPatchValue<V> =
 
 /** One strict before/after change in a persistent map patch. */
 export interface MapPatchEntry<K, V> {
+    /** The key. */
     readonly key: K;
+    /** The state the patch expects the key to be in before it is applied. */
     readonly before: MapPatchValue<V>;
+    /**
+     * The state the key is to be left in. Recording both endpoints is what lets a patch be inverted
+     * and lets application preflight against a target that may have drifted.
+     */
     readonly after: MapPatchValue<V>;
 }
 
@@ -59,6 +72,7 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         this.#changes = changes;
     }
 
+    /** The empty patch, retaining the supplied policy objects. */
     public static empty<K, V>(
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
         valueEquals: (left: V, right: V) => boolean = sameValueZero,
@@ -66,6 +80,7 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         return new PersistentMapPatch(PersistentHashMap.empty(keyPolicy), valueEquals);
     }
 
+    /** Build a patch from the given changes. */
     public static from<K, V>(
         entries: Iterable<MapPatchEntry<K, V>>,
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
@@ -82,6 +97,10 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         return new PersistentMapPatch(changes, valueEquals);
     }
 
+    /**
+     * The patch that turns the first collection into the second, recording only the keys that
+     * differ.
+     */
     public static between<K, V>(
         before: PersistentHashMap<K, V>,
         after: PersistentHashMap<K, V>,
@@ -115,12 +134,21 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         return new PersistentMapPatch(changes, valueEquals);
     }
 
+    /** Number of changes. */
     public get size(): number { return this.#changes.size; }
+    /** Number of changes. */
     public get count(): number { return this.size; }
+    /** Whether the patch holds no changes. */
     public get isEmpty(): boolean { return this.#changes.isEmpty; }
+    /** The retained hash policy defining key equivalence. */
     public get keyPolicy(): HashPolicy<K> { return this.#changes.policy; }
+    /** Iterate the keys. */
     public keys(): IterableIterator<K> { return this.#changes.keys(); }
 
+    /**
+     * Apply every change, or apply none. Each entry's recorded prior state is checked first, so the
+     * patch cannot half-apply to a target that has drifted.
+     */
     public apply(source: PersistentHashMap<K, V>): PersistentHashMap<K, V> {
         this.requireCompatibleMap(source);
         for (const entry of this.#changes) {
@@ -142,6 +170,7 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         return result;
     }
 
+    /** The patch that undoes this one, by exchanging each entry's before and after states. */
     public invert(): PersistentMapPatch<K, V> {
         if (this.isEmpty) return this;
         let changes = PersistentHashMap.empty<K, MapPatchChange<V>>(this.keyPolicy);
@@ -151,6 +180,10 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         return new PersistentMapPatch(changes, this.valueEquals);
     }
 
+    /**
+     * One patch equivalent to applying this one and then the next; a disagreement about the
+     * intermediate state is rejected.
+     */
     public compose(next: PersistentMapPatch<K, V>): PersistentMapPatch<K, V> {
         this.requireCompatiblePatch(next);
         if (this.isEmpty) return next;
@@ -175,10 +208,12 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         return new PersistentMapPatch(changes, this.valueEquals);
     }
 
+    /** An empty patch retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentMapPatch<K, V> {
         return this.isEmpty ? this : PersistentMapPatch.empty(this.keyPolicy, this.valueEquals);
     }
 
+    /** Whether both patchs reference the same root. A representation test, not an equality test. */
     public sharesRootWith(other: PersistentMapPatch<K, V>): boolean {
         return this.#changes.sharesRootWith(other.#changes);
     }
@@ -189,6 +224,10 @@ export class PersistentMapPatch<K, V> implements Iterable<MapPatchEntry<K, V>> {
         }
     }
 
+    /**
+     * Walk the whole patch and check its invariants, throwing on the first violation. A defensive
+     * audit, not part of normal use.
+     */
     public validateStructure(): { readonly count: number } {
         for (const entry of this.#changes) {
             if (PersistentMapPatch.statesEqual(entry.value.before, entry.value.after, this.valueEquals)) {

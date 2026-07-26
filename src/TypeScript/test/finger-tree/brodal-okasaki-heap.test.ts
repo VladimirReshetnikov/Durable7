@@ -1,3 +1,8 @@
+/**
+ * Tests for the persistent Brodal-Okasaki meldable heap: comparator identity governing which heaps
+ * may meld, unambiguous empty and minimum views, bounded callback work, and persistence of earlier
+ * versions.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import { BrodalOkasakiHeap } from "../../src/finger-tree/index.js";

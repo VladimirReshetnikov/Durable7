@@ -1,15 +1,32 @@
+/**
+ * Merkle proofs, synchronization, and three-way merge.
+ *
+ * A proof lets a verifier holding only a trusted root digest confirm membership, absence, or the
+ * exact contents of a key range without holding the tree. Synchronization transfers only the blocks
+ * a receiver lacks, pruning any subtree whose digest already agrees.
+ */
 import { MerkleDigest, MerkleEncodingInternals, MerkleSearchTreePolicy } from "./merkle-encoding.js";
 import { MerkleSearchTree, type MerkleEntry, type MerkleNode, type MerkleStoredEntry } from "./merkle-search-tree.js";
 import { decodeMerkleBlock, MerkleBlock, MerkleVerificationBudget, MerkleVerificationContext } from "./merkle-persistence.js";
 
 const { concat, i32 } = MerkleEncodingInternals;
 
+/** The claim a proof makes: membership, absence, or the exact contents of a key range. */
 export type MerkleProofQuery<K, V> =
   | { readonly kind: "membership"; readonly key: K; readonly value: V }
   | { readonly kind: "nonmembership"; readonly key: K }
   | { readonly kind: "range"; readonly minimum: K; readonly maximum: K };
 
+/**
+ * One block on the proof path, plus which of its children the proof also expands. Unexpanded
+ * children appear only as digests, which is what keeps a proof proportional to the path rather than
+ * to the tree.
+ */
 export class MerkleProofStep {
+  /**
+   * Which children this step expands, sorted and unique so verification cannot be tricked into
+   * pairing a block with the wrong child.
+   */
   readonly expandedChildIndexes: readonly number[];
   constructor(readonly block: MerkleBlock, indexes: Iterable<number>) {
     const values = [...indexes];
@@ -18,8 +35,14 @@ export class MerkleProofStep {
   }
 }
 
+/**
+ * A self-contained proof, verifiable against a trusted root digest alone. It carries the algorithm
+ * and domain identifiers so it cannot be checked against a tree built under a different policy.
+ */
 export class MerkleProof<K, V> {
+  /** The canonically encoded query the proof answers. */
   readonly queryBytes: Uint8Array;
+  /** The block path the verifier replays. */
   readonly steps: readonly MerkleProofStep[];
   constructor(
     readonly algorithmId: string,
@@ -31,13 +54,24 @@ export class MerkleProof<K, V> {
   ) { this.queryBytes = queryBytes.slice(); this.steps = [...steps]; }
 }
 
+/**
+ * Why verification rejected a proof, distinguishing malformed or over-budget input from a proof
+ * that is well formed but proves the wrong thing.
+ */
 export type MerkleProofFailure = "none" | "invalid-envelope" | "budget-exceeded" | "invalid-query" | "invalid-block" | "invalid-expansion" | "wrong-result";
+/** The outcome of verifying a proof, including what it cost. */
 export interface MerkleProofVerificationResult<K, V> {
+  /** Whether the proof was accepted. */
   readonly valid: boolean;
+  /** Why it was rejected, or none when accepted. */
   readonly failure: MerkleProofFailure;
+  /** The root digest re-derived from the proof's own blocks. */
   readonly computedRootHash: MerkleDigest;
+  /** Iterate the elements. */
   readonly entries: readonly MerkleEntry<K, V>[];
+  /** How many blocks were charged against the budget. */
   readonly accountedBlocks: number;
+  /** How many bytes were charged against the budget. */
   readonly accountedBytes: number;
 }
 
@@ -89,16 +123,26 @@ function createProof<K, V>(tree: MerkleSearchTree<K, V>, query: MerkleProofQuery
   return new MerkleProof(MerkleSearchTreePolicy.algorithmId, tree.policy.domainDigest, tree.rootHash, query, encodeQuery(query, tree.policy), steps);
 }
 
+/**
+ * Build a proof about a key: membership when it is present, absence otherwise, so the caller need
+ * not know which in advance.
+ */
 export function createMerkleProof<K, V>(tree: MerkleSearchTree<K, V>, key: K): MerkleProof<K, V> {
   const entry = tree.getEntry(key);
   return createProof(tree, entry === undefined ? { kind: "nonmembership", key } : { kind: "membership", key: entry.key, value: entry.value });
 }
 
+/** Build a proof of exactly which entries lie in the inclusive key range. */
 export function createMerkleRangeProof<K, V>(tree: MerkleSearchTree<K, V>, minimum: K, maximum: K): MerkleProof<K, V> {
   if (tree.policy.comparer(minimum, maximum) > 0) throw new RangeError("Minimum key exceeds maximum key.");
   return createProof(tree, { kind: "range", minimum, maximum });
 }
 
+/**
+ * Check a proof against a policy, re-deriving the root digest from the proof's own blocks. A
+ * verifier needs only the trusted root, not the tree; work is charged against a budget so untrusted
+ * input cannot force unbounded verification.
+ */
 export function verifyMerkleProof<K, V>(proof: MerkleProof<K, V>, policy: MerkleSearchTreePolicy<K, V>, budget: MerkleVerificationBudget = new MerkleVerificationBudget()): MerkleProofVerificationResult<K, V> {
   let context = new MerkleVerificationContext(budget);
   const fail = (failure: MerkleProofFailure): MerkleProofVerificationResult<K, V> => ({ valid: false, failure, computedRootHash: proof.rootHash, entries: [], accountedBlocks: context.blocks, accountedBytes: context.bytes });
@@ -146,13 +190,26 @@ export function verifyMerkleProof<K, V>(proof: MerkleProof<K, V>, policy: Merkle
   }
 }
 
+/**
+ * A key's state on one side of a merge: absent, or present holding a value. The explicit presence
+ * marker is what keeps a stored `undefined` distinguishable from absence.
+ */
 export type MerkleMergeValue<V> = { readonly present: false } | { readonly present: true; readonly value: V };
+/** One key the two sides changed incompatibly, with all three states for the caller to judge. */
 export interface MerkleThreeWayMergeConflict<K, V> {
+  /** The key. */
   readonly key: K;
+  /** The key's state in the common ancestor. */
   readonly base: MerkleMergeValue<V>;
+  /** The key's state on the left side. */
   readonly left: MerkleMergeValue<V>;
+  /** The key's state on the right side. */
   readonly right: MerkleMergeValue<V>;
 }
+/**
+ * A caller's decision about one conflict. Declining to settle it fails the whole merge rather than
+ * producing a partly merged tree.
+ */
 export type MerkleMergeResolution<V> =
   | { readonly kind: "unresolved" }
   | { readonly kind: "base" }
@@ -160,15 +217,23 @@ export type MerkleMergeResolution<V> =
   | { readonly kind: "right" }
   | { readonly kind: "delete" }
   | { readonly kind: "value"; readonly value: V };
+/** The outcome of a three-way merge. */
 export interface MerkleThreeWayMergeResult<K, V> {
+  /** Whether every conflict was settled. */
   readonly succeeded: boolean;
   readonly tree?: MerkleSearchTree<K, V>;
+  /** The keys that blocked the merge, empty on success. */
   readonly conflicts: readonly MerkleThreeWayMergeConflict<K, V>[];
 }
 
 function mergeValue<V>(entry: MerkleEntry<unknown, V> | undefined): MerkleMergeValue<V> { return entry === undefined ? { present: false } : { present: true, value: entry.value }; }
 function mergeEqual<V>(left: MerkleMergeValue<V>, right: MerkleMergeValue<V>, valuesEqual: (left: V, right: V) => boolean): boolean { return left.present === right.present && (!left.present || valuesEqual(left.value, (right as { readonly present: true; readonly value: V }).value)); }
 
+/**
+ * Merge two descendants of a common ancestor, consulting the resolver on conflicts. A key changed
+ * on only one side takes that side's state without consulting the resolver; identical roots short-
+ * circuit.
+ */
 export function mergeMerkleTrees<K, V>(
   base: MerkleSearchTree<K, V>, left: MerkleSearchTree<K, V>, right: MerkleSearchTree<K, V>,
   resolver: (conflict: MerkleThreeWayMergeConflict<K, V>) => MerkleMergeResolution<V> = () => ({ kind: "unresolved" }),

@@ -1,47 +1,87 @@
+/**
+ * Canonical, wire-compatible Merkle search tree - algorithm `mst-sha256-b16-v2`.
+ *
+ * A deterministic ordered map that is also a content-addressed block tree, so two parties can
+ * compare whole maps by exchanging root digests. Shape is history independent: an entry's level
+ * comes from its keyed digest, not from insertion order, which is what makes the root digest a
+ * meaningful identity and lets every language port agree byte for byte.
+ */
 import { MerkleDigest, MerkleEncodingInternals, type MerkleSearchTreePolicy } from "./merkle-encoding.js";
 
 const { concat, i32 } = MerkleEncodingInternals;
 
 /** @internal */
 export interface MerkleStoredEntry<K, V> {
+  /** The key. */
   readonly key: K;
+  /** The value. */
   readonly value: V;
+  /** The key's canonical encoding, retained so digests need not be recomputed. */
   readonly keyBytes: Uint8Array;
+  /** The value's canonical encoding. */
   readonly valueBytes: Uint8Array;
+  /**
+   * The entry's level, the number of leading zero base-16 digits of its keyed digest. This is what
+   * makes the tree's shape depend on contents rather than insertion order.
+   */
   readonly level: number;
 }
 
 /** @internal */
 export interface MerkleNode<K, V> {
+  /** The block's level in the canonical wide tree. */
   readonly level: number;
+  /** Iterate the elements. */
   readonly entries: readonly MerkleStoredEntry<K, V>[];
+  /** The subtrees between this block's separators. */
   readonly children: readonly (MerkleNode<K, V> | undefined)[];
+  /** Number of elements. */
   readonly count: number;
+  /** Tree height, exposed for structural diagnostics. */
   readonly height: number;
+  /** Number of blocks the tree encodes into. */
   readonly blockCount: number;
+  /** The smallest key in this subtree, used to check the bounds inherited from the parent. */
   readonly minimumKey: K;
+  /** The largest key in this subtree. */
   readonly maximumKey: K;
+  /** The block's canonical encoding. */
   readonly blockBytes: Uint8Array;
+  /** The digest of the block's bytes, which is this subtree's content address. */
   readonly digest: MerkleDigest;
 }
 
+/** One key-value pair as the tree presents it to callers. */
 export interface MerkleEntry<K, V> { readonly key: K; readonly value: V }
+/** Which side of a diff an entry falls on. */
 export type MerkleMapDifferenceKind = "left-only" | "right-only" | "different-value";
+/** One entry-level difference between two trees. */
 export interface MerkleMapDifference<K, V> {
+  /** Which side the difference falls on. */
   readonly kind: MerkleMapDifferenceKind;
+  /** The key. */
   readonly key: K;
   readonly left?: V;
   readonly right?: V;
 }
+/** Shape and encoding measurements returned by a successful structural audit. */
 export interface MerkleSearchTreeStatistics {
+  /** Number of entries. */
   readonly count: number;
+  /** Tree height, exposed for structural diagnostics. */
   readonly height: number;
+  /** Number of blocks the tree encodes into. */
   readonly blockCount: number;
+  /** Most entries any single block holds. */
   readonly maximumEntriesPerBlock: number;
+  /** Most children any single block holds. */
   readonly maximumChildrenPerBlock: number;
+  /** Total size of the tree's canonical encoding. */
   readonly encodedBytes: number;
+  /** Highest entry level present, which bounds the tree's height. */
   readonly maximumLevel: number;
 }
+/** One block of the content-addressed encoding: its digest and its canonical bytes. */
 export interface MerkleEncodedBlock { readonly digest: MerkleDigest; readonly bytes: Uint8Array }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -81,10 +121,12 @@ function* enumerateNode<K, V>(node: MerkleNode<K, V> | undefined): IterableItera
 export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
   private constructor(readonly policy: MerkleSearchTreePolicy<K, V>, private readonly root: MerkleNode<K, V> | undefined) {}
 
+  /** The empty tree, retaining the supplied policy objects. */
   static empty<K, V>(policy: MerkleSearchTreePolicy<K, V>): MerkleSearchTree<K, V> {
     return new MerkleSearchTree(policy, undefined);
   }
 
+  /** Build a tree from the given entries. */
   static from<K, V>(entries: Iterable<readonly [K, V] | MerkleEntry<K, V>>, policy: MerkleSearchTreePolicy<K, V>): MerkleSearchTree<K, V> {
     const prepared = [...entries].map(item => {
       const key = "key" in item ? item.key : item[0];
@@ -108,12 +150,22 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     return new MerkleSearchTree(policy, root);
   }
 
+  /** Number of entries. */
   get count(): number { return this.root?.count ?? 0; }
+  /** Whether the tree holds no entries. */
   get isEmpty(): boolean { return this.root === undefined; }
+  /** Tree height, exposed for structural diagnostics. */
   get height(): number { return this.root?.height ?? 0; }
+  /** Number of blocks the tree encodes into. */
   get blockCount(): number { return this.root?.blockCount ?? 0; }
+  /**
+   * The digest identifying this tree's contents. Because the shape is history independent, two
+   * trees hold the same entries exactly when their root digests agree.
+   */
   get rootHash(): MerkleDigest { return this.root?.digest ?? this.policy.emptyDigest; }
+  /** Iterate the keys. */
   get keys(): Iterable<K> { const tree = this; return { *[Symbol.iterator]() { for (const entry of tree) yield entry.key; } }; }
+  /** Iterate the values. */
   get values(): Iterable<V> { const tree = this; return { *[Symbol.iterator]() { for (const entry of tree) yield entry.value; } }; }
 
   /** Creates an immutable ordered cursor at a rank gap in `0 .. count`. */
@@ -182,6 +234,7 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     return [rank, false];
   }
 
+  /** The stored key representative and value, or `undefined` when absent. */
   getEntry(key: K): MerkleEntry<K, V> | undefined {
     let node = this.root;
     while (node !== undefined) {
@@ -195,9 +248,12 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     return undefined;
   }
 
+  /** Whether the key is present. */
   has(key: K): boolean { return this.getEntry(key) !== undefined; }
+  /** The value stored for the key, or `undefined` when absent. */
   get(key: K): V | undefined { return this.getEntry(key)?.value; }
 
+  /** A map with the key bound to the value, adding or replacing as needed. */
   set(key: K, value: V): MerkleSearchTree<K, V> {
     const existing = this.findRecord(key);
     if (existing !== undefined) {
@@ -209,14 +265,21 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     return new MerkleSearchTree(this.policy, this.insert(this.root, MerkleSearchTree.createEntry(this.policy, key, value)));
   }
 
+  /** A tree without that entry; returns the receiver when it is absent. */
   remove(key: K): MerkleSearchTree<K, V> {
     const result = this.removeNode(this.root, key);
     return result.removed ? new MerkleSearchTree(this.policy, result.node) : this;
   }
 
+  /** An empty tree retaining the same policies; returns the receiver when already empty. */
   clear(): MerkleSearchTree<K, V> { return this.isEmpty ? this : MerkleSearchTree.empty(this.policy); }
+  /** Whether both trees reference the same root. A representation test, not an equality test. */
   sharesRootWith(other: MerkleSearchTree<K, V>): boolean { return this.root === other.root; }
 
+  /**
+   * Number of blocks the two trees have in common by identity, used to show that a derived version
+   * really shares structure.
+   */
   sharedBlockCount(other: MerkleSearchTree<K, V>): number {
     const left = new Set<MerkleNode<K, V>>();
     for (const node of this.nodesPreorder()) left.add(node);
@@ -225,10 +288,14 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     return count;
   }
 
+  /**
+   * Whether both trees hold the same entries, decided by comparing root digests in constant time.
+   */
   contentEquals(other: MerkleSearchTree<K, V>): boolean {
     return this.policy.compatibleWith(other.policy) && this.rootHash.equals(other.rootHash);
   }
 
+  /** Whether both hold the same entries, comparing values with the supplied predicate. */
   mapEquals(other: MerkleSearchTree<K, V>, valuesEqual: (left: V, right: V) => boolean = Object.is): boolean {
     if (this.count !== other.count) return false;
     const left = this[Symbol.iterator]();
@@ -240,6 +307,7 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     }
   }
 
+  /** The entry-level differences between the two. Identical roots short-circuit. */
   diff(other: MerkleSearchTree<K, V>, valuesEqual: (left: V, right: V) => boolean = Object.is): readonly MerkleMapDifference<K, V>[] {
     if (!this.policy.compatibleWith(other.policy)) throw new RangeError("Merkle policy domains differ.");
     if (this.rootHash.equals(other.rootHash)) return [];
@@ -266,6 +334,7 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     }
   }
 
+  /** A compact textual rendering of the block structure, for diagnostics. */
   get shape(): string {
     const visit = (node: MerkleNode<K, V> | undefined): string => node === undefined ? "." : `L${node.level}[${node.entries.length}](${node.children.map(visit).join(",")})`;
     return visit(this.root);
@@ -275,6 +344,10 @@ export class MerkleSearchTree<K, V> implements Iterable<MerkleEntry<K, V>> {
     for (const node of this.nodesPreorder()) yield { digest: node.digest, bytes: node.blockBytes.slice() };
   }
 
+  /**
+   * Walk the whole tree and check its invariants, throwing on the first violation. A defensive
+   * audit, not part of normal use.
+   */
   validateStructure(): MerkleSearchTreeStatistics {
     let maximumEntriesPerBlock = 0, maximumChildrenPerBlock = 0, encodedBytes = 0, maximumLevel = 0, blocks = 0, count = 0, height = 0;
     const walk = (node: MerkleNode<K, V> | undefined, minimum?: K, maximum?: K): void => {

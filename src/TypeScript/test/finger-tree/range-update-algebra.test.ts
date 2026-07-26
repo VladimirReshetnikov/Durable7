@@ -1,3 +1,7 @@
+/**
+ * Tests for the range-update algebra laws: tag composition order, identity recognition, and the
+ * measure action agreeing with the element action.
+ */
 import { describe, expect, it } from "vitest";
 import {
     addTag,

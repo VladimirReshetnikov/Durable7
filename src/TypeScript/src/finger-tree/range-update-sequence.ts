@@ -1,3 +1,11 @@
+/**
+ * Persistent measured sequence with algebraic lazy range updates.
+ *
+ * Applying an update to a range stores a pending tag at the root of each fully covered subtree
+ * instead of touching every element, so the cost follows the tree depth rather than the range
+ * length while cached measures stay correct. Pushing a tag down is a path copy, so earlier versions
+ * keep observing the values they always had.
+ */
 import type { RangeUpdateAlgebra } from "./range-update-algebra.js";
 import {
     recordRangeUpdateElementApplyCallback,
@@ -749,7 +757,9 @@ function validateNode<Element, Measure, Tag>(
 
 /** Result of splitting a range-update sequence at an element boundary. */
 export interface RangeUpdateSequenceSplit<Element, Measure, Tag> {
+    /** The elements before the split point. */
     readonly left: RangeUpdateSequence<Element, Measure, Tag>;
+    /** The elements at and after the split point. */
     readonly right: RangeUpdateSequence<Element, Measure, Tag>;
 }
 
@@ -758,11 +768,17 @@ export interface RangeUpdateCursorPeek<Element> { readonly value: Element }
 
 /** Structural diagnostics returned by `RangeUpdateSequence.validateStructure`. */
 export interface RangeUpdateSequenceStatistics {
+    /** Number of elements. */
     readonly count: number;
+    /** Number of reachable tree nodes. */
     readonly nodeCount: number;
+    /** Tree height, exposed for structural diagnostics. */
     readonly height: number;
+    /** Largest absolute balance factor observed, which a valid tree keeps at most one. */
     readonly maximumAbsoluteBalanceFactor: number;
+    /** How many nodes still carry an undelivered tag. */
     readonly pendingTagNodeCount: number;
+    /** The greatest depth at which an undelivered tag sits. */
     readonly maximumPendingTagDepth: number;
 }
 
@@ -777,6 +793,10 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
     readonly #root: RangeNode<Element, Measure, Tag> | undefined;
     readonly #context: RangeContext<Element, Measure, Tag>;
 
+    /**
+     * The retained algebra. Only sequences sharing that exact object may be concatenated, since
+     * their tags would otherwise not compose.
+     */
     public readonly algebra: RangeUpdateAlgebra<Element, Measure, Tag>;
 
     private constructor(
@@ -882,6 +902,7 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         return new RangeUpdateSequenceCursor(this, position);
     }
 
+    /** Whether the sequence holds no elements. */
     public get isEmpty(): boolean { return this.#root === undefined; }
 
     /** Cached ordered measure of the complete logical sequence. */
@@ -895,14 +916,17 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         return getElement(this.#root as RangeNode<Element, Measure, Tag>, index, this.#context);
     }
 
+    /** A sequence with the value added at the front. */
     public prepend(item: Element): RangeUpdateSequence<Element, Measure, Tag> {
         return this.insert(0, item);
     }
 
+    /** A sequence with the value added at the back. */
     public append(item: Element): RangeUpdateSequence<Element, Measure, Tag> {
         return this.insert(this.size, item);
     }
 
+    /** A sequence with the element inserted at the given index. */
     public insert(index: number, item: Element): RangeUpdateSequence<Element, Measure, Tag> {
         this.checkBoundaryIndex(index);
         this.checkRoomForOneMore();
@@ -920,6 +944,7 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         ));
     }
 
+    /** A sequence without the element at the given index. */
     public removeAt(index: number): RangeUpdateSequence<Element, Measure, Tag> {
         this.checkElementIndex(index);
         return this.wrap(removeCore(
@@ -929,6 +954,10 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         ));
     }
 
+    /**
+     * This sequence's elements followed by the other's, joining the two trees rather than copying
+     * either.
+     */
     public concat(
         other: RangeUpdateSequence<Element, Measure, Tag>,
     ): RangeUpdateSequence<Element, Measure, Tag> {
@@ -949,6 +978,10 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         return this.wrap(join(this.#root, removed.minimum, removed.remainder, this.#context));
     }
 
+    /**
+     * The elements before the index and those from it on; both halves share structure with the
+     * receiver.
+     */
     public splitAt(index: number): RangeUpdateSequenceSplit<Element, Measure, Tag> {
         this.checkBoundaryIndex(index);
         if (index === 0) {
@@ -962,6 +995,7 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         return { left: this.wrap(split.left), right: this.wrap(split.right) };
     }
 
+    /** The given run of elements as a new sequence, preserving their order. */
     public getRange(index: number, count: number): RangeUpdateSequence<Element, Measure, Tag> {
         this.checkRange(index, count);
         if (count === 0) return RangeUpdateSequence.emptyFromContext(this.#context);
@@ -972,6 +1006,11 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         return this.wrap(middle);
     }
 
+    /**
+     * Apply the tag to a run of elements. This is the operation the structure exists for: the tag
+     * is deferred at the roots of the covered subtrees rather than pushed to every element, so the
+     * cost follows the tree depth and not the range length.
+     */
     public applyRange(
         index: number,
         count: number,
@@ -1002,6 +1041,10 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         ));
     }
 
+    /**
+     * The combined measure of a run of elements, pending tags accounted for, read from cached
+     * subtree measures rather than by visiting them.
+     */
     public measureRange(index: number, count: number): Measure {
         this.checkRange(index, count);
         if (count === 0) return this.#context.emptyMeasure;
@@ -1069,6 +1112,7 @@ export class RangeUpdateSequence<Element, Measure, Tag> implements Iterable<Elem
         return shared;
     }
 
+    /** Copy the elements into an array, in order. */
     public toArray(): Element[] { return Array.from(this); }
 
     /** Returns an independent immutable-snapshot iterator over logical values. */
@@ -1120,61 +1164,89 @@ export class RangeUpdateSequenceCursor<Element, Measure, Tag> {
             throw new RangeError("Cursor position is outside the Range sequence.");
         }
     }
+    /** Number of elements. */
     public get size(): number { return this.sequence.size; }
+    /** Whether the gap precedes the first element. */
     public get isAtStart(): boolean { return this.position === 0; }
+    /** Whether the gap follows the last element. */
     public get isAtEnd(): boolean { return this.position === this.size; }
+    /** The combined measure of every element before the gap. */
     public get measureBefore(): Measure { return this.sequence.measureRange(0, this.position); }
+    /** The combined measure of every element at or after the gap. */
     public get measureAfter(): Measure { return this.sequence.measureRange(this.position, this.size - this.position); }
+    /** The element immediately before the gap, or `undefined` at the start. */
     public peekPrevious(): RangeUpdateCursorPeek<Element> | undefined {
         return this.isAtStart ? undefined : { value: this.sequence.get(this.position - 1) };
     }
+    /** The element immediately after the gap, or `undefined` at the end. */
     public peekNext(): RangeUpdateCursorPeek<Element> | undefined {
         return this.isAtEnd ? undefined : { value: this.sequence.get(this.position) };
     }
+    /**
+     * A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+     * the same version.
+     */
     public movePrevious(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         if (this.isAtStart) throw new RangeError("Cursor is already at the start.");
         return new RangeUpdateSequenceCursor(this.sequence, this.position - 1);
     }
+    /** A cursor one position later. The receiver is unchanged. */
     public moveNext(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         if (this.isAtEnd) throw new RangeError("Cursor is already at the end.");
         return new RangeUpdateSequenceCursor(this.sequence, this.position + 1);
     }
+    /** A cursor at the given position within the same sequence version. */
     public seek(position: number): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         return position === this.position ? this : new RangeUpdateSequenceCursor(this.sequence, position);
     }
+    /** Insert at the gap and return a cursor positioned after the new element. */
     public insert(value: Element): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         return new RangeUpdateSequenceCursor(this.sequence.insert(this.position, value), this.position + 1);
     }
+    /** Remove the element before the gap and return a cursor in its place. */
     public deletePrevious(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         if (this.isAtStart) throw new RangeError("No element precedes the cursor.");
         return new RangeUpdateSequenceCursor(this.sequence.removeAt(this.position - 1), this.position - 1);
     }
+    /** Remove the element after the gap and return a cursor in its place. */
     public deleteNext(): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
         return new RangeUpdateSequenceCursor(this.sequence.removeAt(this.position), this.position);
     }
+    /** Replace the element after the gap, keeping the gap where it is. */
     public replaceNext(value: Element): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
         return new RangeUpdateSequenceCursor(this.sequence.setItem(this.position, value), this.position);
     }
+    /** The combined measure of the given number of elements before the gap. */
     public measurePrevious(count: number): Measure {
         this.checkDirectionalCount(count, this.position);
         return this.sequence.measureRange(this.position - count, count);
     }
+    /** The combined measure of the given number of elements after the gap. */
     public measureNext(count: number): Measure {
         this.checkDirectionalCount(count, this.size - this.position);
         return this.sequence.measureRange(this.position, count);
     }
+    /**
+     * Apply the tag to the given number of elements before the gap, deferred at the covered subtree
+     * roots.
+     */
     public applyPrevious(count: number, tag: Tag): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         this.checkDirectionalCount(count, this.position);
         const sequence = this.sequence.applyRange(this.position - count, count, tag);
         return sequence === this.sequence ? this : new RangeUpdateSequenceCursor(sequence, this.position);
     }
+    /**
+     * Apply the tag to the given number of elements after the gap, deferred at the covered subtree
+     * roots.
+     */
     public applyNext(count: number, tag: Tag): RangeUpdateSequenceCursor<Element, Measure, Tag> {
         this.checkDirectionalCount(count, this.size - this.position);
         const sequence = this.sequence.applyRange(this.position, count, tag);
         return sequence === this.sequence ? this : new RangeUpdateSequenceCursor(sequence, this.position);
     }
+    /** The sequence version this cursor is positioned in. */
     public snapshot(): RangeUpdateSequence<Element, Measure, Tag> { return this.sequence; }
     private checkDirectionalCount(count: number, available: number): void {
         if (!Number.isInteger(count) || count < 0 || count > available) {

@@ -1,3 +1,10 @@
+/**
+ * Comparator vocabulary for the ordered structures.
+ *
+ * Ordered collections take comparison from a retained comparator value rather than from a built-in,
+ * so a collection remembers how it was ordered and binary operations can reject mismatched operands
+ * instead of silently producing a malformed result.
+ */
 /** Total-order comparison function, following Array.sort's negative/zero/positive convention. */
 export type Comparator<T> = (left: T, right: T) => number;
 

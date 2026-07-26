@@ -1,3 +1,7 @@
+/**
+ * Tests for the counted multiset: the per-class and total counting domains, receiver-policy
+ * algebra, and stored-representative retention.
+ */
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { PersistentHashBag, createHashPolicy } from "../../src/hamt/index.js";

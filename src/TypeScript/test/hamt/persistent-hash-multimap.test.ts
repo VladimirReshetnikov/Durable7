@@ -1,3 +1,7 @@
+/**
+ * Tests for the set-valued multimap: separate key and pair cardinalities, representative retention
+ * in both domains, and the nonempty-group invariant.
+ */
 import { describe, expect, it } from "vitest";
 
 import {

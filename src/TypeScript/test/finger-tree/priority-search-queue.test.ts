@@ -1,3 +1,7 @@
+/**
+ * Tests for the priority search queue, exercising both indexes together: key-addressed lookup and
+ * re-prioritization alongside minimum-by-priority access and range pruning.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import { PrioritySearchQueue } from "../../src/finger-tree/index.js";

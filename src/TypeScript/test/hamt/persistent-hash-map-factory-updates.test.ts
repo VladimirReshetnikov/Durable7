@@ -1,3 +1,7 @@
+/**
+ * Tests that the single-pass factory updates hash once, descend once, and invoke exactly one
+ * caller-supplied factory, with no retry loop.
+ */
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { PersistentHashMap, createHashPolicy } from "../../src/hamt/index.js";

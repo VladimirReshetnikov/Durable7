@@ -1,3 +1,9 @@
+/**
+ * Shared internals for the construction-only bulk builders.
+ *
+ * A builder mutates unpublished nodes, so building a large collection avoids the path copy every
+ * persistent write would otherwise pay. The nodes are frozen when the builder publishes.
+ */
 type UntypedCombiner = (existing: unknown, incoming: unknown) => unknown;
 
 const combiners = new WeakMap<object, UntypedCombiner>();

@@ -1,3 +1,10 @@
+/**
+ * The algebra a lazily range-updating sequence is parameterized by.
+ *
+ * Tags must form a monoid under composition, and a tag's action on a cached measure must agree with
+ * its action on the individual elements. Those laws are what make a deferred tag indistinguishable
+ * from an applied one.
+ */
 import type { MeasurePolicy } from "./measures.js";
 
 /**

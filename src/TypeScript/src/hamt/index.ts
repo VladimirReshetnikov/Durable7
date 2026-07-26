@@ -1,3 +1,7 @@
+/**
+ * Public entry point for the hash-trie family: maps, sets, derived collections, Patricia tries, and
+ * Merkle search trees.
+ */
 export * from "./hash-policy.js";
 export * from "./persistent-hamt.js";
 export * from "./persistent-hash-bag.js";

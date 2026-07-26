@@ -1,3 +1,7 @@
+/**
+ * Tests for the range-update sequence surface: factories, point and range edits, splitting,
+ * concatenation, and the signed 32-bit count limit.
+ */
 import { describe, expect, it } from "vitest";
 import type { RangeUpdateAlgebra } from "../../src/finger-tree/range-update-algebra.js";
 import { RangeUpdateSequence } from "../../src/finger-tree/range-update-sequence.js";

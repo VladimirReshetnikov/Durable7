@@ -1,3 +1,7 @@
+/**
+ * Tests for the snapshotting hash-trie facade: snapshot isolation from later mutation, and retry
+ * behavior when a reentrant policy callback publishes a new root.
+ */
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
 import {

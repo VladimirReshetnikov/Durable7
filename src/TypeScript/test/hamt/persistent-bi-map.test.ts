@@ -1,3 +1,7 @@
+/**
+ * Tests for the strict bidirectional map: rejection on either domain with the key checked first,
+ * representative retention, and constant-time inversion.
+ */
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import {

@@ -1,3 +1,7 @@
+/**
+ * Property-based tests comparing the insertion-ordered set against an independent ordered-list
+ * model under generated edit histories.
+ */
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";

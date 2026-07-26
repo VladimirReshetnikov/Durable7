@@ -1,3 +1,11 @@
+/**
+ * Persistent CHAMP hash map and hash set, with bulk builders and one-way editing sessions.
+ *
+ * Branching is 32-way and bitmap-indexed, with immutable collision buckets, so lookup, insertion,
+ * and removal are constant time in expectation while versions share every unchanged node. Key
+ * equivalence comes from a retained hash policy, and a no-op returns a collection sharing the
+ * receiver's root.
+ */
 import { getBulkBuilderCombiner } from "./bulk-builder-internals.js";
 import { defaultHashPolicy, sameValueZero, type HashPolicy } from "./hash-policy.js";
 
@@ -80,47 +88,64 @@ interface RemoveResult<K, V> {
 
 /** A concrete stored key/value representative. */
 export interface HamtEntry<K, V> {
+    /** The key. */
     readonly key: K;
+    /** The value. */
     readonly value: V;
 }
 
 /** Result of a non-throwing insertion. */
 export interface AddResult<T> {
+    /** The value. */
     readonly value: T;
+    /** Whether a new entry was published, as opposed to an equivalent key already being present. */
     readonly added: boolean;
 }
 
 /** Result of removing a map key. */
 export interface MapRemoveResult<K, V> {
+    /** The resulting collection. */
     readonly map: PersistentHashMap<K, V>;
+    /** The value. */
     readonly value: V;
 }
 
 /** Result of removing a map entry, including its stored key representative. */
 export interface MapRemoveEntryResult<K, V> {
+    /** The resulting collection. */
     readonly map: PersistentHashMap<K, V>;
+    /** The stored key representative and value that were removed. */
     readonly entry: HamtEntry<K, V>;
 }
 
 /** Result of a factory-driven persistent map update. */
 export interface MapUpdateResult<K, V> {
+    /** The resulting collection. */
     readonly map: PersistentHashMap<K, V>;
+    /** The value. */
     readonly value: V;
 }
 
 /** Result of removing a set element, including its stored representative. */
 export interface SetRemoveResult<T> {
+    /** A map with the key bound to the value, adding or replacing as needed. */
     readonly set: PersistentHashSet<T>;
+    /** The value. */
     readonly value: T;
 }
 
+/** Which side of a diff an entry falls on. */
 export type MapDifferenceKind = "added" | "removed" | "changed";
 
 /** Typed semantic difference between two maps. */
 export interface MapDifference<K, V> {
+    /** Which side the difference falls on. */
     readonly kind: MapDifferenceKind;
+    /** The key. */
     readonly key: K;
+    /** The value on the source side, absent when the key was added. */
     readonly before: V | undefined;
+    /** The value on the target side, absent when the key was removed. */
     readonly after: V | undefined;
 }
 
@@ -757,7 +782,9 @@ function* entriesOfNode<K, V>(root: Node<K, V>): Generator<HamtEntry<K, V>, void
 /** Immutable 32-way CHAMP hash map with collision buckets and structural sharing. */
 export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
     readonly #root: Node<K, V> | undefined;
+    /** Number of entries. */
     public readonly size: number;
+    /** The retained policy defining equivalence. */
     public readonly policy: HashPolicy<K>;
 
     private constructor(root: Node<K, V> | undefined, size: number, policy: HashPolicy<K>) {
@@ -766,10 +793,12 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         this.policy = policy;
     }
 
+    /** The empty map, retaining the supplied policy objects. */
     public static empty<K, V>(policy: HashPolicy<K> = defaultHashPolicy<K>()): PersistentHashMap<K, V> {
         return new PersistentHashMap<K, V>(undefined, 0, policy);
     }
 
+    /** Build a map from the given entries. */
     public static from<K, V>(
         items: Iterable<readonly [K, V]>,
         policy: HashPolicy<K> = defaultHashPolicy<K>(),
@@ -792,18 +821,24 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
     /** Adopts this immutable map in O(1); a clean session republishes this exact object. */
     public toTransient(): TransientHashMap<K, V> { return new TransientHashMap(this); }
 
+    /** Whether the map holds no entries. */
     public get isEmpty(): boolean { return this.size === 0; }
 
+    /** Whether both maps reference the same root. A representation test, not an equality test. */
     public sharesRootWith(other: PersistentHashMap<K, V>): boolean { return this.#root === other.#root; }
 
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.getEntry(key) !== undefined; }
 
+    /** The value stored for the key, or `undefined` when absent. */
     public get(key: K): V | undefined { return this.getEntry(key)?.value; }
 
+    /** The stored key representative and value, or `undefined` when absent. */
     public getEntry(key: K): HamtEntry<K, V> | undefined {
         return this.#root === undefined ? undefined : getInNode(this.#root, this.policy.hash(key) | 0, key, 0, this.policy);
     }
 
+    /** A map containing the given entry, keeping the stored representative when present. */
     public put(key: K, value: V): PersistentHashMap<K, V> {
         const hash = this.policy.hash(key) | 0;
         if (this.#root === undefined) return new PersistentHashMap(leaf(hash, key, value), 1, this.policy);
@@ -811,12 +846,14 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return result.changed ? new PersistentHashMap(result.node, this.size + (result.added ? 1 : 0), this.policy) : this;
     }
 
+    /** A map containing the given entry; returns the receiver when it is already present. */
     public add(key: K, value: V): PersistentHashMap<K, V> {
         const result = this.tryAdd(key, value);
         if (!result.added) throw new DuplicateKeyError();
         return result.value;
     }
 
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(key: K, value: V): AddResult<PersistentHashMap<K, V>> {
         const hash = this.policy.hash(key) | 0;
         if (this.#root === undefined) return { value: new PersistentHashMap(leaf(hash, key, value), 1, this.policy), added: true };
@@ -843,19 +880,26 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return this.applyFactoryUpdate(key, addFactory, updateFactory);
     }
 
+    /**
+     * Apply `set` for each pair in turn, so later pairs overwrite earlier ones. Only the final map
+     * is observable; for building from scratch a bulk builder avoids the per-item path copies.
+     */
     public setItems(items: Iterable<readonly [K, V]>): PersistentHashMap<K, V> {
         let result: PersistentHashMap<K, V> = this;
         for (const [key, value] of items) result = result.put(key, value);
         return result;
     }
 
+    /** A map without that entry; returns the receiver when it is absent. */
     public remove(key: K): PersistentHashMap<K, V> { return this.tryRemove(key)?.map ?? this; }
 
+    /** Remove the entry and report what was removed, or `undefined` when absent. */
     public tryRemove(key: K): MapRemoveResult<K, V> | undefined {
         const result = this.tryRemoveEntry(key);
         return result === undefined ? undefined : { map: result.map, value: result.entry.value };
     }
 
+    /** Remove the key and report the stored representative and value, or nothing when absent. */
     public tryRemoveEntry(key: K): MapRemoveEntryResult<K, V> | undefined {
         if (this.#root === undefined) return undefined;
         const result = removeNode(this.#root, this.policy.hash(key) | 0, key, 0, this.policy);
@@ -863,16 +907,19 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return { map: new PersistentHashMap(result.node, this.size - 1, this.policy), entry: result.removed };
     }
 
+    /** An empty map retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentHashMap<K, V> {
         return this.isEmpty ? this : new PersistentHashMap(undefined, 0, this.policy);
     }
 
+    /** The entries of both maps. */
     public union(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> {
         this.requireSamePolicy(other);
         if (this.#root === other.#root) return this;
         return this.setItems(Array.from(other, (entry): readonly [K, V] => [entry.key, entry.value]));
     }
 
+    /** The entries present in both maps. */
     public intersect(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> {
         this.requireSamePolicy(other);
         if (this.#root === other.#root) return this;
@@ -881,6 +928,7 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return result.mapEquals(this) ? this : result;
     }
 
+    /** This map's entries that are absent from the other. */
     public except(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> {
         this.requireSamePolicy(other);
         if (this.#root === other.#root) return this.clear();
@@ -889,6 +937,7 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return result;
     }
 
+    /** The entries present in exactly one of the two maps. */
     public symmetricExcept(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> {
         this.requireSamePolicy(other);
         if (this.#root === other.#root) return this.clear();
@@ -897,6 +946,7 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         return result;
     }
 
+    /** Whether both hold the same entries, comparing values with the supplied predicate. */
     public mapEquals(other: PersistentHashMap<K, V>, valueEquals: (left: V, right: V) => boolean = valuesEqual): boolean {
         this.requireSamePolicy(other);
         if (this.#root === other.#root) return true;
@@ -923,6 +973,7 @@ export class PersistentHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
 
     public *keys(): Generator<K, void> { for (const entry of this) yield entry.key; }
     public *values(): Generator<V, void> { for (const entry of this) yield entry.value; }
+    /** Iterate the entries. */
     public entries(): IterableIterator<HamtEntry<K, V>> { return this[Symbol.iterator](); }
 
     public [Symbol.iterator](): IterableIterator<HamtEntry<K, V>> {
@@ -982,15 +1033,20 @@ export class HashMapBulkBuilder<K, V> {
         this.#policy = policy;
     }
 
+    /** Number of entries. */
     public get size(): number { return this.#size; }
+    /** Whether the builder holds no entries. */
     public get isEmpty(): boolean { return this.#size === 0; }
+    /** The retained policy defining equivalence. */
     public get policy(): HashPolicy<K> { return this.#policy; }
 
+    /** A map with the key bound to the value, adding or replacing as needed. */
     public setItem(key: K, value: V): HashMapBulkBuilder<K, V> {
         this.applyItem(key, value);
         return this;
     }
 
+    /** Add or replace every pair in turn, mutating the builder's unpublished nodes. */
     public setItems(items: Iterable<readonly [K, V]>): HashMapBulkBuilder<K, V> {
         if (items === null || items === undefined) throw new TypeError("items must be iterable.");
         for (const [key, value] of items) this.setItem(key, value);
@@ -1037,10 +1093,12 @@ export class PersistentHashSet<T> implements Iterable<T> {
 
     private constructor(map: PersistentHashMap<T, true>) { this.#map = map; }
 
+    /** The empty set, retaining the supplied policy objects. */
     public static empty<T>(policy: HashPolicy<T> = defaultHashPolicy<T>()): PersistentHashSet<T> {
         return new PersistentHashSet(PersistentHashMap.empty<T, true>(policy));
     }
 
+    /** Build a set from the given elements. */
     public static from<T>(values: Iterable<T>, policy: HashPolicy<T> = defaultHashPolicy<T>()): PersistentHashSet<T> {
         if (values === null || values === undefined) throw new TypeError("values must be iterable.");
         const builder = PersistentHashMap.createBulkBuilder<T, true>(policy);
@@ -1048,35 +1106,53 @@ export class PersistentHashSet<T> implements Iterable<T> {
         return new PersistentHashSet(builder.toImmutable());
     }
 
+    /** An empty single-owner editing session under the given policy. */
     public static createTransient<T>(policy: HashPolicy<T> = defaultHashPolicy<T>()): TransientHashSet<T> {
         return new TransientHashSet(PersistentHashSet.empty<T>(policy));
     }
 
+    /**
+     * A single-owner editing session starting from this value, which is itself unaffected by the
+     * session's edits.
+     */
     public toTransient(): TransientHashSet<T> { return new TransientHashSet(this); }
 
+    /** Number of elements. */
     public get size(): number { return this.#map.size; }
+    /** Whether the set holds no elements. */
     public get isEmpty(): boolean { return this.#map.isEmpty; }
+    /** The retained policy defining equivalence. */
     public get policy(): HashPolicy<T> { return this.#map.policy; }
+    /** Whether both sets reference the same root. A representation test, not an equality test. */
     public sharesRootWith(other: PersistentHashSet<T>): boolean { return this.#map.sharesRootWith(other.#map); }
+    /** Whether the element is present. */
     public contains(value: T): boolean { return this.#map.containsKey(value); }
+    /** The value stored for the key, or `undefined` when absent. */
     public get(value: T): T | undefined { return this.#map.getEntry(value)?.key; }
+    /** A set containing the given element; returns the receiver when it is already present. */
     public add(value: T): PersistentHashSet<T> { return this.withMap(this.#map.add(value, true)); }
 
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(value: T): AddResult<PersistentHashSet<T>> {
         const result = this.#map.tryAdd(value, true);
         return { value: this.withMap(result.value), added: result.added };
     }
 
+    /** A set containing the given element, keeping the stored representative when present. */
     public put(value: T): PersistentHashSet<T> { return this.withMap(this.#map.put(value, true)); }
+    /** A set without that element; returns the receiver when it is absent. */
     public remove(value: T): PersistentHashSet<T> { return this.withMap(this.#map.remove(value)); }
 
+    /** Remove the element and report what was removed, or `undefined` when absent. */
     public tryRemove(value: T): SetRemoveResult<T> | undefined {
         const result = this.#map.tryRemoveEntry(value);
         return result === undefined ? undefined : { set: this.withMap(result.map), value: result.entry.key };
     }
 
+    /** An empty set retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentHashSet<T> { return this.withMap(this.#map.clear()); }
 
+    /** The elements of both sets. */
     public union(values: Iterable<T> | PersistentHashSet<T>): PersistentHashSet<T> {
         if (values instanceof PersistentHashSet) return this.withMap(this.#map.union(values.#map));
         let result: PersistentHashSet<T> = this;
@@ -1084,6 +1160,7 @@ export class PersistentHashSet<T> implements Iterable<T> {
         return result;
     }
 
+    /** The elements present in both sets. */
     public intersect(values: Iterable<T> | PersistentHashSet<T>): PersistentHashSet<T> {
         if (values instanceof PersistentHashSet && values.policy === this.policy) return this.withMap(this.#map.intersect(values.#map));
         const probe = PersistentHashSet.from(values, this.policy);
@@ -1093,6 +1170,7 @@ export class PersistentHashSet<T> implements Iterable<T> {
         return result.size === this.size ? this : result;
     }
 
+    /** This set's elements that are absent from the other. */
     public except(values: Iterable<T> | PersistentHashSet<T>): PersistentHashSet<T> {
         if (values instanceof PersistentHashSet && values.policy === this.policy) return this.withMap(this.#map.except(values.#map));
         let result: PersistentHashSet<T> = this;
@@ -1100,6 +1178,7 @@ export class PersistentHashSet<T> implements Iterable<T> {
         return result;
     }
 
+    /** The elements present in exactly one of the two sets. */
     public symmetricExcept(values: Iterable<T> | PersistentHashSet<T>): PersistentHashSet<T> {
         if (values instanceof PersistentHashSet && values.policy === this.policy) return this.withMap(this.#map.symmetricExcept(values.#map));
         const distinct = PersistentHashSet.from(values, this.policy);
@@ -1108,6 +1187,7 @@ export class PersistentHashSet<T> implements Iterable<T> {
         return result;
     }
 
+    /** Whether every element of this set also occurs in the other. */
     public isSubsetOf(values: Iterable<T>): boolean {
         const probe = values instanceof PersistentHashSet && values.policy === this.policy ? values : PersistentHashSet.from(values, this.policy);
         if (this.size > probe.size) return false;
@@ -1115,26 +1195,31 @@ export class PersistentHashSet<T> implements Iterable<T> {
         return true;
     }
 
+    /** Whether this set is a subset of the other and the other holds an element it lacks. */
     public isProperSubsetOf(values: Iterable<T>): boolean {
         const probe = values instanceof PersistentHashSet && values.policy === this.policy ? values : PersistentHashSet.from(values, this.policy);
         return this.size < probe.size && this.isSubsetOf(probe);
     }
 
+    /** Whether every element of the other occurs in this set. */
     public isSupersetOf(values: Iterable<T>): boolean {
         for (const value of values) if (!this.contains(value)) return false;
         return true;
     }
 
+    /** Whether this set is a superset of the other and holds an element the other lacks. */
     public isProperSupersetOf(values: Iterable<T>): boolean {
         const probe = values instanceof PersistentHashSet && values.policy === this.policy ? values : PersistentHashSet.from(values, this.policy);
         return this.size > probe.size && this.isSupersetOf(probe);
     }
 
+    /** Whether the two sets share at least one element. */
     public overlaps(values: Iterable<T>): boolean {
         for (const value of values) if (this.contains(value)) return true;
         return false;
     }
 
+    /** Whether both sets hold the same elements. */
     public setEquals(values: Iterable<T>): boolean {
         const probe = values instanceof PersistentHashSet && values.policy === this.policy ? values : PersistentHashSet.from(values, this.policy);
         return this.size === probe.size && this.isSubsetOf(probe);
@@ -1166,23 +1251,34 @@ export class TransientHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
     #version = 0;
 
     public constructor(source: PersistentHashMap<K, V>) { this.#current = source; }
+    /** Number of entries. */
     public get size(): number { this.ensureActive(); return this.#current.size; }
+    /** Whether the session holds no entries. */
     public get isEmpty(): boolean { return this.size === 0; }
+    /** The retained policy defining equivalence. */
     public get policy(): HashPolicy<K> { this.ensureActive(); return this.#current.policy; }
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { this.ensureActive(); return this.#current.containsKey(key); }
+    /** The value stored for the key, or `undefined` when absent. */
     public get(key: K): V | undefined { this.ensureActive(); return this.#current.get(key); }
+    /** The stored key representative and value, or `undefined` when absent. */
     public getEntry(key: K): HamtEntry<K, V> | undefined { this.ensureActive(); return this.#current.getEntry(key); }
 
+    /** A map with the key bound to the value, adding or replacing as needed. */
     public set(key: K, value: V): void { this.publishMutation(this.#current.put(key, value)); }
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(key: K, value: V): boolean {
         this.ensureActive(); const result = this.#current.tryAdd(key, value);
         if (result.added) this.publishMutation(result.value); return result.added;
     }
+    /** A session containing the given entry; returns the receiver when it is already present. */
     public add(key: K, value: V): void { if (!this.tryAdd(key, value)) throw new DuplicateKeyError(); }
+    /** A session without that entry; returns the receiver when it is absent. */
     public remove(key: K): boolean {
         this.ensureActive(); const result = this.#current.tryRemoveEntry(key);
         if (result === undefined) return false; this.publishMutation(result.map); return true;
     }
+    /** An empty session retaining the same policies; returns the receiver when already empty. */
     public clear(): void { this.publishMutation(this.#current.clear()); }
 
     /** Consumes the session. Every later operation, including enumeration, throws. */
@@ -1190,10 +1286,12 @@ export class TransientHashMap<K, V> implements Iterable<HamtEntry<K, V>> {
         this.ensureActive(); this.#active = false; return this.#current;
     }
 
+    /** Iterate the keys. */
     public keys(): IterableIterator<K> {
         const entries = this.versionedEntries();
         return (function* (): IterableIterator<K> { for (const entry of entries) yield entry.key; })();
     }
+    /** Iterate the values. */
     public values(): IterableIterator<V> {
         const entries = this.versionedEntries();
         return (function* (): IterableIterator<V> { for (const entry of entries) yield entry.value; })();
@@ -1224,21 +1322,40 @@ export class TransientHashSet<T> implements Iterable<T> {
     #active = true;
     #version = 0;
     public constructor(source: PersistentHashSet<T>) { this.#current = source; }
+    /** Number of elements. */
     public get size(): number { this.ensureActive(); return this.#current.size; }
+    /** Whether the session holds no elements. */
     public get isEmpty(): boolean { return this.size === 0; }
+    /** The retained policy defining equivalence. */
     public get policy(): HashPolicy<T> { this.ensureActive(); return this.#current.policy; }
+    /** Whether the element is present. */
     public contains(value: T): boolean { this.ensureActive(); return this.#current.contains(value); }
+    /** The value stored for the key, or `undefined` when absent. */
     public get(value: T): T | undefined { this.ensureActive(); return this.#current.get(value); }
+    /** A session containing the given element; returns the receiver when it is already present. */
     public add(value: T): boolean { this.ensureActive(); const result = this.#current.tryAdd(value); if (result.added) this.publishMutation(result.value); return result.added; }
+    /** A session containing the given element, keeping the stored representative when present. */
     public put(value: T): void { this.publishMutation(this.#current.put(value)); }
+    /** A session without that element; returns the receiver when it is absent. */
     public remove(value: T): boolean { this.ensureActive(); const result = this.#current.tryRemove(value); if (result === undefined) return false; this.publishMutation(result.set); return true; }
+    /** An empty session retaining the same policies; returns the receiver when already empty. */
     public clear(): void { this.publishMutation(this.#current.clear()); }
+    /** Whether every element of this session also occurs in the other. */
     public isSubsetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isSubsetOf(values); }
+    /** Whether this session is a subset of the other and the other holds an element it lacks. */
     public isProperSubsetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isProperSubsetOf(values); }
+    /** Whether every element of the other occurs in this session. */
     public isSupersetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isSupersetOf(values); }
+    /** Whether this session is a superset of the other and holds an element the other lacks. */
     public isProperSupersetOf(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.isProperSupersetOf(values); }
+    /** Whether the two sessions share at least one element. */
     public overlaps(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.overlaps(values); }
+    /** Whether both sessions hold the same elements. */
     public setEquals(values: Iterable<T>): boolean { this.ensureActive(); return this.#current.setEquals(values); }
+    /**
+     * End the session and return its current value. The session is closed afterwards, which is what
+     * makes the published value safe to share.
+     */
     public persist(): PersistentHashSet<T> { this.ensureActive(); this.#active = false; return this.#current; }
     public [Symbol.iterator](): IterableIterator<T> {
         this.ensureActive(); const expected = this.#version, owner = this, iterator = this.#current[Symbol.iterator]();

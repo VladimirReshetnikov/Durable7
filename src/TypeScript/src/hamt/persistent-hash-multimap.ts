@@ -1,9 +1,18 @@
+/**
+ * Persistent set-valued hash multimap.
+ *
+ * Maps each key to a nonempty value set, so adding a present pair is a no-op and removing a key's
+ * last value removes the key itself. Distinct-key and pair cardinalities are tracked separately,
+ * because neither can be derived from the other in constant time.
+ */
 import { defaultHashPolicy, type HashPolicy } from "./hash-policy.js";
 import { PersistentHashMap, PersistentHashSet } from "./persistent-hamt.js";
 
 /** One stored representative pair from a set-valued hash multimap. */
 export interface HashMultimapEntry<K, V> {
+    /** The key. */
     readonly key: K;
+    /** The value. */
     readonly value: V;
 }
 
@@ -40,6 +49,7 @@ export class PersistentHashMultimap<K, V> implements Iterable<HashMultimapEntry<
         this.#pairCount = pairCount;
     }
 
+    /** The empty multimap, retaining the supplied policy objects. */
     public static empty<K, V>(
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
         valuePolicy: HashPolicy<V> = defaultHashPolicy<V>(),
@@ -51,6 +61,7 @@ export class PersistentHashMultimap<K, V> implements Iterable<HashMultimapEntry<
         );
     }
 
+    /** Build a multimap from the given pairs. */
     public static from<K, V>(
         entries: Iterable<readonly [K, V]>,
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
@@ -62,14 +73,21 @@ export class PersistentHashMultimap<K, V> implements Iterable<HashMultimapEntry<
         return result;
     }
 
+    /** Number of distinct keys. Every key has at least one value. */
     public get keyCount(): number { return this.#groups.size; }
+    /** Number of pairs, maintained incrementally rather than derived by summing groups. */
     public get pairCount(): number { return this.#pairCount; }
+    /** Whether the multimap holds no pairs. */
     public get isEmpty(): boolean { return this.#pairCount === 0; }
+    /** The retained hash policy defining key equivalence. */
     public get keyPolicy(): HashPolicy<K> { return this.#groups.policy; }
+    /** The retained hash policy defining value equivalence. */
     public get valuePolicy(): HashPolicy<V> { return this.#valuePolicy; }
 
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.#groups.containsKey(key); }
 
+    /** Whether the pair is present. */
     public contains(key: K, value: V): boolean {
         return this.#groups.getEntry(key)?.value.contains(value) ?? false;
     }
@@ -84,6 +102,10 @@ export class PersistentHashMultimap<K, V> implements Iterable<HashMultimapEntry<
         return this.#groups.getEntry(key)?.value ?? PersistentHashSet.empty(this.#valuePolicy);
     }
 
+    /**
+     * The value group for that key, reported presence-safely so absence stays distinct from an
+     * empty group.
+     */
     public tryGetValues(key: K): HashMultimapLookup<V> {
         const group = this.#groups.getEntry(key);
         return group === undefined
@@ -136,10 +158,12 @@ export class PersistentHashMultimap<K, V> implements Iterable<HashMultimapEntry<
         );
     }
 
+    /** An empty multimap retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentHashMultimap<K, V> {
         return this.isEmpty ? this : PersistentHashMultimap.empty(this.keyPolicy, this.#valuePolicy);
     }
 
+    /** Iterate the keys. */
     public keys(): IterableIterator<K> { return this.#groups.keys(); }
 
     public *entries(): Generator<HashMultimapEntry<K, V>, void> {

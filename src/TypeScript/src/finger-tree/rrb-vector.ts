@@ -1,3 +1,10 @@
+/**
+ * Persistent relaxed radix-balanced vector.
+ *
+ * A strict radix vector indexes in effectively constant time but cannot split or concatenate
+ * cheaply. The relaxed variant allows irregular nodes carrying a size table, which makes those
+ * operations logarithmic while regular nodes keep pure radix arithmetic and store no table at all.
+ */
 const branchFactor = 32;
 const radixBits = 5;
 
@@ -147,13 +154,27 @@ function* iterate<T>(root: RrbNode<T>): Generator<T, void> {
     }
 }
 
+/** An endpoint element together with the vector that remains after removing it. */
 export interface RrbPop<T> { readonly value: T; readonly rest: RrbVector<T> }
+/** The two vectors produced by a positional split; both share structure with the original. */
 export interface RrbVectorSplit<T> { readonly left: RrbVector<T>; readonly right: RrbVector<T> }
+/**
+ * An element found next to a cursor gap, wrapped so a stored `undefined` stays distinct from
+ * "nothing there".
+ */
 export interface RrbCursorPeek<T> { readonly value: T }
+/**
+ * Shape measurements returned by a successful structural audit. The regular and relaxed branch
+ * counts show how much of the tree still uses pure radix addressing.
+ */
 export interface RrbVectorStatistics {
+    /** Number of elements. */
     readonly count: number; readonly height: number; readonly leafCount: number; readonly branchCount: number;
+    /** How many branches use pure radix addressing and store no size table. */
     readonly regularBranchCount: number; readonly relaxedBranchCount: number;
+    /** Fewest elements in any leaf. */
     readonly minimumLeafLength: number; readonly maximumLeafLength: number;
+    /** Fewest children under any branch. */
     readonly minimumBranchingFactor: number; readonly maximumBranchingFactor: number;
 }
 
@@ -162,25 +183,42 @@ export class RrbVector<T> implements Iterable<T> {
     readonly #root: RrbNode<T> | undefined;
     /** @internal Constructs a vector from an already validated tree root. */
     public constructor(root: RrbNode<T> | undefined) { this.#root = normalizeRoot(root); }
+    /** The empty vector, retaining the supplied policy objects. */
     public static empty<T>(): RrbVector<T> { return new RrbVector<T>(undefined); }
+    /** Build a vector from the given elements. */
     public static from<T>(values: Iterable<T>): RrbVector<T> {
         if (values instanceof RrbVector) return values;
         return new RrbVectorBuilder<T>().appendAll(values).toImmutable();
     }
+    /** An empty append builder. */
     public static builder<T>(): RrbVectorBuilder<T> { return new RrbVectorBuilder<T>(); }
+    /** A cursor at the given gap of the vector. */
     public getCursor(position = 0): RrbVectorCursor<T> { return new RrbVectorCursor(this, position); }
+    /** Number of elements. */
     public get size(): number { return this.#root?.count ?? 0; }
+    /** Whether the vector holds no elements. */
     public get isEmpty(): boolean { return this.#root === undefined; }
+    /** Tree height, exposed for structural diagnostics. */
     public get height(): number { return this.#root?.height ?? 0; }
+    /** The value stored for the key, or `undefined` when absent. */
     public get(index: number): T | undefined { return !Number.isInteger(index) || index < 0 || index >= this.size ? undefined : getNode(this.#root!, index); }
+    /** The first element, or `undefined` when empty. */
     public front(): T | undefined { return this.get(0); }
+    /** The last element, or `undefined` when empty. */
     public back(): T | undefined { return this.get(this.size - 1); }
+    /** A vector with the value added at the back. */
     public append(value: T): RrbVector<T> { return this.concat(new RrbVector(new RrbLeaf([value]))); }
+    /** A vector with the value added at the front. */
     public prepend(value: T): RrbVector<T> { return new RrbVector<T>(new RrbLeaf([value])).concat(this); }
+    /** A map with the key bound to the value, adding or replacing as needed. */
     public setItem(index: number, value: T): RrbVector<T> | undefined {
         if (!Number.isInteger(index) || index < 0 || index >= this.size) return undefined;
         const root = setNode(this.#root!, index, value); return root === this.#root ? this : new RrbVector(root);
     }
+    /**
+     * This vector's elements followed by the other's, joining the two trees rather than copying
+     * either.
+     */
     public concat(other: RrbVector<T>): RrbVector<T> {
         if (this.#root === undefined) return other;
         if (other.#root === undefined) return this;
@@ -188,6 +226,10 @@ export class RrbVector<T> implements Iterable<T> {
         const roots = concatNodes(this.#root, other.#root);
         return new RrbVector(roots.length === 1 ? roots[0] : new RrbBranch(roots));
     }
+    /**
+     * The elements before the index and those from it on; both halves share structure with the
+     * receiver.
+     */
     public splitAt(index: number): RrbVectorSplit<T> | undefined {
         if (!Number.isInteger(index) || index < 0 || index > this.size) return undefined;
         if (index === 0) return { left: RrbVector.empty(), right: this };
@@ -195,22 +237,37 @@ export class RrbVector<T> implements Iterable<T> {
         const split = splitNode(this.#root!, index);
         return { left: new RrbVector(split[0]), right: new RrbVector(split[1]) };
     }
+    /** A vector with the value inserted so that it ends up at the given index. */
     public insertAt(index: number, value: T): RrbVector<T> | undefined { return this.insertRange(index, [value]); }
+    /** A vector with every value inserted at the given index, in order. */
     public insertRange(index: number, values: Iterable<T>): RrbVector<T> | undefined {
         const split = this.splitAt(index); if (split === undefined) return undefined;
         const middle = RrbVector.from(values); return middle.isEmpty ? this : split.left.concat(middle).concat(split.right);
     }
+    /** A vector without the element at the given index. */
     public removeAt(index: number): RrbVector<T> | undefined { return this.removeRange(index, 1); }
+    /** A vector without the given run of elements. */
     public removeRange(index: number, count: number): RrbVector<T> | undefined {
         if (!Number.isInteger(index) || !Number.isInteger(count) || index < 0 || count < 0 || index + count > this.size) return undefined;
         if (count === 0) return this;
         const first = this.splitAt(index)!; const second = first.right.splitAt(count)!; return first.left.concat(second.right);
     }
+    /** Remove the last element, returning it with the remaining vector, or nothing when empty. */
     public tryRemoveLast(): RrbPop<T> | undefined { return this.isEmpty ? undefined : { value: this.back()!, rest: this.removeAt(this.size - 1)! }; }
+    /** An empty vector retaining the same policies; returns the receiver when already empty. */
     public clear(): RrbVector<T> { return this.isEmpty ? this : RrbVector.empty(); }
+    /** A builder seeded with these elements, leaving the receiver untouched. */
     public toBuilder(): RrbVectorBuilder<T> { return new RrbVectorBuilder(this); }
+    /** Copy the elements into an array, in order. */
     public toArray(): T[] { return Array.from(this); }
+    /**
+     * Whether both vectors reference the same root. A representation test, not an equality test.
+     */
     public sharesRootWith(other: RrbVector<T>): boolean { return this.#root === other.#root; }
+    /**
+     * Number of leaves the two vectors have in common by identity, used to show that a derived
+     * version really shares structure.
+     */
     public sharedLeafCount(other: RrbVector<T>): number {
         const leaves = new Set<RrbLeaf<T>>(); const stack = this.#root === undefined ? [] : [this.#root];
         while (stack.length !== 0) { const node = stack.pop()!; if (node.kind === "leaf") leaves.add(node); else stack.push(...node.children); }
@@ -218,6 +275,10 @@ export class RrbVector<T> implements Iterable<T> {
         while (probe.length !== 0) { const node = probe.pop()!; if (node.kind === "leaf") { if (leaves.has(node)) count++; } else probe.push(...node.children); }
         return count;
     }
+    /**
+     * Walk the whole vector and check its invariants, throwing on the first violation. A defensive
+     * audit, not part of normal use.
+     */
     public validateStructure(): RrbVectorStatistics {
         if (this.#root === undefined) return { count: 0, height: 0, leafCount: 0, branchCount: 0, regularBranchCount: 0, relaxedBranchCount: 0, minimumLeafLength: 0, maximumLeafLength: 0, minimumBranchingFactor: 0, maximumBranchingFactor: 0 };
         let leafCount = 0; let branchCount = 0; let regular = 0; let relaxed = 0;
@@ -247,49 +308,70 @@ export class RrbVectorCursor<T> {
             throw new RangeError("Cursor position is outside the RRB vector.");
         }
     }
+    /** Number of elements. */
     public get size(): number { return this.vector.size; }
+    /** Whether the gap precedes the first element. */
     public get isAtStart(): boolean { return this.position === 0; }
+    /** Whether the gap follows the last element. */
     public get isAtEnd(): boolean { return this.position === this.size; }
+    /** The element immediately before the gap, or `undefined` at the start. */
     public peekPrevious(): RrbCursorPeek<T> | undefined {
         return this.isAtStart ? undefined : { value: this.vector.get(this.position - 1)! };
     }
+    /** The element immediately after the gap, or `undefined` at the end. */
     public peekNext(): RrbCursorPeek<T> | undefined {
         return this.isAtEnd ? undefined : { value: this.vector.get(this.position)! };
     }
+    /**
+     * A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+     * the same version.
+     */
     public movePrevious(): RrbVectorCursor<T> {
         if (this.isAtStart) throw new RangeError("Cursor is already at the start.");
         return new RrbVectorCursor(this.vector, this.position - 1);
     }
+    /** A cursor one position later. The receiver is unchanged. */
     public moveNext(): RrbVectorCursor<T> {
         if (this.isAtEnd) throw new RangeError("Cursor is already at the end.");
         return new RrbVectorCursor(this.vector, this.position + 1);
     }
+    /** A cursor at the given position within the same vector version. */
     public seek(position: number): RrbVectorCursor<T> {
         return position === this.position ? this : new RrbVectorCursor(this.vector, position);
     }
+    /** Insert at the gap and return a cursor positioned after the new element. */
     public insert(value: T): RrbVectorCursor<T> {
         return new RrbVectorCursor(this.vector.insertAt(this.position, value)!, this.position + 1);
     }
+    /** Insert every value at the gap, in order, returning a cursor after the last. */
     public insertRange(values: Iterable<T>): RrbVectorCursor<T> {
         return this.insertVector(RrbVector.from(values));
     }
+    /**
+     * Insert every element of another vector at the gap, splitting and joining once regardless of
+     * length.
+     */
     public insertVector(values: RrbVector<T>): RrbVectorCursor<T> {
         if (values.isEmpty) return this;
         const split = this.vector.splitAt(this.position)!;
         return new RrbVectorCursor(split.left.concat(values).concat(split.right), this.position + values.size);
     }
+    /** Remove the element before the gap and return a cursor in its place. */
     public deletePrevious(): RrbVectorCursor<T> {
         if (this.isAtStart) throw new RangeError("No element precedes the cursor.");
         return new RrbVectorCursor(this.vector.removeAt(this.position - 1)!, this.position - 1);
     }
+    /** Remove the element after the gap and return a cursor in its place. */
     public deleteNext(): RrbVectorCursor<T> {
         if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
         return new RrbVectorCursor(this.vector.removeAt(this.position)!, this.position);
     }
+    /** Replace the element after the gap, keeping the gap where it is. */
     public replaceNext(value: T): RrbVectorCursor<T> {
         if (this.isAtEnd) throw new RangeError("No element follows the cursor.");
         return new RrbVectorCursor(this.vector.setItem(this.position, value)!, this.position);
     }
+    /** The vector version this cursor is positioned in. */
     public snapshot(): RrbVector<T> { return this.vector; }
 }
 
@@ -301,10 +383,15 @@ export class RrbVectorBuilder<T> implements Iterable<T> {
     #stagedCount = 0;
     #version = 0;
     public constructor(prefix: RrbVector<T> = RrbVector.empty<T>()) { this.#prefix = prefix; }
+    /** Number of elements. */
     public get size(): number { return checkedCount(this.#prefix.size, this.#stagedCount); }
+    /** A vector with the value added at the back. */
     public append(value: T): this { this.#tail.push(value); this.#stagedCount++; if (this.#tail.length === branchFactor) { this.#leaves.push(new RrbLeaf(this.#tail)); this.#tail = []; } this.#version++; return this; }
+    /** Append every element of the given sequence, in order. */
     public appendAll(values: Iterable<T>): this { for (const value of values) this.append(value); return this; }
+    /** An empty vector retaining the same policies; returns the receiver when already empty. */
     public clear(): this { if (this.size !== 0) { this.#prefix = RrbVector.empty(); this.#leaves = []; this.#tail = []; this.#stagedCount = 0; this.#version++; } return this; }
+    /** Freeze the accumulated elements into a persistent vector. */
     public toImmutable(): RrbVector<T> {
         if (this.#stagedCount === 0) return this.#prefix;
         const nodes = this.#tail.length === 0 ? this.#leaves : [...this.#leaves, new RrbLeaf(this.#tail.slice())];

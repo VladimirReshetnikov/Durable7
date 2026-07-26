@@ -1,3 +1,7 @@
+/**
+ * Tests for set relations computed through a one-way editing session, including that the published
+ * set matches the persistent path.
+ */
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import {

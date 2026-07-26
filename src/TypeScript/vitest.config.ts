@@ -1,3 +1,4 @@
+/** Vitest configuration for the TypeScript test suite. */
 import { defineConfig } from "vitest/config";
 
 const config: ReturnType<typeof defineConfig> = defineConfig({

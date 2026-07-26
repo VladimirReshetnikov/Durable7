@@ -1,3 +1,7 @@
+/**
+ * Tests for the construction-only bulk builder, including that a published collection is detached
+ * from the builder's nodes.
+ */
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import {

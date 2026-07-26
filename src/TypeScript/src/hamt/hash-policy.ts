@@ -1,6 +1,18 @@
+/**
+ * Hashing and equivalence policy for the persistent hash collections, with the default
+ * implementations.
+ *
+ * A collection retains its policy object, so equivalence classes are defined by the policy rather
+ * than by JavaScript's built-in comparison, and two collections can be checked for policy
+ * compatibility before combining.
+ */
 /** Runtime hashing and equivalence policy used by the persistent hash collections. */
 export interface HashPolicy<K> {
+    /**
+     * Return a 32-bit hash for `key`. Keys the policy treats as equivalent must hash identically.
+     */
     hash(key: K): number;
+    /** Return whether the two keys belong to the same equivalence class. */
     equivalent(left: K, right: K): boolean;
 }
 

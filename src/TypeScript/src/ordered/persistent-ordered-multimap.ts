@@ -1,10 +1,19 @@
+/**
+ * Persistent insertion-ordered multimap: ordered keys, each with an ordered value group.
+ *
+ * Order is retained at both levels - keys in the order they first acquired a value, values in the
+ * order they were first added to their key. Value groups are sets, so re-adding a pair disturbs
+ * neither ordering.
+ */
 import { defaultHashPolicy, type HashPolicy } from "../hamt/hash-policy.js";
 import { PersistentOrderedMap } from "./persistent-ordered-map.js";
 import { PersistentOrderedSet } from "./persistent-ordered-set.js";
 
 /** One key/value representative in key-grouped insertion order. */
 export interface OrderedMultimapEntry<K, V> {
+    /** The key. */
     readonly key: K;
+    /** The value. */
     readonly value: V;
 }
 
@@ -15,7 +24,9 @@ export type OrderedMultimapLookup<V> =
 
 /** Result of attempting to add one ordered-multimap pair. */
 export interface OrderedMultimapAddResult<K, V> {
+    /** Whether a new pair was published, as opposed to it already being present. */
     readonly added: boolean;
+    /** The resulting collection. */
     readonly map: PersistentOrderedMultimap<K, V>;
 }
 
@@ -40,6 +51,7 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         this.#pairCount = pairCount;
     }
 
+    /** The empty multimap, retaining the supplied policy objects. */
     public static empty<K, V>(
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
         valuePolicy: HashPolicy<V> = defaultHashPolicy<V>(),
@@ -51,6 +63,7 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         );
     }
 
+    /** Build a multimap from the given pairs. */
     public static from<K, V>(
         entries: Iterable<readonly [K, V]>,
         keyPolicy: HashPolicy<K> = defaultHashPolicy<K>(),
@@ -62,19 +75,27 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         return result;
     }
 
+    /** Number of distinct keys. Every key has at least one value. */
     public get keyCount(): number { return this.#groups.size; }
+    /** Number of pairs, maintained incrementally rather than derived by summing groups. */
     public get pairCount(): number { return this.#pairCount; }
+    /** Whether the multimap holds no pairs. */
     public get isEmpty(): boolean { return this.#pairCount === 0; }
+    /** The retained hash policy defining key equivalence. */
     public get keyPolicy(): HashPolicy<K> { return this.#groups.keyPolicy; }
+    /** The retained hash policy defining value equivalence. */
     public get valuePolicy(): HashPolicy<V> { return this.#valuePolicy; }
 
+    /** Whether the key is present. */
     public containsKey(key: K): boolean { return this.#groups.containsKey(key); }
 
+    /** Whether the pair is present. */
     public contains(key: K, value: V): boolean {
         const group = this.#groups.tryGetEntry(key);
         return group.found && group.entry.value.contains(value);
     }
 
+    /** How many distinct values the key has, or zero when absent. */
     public countValues(key: K): number {
         const group = this.#groups.tryGetEntry(key);
         return group.found ? group.entry.value.size : 0;
@@ -86,6 +107,10 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         return group.found ? group.entry.value : PersistentOrderedSet.empty(this.#valuePolicy);
     }
 
+    /**
+     * The value group for that key, reported presence-safely so absence stays distinct from an
+     * empty group.
+     */
     public tryGetValues(key: K): OrderedMultimapLookup<V> {
         const group = this.#groups.tryGetEntry(key);
         return group.found
@@ -93,8 +118,13 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
             : { found: false, values: PersistentOrderedSet.empty(this.#valuePolicy) };
     }
 
+    /**
+     * The stored key representative, which is the first inserted for its class and survives value
+     * replacement.
+     */
     public getStoredKey(key: K): K | undefined { return this.#groups.getStoredKey(key); }
 
+    /** The stored value representative, reported presence-safely. */
     public tryGetValue(key: K, value: V): { readonly found: boolean; readonly value: V } {
         const group = this.#groups.tryGetEntry(key);
         return group.found ? group.entry.value.tryGetValue(value) : { found: false, value };
@@ -135,6 +165,7 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         return { found: false, cursor: new PersistentOrderedMultimapCursor(this, this.#pairCount) };
     }
 
+    /** The pair at the given rank of the flattened grouped sequence the cursors range over. */
     public cursorEntryAt(rank: number): OrderedMultimapEntry<K, V> {
         if (!Number.isSafeInteger(rank) || rank < 0 || rank >= this.#pairCount) {
             throw new RangeError("rank must identify a key-grouped pair.");
@@ -147,6 +178,7 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         throw new Error("The ordered multimap pair count disagrees with its groups.");
     }
 
+    /** A multimap containing the given pair; returns the receiver when it is already present. */
     public add(key: K, value: V): PersistentOrderedMultimap<K, V> {
         const group = this.#groups.tryGetEntry(key);
         if (group.found) {
@@ -166,11 +198,13 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         );
     }
 
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(key: K, value: V): OrderedMultimapAddResult<K, V> {
         const map = this.add(key, value);
         return { added: map !== this, map };
     }
 
+    /** A multimap without that pair; returns the receiver when it is absent. */
     public remove(key: K, value: V): PersistentOrderedMultimap<K, V> {
         const group = this.#groups.tryGetEntry(key);
         if (!group.found) return this;
@@ -182,6 +216,7 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         return new PersistentOrderedMultimap(groups, this.#valuePolicy, this.#pairCount - 1);
     }
 
+    /** Remove the pair holding that key from both directions. */
     public removeKey(key: K): PersistentOrderedMultimap<K, V> {
         const group = this.#groups.tryGetEntry(key);
         return !group.found
@@ -193,10 +228,12 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
             );
     }
 
+    /** An empty multimap retaining the same policies; returns the receiver when already empty. */
     public clear(): PersistentOrderedMultimap<K, V> {
         return this.isEmpty ? this : PersistentOrderedMultimap.empty(this.keyPolicy, this.#valuePolicy);
     }
 
+    /** Iterate the keys. */
     public keys(): IterableIterator<K> { return this.#groups.keys(); }
 
     public *groups(): Generator<readonly [K, PersistentOrderedSet<V>], void> {
@@ -209,11 +246,19 @@ export class PersistentOrderedMultimap<K, V> implements Iterable<OrderedMultimap
         }
     }
 
+    /**
+     * Whether both multimaps reference the same group map. A representation test, not an equality
+     * test.
+     */
     public sharesGroupsRootsWith(other: PersistentOrderedMultimap<K, V>): boolean {
         return this.#groups.sharesOrderStorageWith(other.#groups)
             && this.#groups.sharesMembershipRootWith(other.#groups);
     }
 
+    /**
+     * Walk the whole multimap and check its invariants, throwing on the first violation. A
+     * defensive audit, not part of normal use.
+     */
     public validateStructure(): { readonly keyCount: number; readonly pairCount: number } {
         this.#groups.validateStructure();
         let pairCount = 0;
@@ -260,28 +305,39 @@ export class PersistentOrderedMultimapCursor<K, V> {
         }
     }
 
+    /** Number of pairs, maintained incrementally rather than derived by summing groups. */
     public get pairCount(): number { return this.snapshot.pairCount; }
+    /** Whether the gap precedes the first pair. */
     public get isAtStart(): boolean { return this.position === 0; }
+    /** Whether the gap follows the last pair. */
     public get isAtEnd(): boolean { return this.position === this.pairCount; }
 
+    /** The pair before the gap, reported presence-safely. */
     public tryPeekPrevious(): OrderedMultimapEntry<K, V> | undefined {
         return this.isAtStart ? undefined : this.snapshot.cursorEntryAt(this.position - 1);
     }
 
+    /** The pair after the gap, reported presence-safely. */
     public tryPeekNext(): OrderedMultimapEntry<K, V> | undefined {
         return this.isAtEnd ? undefined : this.snapshot.cursorEntryAt(this.position);
     }
 
+    /**
+     * A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+     * the same version.
+     */
     public movePrevious(): PersistentOrderedMultimapCursor<K, V> {
         if (this.isAtStart) throw new RangeError("The ordered-multimap cursor is already at the start.");
         return new PersistentOrderedMultimapCursor(this.snapshot, this.position - 1);
     }
 
+    /** A cursor one position later. The receiver is unchanged. */
     public moveNext(): PersistentOrderedMultimapCursor<K, V> {
         if (this.isAtEnd) throw new RangeError("The ordered-multimap cursor is already at the end.");
         return new PersistentOrderedMultimapCursor(this.snapshot, this.position + 1);
     }
 
+    /** A cursor at the given position within the same multimap version. */
     public seek(position: number): PersistentOrderedMultimapCursor<K, V> {
         return position === this.position
             ? this
@@ -302,6 +358,7 @@ export class PersistentOrderedMultimapCursor<K, V> {
         return new PersistentOrderedMultimapCursor(snapshot, groupEndPosition(snapshot, key));
     }
 
+    /** Add the entry, reporting whether it was added rather than throwing on a duplicate. */
     public tryAdd(key: K, value: V): {
         readonly added: boolean;
         readonly cursor: PersistentOrderedMultimapCursor<K, V>;

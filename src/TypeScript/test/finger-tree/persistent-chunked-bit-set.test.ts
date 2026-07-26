@@ -1,3 +1,7 @@
+/**
+ * Tests for the sparse chunked bit set: the nonnegative signed 32-bit index domain, no-op identity,
+ * inclusive rank and zero-based select, and chunkwise set algebra.
+ */
 import { describe, expect, it } from "vitest";
 
 import { PersistentChunkedBitSet } from "../../src/finger-tree/index.js";

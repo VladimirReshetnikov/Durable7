@@ -1,3 +1,7 @@
+/**
+ * Tests for the insertion-ordered multimap: ordering retained at both levels, and group contraction
+ * when a key loses its last value.
+ */
 import { describe, expect, it } from "vitest";
 
 import { createHashPolicy, PersistentOrderedMultimap } from "../../src/index.js";

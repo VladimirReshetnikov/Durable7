@@ -1,3 +1,7 @@
+/**
+ * Tests that iterating a range-update sequence observes the same values as direct access, so
+ * pending tags are pushed down correctly along the traversal.
+ */
 import { describe, expect, it } from "vitest";
 import type { RangeUpdateAlgebra } from "../../src/finger-tree/range-update-algebra.js";
 import { RangeUpdateSequence } from "../../src/finger-tree/range-update-sequence.js";
