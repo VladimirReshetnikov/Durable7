@@ -160,6 +160,35 @@ var firstEntry = map.EntryAt(0);
 var range = map.GetRange(1, 2);
 ```
 
+Use `PersistentDeltaMap<TKey, TValue>` when the recurring question is “what is the exact net change
+from this accepted checkpoint?” rather than an arbitrary-pair diff:
+
+```csharp
+var tracked = PersistentDeltaMap<int, string>.CreateRange(new[]
+{
+    KeyValuePair.Create(1, "one"),
+    KeyValuePair.Create(2, "two"),
+})
+    .SetItem(1, "ONE")
+    .Remove(2)
+    .SetItem(3, "three");
+
+foreach (var change in tracked.GetChanges()) // keys 1, 2, 3
+    Console.WriteLine($"{change.Key}: {change.Kind}");
+
+var reverted = tracked.Rollback();   // { 1: "one", 2: "two" }, O(1)
+var accepted = tracked.Checkpoint(); // current state becomes the checkpoint, O(1)
+```
+
+Repeated writes coalesce to the checkpoint's first-before/final-after endpoints; restoring an
+endpoint cancels its record. With N keys across checkpoint and current state and k net-changed keys,
+point operations remain O(log(N + 1)) and fully consuming ordered `GetChanges()` is `Θ(k + 1)`.
+This research surface is
+fully persistent but deliberately limited to a designated checkpoint and point updates; it does not
+promise arbitrary-version diff, tracked bulk clear, or tracked range extraction. The
+[proposal and prior-art audit](../../../../docs/proposals/persistent-delta-map-2026-07-25.md) state the
+precise comparison model and novelty boundary.
+
 Pass an `IComparer<T>` or `IComparer<TKey>` through `Create` or `CreateRange` when the default order
 is not the desired order.
 
@@ -687,6 +716,7 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | Batched sorted-set edits before one snapshot | `SortedSet<T>.Builder` |
 | Sorted key/value lookup and rank access | `SortedDictionary<TKey, TValue>` |
 | Batched sorted-dictionary edits before one snapshot | `SortedDictionary<TKey, TValue>.Builder` |
+| Exact sorted net changes from one designated persistent-map checkpoint | `PersistentDeltaMap<TKey, TValue>` |
 | Minimum-priority draining and meld | `PriorityQueue<TElement, TPriority>` |
 | Closed-interval overlap and containment queries | `IntervalTree<T>` |
 | Closed-interval keys with payload lookup and overlap queries | `PersistentIntervalMap<TEndpoint, TValue>` |

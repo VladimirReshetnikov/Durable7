@@ -92,6 +92,19 @@ During interval-map development, run its focused model/invariant lane with:
 .\test.ps1 -Filter FullyQualifiedName~PersistentIntervalMapTests
 ```
 
+For the checkpoint-differential ordered-map research prototype, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentDeltaMapTests
+```
+
+The 2026-07-25 focused lane passes 15/15 cases covering endpoint classification, cancellation,
+representative policy, retained branches, randomized model parity, callback failures, and the
+`Θ(k + 1)` enumeration guard. The complete FingerTree project passes 739/739 tests and the serialized C#
+solution passes 1,545/1,545 tests in both Debug and Release. The broader proposal and scoped novelty
+audit are recorded in the
+[research note](../../../../docs/proposals/persistent-delta-map-2026-07-25.md).
+
 For the sparse chunked bit set, run:
 
 ```powershell

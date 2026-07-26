@@ -28,6 +28,10 @@ reasonable oracle.
   `PriorityQueueTests.cs`, `IntervalTreeTests.cs`, `ReversibleDequeTests.cs`, and
   `DerivedCollectionPersistenceTests.cs` cover derived collection facades and mutable sorted builders against
   BCL or brute-force model behavior.
+- `PersistentDeltaMapTests.cs` covers exact checkpoint-relative before/after changes, coalescing and
+  cancellation, comparer-equivalent representative episodes, retained branches, O(1) root-sharing
+  checkpoint/rollback, randomized model parity, callback failure atomicity, and a baseline-independent
+  change-enumeration comparison-count guard.
 - `PersistentIntervalMapTests.cs` covers strict and replacing updates, lexicographic interval-key
   order, configured payload equality, first interval representatives, reversed-endpoint rejection,
   point and overlap queries against a brute-force model, removal, policy-preserving clear,
@@ -129,6 +133,16 @@ Filter a class while developing a focused change:
 ```powershell
 .\test.ps1 -Filter FullyQualifiedName~RopePropertyTests
 ```
+
+The checkpoint-differential map lane uses:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentDeltaMapTests
+```
+
+The 2026-07-25 research-prototype run passes 15/15 focused cases. After the prototype and its
+edge-case audit were added, the complete FingerTree project passes 739/739 tests and the serialized
+C# solution passes 1,545/1,545 tests in both Debug and Release.
 
 The range-update integration lane uses the same serialized launcher:
 
