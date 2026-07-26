@@ -1,5 +1,20 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Runs the Rust test suites.
+
+.PARAMETER Workspace
+Which workspace to test, or All for every one.
+
+.PARAMETER Release
+Test the optimized build rather than the debug build.
+
+.PARAMETER CargoArguments
+Further arguments passed through to cargo.
+#>
+
+
 [CmdletBinding()]
 param(
     [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered', 'RangeUpdate')]

@@ -1,5 +1,15 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Installs dependencies and runs the TypeScript type check and test suite.
+
+.DESCRIPTION
+Pins the package manager and build tools to a single job, because the unattended runs this script
+targets share a machine and an unbounded parallel build starves them.
+#>
+
+
 [CmdletBinding()]
 param()
 

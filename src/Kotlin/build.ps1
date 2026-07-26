@@ -1,3 +1,11 @@
+<#
+.SYNOPSIS
+Compiles and runs the Kotlin test suites.
+
+.PARAMETER Workspace
+Which workspace to build and test, or All for every one.
+#>
+
 param(
     [ValidateSet("All", "Hamt", "FingerTree", "Ordered")]
     [string]$Workspace = "All"

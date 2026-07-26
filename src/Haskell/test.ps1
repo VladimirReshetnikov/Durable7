@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Builds and runs the Haskell test suites.
+
+.PARAMETER Workspace
+Which package to test, or All for every one.
+
+.PARAMETER CabalArguments
+Further arguments passed through to cabal.
+#>
+
+
 [CmdletBinding()]
 param(
     [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered')]

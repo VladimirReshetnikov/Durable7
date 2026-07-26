@@ -1,3 +1,18 @@
+<#
+.SYNOPSIS
+Compiles and optionally tests the C++ Hamt workspace.
+
+.DESCRIPTION
+Compiles each translation unit directly rather than through CMake, so this workspace can be built
+without a generator present.
+
+.PARAMETER Configuration
+The build configuration.
+
+.PARAMETER RunTests
+Run the test executables after building.
+#>
+
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]

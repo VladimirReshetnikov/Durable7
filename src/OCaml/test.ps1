@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Builds and runs the OCaml test suites.
+
+.PARAMETER Workspace
+Which test directory to run, or All for every one.
+
+.PARAMETER DuneArguments
+Further arguments passed through to dune.
+#>
+
+
 [CmdletBinding()]
 param(
     [ValidateSet('All', 'Common', 'Hamt', 'FingerTree', 'Ordered')]

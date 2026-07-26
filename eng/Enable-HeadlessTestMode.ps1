@@ -1,5 +1,21 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Suppresses the Windows error dialogs a crashing test process would otherwise raise.
+
+.DESCRIPTION
+An unattended test run must fail by exit code, not by waiting on a modal dialog nobody will
+dismiss. This dot-sourced helper defines Enable-HeadlessTestMode, which clears the Windows error
+mode bits responsible for those dialogs and returns the previous state so a caller can restore it.
+On a non-Windows host it reports that it did nothing and succeeds, so the same test scripts run
+unchanged everywhere.
+
+.OUTPUTS
+A PSCustomObject with IsWindows, PreviousMode, EffectiveMode and SuppressedModeMask.
+#>
+
+
 function Enable-HeadlessTestMode {
     [CmdletBinding()]
     param()

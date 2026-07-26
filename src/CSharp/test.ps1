@@ -1,5 +1,37 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Builds and runs the C# test suites.
+
+.DESCRIPTION
+Runs `dotnet test` over the solution with Windows error dialogs suppressed, so an unattended run
+fails by exit code rather than waiting on a dialog.
+
+.PARAMETER Project
+The solution or project to test. Defaults to Durable7.sln beside this script.
+
+.PARAMETER Configuration
+The build configuration to test.
+
+.PARAMETER Filter
+A test filter expression, passed through to `dotnet test`.
+
+.PARAMETER NoRestore
+Skip the restore step, for a repeat run where packages have not changed.
+
+.PARAMETER NoBuild
+Skip the build step and test what is already built.
+
+.PARAMETER Blame
+Run in blame mode, which identifies the test that crashed a run rather than only reporting that one
+did.
+
+.PARAMETER AdditionalArguments
+Further arguments passed through to `dotnet test`.
+#>
+
+
 [CmdletBinding(PositionalBinding = $false)]
 param(
     [string]$Project = (Join-Path $PSScriptRoot 'Durable7.sln'),

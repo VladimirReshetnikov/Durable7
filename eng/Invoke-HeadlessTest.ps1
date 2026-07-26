@@ -1,5 +1,21 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Runs a test executable with Windows error dialogs suppressed.
+
+.DESCRIPTION
+Enables headless test mode, runs the executable, and propagates its exit code. A process that ends
+without reporting an exit code is treated as a failure rather than silently passing.
+
+.PARAMETER ExecutablePath
+The test executable to run.
+
+.PARAMETER ArgumentList
+Arguments to pass to it. Remaining command-line arguments are collected here.
+#>
+
+
 [CmdletBinding()]
 param(
     [Parameter(Mandatory, Position = 0)]

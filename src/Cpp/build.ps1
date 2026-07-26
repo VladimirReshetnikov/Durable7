@@ -1,3 +1,30 @@
+<#
+.SYNOPSIS
+Configures, builds, and optionally tests the C++ workspaces.
+
+.DESCRIPTION
+Imports a Visual C++ environment, then drives CMake and CTest. The tool paths are parameters rather
+than assumptions, so a machine with a different Visual Studio layout can be pointed at its own.
+
+.PARAMETER Workspace
+Which workspaces to build, or All for every one.
+
+.PARAMETER Configuration
+The build configuration.
+
+.PARAMETER RunTests
+Run the test suites after building.
+
+.PARAMETER VisualStudioDevCmd
+Path to VsDevCmd.bat, used to import the C++ build environment.
+
+.PARAMETER CMake
+Path to cmake.exe.
+
+.PARAMETER CTest
+Path to ctest.exe.
+#>
+
 [CmdletBinding()]
 param(
     [ValidateSet('All', 'Hamt', 'FingerTree', 'Ordered')]

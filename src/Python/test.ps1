@@ -1,5 +1,18 @@
 # SPDX-License-Identifier: MIT-0
 
+<#
+.SYNOPSIS
+Runs the Python test suite.
+
+.PARAMETER SkipInstall
+Skip installing the package into the environment, for a repeat run where it has not changed.
+
+.PARAMETER SkipPackageSmoke
+Skip the built-package smoke test, which checks the wheel imports and works as installed rather
+than only from the source tree.
+#>
+
+
 [CmdletBinding()]
 param(
     [switch]$SkipInstall,
