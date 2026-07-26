@@ -1,3 +1,10 @@
+//! Tests for the strict persistent bidirectional map.
+//!
+//! Covers the strictness contract in both domains: an insertion colliding on key, on value, or on
+//! both is rejected with the key domain reported first, and the source map is left untouched.
+//! Also covers first-representative retention under independent key and value hash policies, O(1)
+//! inversion that shares the existing roots, and atomicity when a caller-supplied hasher panics.
+
 use std::collections::HashMap;
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::hash::{BuildHasher, Hash, Hasher};

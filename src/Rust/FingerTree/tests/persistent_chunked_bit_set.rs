@@ -1,3 +1,9 @@
+//! Integration tests for the persistent sparse chunked bit set.
+//!
+//! Checks the nonnegative signed-32-bit index domain (including that out-of-domain indices are
+//! rejected rather than coerced), no-op identity for updates that change nothing, rank/select
+//! agreement with a reference [`BTreeSet`], set algebra, and structural validation.
+
 use std::collections::BTreeSet;
 
 use durable7_fingertree::PersistentChunkedBitSet;

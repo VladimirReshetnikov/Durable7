@@ -1,3 +1,17 @@
+//! DABA Lite: a FIFO sliding-window aggregate with worst-case constant work per operation.
+//!
+//! [`DabaLite`] maintains the monoid combination of every element currently in a FIFO window, and
+//! keeps that aggregate current under pushes and evictions without ever recomputing it from
+//! scratch. Each operation performs one bounded step of an incremental reversal, which is what
+//! turns the usual amortized bound into a worst-case one.
+//!
+//! Unlike the rest of this crate, this type is deliberately **mutable** and is not a persistent
+//! snapshot: operations update the window in place. The aggregate is defined by a [`DabaMonoid`]
+//! implementation, whose `combine` must be associative with `empty` as a two-sided identity but need
+//! not be commutative or invertible. Mutating operations plan all callback work before publishing,
+//! so a callback that panics leaves the window unchanged; side effects that a callback performed on
+//! its own state cannot be rolled back.
+
 use crate::measured::SumMeasure;
 use std::cell::RefCell;
 use std::collections::HashSet;

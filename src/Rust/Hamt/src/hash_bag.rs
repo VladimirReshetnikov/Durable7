@@ -1,3 +1,19 @@
+//! Persistent multiset (bag) with explicit per-class multiplicities.
+//!
+//! [`PersistentHashBag`] stores each equivalence class once, in a CHAMP map from the retained
+//! *first representative* to a positive occurrence count. Counting rather than storing duplicates
+//! keeps memory proportional to the number of distinct classes, and makes "add 1000 copies" O(1)
+//! work instead of a thousand insertions.
+//!
+//! Two counting domains are distinguished on purpose: a per-class count is a positive `i32`, while
+//! the bag's total is a widened `i64` that cannot overflow by summing in-range classes. Operations
+//! that would leave those domains — a negative copy count, or a class exceeding [`i32::MAX`] —
+//! fail with [`HashBagError`] rather than wrapping.
+//!
+//! Multiset algebra (sum, difference, intersection, union) follows the *receiver's* hash policy,
+//! and the receiver's stored representative is retained wherever a class survives, so which
+//! concrete value you get back is well defined rather than incidental.
+
 use super::{Iter, PersistentHashMap};
 use std::collections::hash_map::RandomState;
 use std::fmt;
@@ -108,11 +124,13 @@ impl<T, S> PersistentHashBag<T, S> {
         self.total_count
     }
 
+    /// Returns `true` when the bag holds no occurrences at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.counts.is_empty()
     }
 
+    /// Borrows the retained hash policy that defines this bag's equivalence classes.
     #[must_use]
     pub fn hasher(&self) -> &S {
         self.counts.hasher()
@@ -182,6 +200,7 @@ where
     T: Eq + Hash,
     S: BuildHasher,
 {
+    /// Reports whether `item`'s equivalence class occurs at least once. O(1).
     #[must_use]
     pub fn contains(&self, item: &T) -> bool {
         self.counts.contains_key(item)

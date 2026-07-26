@@ -1,3 +1,10 @@
+//! Tests for the persistent map with an automatically maintained secondary index.
+//!
+//! The central concern is that the index cannot drift from the primary map, so these tests count
+//! index-selector invocations: a duplicate add and a value-identical write must not call it, a
+//! changed value must move the entry between index groups, and a selector that panics must leave
+//! the source snapshot intact.
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};

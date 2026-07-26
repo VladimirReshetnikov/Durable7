@@ -1,3 +1,11 @@
+//! Tests for the lazily range-updating persistent sequence.
+//!
+//! The property under test is that a deferred tag is indistinguishable from an applied one: every
+//! read path - element access, cached measures, iteration, splitting, concatenation - must agree
+//! with eager application. Tests cover tag composition order, alternate identity representations,
+//! persistence of earlier versions across range updates, atomicity when a caller-supplied algebra
+//! panics, and concurrent read-only sharing of one snapshot.
+
 use std::cell::Cell;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;

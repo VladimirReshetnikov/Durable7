@@ -1,3 +1,22 @@
+//! Order-statistic sorted bag, set, and map over the measured finger tree.
+//!
+//! [`SortedBag`], [`SortedSet`], and [`SortedMap`] all keep their elements in ascending order inside
+//! a [`FingerTree`](crate::FingerTree) whose measure caches both the element count and the largest
+//! key of each subtree. Caching both means one generic split answers ordered queries *and*
+//! positional queries, so these types offer rank and select — "how many elements are below `x`",
+//! "what is the element at index `i`" — in O(log n), which an ordinary balanced tree cannot do
+//! without extra bookkeeping.
+//!
+//! The three differ only in what an element is and how duplicates are treated: a bag admits
+//! equivalent elements, a set keeps the first representative of each equivalence class, and a map
+//! stores `(key, value)` pairs keyed by the first representative. Duplicate-rejecting map insertion
+//! reports [`DuplicateKeyError`] rather than overwriting.
+//!
+//! Each type has an immutable gap cursor ([`SortedBagCursor`], [`SortedSetCursor`],
+//! [`SortedMapCursor`]) that can seek by rank or by key; a seek reports whether it landed on a match
+//! through [`OrderedCursorSearch`], and a cursor insertion reports novelty through
+//! [`OrderedCursorInsert`].
+
 use crate::measured::{FingerTree, MeasurePolicy, MeasuredSplit, OrderStatisticMeasure, RankedKey};
 use std::marker::PhantomData;
 
@@ -36,9 +55,14 @@ where
 
 type MapStorage<K, V> = FingerTree<(K, V), EntryMeasure<K, V>>;
 
+/// A duplicate-rejecting map insertion found an equivalent key already present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DuplicateKeyError;
 
+/// A persistent sorted multiset with rank and select in O(log n).
+///
+/// Elements are kept in ascending order and equivalent elements may repeat. Every operation returns
+/// a new bag and leaves the receiver valid and unchanged.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedBag<T>
 where
@@ -51,62 +75,78 @@ impl<T> SortedBag<T>
 where
     T: Ord + Clone,
 {
+    /// Creates an empty bag.
     #[must_use]
     pub fn new() -> Self {
         Self::from_items(SortedStorage::new())
     }
 
+    /// Returns the number of elements, counting duplicates separately. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
+    /// Returns `true` when the bag holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
+    /// Borrows the smallest element, or `None` when empty.
     #[must_use]
     pub fn min(&self) -> Option<&T> {
         self.items.front()
     }
 
+    /// Borrows the largest element, or `None` when empty.
     #[must_use]
     pub fn max(&self) -> Option<&T> {
         self.items.back()
     }
 
+    /// Borrows the element at ordinal `rank` in ascending order, or `None` when out of range.
+    ///
+    /// O(log n): the cached element counts make select a measure-directed descent.
     #[must_use]
     pub fn get(&self, rank: usize) -> Option<&T> {
         self.items.get(rank)
     }
 
+    /// Reports whether an element equivalent to `value` is present. O(log n).
     #[must_use]
     pub fn contains(&self, value: &T) -> bool {
         self.count_of(value) > 0
     }
 
+    /// Returns how many elements are strictly below `value`, that is, `value`'s rank. O(log n).
     #[must_use]
     pub fn count_less_than(&self, value: &T) -> usize {
         lower_bound(&self.items, value)
     }
 
+    /// Returns how many elements are at most `value`. O(log n).
     #[must_use]
     pub fn count_at_most(&self, value: &T) -> usize {
         upper_bound(&self.items, value)
     }
 
+    /// Returns the multiplicity of `value`, computed as the gap between its two rank bounds.
+    /// O(log n).
     #[must_use]
     pub fn count_of(&self, value: &T) -> usize {
         self.count_at_most(value) - self.count_less_than(value)
     }
 
+    /// Returns a bag with `value` inserted at its sorted position, after any existing equals.
+    /// O(log n); the receiver is unchanged.
     #[must_use]
     pub fn add(&self, value: T) -> Self {
         let split = split_above(&self.items, &value);
         Self::from_items(split.left.append(value).concat(&split.right))
     }
 
+    /// Inserts every element of `values`, publishing only the final bag.
     #[must_use]
     pub fn add_range<I>(&self, values: I) -> Self
     where
@@ -120,6 +160,8 @@ where
         result
     }
 
+    /// Removes one occurrence of `value`. Removing an absent element is a no-op that shares the
+    /// receiver's storage.
     #[must_use]
     pub fn remove(&self, value: &T) -> Self {
         let split = split_at_least(&self.items, value);
@@ -135,6 +177,7 @@ where
         }
     }
 
+    /// Removes every occurrence of `value` in one split-and-join, regardless of multiplicity.
     #[must_use]
     pub fn remove_all(&self, value: &T) -> Self {
         let less_split = split_at_least(&self.items, value);
@@ -146,6 +189,8 @@ where
         Self::from_items(less_split.left.concat(&greater_split.right))
     }
 
+    /// Returns the `count` elements starting at rank `start` as a new bag, or `None` when the range
+    /// falls outside the bag.
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
         self.items.split_at_index(start).and_then(|split| {
@@ -156,6 +201,9 @@ where
         })
     }
 
+    /// Returns the elements in the inclusive value range `[low, high]` as a new bag.
+    ///
+    /// O(log n) plus the cost of building the result; an inverted range yields an empty bag.
     #[must_use]
     pub fn get_value_range(&self, low: &T, high: &T) -> Self {
         let at_least = split_at_least(&self.items, low);
@@ -163,11 +211,14 @@ where
         Self::from_items(in_range.left)
     }
 
+    /// Copies the elements into a vector in ascending order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         self.items.to_vec()
     }
 
+    /// Reports whether two bags are backed by the same tree, so neither can observe an edit made to
+    /// the other. A representation test, not an equality test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.items.shares_storage_with(&other.items)
@@ -198,6 +249,10 @@ where
     }
 }
 
+/// A persistent sorted set with rank and select in O(log n).
+///
+/// Like [`SortedBag`] but holding at most one element per equivalence class, keeping the first
+/// representative inserted. Every operation returns a new set and leaves the receiver unchanged.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedSet<T>
 where
@@ -210,41 +265,50 @@ impl<T> SortedSet<T>
 where
     T: Ord + Clone,
 {
+    /// Creates an empty set.
     #[must_use]
     pub fn new() -> Self {
         Self::from_items(SortedStorage::new())
     }
 
+    /// Returns the number of distinct elements. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
+    /// Returns `true` when the set holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
+    /// Borrows the smallest element, or `None` when empty.
     #[must_use]
     pub fn min(&self) -> Option<&T> {
         self.items.front()
     }
 
+    /// Borrows the largest element, or `None` when empty.
     #[must_use]
     pub fn max(&self) -> Option<&T> {
         self.items.back()
     }
 
+    /// Borrows the element at ordinal `rank` in ascending order, or `None` when out of range.
+    /// O(log n).
     #[must_use]
     pub fn get(&self, rank: usize) -> Option<&T> {
         self.items.get(rank)
     }
 
+    /// Reports whether an element equivalent to `value` is present. O(log n).
     #[must_use]
     pub fn contains(&self, value: &T) -> bool {
         self.index_of(value).is_some()
     }
 
+    /// Returns `value`'s ordinal rank, or `None` when absent. O(log n).
     #[must_use]
     pub fn index_of(&self, value: &T) -> Option<usize> {
         let index = lower_bound(&self.items, value);
@@ -252,6 +316,8 @@ where
             .then_some(index)
     }
 
+    /// Returns a set containing `value`. Adding an already present class is a no-op that retains the
+    /// stored representative and shares the receiver's storage.
     #[must_use]
     pub fn add(&self, value: T) -> Self {
         let split = split_at_least(&self.items, &value);
@@ -262,6 +328,7 @@ where
         Self::from_items(split.left.append(value).concat(&split.right))
     }
 
+    /// Inserts every element of `values`, publishing only the final set.
     #[must_use]
     pub fn add_range<I>(&self, values: I) -> Self
     where
@@ -275,6 +342,7 @@ where
         result
     }
 
+    /// Returns a set without `value`. Removing an absent element is a no-op.
     #[must_use]
     pub fn remove(&self, value: &T) -> Self {
         let split = split_at_least(&self.items, value);
@@ -290,28 +358,34 @@ where
         }
     }
 
+    /// Borrows the largest element at most `value`, or `None` when every element exceeds it.
     #[must_use]
     pub fn floor(&self, value: &T) -> Option<&T> {
         let index = upper_bound(&self.items, value).checked_sub(1)?;
         self.items.get(index)
     }
 
+    /// Borrows the smallest element at least `value`, or `None` when every element is below it.
     #[must_use]
     pub fn ceiling(&self, value: &T) -> Option<&T> {
         self.items.get(lower_bound(&self.items, value))
     }
 
+    /// Borrows the largest element strictly below `value`, or `None` when none is.
     #[must_use]
     pub fn lower(&self, value: &T) -> Option<&T> {
         let index = lower_bound(&self.items, value).checked_sub(1)?;
         self.items.get(index)
     }
 
+    /// Borrows the smallest element strictly above `value`, or `None` when none is.
     #[must_use]
     pub fn higher(&self, value: &T) -> Option<&T> {
         self.items.get(upper_bound(&self.items, value))
     }
 
+    /// Returns the `count` elements starting at rank `start` as a new set, or `None` when the range
+    /// falls outside the set.
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
         self.items.split_at_index(start).and_then(|split| {
@@ -322,6 +396,8 @@ where
         })
     }
 
+    /// Returns the elements in the inclusive value range `[low, high]` as a new set. An inverted
+    /// range yields an empty set.
     #[must_use]
     pub fn get_value_range(&self, low: &T, high: &T) -> Self {
         let at_least = split_at_least(&self.items, low);
@@ -329,61 +405,76 @@ where
         Self::from_items(in_range.left)
     }
 
+    /// Returns the elements of both sets.
     #[must_use]
     pub fn union(&self, other: &Self) -> Self {
         self.merge(other, |in_left, in_right| in_left || in_right)
     }
 
+    /// Returns the elements present in both sets.
     #[must_use]
     pub fn intersect(&self, other: &Self) -> Self {
         self.merge(other, |in_left, in_right| in_left && in_right)
     }
 
+    /// Returns this set's elements that are absent from `other`.
     #[must_use]
     pub fn except(&self, other: &Self) -> Self {
         self.merge(other, |in_left, in_right| in_left && !in_right)
     }
 
+    /// Returns the elements present in exactly one of the two sets.
     #[must_use]
     pub fn symmetric_except(&self, other: &Self) -> Self {
         self.merge(other, |in_left, in_right| in_left ^ in_right)
     }
 
+    /// Reports whether every element of this set occurs in `other`.
     #[must_use]
     pub fn is_subset_of(&self, other: &Self) -> bool {
         self.items.iter().all(|value| other.contains(value))
     }
 
+    /// Reports whether every element of `other` occurs in this set.
     #[must_use]
     pub fn is_superset_of(&self, other: &Self) -> bool {
         other.is_subset_of(self)
     }
 
+    /// Reports whether this set is a subset of `other` and `other` holds at least one element it
+    /// lacks.
     #[must_use]
     pub fn is_proper_subset_of(&self, other: &Self) -> bool {
         self.len() < other.len() && self.is_subset_of(other)
     }
 
+    /// Reports whether this set is a superset of `other` and holds at least one element `other`
+    /// lacks.
     #[must_use]
     pub fn is_proper_superset_of(&self, other: &Self) -> bool {
         self.len() > other.len() && self.is_superset_of(other)
     }
 
+    /// Reports whether the two sets share at least one element.
     #[must_use]
     pub fn overlaps(&self, other: &Self) -> bool {
         self.items.iter().any(|value| other.contains(value))
     }
 
+    /// Reports whether the two sets hold the same elements.
     #[must_use]
     pub fn set_equals(&self, other: &Self) -> bool {
         self.items == other.items
     }
 
+    /// Copies the elements into a vector in ascending order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         self.items.to_vec()
     }
 
+    /// Reports whether two sets are backed by the same tree. A representation test, not an equality
+    /// test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.items.shares_storage_with(&other.items)
@@ -464,6 +555,11 @@ where
     }
 }
 
+/// A persistent sorted map with rank and select over its keys in O(log n).
+///
+/// Entries are ordered by key, one entry per key equivalence class, retaining the first key
+/// representative across value replacement. Every operation returns a new map and leaves the
+/// receiver unchanged.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedMap<K, V>
 where
@@ -477,42 +573,51 @@ where
     K: Ord + Clone,
     V: Clone,
 {
+    /// Creates an empty map.
     #[must_use]
     pub fn new() -> Self {
         Self::from_entries(MapStorage::new())
     }
 
+    /// Returns the number of entries. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
+    /// Returns `true` when the map holds no entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    /// Reports whether `key` is present. O(log n).
     #[must_use]
     pub fn contains_key(&self, key: &K) -> bool {
         self.index_of_key(key).is_some()
     }
 
+    /// Borrows the value stored for `key`, or `None` when absent. O(log n).
     #[must_use]
     pub fn get(&self, key: &K) -> Option<&V> {
         self.index_of_key(key)
             .and_then(|index| self.entries.get(index).map(|(_, value)| value))
     }
 
+    /// Borrows the entry at ordinal `rank` in ascending key order, or `None` when out of range.
+    /// O(log n).
     #[must_use]
     pub fn entry_at(&self, rank: usize) -> Option<(&K, &V)> {
         self.entries.get(rank).map(|(key, value)| (key, value))
     }
 
+    /// Borrows the entry with the smallest key, or `None` when empty.
     #[must_use]
     pub fn min_entry(&self) -> Option<(&K, &V)> {
         self.entry_at(0)
     }
 
+    /// Borrows the entry with the largest key, or `None` when empty.
     #[must_use]
     pub fn max_entry(&self) -> Option<(&K, &V)> {
         self.len()
@@ -520,6 +625,7 @@ where
             .and_then(|index| self.entry_at(index))
     }
 
+    /// Returns `key`'s ordinal rank, or `None` when absent. O(log n).
     #[must_use]
     pub fn index_of_key(&self, key: &K) -> Option<usize> {
         let index = lower_bound_by_key(&self.entries, key);
@@ -531,6 +637,8 @@ where
         .then_some(index)
     }
 
+    /// Adds `key`, or replaces its value when present, retaining the stored key representative.
+    /// O(log n).
     #[must_use]
     pub fn set_item(&self, key: K, value: V) -> Self {
         let split = split_key_at_least(&self.entries, &key);
@@ -551,11 +659,16 @@ where
         Self::from_entries(split.left.append((key, value)).concat(&split.right))
     }
 
+    /// Reports whether two maps are backed by the same tree. A representation test, not an equality
+    /// test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.entries.shares_storage_with(&other.entries)
     }
 
+    /// Adds a new entry, failing with [`DuplicateKeyError`] when `key` is already present.
+    ///
+    /// The receiver is left untouched on failure. Use [`Self::set_item`] to overwrite instead.
     pub fn insert(&self, key: K, value: V) -> Result<Self, DuplicateKeyError> {
         let (map, inserted) = self.try_insert(key, value);
         if inserted {
@@ -565,6 +678,7 @@ where
         }
     }
 
+    /// Adds a new entry, reporting whether it was added instead of returning a `Result`.
     #[must_use]
     pub fn try_insert(&self, key: K, value: V) -> (Self, bool) {
         let split = split_key_at_least(&self.entries, &key);
@@ -582,6 +696,8 @@ where
         )
     }
 
+    /// Returns a map without `key`. Removing an absent key is a no-op that shares the receiver's
+    /// storage.
     #[must_use]
     pub fn remove(&self, key: &K) -> Self {
         let split = split_key_at_least(&self.entries, key);
@@ -601,6 +717,8 @@ where
         }
     }
 
+    /// Removes `key`, returning the resulting map and the removed value, or `None` when the key was
+    /// absent.
     #[must_use]
     pub fn try_remove(&self, key: &K) -> Option<(Self, V)> {
         let split = split_key_at_least(&self.entries, key);
@@ -617,28 +735,34 @@ where
         Some((Self::from_entries(split.left.concat(&tail)), value))
     }
 
+    /// Borrows the entry with the largest key at most `key`, or `None` when every key exceeds it.
     #[must_use]
     pub fn floor_entry(&self, key: &K) -> Option<(&K, &V)> {
         let index = upper_bound_by_key(&self.entries, key).checked_sub(1)?;
         self.entry_at(index)
     }
 
+    /// Borrows the entry with the smallest key at least `key`, or `None` when every key is below it.
     #[must_use]
     pub fn ceiling_entry(&self, key: &K) -> Option<(&K, &V)> {
         self.entry_at(lower_bound_by_key(&self.entries, key))
     }
 
+    /// Borrows the entry with the largest key strictly below `key`, or `None` when none is.
     #[must_use]
     pub fn lower_entry(&self, key: &K) -> Option<(&K, &V)> {
         let index = lower_bound_by_key(&self.entries, key).checked_sub(1)?;
         self.entry_at(index)
     }
 
+    /// Borrows the entry with the smallest key strictly above `key`, or `None` when none is.
     #[must_use]
     pub fn higher_entry(&self, key: &K) -> Option<(&K, &V)> {
         self.entry_at(upper_bound_by_key(&self.entries, key))
     }
 
+    /// Returns the `count` entries starting at rank `start` as a new map, or `None` when the range
+    /// falls outside the map.
     #[must_use]
     pub fn get_range(&self, start: usize, count: usize) -> Option<Self> {
         self.entries.split_at_index(start).and_then(|split| {
@@ -649,6 +773,8 @@ where
         })
     }
 
+    /// Returns the entries whose keys lie in the inclusive range `[low, high]` as a new map. An
+    /// inverted range yields an empty map.
     #[must_use]
     pub fn get_key_range(&self, low: &K, high: &K) -> Self {
         let at_least = split_key_at_least(&self.entries, low);
@@ -656,16 +782,19 @@ where
         Self::from_entries(in_range.left)
     }
 
+    /// Copies the entries into a vector in ascending key order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<(K, V)> {
         self.entries.to_vec()
     }
 
+    /// Copies the keys into a vector in ascending order. O(n).
     #[must_use]
     pub fn keys_to_vec(&self) -> Vec<K> {
         self.entries.iter().map(|(key, _)| key.clone()).collect()
     }
 
+    /// Copies the values into a vector in their keys' ascending order. O(n).
     #[must_use]
     pub fn values_to_vec(&self) -> Vec<V> {
         self.entries
@@ -721,6 +850,7 @@ where
 /// `found` reports whether an equivalent entry is already present. It never reports whether an
 /// edit occurred; insertion results use [`OrderedCursorInsert`] so the two discriminators cannot
 /// be confused by generic code written over either type.
+/// Presence-discriminated result of seeking a cursor to a value or key.
 pub struct OrderedCursorSearch<C> {
     pub found: bool,
     pub cursor: C,
@@ -731,12 +861,17 @@ pub struct OrderedCursorSearch<C> {
 /// `added` reports whether the attempt published a new entry. A rejected attempt reports `false`
 /// and returns a cursor focused on the retained equivalent entry, leaving the receiver's version
 /// unchanged.
+/// Insertion-discriminated result of a cursor insertion.
+///
+/// `added` reports whether a new entry was published, which is deliberately distinct from the
+/// `found` of [`OrderedCursorSearch`].
 pub struct OrderedCursorInsert<C> {
     pub added: bool,
     pub cursor: C,
 }
 
 /// Immutable root-plus-rank cursor over a persistent sorted bag.
+/// Immutable gap cursor over one [`SortedBag`] version.
 #[derive(Clone, Debug)]
 pub struct SortedBagCursor<T: Clone> {
     bag: SortedBag<T>,
@@ -744,20 +879,27 @@ pub struct SortedBagCursor<T: Clone> {
 }
 
 impl<T: Ord + Clone> SortedBag<T> {
+    /// Creates a cursor at the gap `position` in `0..=len`, or `None` when it exceeds the element
+    /// count.
     pub fn cursor_at(&self, position: usize) -> Option<SortedBagCursor<T>> {
         (position <= self.len()).then(|| SortedBagCursor {
             bag: self.clone(),
             position,
         })
     }
+    /// Creates a cursor before the first element not below `value`, that is, where `value` would be
+    /// inserted before its equals. O(log n).
     pub fn cursor_at_lower_bound(&self, value: &T) -> SortedBagCursor<T> {
         self.cursor_at(self.count_less_than(value))
             .expect("lower bound is valid")
     }
+    /// Creates a cursor after every element equivalent to `value`. O(log n).
     pub fn cursor_at_upper_bound(&self, value: &T) -> SortedBagCursor<T> {
         self.cursor_at(self.count_at_most(value))
             .expect("upper bound is valid")
     }
+    /// Seeks to `value` and reports whether it is present. On a miss the cursor sits at the lower
+    /// bound and remains usable.
     pub fn find_cursor(&self, value: &T) -> OrderedCursorSearch<SortedBagCursor<T>> {
         let cursor = self.cursor_at_lower_bound(value);
         OrderedCursorSearch {
@@ -768,40 +910,51 @@ impl<T: Ord + Clone> SortedBag<T> {
 }
 
 impl<T: Ord + Clone> SortedBagCursor<T> {
+    /// Returns the element count of the bag version this cursor is positioned in.
     pub fn len(&self) -> usize {
         self.bag.len()
     }
+    /// Returns `true` when that bag version holds no elements.
     pub fn is_empty(&self) -> bool {
         self.bag.is_empty()
     }
+    /// Returns the cursor's gap index in `0..=len`, which is also the rank of the next element.
     pub fn position(&self) -> usize {
         self.position
     }
+    /// Returns `true` when the gap precedes the first element.
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
+    /// Returns `true` when the gap follows the last element.
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
+    /// Borrows the element immediately before the gap, or `None` at the start.
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
             .checked_sub(1)
             .and_then(|rank| self.bag.get(rank))
     }
+    /// Borrows the element immediately after the gap, or `None` at the end.
     pub fn peek_next(&self) -> Option<&T> {
         self.bag.get(self.position)
     }
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     pub fn move_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .and_then(|position| self.bag.cursor_at(position))
     }
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
             bag: self.bag.clone(),
             position: self.position + 1,
         })
     }
+    /// Jumps to the gap at `position` within the same bag version, or `None` when `position` exceeds
+    /// the element count.
     pub fn seek_rank(&self, position: usize) -> Option<Self> {
         if position == self.position {
             Some(self.clone())
@@ -809,6 +962,10 @@ impl<T: Ord + Clone> SortedBagCursor<T> {
             self.bag.cursor_at(position)
         }
     }
+    /// Inserts `value` and returns a cursor just after it.
+    ///
+    /// The gap moves to `value`'s sorted position rather than staying where the receiver was, since
+    /// placement is decided by the ordering, not by the cursor.
     pub fn add(&self, value: T) -> Self {
         let position = self.bag.count_at_most(&value);
         Self {
@@ -832,20 +989,24 @@ impl<T: Ord + Clone> SortedBagCursor<T> {
             position,
         }
     }
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
     pub fn delete_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .map(|rank| self.delete_at(rank, rank))
     }
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     pub fn delete_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| self.delete_at(self.position, self.position))
     }
+    /// Borrows the bag version this cursor is positioned in.
     pub fn snapshot(&self) -> &SortedBag<T> {
         &self.bag
     }
 }
 
 /// Immutable root-plus-rank cursor over a persistent sorted set.
+/// Immutable gap cursor over one [`SortedSet`] version.
 #[derive(Clone, Debug)]
 pub struct SortedSetCursor<T: Clone> {
     set: SortedSet<T>,
@@ -853,20 +1014,26 @@ pub struct SortedSetCursor<T: Clone> {
 }
 
 impl<T: Ord + Clone> SortedSet<T> {
+    /// Creates a cursor at the gap `position` in `0..=len`, or `None` when it exceeds the element
+    /// count.
     pub fn cursor_at(&self, position: usize) -> Option<SortedSetCursor<T>> {
         (position <= self.len()).then(|| SortedSetCursor {
             set: self.clone(),
             position,
         })
     }
+    /// Creates a cursor before the first element not below `value`. O(log n).
     pub fn cursor_at_lower_bound(&self, value: &T) -> SortedSetCursor<T> {
         self.cursor_at(lower_bound(&self.items, value))
             .expect("lower bound is valid")
     }
+    /// Creates a cursor after any element equivalent to `value`. O(log n).
     pub fn cursor_at_upper_bound(&self, value: &T) -> SortedSetCursor<T> {
         self.cursor_at(upper_bound(&self.items, value))
             .expect("upper bound is valid")
     }
+    /// Seeks to `value` and reports whether it is present. On a miss the cursor sits at the lower
+    /// bound and remains usable.
     pub fn find_cursor(&self, value: &T) -> OrderedCursorSearch<SortedSetCursor<T>> {
         let cursor = self.cursor_at_lower_bound(value);
         OrderedCursorSearch {
@@ -877,40 +1044,51 @@ impl<T: Ord + Clone> SortedSet<T> {
 }
 
 impl<T: Ord + Clone> SortedSetCursor<T> {
+    /// Returns the element count of the set version this cursor is positioned in.
     pub fn len(&self) -> usize {
         self.set.len()
     }
+    /// Returns `true` when that set version holds no elements.
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
     }
+    /// Returns the cursor's gap index in `0..=len`, which is also the rank of the next element.
     pub fn position(&self) -> usize {
         self.position
     }
+    /// Returns `true` when the gap precedes the first element.
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
+    /// Returns `true` when the gap follows the last element.
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
+    /// Borrows the element immediately before the gap, or `None` at the start.
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
             .checked_sub(1)
             .and_then(|rank| self.set.get(rank))
     }
+    /// Borrows the element immediately after the gap, or `None` at the end.
     pub fn peek_next(&self) -> Option<&T> {
         self.set.get(self.position)
     }
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     pub fn move_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .and_then(|position| self.set.cursor_at(position))
     }
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
             set: self.set.clone(),
             position: self.position + 1,
         })
     }
+    /// Jumps to the gap at `position` within the same set version, or `None` when `position` exceeds
+    /// the element count.
     pub fn seek_rank(&self, position: usize) -> Option<Self> {
         if position == self.position {
             Some(self.clone())
@@ -918,6 +1096,8 @@ impl<T: Ord + Clone> SortedSetCursor<T> {
             self.set.cursor_at(position)
         }
     }
+    /// Inserts `value` and returns a cursor just after it. An already present class is a no-op that
+    /// retains the stored representative; the gap still lands at `value`'s sorted position.
     pub fn add(&self, value: T) -> Self {
         let position = lower_bound(&self.set.items, &value);
         Self {
@@ -925,6 +1105,7 @@ impl<T: Ord + Clone> SortedSetCursor<T> {
             position: position + 1,
         }
     }
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
         let item = self.set.get(position)?.clone();
@@ -933,6 +1114,7 @@ impl<T: Ord + Clone> SortedSetCursor<T> {
             position,
         })
     }
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     pub fn delete_next(&self) -> Option<Self> {
         let item = self.set.get(self.position)?.clone();
         Some(Self {
@@ -940,12 +1122,14 @@ impl<T: Ord + Clone> SortedSetCursor<T> {
             position: self.position,
         })
     }
+    /// Borrows the set version this cursor is positioned in.
     pub fn snapshot(&self) -> &SortedSet<T> {
         &self.set
     }
 }
 
 /// Immutable key-order root-plus-rank cursor over a persistent sorted map.
+/// Immutable gap cursor over one [`SortedMap`] version.
 #[derive(Clone, Debug)]
 pub struct SortedMapCursor<K: Clone, V> {
     map: SortedMap<K, V>,
@@ -953,20 +1137,26 @@ pub struct SortedMapCursor<K: Clone, V> {
 }
 
 impl<K: Ord + Clone, V: Clone> SortedMap<K, V> {
+    /// Creates a cursor at the gap `position` in `0..=len`, or `None` when it exceeds the entry
+    /// count.
     pub fn cursor_at(&self, position: usize) -> Option<SortedMapCursor<K, V>> {
         (position <= self.len()).then(|| SortedMapCursor {
             map: self.clone(),
             position,
         })
     }
+    /// Creates a cursor before the first entry whose key is not below `key`. O(log n).
     pub fn cursor_at_lower_bound(&self, key: &K) -> SortedMapCursor<K, V> {
         self.cursor_at(lower_bound_by_key(&self.entries, key))
             .expect("lower bound is valid")
     }
+    /// Creates a cursor after any entry whose key equals `key`. O(log n).
     pub fn cursor_at_upper_bound(&self, key: &K) -> SortedMapCursor<K, V> {
         self.cursor_at(upper_bound_by_key(&self.entries, key))
             .expect("upper bound is valid")
     }
+    /// Seeks to `key` and reports whether it is present. On a miss the cursor sits at the lower bound
+    /// and remains usable.
     pub fn find_cursor(&self, key: &K) -> OrderedCursorSearch<SortedMapCursor<K, V>> {
         let cursor = self.cursor_at_lower_bound(key);
         OrderedCursorSearch {
@@ -977,40 +1167,51 @@ impl<K: Ord + Clone, V: Clone> SortedMap<K, V> {
 }
 
 impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
+    /// Returns the entry count of the map version this cursor is positioned in.
     pub fn len(&self) -> usize {
         self.map.len()
     }
+    /// Returns `true` when that map version holds no entries.
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
+    /// Returns the cursor's gap index in `0..=len`, which is also the rank of the next entry.
     pub fn position(&self) -> usize {
         self.position
     }
+    /// Returns `true` when the gap precedes the first entry.
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
+    /// Returns `true` when the gap follows the last entry.
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
+    /// Borrows the entry immediately before the gap, or `None` at the start.
     pub fn peek_previous(&self) -> Option<(&K, &V)> {
         self.position
             .checked_sub(1)
             .and_then(|rank| self.map.entry_at(rank))
     }
+    /// Borrows the entry immediately after the gap, or `None` at the end.
     pub fn peek_next(&self) -> Option<(&K, &V)> {
         self.map.entry_at(self.position)
     }
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     pub fn move_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .and_then(|position| self.map.cursor_at(position))
     }
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
             map: self.map.clone(),
             position: self.position + 1,
         })
     }
+    /// Jumps to the gap at `position` within the same map version, or `None` when `position` exceeds
+    /// the entry count.
     pub fn seek_rank(&self, position: usize) -> Option<Self> {
         if position == self.position {
             Some(self.clone())
@@ -1018,6 +1219,10 @@ impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
             self.map.cursor_at(position)
         }
     }
+    /// Adds a new entry and returns a cursor just after it in key order.
+    ///
+    /// Strict: an already present key fails with [`DuplicateKeyError`] and the receiver keeps its
+    /// version. The gap lands at the key's sorted position.
     pub fn insert(&self, key: K, value: V) -> Result<Self, DuplicateKeyError> {
         let position = lower_bound_by_key(&self.map.entries, &key);
         self.map.insert(key, value).map(|map| Self {
@@ -1040,6 +1245,7 @@ impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
             },
         }
     }
+    /// Adds `key`, or replaces its value when present, and returns a cursor at the resulting entry.
     pub fn set_item(&self, key: K, value: V) -> Self {
         let location = self.map.find_cursor(&key);
         Self {
@@ -1051,6 +1257,8 @@ impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
             },
         }
     }
+    /// Replaces the value of the entry after the gap, keeping its key and position, or returns `None`
+    /// at the end.
     pub fn set_next_value(&self, value: V) -> Option<Self> {
         let (key, _) = self.peek_next()?;
         Some(Self {
@@ -1058,6 +1266,7 @@ impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
             position: self.position,
         })
     }
+    /// Removes the entry before the gap and returns a cursor in its place, or `None` at the start.
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
         let (key, _) = self.map.entry_at(position)?;
@@ -1066,6 +1275,7 @@ impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
             position,
         })
     }
+    /// Removes the entry after the gap and returns a cursor in its place, or `None` at the end.
     pub fn delete_next(&self) -> Option<Self> {
         let (key, _) = self.map.entry_at(self.position)?;
         Some(Self {
@@ -1073,6 +1283,7 @@ impl<K: Ord + Clone, V: Clone> SortedMapCursor<K, V> {
             position: self.position,
         })
     }
+    /// Borrows the map version this cursor is positioned in.
     pub fn snapshot(&self) -> &SortedMap<K, V> {
         &self.map
     }

@@ -1,3 +1,17 @@
+//! Persistent big-endian Patricia (radix) maps and sets over fixed-width integer keys.
+//!
+//! A Patricia trie branches on the bit positions where keys actually differ, skipping runs of
+//! shared prefix bits instead of storing one node per bit. For integer keys that clusters related
+//! keys together and bounds every operation by the key width — 32 or 64 bits — rather than by the
+//! number of stored entries, and it needs no hashing, no rebalancing, and no comparison policy.
+//!
+//! Branching is big-endian, that is, on the highest differing bit first, which makes the in-order
+//! traversal ascending by unsigned key value and makes merges and set algebra between two tries a
+//! structural walk that shares whole untouched subtrees. Every version is immutable, so an update
+//! copies only the path from the root to the affected branch.
+//!
+//! The module provides the 32- and 64-bit map and set families exported from the crate root.
+
 use std::{fmt, sync::Arc};
 
 #[derive(Clone)]
@@ -252,6 +266,7 @@ impl<K: Copy + Eq, V: Clone + PartialEq> Core<K, V> {
     }
 }
 
+/// Borrowing iterator over a Patricia map's entries, in ascending unsigned key order.
 pub struct Iter<'a, K, V> {
     stack: Vec<&'a Node<K, V>>,
 }
@@ -1008,24 +1023,29 @@ macro_rules! map_type {
             }
         }
         impl<V> $name<V> {
+            /// Creates an empty map.
             #[must_use]
             pub fn new() -> Self {
                 Self {
                     core: Core::new($encode),
                 }
             }
+            /// Returns the number of entries. O(1).
             #[must_use]
             pub fn len(&self) -> usize {
                 self.core.len
             }
+            /// Returns `true` when the map holds no entries.
             #[must_use]
             pub fn is_empty(&self) -> bool {
                 self.core.len == 0
             }
+            /// Borrows the value stored for `key`, or `None` when absent. O(key width).
             #[must_use]
             pub fn get(&self, key: $key) -> Option<&V> {
                 self.core.get(key)
             }
+            /// Reports whether `key` is present. O(key width).
             #[must_use]
             pub fn contains_key(&self, key: $key) -> bool {
                 self.core.contains(key)
@@ -1084,27 +1104,38 @@ macro_rules! map_type {
                     found,
                 )
             }
+            /// Reports whether two maps are backed by the same trie root, so neither can observe an edit
+            /// made to the other. A representation test, not an equality test.
             #[must_use]
             pub fn shares_root_with(&self, other: &Self) -> bool {
                 same_root(&self.core.root, &other.core.root)
             }
+            /// Iterates the entries in ascending unsigned key order.
             pub fn iter(&self) -> impl Iterator<Item = (&$key, &V)> {
                 self.core.iter()
             }
         }
         impl<V: Clone + PartialEq> $name<V> {
+            /// Adds `key`, or replaces its value when present. Writing a value equal to the stored one is a
+            /// no-op that shares the receiver's root. O(key width).
             #[must_use]
             pub fn insert(&self, key: $key, value: V) -> Self {
                 Self {
                     core: self.core.insert(key, value),
                 }
             }
+            /// Returns a map without `key`. Removing an absent key is a no-op that shares the receiver's
+            /// root. O(key width).
             #[must_use]
             pub fn remove(&self, key: $key) -> Self {
                 Self {
                     core: self.core.remove(key),
                 }
             }
+            /// Merges both maps, preferring this map's value where a key occurs in both.
+            ///
+            /// Structural: subtrees the operands already share are adopted whole rather than re-entered, so
+            /// merging two largely equal maps costs far less than their combined size.
             #[must_use]
             pub fn union(&self, other: &Self) -> Self {
                 Self {
@@ -1124,6 +1155,8 @@ macro_rules! map_type {
                     core: self.core.union_with(&other.core, combine),
                 }
             }
+            /// Keeps the entries whose keys occur in both maps, taking values from this map. Structural, as
+            /// for [`union`](Self::union).
             #[must_use]
             pub fn intersect(&self, other: &Self) -> Self {
                 Self {
@@ -1143,6 +1176,7 @@ macro_rules! map_type {
                     core: self.core.intersect_with(&other.core, combine),
                 }
             }
+            /// Removes every key that occurs in `other`. Structural, as for [`union`](Self::union).
             #[must_use]
             pub fn except(&self, other: &Self) -> Self {
                 Self {
@@ -1191,22 +1225,27 @@ macro_rules! map_cursor_type {
         }
 
         impl<V> $name<V> {
+            /// Returns the entry count of the map version this cursor is positioned in.
             #[must_use]
             pub fn len(&self) -> usize {
                 self.map.len()
             }
+            /// Returns `true` when that map version holds no entries.
             #[must_use]
             pub fn is_empty(&self) -> bool {
                 self.map.is_empty()
             }
+            /// Returns the cursor's gap index in `0..=len`, which is also the rank of the next entry.
             #[must_use]
             pub fn position(&self) -> usize {
                 self.position
             }
+            /// Returns `true` when the gap precedes the first entry.
             #[must_use]
             pub fn is_at_start(&self) -> bool {
                 self.position == 0
             }
+            /// Returns `true` when the gap follows the last entry.
             #[must_use]
             pub fn is_at_end(&self) -> bool {
                 self.position == self.len()
@@ -1223,6 +1262,7 @@ macro_rules! map_cursor_type {
             pub fn peek_next(&self) -> Option<(&$key, &V)> {
                 self.map.core.entry_at(self.position)
             }
+            /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
             #[must_use]
             pub fn move_previous(&self) -> Option<Self> {
                 Some(Self {
@@ -1230,6 +1270,7 @@ macro_rules! map_cursor_type {
                     position: self.position.checked_sub(1)?,
                 })
             }
+            /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
             #[must_use]
             pub fn move_next(&self) -> Option<Self> {
                 if self.is_at_end() {
@@ -1240,6 +1281,8 @@ macro_rules! map_cursor_type {
                     position: self.position + 1,
                 })
             }
+            /// Jumps to the gap at `position` within the same map version, or `None` when `position` exceeds
+            /// the entry count.
             #[must_use]
             pub fn seek(&self, position: usize) -> Option<Self> {
                 (position <= self.len()).then(|| Self {
@@ -1337,22 +1380,27 @@ macro_rules! set_type {
             map: $map<()>,
         }
         impl $name {
+            /// Creates an empty set.
             #[must_use]
             pub fn new() -> Self {
                 Self::default()
             }
+            /// Returns the number of elements. O(1).
             #[must_use]
             pub fn len(&self) -> usize {
                 self.map.len()
             }
+            /// Returns `true` when the set holds no elements.
             #[must_use]
             pub fn is_empty(&self) -> bool {
                 self.map.is_empty()
             }
+            /// Reports whether `value` is present. O(key width).
             #[must_use]
             pub fn contains(&self, value: $key) -> bool {
                 self.map.contains_key(value)
             }
+            /// Creates a cursor at the gap before the first element. O(1).
             #[must_use]
             pub fn cursor(&self) -> $cursor {
                 $cursor {
@@ -1360,6 +1408,8 @@ macro_rules! set_type {
                     position: 0,
                 }
             }
+            /// Creates a cursor at the gap `position` in `0..=len`, or `None` when it exceeds the element
+            /// count. O(1).
             #[must_use]
             pub fn cursor_at(&self, position: usize) -> Option<$cursor> {
                 (position <= self.len()).then(|| $cursor {
@@ -1367,6 +1417,7 @@ macro_rules! set_type {
                     position,
                 })
             }
+            /// Creates a cursor after the last element. O(1).
             #[must_use]
             pub fn cursor_at_end(&self) -> $cursor {
                 $cursor {
@@ -1374,6 +1425,8 @@ macro_rules! set_type {
                     position: self.len(),
                 }
             }
+            /// Creates a cursor before the first element not below `value`, that is, where `value` would be
+            /// inserted. O(key width).
             #[must_use]
             pub fn lower_bound_cursor(&self, value: $key) -> $cursor {
                 let (position, _) = self.map.core.lower_bound_rank(value);
@@ -1382,6 +1435,8 @@ macro_rules! set_type {
                     position,
                 }
             }
+            /// Creates a cursor after `value` if present, and otherwise at its insertion point.
+            /// O(key width).
             #[must_use]
             pub fn upper_bound_cursor(&self, value: $key) -> $cursor {
                 let (position, found) = self.map.core.lower_bound_rank(value);
@@ -1390,6 +1445,10 @@ macro_rules! set_type {
                     position: position + usize::from(found),
                 }
             }
+            /// Seeks to `value` and reports whether it is present.
+            ///
+            /// On a miss the cursor still sits at `value`'s insertion point, so it remains usable.
+            /// O(key width).
             #[must_use]
             pub fn cursor_at_item(&self, value: $key) -> ($cursor, bool) {
                 let (position, found) = self.map.core.lower_bound_rank(value);
@@ -1401,36 +1460,47 @@ macro_rules! set_type {
                     found,
                 )
             }
+            /// Returns a set containing `value`. Inserting a present element is a no-op that shares the
+            /// receiver's root. O(key width).
             #[must_use]
             pub fn insert(&self, value: $key) -> Self {
                 Self {
                     map: self.map.insert(value, ()),
                 }
             }
+            /// Returns a set without `value`. Removing an absent element is a no-op that shares the
+            /// receiver's root. O(key width).
             #[must_use]
             pub fn remove(&self, value: $key) -> Self {
                 Self {
                     map: self.map.remove(value),
                 }
             }
+            /// Returns the elements of both sets.
+            ///
+            /// Structural: subtrees the operands already share are adopted whole rather than re-entered.
             #[must_use]
             pub fn union(&self, other: &Self) -> Self {
                 Self {
                     map: self.map.union(&other.map),
                 }
             }
+            /// Returns the elements present in both sets. Structural, as for [`union`](Self::union).
             #[must_use]
             pub fn intersect(&self, other: &Self) -> Self {
                 Self {
                     map: self.map.intersect(&other.map),
                 }
             }
+            /// Returns this set's elements that are absent from `other`. Structural, as for
+            /// [`union`](Self::union).
             #[must_use]
             pub fn except(&self, other: &Self) -> Self {
                 Self {
                     map: self.map.except(&other.map),
                 }
             }
+            /// Iterates the elements in ascending unsigned key order.
             pub fn iter(&self) -> impl Iterator<Item = &$key> {
                 self.map.iter().map(|(key, _)| key)
             }
@@ -1460,26 +1530,32 @@ macro_rules! set_cursor_type {
         }
 
         impl $name {
+            /// Returns the element count of the set version this cursor is positioned in.
             #[must_use]
             pub fn len(&self) -> usize {
                 self.set.len()
             }
+            /// Returns `true` when that set version holds no elements.
             #[must_use]
             pub fn is_empty(&self) -> bool {
                 self.set.is_empty()
             }
+            /// Returns the cursor's gap index in `0..=len`, which is also the rank of the next element.
             #[must_use]
             pub fn position(&self) -> usize {
                 self.position
             }
+            /// Returns `true` when the gap precedes the first element.
             #[must_use]
             pub fn is_at_start(&self) -> bool {
                 self.position == 0
             }
+            /// Returns `true` when the gap follows the last element.
             #[must_use]
             pub fn is_at_end(&self) -> bool {
                 self.position == self.len()
             }
+            /// Borrows the element immediately before the gap, or `None` at the start.
             #[must_use]
             pub fn peek_previous(&self) -> Option<&$key> {
                 self.position
@@ -1487,6 +1563,7 @@ macro_rules! set_cursor_type {
                     .and_then(|index| self.set.map.core.entry_at(index))
                     .map(|(key, _)| key)
             }
+            /// Borrows the element immediately after the gap, or `None` at the end.
             #[must_use]
             pub fn peek_next(&self) -> Option<&$key> {
                 self.set
@@ -1495,6 +1572,7 @@ macro_rules! set_cursor_type {
                     .entry_at(self.position)
                     .map(|(key, _)| key)
             }
+            /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
             #[must_use]
             pub fn move_previous(&self) -> Option<Self> {
                 Some(Self {
@@ -1502,6 +1580,7 @@ macro_rules! set_cursor_type {
                     position: self.position.checked_sub(1)?,
                 })
             }
+            /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
             #[must_use]
             pub fn move_next(&self) -> Option<Self> {
                 if self.is_at_end() {
@@ -1512,6 +1591,8 @@ macro_rules! set_cursor_type {
                     position: self.position + 1,
                 })
             }
+            /// Jumps to the gap at `position` within the same set version, or `None` when `position` exceeds
+            /// the element count.
             #[must_use]
             pub fn seek(&self, position: usize) -> Option<Self> {
                 (position <= self.len()).then(|| Self {
@@ -1532,6 +1613,8 @@ macro_rules! set_cursor_type {
                     }
                 })
             }
+            /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
+            /// The receiver keeps its own version.
             #[must_use]
             pub fn delete_previous(&self) -> Option<Self> {
                 let value = *self.peek_previous()?;
@@ -1540,6 +1623,8 @@ macro_rules! set_cursor_type {
                     position: self.position - 1,
                 })
             }
+            /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
+            /// The receiver keeps its own version.
             #[must_use]
             pub fn delete_next(&self) -> Option<Self> {
                 let value = *self.peek_next()?;
@@ -1548,6 +1633,7 @@ macro_rules! set_cursor_type {
                     position: self.position,
                 })
             }
+            /// Returns the set version this cursor is positioned in. O(1); the root is shared.
             #[must_use]
             pub fn snapshot(&self) -> $set {
                 self.set.clone()

@@ -1,3 +1,18 @@
+//! Canonical persistent sorted set built on a zip-zip tree.
+//!
+//! [`CanonicalSortedSet`] is *history independent*: two sets holding the same elements under the
+//! same policy have the same shape, no matter what sequence of insertions and removals produced
+//! them. Shape is decided by per-element ranks derived from a keyed hash rather than from insertion
+//! order, so the set is canonical and structurally comparable across versions and across ports.
+//!
+//! Ranks come from a [`ZipTreeRankPolicy`], which combines a [`ZipTreeComparer`] with a
+//! [`ZipTreeRankHash`] and derives ranks through HMAC-SHA-256 over a policy-bound key. The HMAC step
+//! makes the shape resistant to adversarially chosen elements; it cannot repair a rank hash that is
+//! unstable or inconsistent with the comparer's equivalence classes, so those remain caller
+//! obligations. Policy construction failures surface as [`ZipTreePolicyError`], operations that mix
+//! incompatible policies as [`CanonicalSetError`], and audit failures as
+//! [`CanonicalSetInvariantError`].
+
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
@@ -992,20 +1007,31 @@ impl<T> CanonicalSortedSet<T> {
         }
         None
     }
+    /// Creates a cursor at the gap `position` in `0..=len`, or `None` when `position` exceeds the
+    /// element count.
     pub fn cursor_at(&self, position: usize) -> Option<CanonicalSortedSetCursor<T>> {
         (position <= self.len()).then(|| CanonicalSortedSetCursor {
             set: self.clone(),
             position,
         })
     }
+    /// Creates a cursor before the first element not below `value`, that is, where `value` would be
+    /// inserted. O(log n).
     pub fn cursor_at_lower_bound(&self, value: &T) -> CanonicalSortedSetCursor<T> {
         self.cursor_at(self.cursor_bound_rank(value, false))
             .expect("lower bound is valid")
     }
+    /// Creates a cursor after any element equivalent to `value`, that is, before the first element
+    /// strictly above it. O(log n).
     pub fn cursor_at_upper_bound(&self, value: &T) -> CanonicalSortedSetCursor<T> {
         self.cursor_at(self.cursor_bound_rank(value, true))
             .expect("upper bound is valid")
     }
+    /// Seeks to `value` and reports whether it is present.
+    ///
+    /// The returned cursor is usable either way: on a miss it sits at the lower bound, which is
+    /// where `value` would be inserted. Membership is decided by the retained policy's comparer,
+    /// not by `PartialEq`. O(log n).
     pub fn find_cursor(&self, value: &T) -> CanonicalCursorSearch<T> {
         let cursor = self.cursor_at_lower_bound(value);
         CanonicalCursorSearch {
@@ -1018,40 +1044,51 @@ impl<T> CanonicalSortedSet<T> {
 }
 
 impl<T> CanonicalSortedSetCursor<T> {
+    /// Returns the element count of the set this cursor is positioned in.
     pub fn len(&self) -> usize {
         self.set.len()
     }
+    /// Returns `true` when the set this cursor is positioned in holds no elements.
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
     }
+    /// Returns the cursor's gap index in `0..=len`, which is also the rank of the next element.
     pub fn position(&self) -> usize {
         self.position
     }
+    /// Returns `true` when the gap is before the first element.
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
+    /// Returns `true` when the gap is after the last element.
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
+    /// Borrows the element immediately before the gap, or `None` at the start. O(log n).
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
             .checked_sub(1)
             .and_then(|rank| self.set.cursor_item_at(rank))
     }
+    /// Borrows the element immediately after the gap, or `None` at the end. O(log n).
     pub fn peek_next(&self) -> Option<&T> {
         self.set.cursor_item_at(self.position)
     }
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     pub fn move_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .and_then(|position| self.set.cursor_at(position))
     }
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
             set: self.set.clone(),
             position: self.position + 1,
         })
     }
+    /// Jumps to the gap at `position` within the same set version, or `None` when `position`
+    /// exceeds the element count.
     pub fn seek_rank(&self, position: usize) -> Option<Self> {
         if position == self.position {
             Some(self.clone())
@@ -1059,12 +1096,19 @@ impl<T> CanonicalSortedSetCursor<T> {
             self.set.cursor_at(position)
         }
     }
+    /// Borrows the set version this cursor is positioned in.
     pub fn snapshot(&self) -> &CanonicalSortedSet<T> {
         &self.set
     }
 }
 
 impl<T: Clone> CanonicalSortedSetCursor<T> {
+    /// Inserts `value` into the underlying set and returns a cursor just after it.
+    ///
+    /// The gap moves to `value`'s sorted position rather than staying where the receiver was: in a
+    /// canonical set an element's place is decided by the ordering, not by where the cursor
+    /// happened to be. Fails with [`CanonicalSetError`] when `value` cannot be ranked under the
+    /// retained policy. The receiver keeps its own version.
     pub fn insert(&self, value: T) -> Result<Self, CanonicalSetError> {
         let position = self.set.cursor_bound_rank(&value, false);
         self.set.insert(value).map(|set| Self {
@@ -1072,6 +1116,8 @@ impl<T: Clone> CanonicalSortedSetCursor<T> {
             position: position + 1,
         })
     }
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the
+    /// start.
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
         let item = self.set.cursor_item_at(position)?.clone();
@@ -1080,6 +1126,7 @@ impl<T: Clone> CanonicalSortedSetCursor<T> {
             position,
         })
     }
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     pub fn delete_next(&self) -> Option<Self> {
         let item = self.set.cursor_item_at(self.position)?.clone();
         Some(Self {
@@ -1089,6 +1136,7 @@ impl<T: Clone> CanonicalSortedSetCursor<T> {
     }
 }
 
+/// Borrowing iterator over a [`CanonicalSortedSet`] in ascending order.
 pub struct CanonicalSortedSetIter<'a, T> {
     stack: Vec<&'a Node<T>>,
     remaining: usize,

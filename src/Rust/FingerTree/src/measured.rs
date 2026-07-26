@@ -1,22 +1,56 @@
+//! The measured 2-3 finger tree that most of this crate is built on, plus the standard measures.
+//!
+//! [`FingerTree`] is a persistent sequence that caches a monoidal *measure* at every node. Because
+//! the measure of a subtree is available without descending into it, a single generic split can
+//! answer any question the measure can express — "the 100th element", "the first prefix whose sum
+//! exceeds 40", "the leftmost element whose key is at least `k`" — in O(log n). Amortized access at
+//! either end is O(1).
+//!
+//! The measure is chosen by a [`MeasurePolicy`], and the module ships the policies the rest of the
+//! crate uses: [`SizeMeasure`] for order statistics, [`SumMeasure`], [`MaxMeasure`],
+//! [`MinMeasure`], [`KeyMeasure`] and [`OrderStatisticMeasure`] for ordered structures, and
+//! [`ProductMeasure`] for pairing two policies (with [`SizeAndSumMeasure`], [`SizeAndMaxMeasure`],
+//! and [`SizeAndMinMeasure`] as ready-made combinations).
+//!
+//! Splitting produces a [`MeasuredSplit`]; locating produces a [`LocateResult`]. Positional
+//! traversal uses [`FingerTreeCursor`], whose measure-directed seeks report a
+//! [`FingerTreeCursorSearch`].
+
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Add;
 use std::sync::Arc;
 
+/// Defines the monoid that a [`FingerTree`] caches at every node.
+///
+/// Implementations must form a monoid: [`combine`](Self::combine) must be associative and
+/// [`empty`](Self::empty) must be a two-sided identity for it. Splitting relies on those laws, so a
+/// policy that breaks them yields unspecified — not merely suboptimal — search results. The
+/// operation need not be commutative; measures are always combined left to right in sequence order.
 pub trait MeasurePolicy<T> {
+    /// The cached summary type.
     type Measure: Clone;
 
+    /// Returns the identity measure, that is, the measure of the empty sequence.
     fn empty() -> Self::Measure;
+
+    /// Returns the measure of a single element.
     fn measure(element: &T) -> Self::Measure;
+
+    /// Combines two measures in sequence order, `left` preceding `right`.
     fn combine(left: &Self::Measure, right: &Self::Measure) -> Self::Measure;
 }
 
+/// The measure computed by a [`ProductMeasure`]: two independent measures carried together.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MeasurePair<TFirst, TSecond> {
+    /// The first component's measure.
     pub first: TFirst,
+    /// The second component's measure.
     pub second: TSecond,
 }
 
+/// Counts elements, making the tree an order-statistic sequence indexable by position.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SizeMeasure;
 
@@ -36,6 +70,11 @@ impl<T> MeasurePolicy<T> for SizeMeasure {
     }
 }
 
+/// Runs two measure policies side by side over the same elements.
+///
+/// The product of two monoids is a monoid, so a tree measured this way can be searched by either
+/// component — for example counting elements *and* summing weights, so the same tree answers both
+/// "the element at index 10" and "where the running total passes 500".
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProductMeasure<T, PFirst, PSecond>(PhantomData<(T, PFirst, PSecond)>);
 
@@ -68,12 +107,22 @@ where
     }
 }
 
+/// The measure computed by an [`OrderStatisticMeasure`]: a subtree's element count and its last key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RankedKey<T> {
+    /// The number of elements in the subtree.
     pub count: usize,
+    /// The last element in the subtree, or `None` when it is empty. For an ascending sequence this
+    /// is the subtree's largest key, which is what upper- and lower-bound searches compare against.
     pub key: Option<T>,
 }
 
+/// Caches both the element count and the last key, so one tree supports rank, select, and ordered
+/// search at once.
+///
+/// This is the measure behind [`SortedBag`](crate::SortedBag), [`SortedSet`](crate::SortedSet), and
+/// [`SortedMap`](crate::SortedMap): counting alone would give positional access without ordered
+/// lookup, and keys alone would give ordered lookup without rank.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OrderStatisticMeasure<T>(PhantomData<T>);
 
@@ -105,6 +154,10 @@ where
     }
 }
 
+/// Caches each subtree's last element, supporting ordered lower- and upper-bound searches.
+///
+/// Use this when only ordered lookup is needed; [`OrderStatisticMeasure`] additionally caches
+/// counts and so also supports rank and select.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KeyMeasure<T>(PhantomData<T>);
 
@@ -127,6 +180,10 @@ where
     }
 }
 
+/// Adds elements together, so the cached measure of a subtree is the total of its elements.
+///
+/// Turns the tree into a cumulative-weight structure: prefix sums, threshold splits, and weighted
+/// selection all become O(log n).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SumMeasure<T>(PhantomData<T>);
 
@@ -149,6 +206,10 @@ where
     }
 }
 
+/// Caches each subtree's maximum element, making the tree a priority queue.
+///
+/// The overall maximum is the root measure, so peeking is O(1) and extraction is O(log n) — with
+/// no requirement that the elements be stored in sorted order.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MaxMeasure;
 
@@ -175,6 +236,9 @@ where
     }
 }
 
+/// Caches each subtree's minimum element, making the tree a min-priority queue.
+///
+/// The mirror image of [`MaxMeasure`]: peeking the minimum is O(1) and extraction is O(log n).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MinMeasure;
 
@@ -201,10 +265,23 @@ where
     }
 }
 
+/// Counts and sums at once: positional indexing plus cumulative-weight search and selection.
 pub type SizeAndSumMeasure<T> = ProductMeasure<T, SizeMeasure, SumMeasure<T>>;
+/// Counts and tracks the maximum at once: positional indexing plus O(1) maximum access.
 pub type SizeAndMaxMeasure<T> = ProductMeasure<T, SizeMeasure, MaxMeasure>;
+/// Counts and tracks the minimum at once: positional indexing plus O(1) minimum access.
 pub type SizeAndMinMeasure<T> = ProductMeasure<T, SizeMeasure, MinMeasure>;
 
+/// A persistent sequence that caches the measure defined by `P` at every node.
+///
+/// Every operation returns a new tree and leaves the receiver valid; versions share their unchanged
+/// nodes through [`Arc`], so cloning is O(1) and an update copies only one root-to-leaf path.
+/// Because each node's measure is available without descending into it, the single
+/// [`split`](Self::split) operation answers any monotone question the measure can express in
+/// O(log n), while access at either end is amortized O(1).
+///
+/// A tree is `Send + Sync` whenever `T` is, so one snapshot can be read concurrently without
+/// locking.
 pub struct FingerTree<T, P>
 where
     P: MeasurePolicy<T>,
@@ -231,23 +308,34 @@ pub struct FingerTreeCursorSearch<T, P>
 where
     P: MeasurePolicy<T>,
 {
+    /// The located cursor. On a miss this is still a usable cursor positioned at the end.
     pub cursor: FingerTreeCursor<T, P>,
+    /// Whether some prefix actually satisfied the predicate.
     pub found: bool,
 }
 
+/// The two halves produced by splitting a [`FingerTree`].
+///
+/// Both halves are complete trees sharing structure with the original, which itself remains valid.
 #[derive(Clone)]
 pub struct MeasuredSplit<T, P>
 where
     P: MeasurePolicy<T>,
 {
+    /// The elements before the split point.
     pub left: FingerTree<T, P>,
+    /// The elements at and after the split point.
     pub right: FingerTree<T, P>,
 }
 
+/// Where a measure-directed search landed, reported without splitting the tree.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocateResult<T, M> {
+    /// The index of the located element, or the tree's length on a miss.
     pub index: usize,
+    /// The combined measure of every element before `index`.
     pub measure_before: M,
+    /// The located element, or `None` on a miss.
     pub item: Option<T>,
 }
 
@@ -735,6 +823,7 @@ impl<T, P> FingerTree<T, P>
 where
     P: MeasurePolicy<T>,
 {
+    /// Creates an empty tree whose measure is the policy identity.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -744,11 +833,13 @@ where
         }
     }
 
+    /// Returns the number of elements. O(1); the count is cached at the root.
     #[must_use]
     pub fn len(&self) -> usize {
         self.root.len()
     }
 
+    /// Returns `true` when the tree holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.root.len() == 0
@@ -789,30 +880,42 @@ where
         }
     }
 
+    /// Returns the combined measure of every element, in sequence order. O(1); it is cached.
     #[must_use]
     pub fn measure(&self) -> &P::Measure {
         &self.measure
     }
 
+    /// Borrows the first element, or `None` when the tree is empty. O(1).
     #[must_use]
     pub fn front(&self) -> Option<&T> {
         self.root.first()
     }
 
+    /// Borrows the last element, or `None` when the tree is empty. O(1).
     #[must_use]
     pub fn back(&self) -> Option<&T> {
         self.root.last()
     }
 
+    /// Borrows the element at `index`, or `None` when `index` is out of range. O(log n).
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
         (index < self.len()).then(|| self.root.get(index)).flatten()
     }
 
+    /// Iterates the elements in sequence order.
     pub fn iter(&self) -> Iter<'_, T, P::Measure> {
         Iter::new(&self.root)
     }
 
+    /// Returns `true` when `self` and `other` are the same root, so neither can observe a change
+    /// made to the other.
+    ///
+    /// This is a *representation* test, not an equality test: it answers "did these two versions
+    /// come from the same node?" in O(1) and is used to confirm that a no-op operation really did
+    /// avoid copying. Two trees holding equal elements but built independently return `false`. All
+    /// empty trees are treated as sharing.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         (self.is_empty() && other.is_empty()) || Arc::ptr_eq(&self.root, &other.root)
@@ -832,6 +935,10 @@ where
         }
     }
 
+    /// Concatenates two trees, placing every element of `other` after every element of `self`.
+    ///
+    /// O(log(min(m, n))). Concatenating with an empty tree shares the non-empty operand's root
+    /// instead of copying it.
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
         if self.is_empty() {
@@ -849,6 +956,14 @@ where
         ))
     }
 
+    /// Splits at the first position whose inclusive prefix measure satisfies `predicate`.
+    ///
+    /// This is the tree's central operation: because every node caches its measure, the search
+    /// descends without visiting the elements it skips, so the split costs O(log n) rather than a
+    /// scan. `predicate` is expected to be *monotone* — false for every prefix up to some boundary
+    /// and true from there on — which is what makes "the first satisfying position" well defined;
+    /// a non-monotone predicate yields an unspecified but still structurally valid split. When no
+    /// prefix satisfies it, everything lands in the left half.
     #[must_use]
     pub fn split<F>(&self, predicate: F) -> MeasuredSplit<T, P>
     where
@@ -858,11 +973,16 @@ where
         self.split_at_index_unchecked(index)
     }
 
+    /// Splits at a positional boundary in `0..=len`, or returns `None` when `index` exceeds the
+    /// length. O(log n).
     #[must_use]
     pub fn split_at_index(&self, index: usize) -> Option<MeasuredSplit<T, P>> {
         (index <= self.len()).then(|| self.split_at_index_unchecked(index))
     }
 
+    /// Returns the combined measure of the first `count` elements, or `None` when `count` exceeds
+    /// the length. O(log n) — the prefix is summed from cached node measures, not element by
+    /// element.
     #[must_use]
     pub fn prefix_measure(&self, count: usize) -> Option<P::Measure> {
         (count <= self.len())
@@ -943,16 +1063,19 @@ impl<T, P> FingerTreeCursor<T, P>
 where
     P: MeasurePolicy<T>,
 {
+    /// Returns `true` when the gap is before the first element.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap is after the last element.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.tree.len()
     }
 
+    /// Returns the combined measure of every element before the gap. O(log n).
     #[must_use]
     pub fn measure_before(&self) -> P::Measure {
         self.tree
@@ -960,6 +1083,7 @@ where
             .expect("a cursor boundary has a prefix measure")
     }
 
+    /// Returns the combined measure of every element at or after the gap. O(log n).
     #[must_use]
     pub fn measure_after(&self) -> P::Measure {
         self.tree
@@ -970,6 +1094,7 @@ where
             .clone()
     }
 
+    /// Borrows the element immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
@@ -977,11 +1102,15 @@ where
             .and_then(|index| self.tree.get(index))
     }
 
+    /// Borrows the element immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<&T> {
         self.tree.get(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start.
+    ///
+    /// The receiver is unchanged; movement produces a new cursor over the same snapshot.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         Some(Self {
@@ -990,6 +1119,9 @@ where
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end.
+    ///
+    /// The receiver is unchanged; movement produces a new cursor over the same snapshot.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -1007,6 +1139,10 @@ where
         self.tree.cursor_by_measure(predicate)
     }
 
+    /// Inserts `item` at the gap and returns a cursor positioned after it.
+    ///
+    /// The receiver keeps its own snapshot, so cursors retained before this call continue to see
+    /// the sequence without `item`. O(log n).
     #[must_use]
     pub fn insert(&self, item: T) -> Self {
         let split = self
@@ -1020,6 +1156,8 @@ where
         }
     }
 
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the
+    /// start. O(log n).
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -1037,6 +1175,8 @@ where
         })
     }
 
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
+    /// O(log n).
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         if self.is_at_end() {
@@ -1056,6 +1196,8 @@ where
         })
     }
 
+    /// Replaces the element after the gap with `item`, keeping the gap where it is, or returns
+    /// `None` at the end. O(log n).
     #[must_use]
     pub fn replace_next(&self, item: T) -> Option<Self> {
         if self.is_at_end() {
@@ -1076,6 +1218,7 @@ where
         })
     }
 
+    /// Returns the tree version this cursor is positioned in. O(1); the root is shared.
     #[must_use]
     pub fn snapshot(&self) -> FingerTree<T, P> {
         self.tree.clone()
@@ -1105,6 +1248,7 @@ where
     T: Clone,
     P: MeasurePolicy<T>,
 {
+    /// Copies every element into a new vector, in sequence order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         let mut result = Vec::with_capacity(self.len());
@@ -1112,6 +1256,7 @@ where
         result
     }
 
+    /// Returns a tree with `item` added at the front. Amortized O(1).
     #[must_use]
     pub fn prepend(&self, item: T) -> Self {
         let measure = P::measure(&item);
@@ -1122,6 +1267,7 @@ where
         ))
     }
 
+    /// Returns a tree with `item` added at the back. Amortized O(1).
     #[must_use]
     pub fn append(&self, item: T) -> Self {
         let measure = P::measure(&item);
@@ -1132,18 +1278,28 @@ where
         ))
     }
 
+    /// Splits off the first element, returning it together with the remaining tree, or `None` when
+    /// empty. The receiver is unchanged.
     #[must_use]
     pub fn try_view_left(&self) -> Option<(T, Self)> {
         let first = self.front()?.clone();
         Some((first, self.split_at_index_unchecked(1).right))
     }
 
+    /// Splits off the last element, returning it together with the remaining tree, or `None` when
+    /// empty. The receiver is unchanged.
     #[must_use]
     pub fn try_view_right(&self) -> Option<(T, Self)> {
         let last = self.back()?.clone();
         Some((last, self.split_at_index_unchecked(self.len() - 1).left))
     }
 
+    /// Finds the first element whose inclusive prefix measure satisfies `predicate` and returns the
+    /// elements before it, the element itself, and the elements after it.
+    ///
+    /// Returns `None` when no prefix satisfies `predicate`. Unlike [`Self::split`], which always
+    /// produces two halves, this distinguishes "found here" from "not found" and hands back the
+    /// located element. O(log n).
     #[must_use]
     pub fn try_split_find<F>(&self, predicate: F) -> Option<(Self, T, Self)>
     where
@@ -1156,6 +1312,11 @@ where
         Some((left, item, right))
     }
 
+    /// Reports where the first element satisfying `predicate` sits, without splitting the tree.
+    ///
+    /// The returned [`LocateResult`] carries the element's index, the combined measure of
+    /// everything before it, and the element itself. When no prefix satisfies `predicate`, the
+    /// result describes the end position and its `item` is `None`. O(log n).
     #[must_use]
     pub fn try_locate<F>(&self, predicate: F) -> LocateResult<T, P::Measure>
     where
@@ -1187,6 +1348,10 @@ where
     PFirst: MeasurePolicy<T>,
     PSecond: MeasurePolicy<T>,
 {
+    /// Splits by a predicate over the first component of the product measure only.
+    ///
+    /// A convenience over [`Self::split`] for the common case where a tree carries two measures —
+    /// say size and sum — and the caller wants to search by just one of them.
     #[must_use]
     pub fn split_by_first<F>(
         &self,
@@ -1198,6 +1363,7 @@ where
         self.split(|measure| predicate(&measure.first))
     }
 
+    /// Splits by a predicate over the second component of the product measure only.
     #[must_use]
     pub fn split_by_second<F>(
         &self,
@@ -1216,6 +1382,7 @@ where
     PFirst: MeasurePolicy<T>,
     PSecond: MeasurePolicy<T>,
 {
+    /// [`Self::try_split_find`] driven by the first component of the product measure only.
     #[must_use]
     pub fn try_split_find_by_first<F>(&self, mut predicate: F) -> Option<(Self, T, Self)>
     where
@@ -1224,6 +1391,7 @@ where
         self.try_split_find(|measure| predicate(&measure.first))
     }
 
+    /// [`Self::try_split_find`] driven by the second component of the product measure only.
     #[must_use]
     pub fn try_split_find_by_second<F>(&self, mut predicate: F) -> Option<(Self, T, Self)>
     where
@@ -1232,6 +1400,7 @@ where
         self.try_split_find(|measure| predicate(&measure.second))
     }
 
+    /// [`Self::try_locate`] driven by the first component of the product measure only.
     #[must_use]
     pub fn try_locate_by_first<F>(
         &self,
@@ -1243,6 +1412,7 @@ where
         self.try_locate(|measure| predicate(&measure.first))
     }
 
+    /// [`Self::try_locate`] driven by the second component of the product measure only.
     #[must_use]
     pub fn try_locate_by_second<F>(
         &self,
@@ -1259,11 +1429,18 @@ impl<T> FingerTree<T, MaxMeasure>
 where
     T: Clone + Ord,
 {
+    /// Borrows the maximum element, or `None` when empty.
+    ///
+    /// O(1): the maximum is the tree's cached root measure, so no search is needed.
     #[must_use]
     pub fn try_peek_max(&self) -> Option<&T> {
         self.measure().as_ref()
     }
 
+    /// Removes one occurrence of the maximum element, returning it and the remaining tree.
+    ///
+    /// Returns `None` when empty. When several elements tie for the maximum, the leftmost is
+    /// removed. O(log n).
     #[must_use]
     pub fn try_extract_max(&self) -> Option<(T, Self)> {
         let target = self.measure().as_ref()?;
@@ -1277,11 +1454,18 @@ impl<T> FingerTree<T, MinMeasure>
 where
     T: Clone + Ord,
 {
+    /// Borrows the minimum element, or `None` when empty.
+    ///
+    /// O(1): the minimum is the tree's cached root measure, so no search is needed.
     #[must_use]
     pub fn try_peek_min(&self) -> Option<&T> {
         self.measure().as_ref()
     }
 
+    /// Removes one occurrence of the minimum element, returning it and the remaining tree.
+    ///
+    /// Returns `None` when empty. When several elements tie for the minimum, the leftmost is
+    /// removed. O(log n).
     #[must_use]
     pub fn try_extract_min(&self) -> Option<(T, Self)> {
         let target = self.measure().as_ref()?;
@@ -1295,11 +1479,20 @@ impl<T> FingerTree<T, KeyMeasure<T>>
 where
     T: Clone + Ord,
 {
+    /// Splits an ascending tree so that the left half holds every element strictly below `key`.
+    ///
+    /// Elements equivalent to `key` land in the right half, so this is the position where `key`
+    /// would be inserted before its equals. O(log n). Assumes the elements are in ascending order.
     #[must_use]
     pub fn split_by_lower_bound(&self, key: &T) -> MeasuredSplit<T, KeyMeasure<T>> {
         self.split(|measure| measure.as_ref().is_some_and(|last_key| last_key >= key))
     }
 
+    /// Splits an ascending tree so that the left half holds every element up to and including
+    /// those equivalent to `key`.
+    ///
+    /// Together with [`Self::split_by_lower_bound`], this brackets the run of elements equivalent
+    /// to `key`. O(log n). Assumes the elements are in ascending order.
     #[must_use]
     pub fn split_by_upper_bound(&self, key: &T) -> MeasuredSplit<T, KeyMeasure<T>> {
         self.split(|measure| measure.as_ref().is_some_and(|last_key| last_key > key))
@@ -1310,11 +1503,20 @@ impl<T> FingerTree<T, OrderStatisticMeasure<T>>
 where
     T: Clone + Ord,
 {
+    /// Splits an ascending tree so that the left half holds every element strictly below `key`.
+    ///
+    /// The order-statistic measure also caches counts, so the left half's length is the rank of
+    /// `key`. O(log n). Assumes the elements are in ascending order.
     #[must_use]
     pub fn split_by_lower_bound(&self, key: &T) -> MeasuredSplit<T, OrderStatisticMeasure<T>> {
         self.split(|measure| measure.key.as_ref().is_some_and(|last_key| last_key >= key))
     }
 
+    /// Splits an ascending tree so that the left half holds every element up to and including
+    /// those equivalent to `key`.
+    ///
+    /// The left half's length is therefore the number of elements at most `key`. O(log n). Assumes
+    /// the elements are in ascending order.
     #[must_use]
     pub fn split_by_upper_bound(&self, key: &T) -> MeasuredSplit<T, OrderStatisticMeasure<T>> {
         self.split(|measure| measure.key.as_ref().is_some_and(|last_key| last_key > key))
@@ -1325,6 +1527,9 @@ impl<T> FingerTree<T, SizeAndSumMeasure<T>>
 where
     T: Add<Output = T> + Clone + Default + PartialOrd,
 {
+    /// Splits at the first position where the running total of elements exceeds `threshold`.
+    ///
+    /// The left half is the longest prefix whose sum is at most `threshold`. O(log n).
     #[must_use]
     pub fn split_by_cumulative_weight(
         &self,
@@ -1333,6 +1538,12 @@ where
         self.split_by_second(|sum| sum > threshold)
     }
 
+    /// Selects the element that carries `threshold` in a weighted-choice scan, with its index.
+    ///
+    /// This is the standard weighted-sampling step: treating each element as a weight, it returns
+    /// the first element whose inclusive running total exceeds `threshold`, so drawing `threshold`
+    /// uniformly from `0..total` picks each element in proportion to its weight. Returns `None`
+    /// when `threshold` is at least the total. O(log n) rather than the usual linear scan.
     #[must_use]
     pub fn try_select_by_cumulative_weight(&self, threshold: &T) -> Option<(T, usize)> {
         let located = self.try_locate_by_second(|sum| sum > threshold);
@@ -1346,11 +1557,14 @@ impl<T> FingerTree<T, SizeAndMaxMeasure<T>>
 where
     T: Clone + Ord,
 {
+    /// Borrows the maximum element, or `None` when empty. O(1) from the cached root measure.
     #[must_use]
     pub fn try_peek_max(&self) -> Option<&T> {
         self.measure().second.as_ref()
     }
 
+    /// Removes the leftmost occurrence of the maximum element, returning it and the remaining tree.
+    /// Returns `None` when empty. O(log n).
     #[must_use]
     pub fn try_extract_max(&self) -> Option<(T, Self)> {
         let target = self.measure().second.as_ref()?;
@@ -1365,11 +1579,14 @@ impl<T> FingerTree<T, SizeAndMinMeasure<T>>
 where
     T: Clone + Ord,
 {
+    /// Borrows the minimum element, or `None` when empty. O(1) from the cached root measure.
     #[must_use]
     pub fn try_peek_min(&self) -> Option<&T> {
         self.measure().second.as_ref()
     }
 
+    /// Removes the leftmost occurrence of the minimum element, returning it and the remaining tree.
+    /// Returns `None` when empty. O(log n).
     #[must_use]
     pub fn try_extract_min(&self) -> Option<(T, Self)> {
         let target = self.measure().second.as_ref()?;
@@ -1380,6 +1597,7 @@ where
     }
 }
 
+/// Borrowing iterator over a [`FingerTree`] in sequence order.
 pub struct Iter<'a, T, M> {
     stack: Vec<&'a MeasuredNode<T, M>>,
     remaining: usize,

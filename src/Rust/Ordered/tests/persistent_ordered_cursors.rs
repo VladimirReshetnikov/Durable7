@@ -1,3 +1,10 @@
+//! Cross-family tests for the insertion-ordered cursor surface.
+//!
+//! Asserts that the set, map, and multimap cursors share one vocabulary and one result shape - in
+//! particular that `try_insert` reports whether an entry was *added*, not whether one was already
+//! present. Multimap cursors additionally rank over the flattened grouped pair sequence, including
+//! the boundary case where an insertion lands at the end of a non-final group.
+
 use durable7_ordered::{
     OrderedCursorInsert, PersistentOrderedMap, PersistentOrderedMultimap, PersistentOrderedSet,
 };

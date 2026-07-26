@@ -1,3 +1,35 @@
+//! Storage, verification, proofs, synchronization, and merge for Merkle search trees.
+//!
+//! This module is what makes the tree in [`crate::merkle_search_tree`] useful across a trust or
+//! network boundary. It covers four related jobs:
+//!
+//! * **Storage and verification.** A tree decomposes into content-addressed [`MerkleBlock`]s kept
+//!   in a [`MerkleBlockStore`] ([`InMemoryMerkleBlockStore`] is the built-in one). Loading a tree
+//!   re-derives every block's digest from its bytes, so a corrupted or substituted block is
+//!   rejected as a [`MerkleVerificationError`] rather than trusted. Because untrusted input must
+//!   not be able to force unbounded work, verification runs against a
+//!   [`MerkleVerificationBudget`] and stops with a [`MerkleBudgetError`] when the budget is
+//!   exhausted.
+//!
+//! * **Proofs.** A [`MerkleProof`] lets a verifier holding only a trusted root digest confirm a
+//!   claim about a tree it does not have — that a key maps to a value, that a key is absent, or
+//!   that a range contains exactly certain entries — by checking the sibling digests along one
+//!   path. [`MerkleProofKind`] distinguishes those cases; verification yields a
+//!   [`MerkleProofVerificationResult`].
+//!
+//! * **Synchronization.** [`MerkleSyncPlan`] compares two roots and identifies exactly the blocks
+//!   the receiver is missing, pruning any subtree whose digests already agree. Equal subtrees cost
+//!   one digest comparison regardless of size, so the transfer is proportional to the difference
+//!   rather than to the data. Blocks travel in a [`MerkleBlockPack`].
+//!
+//! * **Three-way merge.** Given a common ancestor and two descendants, the merge classifies each
+//!   key's change and reports genuine disagreements as [`MerkleThreeWayMergeConflict`]s for the
+//!   caller to settle through a [`MerkleMergeResolution`], producing a
+//!   [`MerkleThreeWayMergeResult`].
+//!
+//! All of it is wire-compatible with the sibling ports: the same tree yields the same blocks and
+//! the same proofs in every language.
+
 use crate::merkle_search_tree::{
     MERKLE_BLOCK_HEADER_LENGTH, MERKLE_BLOCK_MAGIC, MERKLE_DIGEST_LENGTH, MERKLE_NODE_BLOCK_TAG,
     MerkleNode, MerkleNodeLink, enumerate_nodes_preorder,

@@ -1,3 +1,10 @@
+//! Wire-format conformance tests for the Merkle search tree core.
+//!
+//! These are the tests that keep the Rust port byte-identical to its eight siblings: fixed
+//! cross-language vectors for every built-in codec, exact digest parsing and writing, canonical
+//! `MST2` block bytes, and the history-independent tree shape. Also covers ordered cursor
+//! navigation and concurrent read-only sharing of one tree.
+
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;

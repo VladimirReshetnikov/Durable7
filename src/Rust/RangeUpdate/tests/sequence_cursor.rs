@@ -1,3 +1,9 @@
+//! Tests for cursor navigation over the lazily range-updating sequence.
+//!
+//! Confirms that moving, peeking, and seeking through a cursor observe the same values as direct
+//! access, so pending range-update tags are pushed down correctly along the cursor's path and
+//! retained cursors keep their own version.
+
 use durable7_range_update::{MeasurePolicy, RangeUpdateAlgebra, RangeUpdateSequence};
 
 #[derive(Debug)]

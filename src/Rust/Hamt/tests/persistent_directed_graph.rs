@@ -1,3 +1,10 @@
+//! Tests for the persistent directed graph.
+//!
+//! Covers explicit vertex management - including isolated vertices and the removal of a vertex
+//! together with its incident edges - bidirectional adjacency, retention of vertex-set
+//! representatives at edge endpoints, and root sharing when adding a vertex or edge that is
+//! already present.
+
 use std::sync::Arc;
 
 use durable7_hamt::PersistentDirectedGraph;

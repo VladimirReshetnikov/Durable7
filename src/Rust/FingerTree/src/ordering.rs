@@ -1,3 +1,17 @@
+//! Retained ordering policies for the crate's ordered structures.
+//!
+//! Ordered structures here take their comparison from an [`OrderPolicy`] value rather than from a
+//! `T: Ord` bound, so a collection can be ordered by a caller-supplied rule and can remember which
+//! rule it was built with. Remembering matters for binary operations: melding or comparing two
+//! structures is only meaningful when both were ordered the same way, and a retained policy makes
+//! that check possible instead of silently producing a malformed result.
+//!
+//! Policy identity is deliberate. Cloning a custom policy preserves identity, so derived versions
+//! stay compatible with their source; two independently constructed custom policies are distinct
+//! even when they compare identically, because there is no way to prove two closures agree.
+//! [`NaturalOrderComparer`] is the shared natural-[`Ord`] policy and compares equal to itself
+//! everywhere.
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::sync::Arc;

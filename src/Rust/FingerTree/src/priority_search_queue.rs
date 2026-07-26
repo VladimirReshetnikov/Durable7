@@ -1,3 +1,22 @@
+//! Persistent priority search queue: a search tree and a priority queue over the same entries.
+//!
+//! [`PrioritySearchQueue`] indexes each entry by a unique key *and* orders it by priority, so it
+//! supports both the map operations (lookup, insert, delete, and adjust by key) and the queue
+//! operations (find and remove the minimum by priority) in O(log n). A plain priority queue can do
+//! the second group only; a plain sorted map can do the first group only.
+//!
+//! The representation is a pennant-based tournament tree in which each node carries a winner —
+//! the minimum-priority entry of its subtree — so the overall minimum is available at the root
+//! without a search. Ordering of both keys and priorities comes from retained
+//! [`OrderPolicy`](crate::ordering::OrderPolicy) values, and operations that mix incompatible
+//! policies fail rather than producing a malformed queue.
+//!
+//! Mutating operations report what they did through [`PrioritySearchAddResult`] and
+//! [`PrioritySearchRemoveResult`]; [`PrioritySearchMinimumView`] borrows the current minimum without
+//! removing it. Range enumeration ([`PrioritySearchRangeIter`]) rejects an inverted range with
+//! [`PrioritySearchRangeError`], and a full audit returns [`PrioritySearchQueueStatistics`] or the
+//! first [`PrioritySearchInvariantError`].
+
 use crate::ordering::{OrderComparer, OrderPolicy};
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -1058,20 +1077,30 @@ impl<K, P, V> PrioritySearchQueue<K, P, V> {
         }
         None
     }
+    /// Creates a cursor at the gap `position` in `0..=len` of the key-ordered sequence, or `None` when
+    /// it exceeds the entry count.
     pub fn cursor_at(&self, position: usize) -> Option<PrioritySearchQueueCursor<K, P, V>> {
         (position <= self.len()).then(|| PrioritySearchQueueCursor {
             queue: self.clone(),
             position,
         })
     }
+    /// Creates a cursor before the first entry whose key is not below `key`, that is, where `key`
+    /// would be inserted. O(log n).
     pub fn cursor_at_lower_bound(&self, key: &K) -> PrioritySearchQueueCursor<K, P, V> {
         self.cursor_at(self.cursor_bound_rank(key, false))
             .expect("lower bound is valid")
     }
+    /// Creates a cursor after any entry equivalent to `key`, that is, before the first entry whose key
+    /// is strictly above it. O(log n).
     pub fn cursor_at_upper_bound(&self, key: &K) -> PrioritySearchQueueCursor<K, P, V> {
         self.cursor_at(self.cursor_bound_rank(key, true))
             .expect("upper bound is valid")
     }
+    /// Seeks to `key` and reports whether it is present.
+    ///
+    /// On a miss the cursor sits at the lower bound, which is where `key` would be inserted, so it
+    /// remains usable. Key equivalence is decided by the retained key ordering policy.
     pub fn find_cursor(&self, key: &K) -> PrioritySearchCursorSearch<K, P, V> {
         let cursor = self.cursor_at_lower_bound(key);
         PrioritySearchCursorSearch {
@@ -1081,6 +1110,10 @@ impl<K, P, V> PrioritySearchQueue<K, P, V> {
             cursor,
         }
     }
+    /// Creates a cursor positioned at the entry with the smallest priority.
+    ///
+    /// This is the bridge between the queue's two indexes: the minimum is found by priority, and the
+    /// cursor that comes back walks the *key* order from there. An empty queue yields a start cursor.
     pub fn cursor_at_minimum_priority(&self) -> PrioritySearchQueueCursor<K, P, V> {
         self.minimum().map_or_else(
             || self.cursor_at(0).expect("empty start is valid"),
@@ -1090,40 +1123,53 @@ impl<K, P, V> PrioritySearchQueue<K, P, V> {
 }
 
 impl<K, P, V> PrioritySearchQueueCursor<K, P, V> {
+    /// Returns the entry count of the queue version this cursor is positioned in.
     pub fn len(&self) -> usize {
         self.queue.len()
     }
+    /// Returns `true` when that queue version holds no entries.
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
+    /// Returns the cursor's gap index in the key-ordered sequence, in `0..=len`.
     pub fn position(&self) -> usize {
         self.position
     }
+    /// Returns `true` when the gap precedes the first entry in key order.
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
+    /// Returns `true` when the gap follows the last entry in key order.
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
+    /// Borrows the entry immediately before the gap, or `None` at the start.
     pub fn peek_previous(&self) -> Option<&PrioritySearchEntry<K, P, V>> {
         self.position
             .checked_sub(1)
             .and_then(|rank| self.queue.cursor_entry_at(rank))
     }
+    /// Borrows the entry immediately after the gap, or `None` at the end.
     pub fn peek_next(&self) -> Option<&PrioritySearchEntry<K, P, V>> {
         self.queue.cursor_entry_at(self.position)
     }
+    /// Returns a cursor one position earlier in key order, or `None` at the start. The receiver is
+    /// unchanged.
     pub fn move_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .and_then(|position| self.queue.cursor_at(position))
     }
+    /// Returns a cursor one position later in key order, or `None` at the end. The receiver is
+    /// unchanged.
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
             queue: self.queue.clone(),
             position: self.position + 1,
         })
     }
+    /// Jumps to the gap at `position` within the same queue version, or `None` when `position`
+    /// exceeds the entry count.
     pub fn seek_rank(&self, position: usize) -> Option<Self> {
         if position == self.position {
             Some(self.clone())
@@ -1131,6 +1177,7 @@ impl<K, P, V> PrioritySearchQueueCursor<K, P, V> {
             self.queue.cursor_at(position)
         }
     }
+    /// Borrows the queue version this cursor is positioned in.
     pub fn snapshot(&self) -> &PrioritySearchQueue<K, P, V> {
         &self.queue
     }
@@ -1160,6 +1207,11 @@ impl<K, P, V> PrioritySearchQueueCursor<K, P, V> {
 }
 
 impl<K: Clone, P: Clone + PartialEq, V: Clone + PartialEq> PrioritySearchQueueCursor<K, P, V> {
+    /// Adds a new entry and returns a cursor just after it in key order.
+    ///
+    /// The gap moves to the key's ordered position rather than staying where the receiver was, since
+    /// the entry's place is decided by the key ordering. An already present key fails, handing back
+    /// the [`PrioritySearchAddResult`] that describes the rejection; the receiver keeps its version.
     pub fn insert(
         &self,
         key: K,
@@ -1177,6 +1229,10 @@ impl<K: Clone, P: Clone + PartialEq, V: Clone + PartialEq> PrioritySearchQueueCu
             Err(result)
         }
     }
+    /// Adds `key`, or replaces its priority and value when already present, and returns a cursor
+    /// positioned at the resulting entry.
+    ///
+    /// Changing a priority re-places the entry in the priority index while leaving key order intact.
     pub fn set_item(&self, key: K, priority: P, value: V) -> Self {
         let location = self.queue.find_cursor(&key);
         Self {
@@ -1188,6 +1244,8 @@ impl<K: Clone, P: Clone + PartialEq, V: Clone + PartialEq> PrioritySearchQueueCu
             },
         }
     }
+    /// Replaces the priority and value of the entry after the gap, keeping its key and position, or
+    /// returns `None` at the end.
     pub fn set_next(&self, priority: P, value: V) -> Option<Self> {
         let key = self.peek_next()?.key().clone();
         Some(Self {
@@ -1197,6 +1255,7 @@ impl<K: Clone, P: Clone + PartialEq, V: Clone + PartialEq> PrioritySearchQueueCu
     }
 }
 
+/// Borrowing iterator over a [`PrioritySearchQueue`]'s entries, in ascending key order.
 pub struct PrioritySearchIter<'a, K, P, V> {
     pending: Vec<&'a Node<K, P, V>>,
     cursor: Option<&'a Node<K, P, V>>,

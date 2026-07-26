@@ -1,3 +1,28 @@
+//! Canonical, wire-compatible Merkle search tree — algorithm `mst-sha256-b16-v2`.
+//!
+//! [`MerkleSearchTree`] is a deterministic ordered map that is also a content-addressed block tree:
+//! its root digest identifies its contents exactly, so two parties can compare or synchronize
+//! entire maps by exchanging digests rather than entries. It is neither a probabilistic skip list
+//! nor a binary Merkle tree.
+//!
+//! Shape is *history independent*. Each entry's level is the number of leading zero base-16 digits
+//! of its keyed SHA-256 digest — zero with probability 1/16 per digit, which is the B=16
+//! construction — so the tree built from a set of entries is the same tree no matter what order
+//! they were inserted in. That is what makes the root digest a meaningful identity, and what lets a
+//! tree built by one port verify against a proof produced by another: this module and its siblings
+//! in the other eight languages agree byte for byte, down to the `MST2` block format defined here.
+//!
+//! Every tree retains a [`MerkleSearchTreePolicy`] holding the key comparer, the injective key and
+//! value codecs, and the derived domain digest. The digest domain binds the algorithm ID, policy
+//! ID, and both codec IDs, so trees built under different policies cannot be confused for one
+//! another.
+//!
+//! Nodes and encoded bytes are shared through [`Arc`], so an update allocates only the affected
+//! block path and a no-op — an encoded-value-identical write, an absent removal, clearing an empty
+//! tree — retains the existing root. Persistence, proofs, synchronization, and three-way merge
+//! live in [`crate::merkle_persistence`]; canonical value codecs live in
+//! [`crate::merkle_encoding`].
+
 use crate::{MerkleCodecError, MerkleDigest, MerkleSearchTreePolicy};
 use std::cmp::Ordering;
 use std::collections::HashSet;

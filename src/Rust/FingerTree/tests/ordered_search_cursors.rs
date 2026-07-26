@@ -1,3 +1,12 @@
+//! Cross-structure tests for the ordered and query cursor surface.
+//!
+//! Every ordered structure in the crate exposes the same cursor vocabulary — seek by rank, seek by
+//! key, peek, move, edit, snapshot — and these tests assert that the shared vocabulary really does
+//! behave identically across [`SortedBag`], [`SortedSet`], [`SortedMap`], [`CanonicalSortedSet`],
+//! [`PersistentChunkedBitSet`], [`IntervalTree`], [`PersistentIntervalMap`], and
+//! [`PrioritySearchQueue`], including where a seek lands when there is no exact match and that
+//! retained cursors keep their own version.
+
 use std::cmp::Ordering;
 
 use durable7_fingertree::{

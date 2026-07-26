@@ -1,3 +1,14 @@
+//! Persistent map with one automatically maintained secondary index.
+//!
+//! [`PersistentIndexedMap`] is a primary `K -> V` map plus a derived `I -> {K}` index, where each
+//! value's index key is computed by a caller-supplied projection. The index is *nonunique*: several
+//! primary keys may share an index key. Every mutation updates both structures together and
+//! publishes only when both are complete, so the index can never drift out of agreement with the
+//! primary map the way a hand-maintained side table can.
+//!
+//! Lookup by index key is therefore O(1) in the number of stored entries rather than a full scan,
+//! at the cost of maintaining the second structure on every write.
+
 use crate::{DuplicateKey, PersistentHashMap, PersistentHashMultimap, PersistentHashSet};
 use std::collections::hash_map::RandomState;
 use std::fmt;
@@ -13,17 +24,24 @@ struct IndexedEntry<V, I> {
 /// Successful coupled-index validation statistics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IndexedMapStatistics {
+    /// The number of primary entries.
     pub count: usize,
+    /// The number of distinct index keys.
     pub index_key_count: usize,
 }
 
 /// A disagreement between an indexed map's primary and secondary indexes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndexedMapInvariantError {
+    /// The secondary multimap failed its own validation.
     SecondaryIndex,
+    /// The primary map and the secondary index disagree on how many entries are filed.
     CountMismatch,
+    /// A primary entry is missing from the index group its recorded index key names.
     MissingSecondaryMembership,
+    /// The index refers to a primary key that the primary map does not hold.
     MissingPrimaryRow,
+    /// An entry is filed under an index key other than the one recorded for it.
     IndexKeyMismatch,
 }
 
@@ -63,6 +81,8 @@ where
 }
 
 impl<K, V, I, F> PersistentIndexedMap<K, V, I, F, RandomState, RandomState> {
+    /// Creates an empty map whose secondary index is keyed by `selector`, using fresh default hash
+    /// policies.
     #[must_use]
     pub fn new(selector: F) -> Self {
         Self::with_hashers(selector, RandomState::new(), RandomState::new())
@@ -70,6 +90,8 @@ impl<K, V, I, F> PersistentIndexedMap<K, V, I, F, RandomState, RandomState> {
 }
 
 impl<K, V, I, F, SK, SI> PersistentIndexedMap<K, V, I, F, SK, SI> {
+    /// Creates an empty map with an independently chosen hash policy for primary keys and for index
+    /// keys.
     #[must_use]
     pub fn with_hashers(selector: F, key_hasher: SK, index_hasher: SI) -> Self
     where
@@ -82,56 +104,74 @@ impl<K, V, I, F, SK, SI> PersistentIndexedMap<K, V, I, F, SK, SI> {
         }
     }
 
+    /// Returns the number of primary entries. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.primary.len()
     }
 
+    /// Returns `true` when the map holds no entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.primary.is_empty()
     }
 
+    /// Returns the number of distinct index keys. O(1). Never exceeds [`Self::len`], since the index
+    /// is nonunique.
     #[must_use]
     pub fn index_key_count(&self) -> usize {
         self.index.key_count()
     }
 
+    /// Borrows the hash policy defining primary-key equivalence.
     #[must_use]
     pub fn key_hasher(&self) -> &SK {
         self.primary.hasher()
     }
 
+    /// Borrows the hash policy defining index-key equivalence.
     #[must_use]
     pub fn index_hasher(&self) -> &SI {
         self.index.key_hasher()
     }
 
+    /// Borrows the projection that derives an index key from a value.
+    ///
+    /// The map calls it only when a value is added or actually changes, never on lookup, so the index
+    /// cannot drift from the primary map.
     #[must_use]
     pub fn selector(&self) -> &F {
         &self.selector
     }
 
+    /// Iterates the primary keys, in unspecified order.
     pub fn keys(&self) -> impl Iterator<Item = &K> {
         self.primary.keys()
     }
 
+    /// Iterates the values, in unspecified order.
     pub fn values(&self) -> impl Iterator<Item = &V> {
         self.primary.values().map(|entry| &entry.value)
     }
 
+    /// Iterates the primary entries, in unspecified order.
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (&K, &V)> {
         self.primary.iter().map(|(key, entry)| (key, &entry.value))
     }
 
+    /// Iterates the distinct index keys, in unspecified order.
     pub fn index_keys(&self) -> impl Iterator<Item = &I> {
         self.index.keys()
     }
 
+    /// Iterates each index key together with the set of primary keys filed under it. Every yielded
+    /// set is nonempty.
     pub fn index_groups(&self) -> impl Iterator<Item = (&I, &PersistentHashSet<K, SK>)> {
         self.index.groups()
     }
 
+    /// Reports whether two maps share both the primary and index representations, so neither can
+    /// observe an edit made to the other. A representation test, not an equality test.
     #[must_use]
     pub fn shares_roots_with(&self, other: &Self) -> bool {
         self.primary.shares_root_with(&other.primary)
@@ -146,36 +186,48 @@ where
     SK: BuildHasher,
     SI: BuildHasher,
 {
+    /// Reports whether `key` is present. O(1) expected.
     #[must_use]
     pub fn contains_key(&self, key: &K) -> bool {
         self.primary.contains_key(key)
     }
 
+    /// Borrows the value stored for `key`, or `None` when absent. O(1) expected.
     #[must_use]
     pub fn get(&self, key: &K) -> Option<&V> {
         self.primary.get(key).map(|entry| &entry.value)
     }
 
+    /// Borrows the stored key representative equivalent to `equal_key`, or `None` when absent.
     #[must_use]
     pub fn get_key(&self, equal_key: &K) -> Option<&K> {
         self.primary.get_key_value(equal_key).map(|(key, _)| key)
     }
 
+    /// Borrows the index key currently filed for `key`, or `None` when the key is absent.
+    ///
+    /// Returns the value recorded at write time rather than re-running the selector.
     #[must_use]
     pub fn get_index_key(&self, key: &K) -> Option<&I> {
         self.primary.get(key).map(|entry| &entry.index_key)
     }
 
+    /// Reports whether at least one entry is filed under `index_key`. O(1) expected.
     #[must_use]
     pub fn contains_index_key(&self, index_key: &I) -> bool {
         self.index.contains_key(index_key)
     }
 
+    /// Returns how many entries are filed under `index_key`, or zero when it is absent.
     #[must_use]
     pub fn count_by_index(&self, index_key: &I) -> usize {
         self.index.count_values(index_key)
     }
 
+    /// Borrows the primary keys filed under `index_key`, or `None` when it is absent.
+    ///
+    /// This is the point of the secondary index: the lookup is O(1) expected rather than a scan over
+    /// every entry. Never yields an empty set.
     #[must_use]
     pub fn keys_by_index(&self, index_key: &I) -> Option<&PersistentHashSet<K, SK>> {
         self.index.get_values(index_key)
@@ -191,6 +243,8 @@ where
     SK: BuildHasher + Clone,
     SI: BuildHasher + Clone,
 {
+    /// Builds a map from entries under the supplied hash policies, populating the secondary index as
+    /// it goes.
     #[must_use]
     pub fn from_entries_with_hashers<E>(
         entries: E,
@@ -207,6 +261,10 @@ where
         )
     }
 
+    /// Adds a new entry and files it in the index, failing with [`DuplicateKey`] when `key` is already
+    /// present.
+    ///
+    /// The selector is not invoked on a duplicate, and the receiver is left untouched.
     pub fn add(&self, key: K, value: V) -> Result<Self, DuplicateKey> {
         if self.primary.contains_key(&key) {
             return Err(DuplicateKey);
@@ -230,6 +288,7 @@ where
         })
     }
 
+    /// Adds a new entry, reporting whether it was added instead of returning a `Result`.
     #[must_use]
     pub fn try_add(&self, key: K, value: V) -> (Self, bool) {
         match self.add(key, value) {
@@ -238,6 +297,11 @@ where
         }
     }
 
+    /// Adds `key`, or replaces its value when present, moving it between index groups if its index
+    /// key changed.
+    ///
+    /// Writing a value equal to the stored one is a no-op: the selector is not invoked and both
+    /// representations are shared.
     #[must_use]
     pub fn set_item(&self, key: K, value: V) -> Self {
         let Some((stored_key, current)) = self.primary.get_key_value(&key) else {
@@ -274,6 +338,8 @@ where
         }
     }
 
+    /// Removes `key` from the primary map and from its index group, dropping the group when it
+    /// becomes empty. The selector is not invoked. Removing an absent key is a no-op.
     #[must_use]
     pub fn remove(&self, key: &K) -> Self {
         let Some((stored_key, current)) = self.primary.get_key_value(key) else {
@@ -288,6 +354,8 @@ where
         }
     }
 
+    /// Returns an empty map retaining both hash policies and the selector. Clearing an empty map is a
+    /// no-op that shares the receiver's representation.
     #[must_use]
     pub fn clear(&self) -> Self {
         if self.is_empty() {
@@ -301,6 +369,10 @@ where
         }
     }
 
+    /// Cross-checks the secondary index against the primary map: every entry filed exactly once under
+    /// the index key recorded for it, and no empty groups.
+    ///
+    /// A defensive audit over the whole map; ordinary operations maintain these invariants.
     pub fn validate(&self) -> Result<IndexedMapStatistics, IndexedMapInvariantError> {
         self.index
             .validate()
@@ -335,6 +407,7 @@ where
     I: Eq + Hash + Clone,
     F: Fn(&K, &V) -> I,
 {
+    /// Builds a map from entries under fresh default hash policies.
     #[must_use]
     pub fn from_entries<E>(entries: E, selector: F) -> Self
     where

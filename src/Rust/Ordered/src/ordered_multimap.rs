@@ -1,3 +1,14 @@
+//! Persistent insertion-ordered multimap: ordered keys, each with an ordered value group.
+//!
+//! [`PersistentOrderedMultimap`] composes a [`PersistentOrderedMap`] of keys with a
+//! [`PersistentOrderedSet`] of values per key, so order is retained at *both* levels: keys iterate
+//! in the order they first acquired a value, and each key's distinct values iterate in the order
+//! they were first added to that key.
+//!
+//! Value groups are sets, so re-adding an existing pair is a no-op that disturbs neither ordering.
+//! As in [`crate::ordered_map`], groups are kept nonempty: removing a key's last value removes the
+//! key itself, so a key is present exactly when it has at least one value.
+
 use std::collections::hash_map::RandomState;
 use std::fmt;
 use std::hash::{BuildHasher, Hash};
@@ -24,16 +35,22 @@ impl<V, S> PartialEq for OrderedGroup<V, S> {
 /// Successful structural-validation statistics for an ordered multimap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PersistentOrderedMultimapStatistics {
+    /// The number of distinct keys.
     pub key_count: usize,
+    /// The number of pairs, recomputed by summing the group sizes.
     pub pair_count: usize,
 }
 
 /// A disagreement among the ordered multimap's nested indexes and cached count.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PersistentOrderedMultimapInvariantError {
+    /// The outer ordered map failed its own validation.
     OuterMap,
+    /// A key was stored with an empty value group, which the nonempty invariant forbids.
     EmptyGroup,
+    /// One key's ordered value set failed its own validation.
     ValueGroup,
+    /// The maintained pair count disagrees with the sum of the group sizes.
     PairCountMismatch,
 }
 
@@ -76,6 +93,7 @@ where
 }
 
 impl<K, V> PersistentOrderedMultimap<K, V, RandomState, RandomState> {
+    /// Creates an empty multimap using fresh default hash policies for keys and values.
     #[must_use]
     pub fn new() -> Self {
         Self::with_hashers(RandomState::new(), RandomState::new())
@@ -83,6 +101,7 @@ impl<K, V> PersistentOrderedMultimap<K, V, RandomState, RandomState> {
 }
 
 impl<K, V, SK, SV> PersistentOrderedMultimap<K, V, SK, SV> {
+    /// Creates an empty multimap with an independently chosen hash policy for each domain.
     #[must_use]
     pub fn with_hashers(key_hasher: SK, value_hasher: SV) -> Self {
         Self {
@@ -92,45 +111,57 @@ impl<K, V, SK, SV> PersistentOrderedMultimap<K, V, SK, SV> {
         }
     }
 
+    /// Returns the number of distinct keys. O(1). Every key has at least one value.
     #[must_use]
     pub fn key_count(&self) -> usize {
         self.groups.len()
     }
 
+    /// Returns the total number of `(key, value)` pairs. O(1).
     #[must_use]
     pub fn pair_count(&self) -> usize {
         self.pair_count
     }
 
+    /// Returns `true` when the multimap holds no pairs, and therefore no keys.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pair_count == 0
     }
 
+    /// Borrows the hash policy defining key equivalence.
     #[must_use]
     pub fn key_hasher(&self) -> &SK {
         self.groups.hasher()
     }
 
+    /// Borrows the hash policy defining value equivalence within each group.
     #[must_use]
     pub fn value_hasher(&self) -> &SV {
         &self.value_hasher
     }
 
+    /// Iterates the keys in the order they first acquired a value.
     pub fn keys(&self) -> impl ExactSizeIterator<Item = &K> {
         self.groups.keys()
     }
 
+    /// Iterates each key with its ordered value set, keys in key order. Every yielded set is
+    /// nonempty.
     pub fn groups(&self) -> impl ExactSizeIterator<Item = (&K, &PersistentOrderedSet<V, SV>)> {
         self.groups.iter().map(|(key, group)| (key, &group.0))
     }
 
+    /// Iterates every `(key, value)` pair in grouped order: keys in key order, and within each key,
+    /// values in the order they were first added to it.
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         self.groups
             .iter()
             .flat_map(|(key, group)| group.0.iter().map(move |value| (key, value)))
     }
 
+    /// Reports whether two multimaps share the same group map, so neither can observe an edit made to
+    /// the other. A representation test, not an equality test.
     #[must_use]
     pub fn shares_groups_root_with(&self, other: &Self) -> bool {
         self.groups.shares_roots_with(&other.groups)
@@ -144,11 +175,13 @@ where
     SK: BuildHasher,
     SV: BuildHasher + Clone,
 {
+    /// Reports whether `key` has at least one value. O(1) expected.
     #[must_use]
     pub fn contains_key(&self, key: &K) -> bool {
         self.groups.contains_key(key)
     }
 
+    /// Reports whether the pair `(key, value)` is present. O(1) expected.
     #[must_use]
     pub fn contains(&self, key: &K, value: &V) -> bool {
         self.groups
@@ -156,21 +189,27 @@ where
             .is_some_and(|group| group.0.contains(value))
     }
 
+    /// Returns how many distinct values `key` has, or zero when absent.
     #[must_use]
     pub fn count_values(&self, key: &K) -> usize {
         self.groups.get(key).map_or(0, |group| group.0.len())
     }
 
+    /// Borrows `key`'s ordered value set, or `None` when the key is absent. Never yields an empty
+    /// set.
     #[must_use]
     pub fn get_values(&self, key: &K) -> Option<&PersistentOrderedSet<V, SV>> {
         self.groups.get(key).map(|group| &group.0)
     }
 
+    /// Borrows the stored key representative equivalent to `equal_key`, or `None` when absent.
     #[must_use]
     pub fn get_key(&self, equal_key: &K) -> Option<&K> {
         self.groups.get_key(equal_key)
     }
 
+    /// Borrows the stored value representative under `key` for `equal_value`, or `None` when the pair
+    /// is absent.
     #[must_use]
     pub fn get_value(&self, key: &K, equal_value: &V) -> Option<&V> {
         self.groups.get(key)?.0.get_stored(equal_value)
@@ -182,6 +221,8 @@ where
     K: Eq + Hash + Clone,
     V: Eq + Hash + Clone,
 {
+    /// Builds a multimap from pairs under fresh default hash policies, retaining first representatives
+    /// and first-occurrence order in both domains.
     #[must_use]
     pub fn from_pairs<I>(pairs: I) -> Self
     where
@@ -198,6 +239,7 @@ where
     SK: BuildHasher + Clone,
     SV: BuildHasher + Clone,
 {
+    /// Builds a multimap from pairs under the supplied hash policies.
     #[must_use]
     pub fn from_pairs_with_hashers<I>(pairs: I, key_hasher: SK, value_hasher: SV) -> Self
     where
@@ -247,6 +289,10 @@ where
         }
     }
 
+    /// Adds the pair `(key, value)`, reporting whether it was new.
+    ///
+    /// A new key is appended after the existing keys; a new value is appended after that key's
+    /// existing values. Re-adding a present pair is a no-op that disturbs neither ordering.
     #[must_use]
     pub fn try_insert(&self, key: K, value: V) -> (Self, bool) {
         let result = self.insert(key, value);
@@ -254,6 +300,9 @@ where
         (result, changed)
     }
 
+    /// Removes the pair `(key, value)`, dropping the key when that was its last value.
+    ///
+    /// Removing an absent pair is a no-op. Surviving keys and values keep their relative order.
     #[must_use]
     pub fn remove(&self, key: &K, value: &V) -> Self {
         let Some(stored_key) = self.groups.get_key(key) else {
@@ -283,6 +332,8 @@ where
         }
     }
 
+    /// Removes `key` with all of its values, returning the resulting multimap, the stored key
+    /// representative, and the removed value set, or `None` when the key was absent.
     #[must_use]
     pub fn try_remove_key(&self, key: &K) -> Option<(Self, K, PersistentOrderedSet<V, SV>)> {
         let removed = self.groups.try_remove(key);
@@ -301,12 +352,15 @@ where
         ))
     }
 
+    /// Removes `key` together with all of its values. Removing an absent key is a no-op.
     #[must_use]
     pub fn remove_key(&self, key: &K) -> Self {
         self.try_remove_key(key)
             .map_or_else(|| self.clone(), |(result, _, _)| result)
     }
 
+    /// Returns an empty multimap retaining both hash policies. Clearing an empty multimap is a no-op
+    /// that shares the receiver's representation.
     #[must_use]
     pub fn clear(&self) -> Self {
         if self.is_empty() {
@@ -316,6 +370,9 @@ where
         }
     }
 
+    /// Cross-checks the maintained pair count against the groups and confirms that no group is empty.
+    ///
+    /// A defensive audit; ordinary operations maintain these invariants.
     pub fn validate_structure(
         &self,
     ) -> Result<PersistentOrderedMultimapStatistics, PersistentOrderedMultimapInvariantError> {

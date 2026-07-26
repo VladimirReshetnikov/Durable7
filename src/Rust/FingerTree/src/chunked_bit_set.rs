@@ -1,3 +1,15 @@
+//! Persistent sparse bit set stored as measured fixed-width chunks.
+//!
+//! [`PersistentChunkedBitSet`] keeps only the chunks that contain at least one set bit, ordered by
+//! chunk index inside a [`FingerTree`](crate::FingerTree). The measure caches each subtree's chunk
+//! span and population count, which is what makes point lookup, inclusive rank, and select
+//! logarithmic rather than linear in the highest index ever set.
+//!
+//! Bit indices are restricted to the cross-language nonnegative signed-32-bit domain so that every
+//! port accepts exactly the same inputs; a negative index is reported as [`NegativeBitIndex`]
+//! instead of being coerced. [`PersistentChunkedBitSet::validate`] checks the stored chunks
+//! against their cached measure and returns [`ChunkedBitSetStatistics`] when they agree.
+
 use crate::{FingerTree, MeasurePolicy};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -64,15 +76,20 @@ impl std::error::Error for NegativeBitIndex {}
 /// Successful sparse bit-set invariant statistics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ChunkedBitSetStatistics {
+    /// The number of stored chunks.
     pub chunk_count: usize,
+    /// The number of set bits, recounted from the stored chunks.
     pub pop_count: u64,
 }
 
 /// A disagreement between stored chunks and their cached measure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChunkedBitSetInvariantError {
+    /// Stored chunk indices are not strictly ascending, so lookups could not be trusted.
     WordIndexesNotStrictlyAscending,
+    /// An all-zero chunk was retained, which the sparse representation forbids.
     EmptyChunk,
+    /// The cached measure disagrees with the bits actually stored.
     MeasureMismatch,
 }
 
@@ -109,6 +126,7 @@ pub struct PersistentChunkedBitSet {
 }
 
 impl PersistentChunkedBitSet {
+    /// Creates an empty bit set.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -116,6 +134,7 @@ impl PersistentChunkedBitSet {
         }
     }
 
+    /// Builds a bit set with every listed index set, failing on the first negative index.
     pub fn from_indices<I>(indices: I) -> Result<Self, NegativeBitIndex>
     where
         I: IntoIterator<Item = i32>,
@@ -135,26 +154,36 @@ impl PersistentChunkedBitSet {
         ))
     }
 
+    /// Returns the number of set bits. O(1) — the population count is cached at the root.
+    ///
+    /// Widened to `u64` because the index domain spans the whole nonnegative signed-32-bit range.
     #[must_use]
     pub fn len(&self) -> u64 {
         self.chunks.measure().pop_count
     }
 
+    /// Returns the number of stored chunks, that is, how many fixed-width blocks contain at least one
+    /// set bit. A measure of representation size rather than of contents.
     #[must_use]
     pub fn chunk_count(&self) -> usize {
         self.chunks.measure().chunk_count
     }
 
+    /// Returns `true` when no bit is set.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
 
+    /// Reports whether two sets are backed by the same chunk sequence, so neither can observe an edit
+    /// made to the other. A representation test, not an equality test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.chunks.shares_storage_with(&other.chunks)
     }
 
+    /// Reports whether `bit_index` is set. A negative index is simply absent rather than an error.
+    /// O(log c) in the number of stored chunks.
     #[must_use]
     pub fn contains(&self, bit_index: i32) -> bool {
         if bit_index < 0 {
@@ -173,6 +202,9 @@ impl PersistentChunkedBitSet {
             })
     }
 
+    /// Returns a set with `bit_index` set, failing on a negative index.
+    ///
+    /// Setting an already set bit is a no-op that shares the receiver's storage.
     pub fn insert(&self, bit_index: i32) -> Result<Self, NegativeBitIndex> {
         Self::validate_index(bit_index)?;
         let word_index = bit_index >> 6;
@@ -214,12 +246,15 @@ impl PersistentChunkedBitSet {
         })
     }
 
+    /// Sets `bit_index` and reports whether it was previously clear, failing on a negative index.
     pub fn try_insert(&self, bit_index: i32) -> Result<(Self, bool), NegativeBitIndex> {
         let result = self.insert(bit_index)?;
         let changed = !result.shares_storage_with(self);
         Ok((result, changed))
     }
 
+    /// Returns a set with `bit_index` clear. Clearing an unset or negative index is a no-op that
+    /// shares the receiver's storage; a chunk emptied by the removal is dropped.
     #[must_use]
     pub fn remove(&self, bit_index: i32) -> Self {
         if bit_index < 0 {
@@ -299,6 +334,10 @@ impl PersistentChunkedBitSet {
         i32::try_from(i64::from(chunk.word_index) * 64 + offset).ok()
     }
 
+    /// Returns the bits set in either operand.
+    ///
+    /// Merges chunk by chunk rather than bit by bit, so the cost is proportional to the number of
+    /// stored chunks, not to the index range.
     #[must_use]
     pub fn union(&self, other: &Self) -> Self {
         if self.shares_storage_with(other) {
@@ -308,6 +347,7 @@ impl PersistentChunkedBitSet {
         }
     }
 
+    /// Returns the bits set in both operands. Chunkwise, as for [`Self::union`].
     #[must_use]
     pub fn intersect(&self, other: &Self) -> Self {
         if self.shares_storage_with(other) {
@@ -317,6 +357,7 @@ impl PersistentChunkedBitSet {
         }
     }
 
+    /// Returns this set's bits that are clear in `other`. Chunkwise, as for [`Self::union`].
     #[must_use]
     pub fn except(&self, other: &Self) -> Self {
         if self.shares_storage_with(other) {
@@ -326,6 +367,7 @@ impl PersistentChunkedBitSet {
         }
     }
 
+    /// Returns the bits set in exactly one operand. Chunkwise, as for [`Self::union`].
     #[must_use]
     pub fn symmetric_except(&self, other: &Self) -> Self {
         if self.shares_storage_with(other) {
@@ -335,6 +377,8 @@ impl PersistentChunkedBitSet {
         }
     }
 
+    /// Returns an empty set. Clearing an already empty set is a no-op that shares the receiver's
+    /// storage.
     #[must_use]
     pub fn clear(&self) -> Self {
         if self.is_empty() {
@@ -344,6 +388,7 @@ impl PersistentChunkedBitSet {
         }
     }
 
+    /// Iterates the set bit indices in ascending order.
     pub fn iter(&self) -> impl Iterator<Item = i32> + '_ {
         self.chunks.iter().flat_map(|chunk| {
             let word_index = chunk.word_index;
@@ -359,6 +404,10 @@ impl PersistentChunkedBitSet {
         })
     }
 
+    /// Checks the stored chunks against their cached measure: ascending distinct chunk indices, no
+    /// all-zero chunk retained, and a population count matching the bits actually set.
+    ///
+    /// A defensive audit over the whole set; ordinary operations maintain these invariants.
     pub fn validate(&self) -> Result<ChunkedBitSetStatistics, ChunkedBitSetInvariantError> {
         let mut previous = None;
         let mut chunk_count = 0usize;
@@ -519,12 +568,15 @@ pub struct PersistentChunkedBitSetCursor {
 }
 
 impl PersistentChunkedBitSet {
+    /// Creates a cursor at the gap `position` in `0..=len` of the ascending set-bit sequence, or
+    /// `None` when it exceeds the population count.
     pub fn cursor_at(&self, position: u64) -> Option<PersistentChunkedBitSetCursor> {
         (position <= self.len()).then(|| PersistentChunkedBitSetCursor {
             set: self.clone(),
             position,
         })
     }
+    /// Creates a cursor before the first set bit at or after `bit_index`. O(log c).
     pub fn cursor_at_or_after(&self, bit_index: i32) -> PersistentChunkedBitSetCursor {
         let position = if bit_index <= 0 {
             0
@@ -533,6 +585,9 @@ impl PersistentChunkedBitSet {
         };
         self.cursor_at(position).expect("population rank is valid")
     }
+    /// Seeks to `bit_index` and reports whether it is set.
+    ///
+    /// On a miss the cursor sits before the next set bit, so it remains usable.
     pub fn find_cursor(&self, bit_index: i32) -> ChunkedBitSetCursorSearch {
         let cursor = self.cursor_at_or_after(bit_index);
         ChunkedBitSetCursorSearch {
@@ -543,40 +598,52 @@ impl PersistentChunkedBitSet {
 }
 
 impl PersistentChunkedBitSetCursor {
+    /// Returns the population count of the set version this cursor is positioned in.
     pub fn len(&self) -> u64 {
         self.set.len()
     }
+    /// Returns `true` when that set version has no bits set.
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
     }
+    /// Returns the cursor's gap index within the ascending set-bit sequence, which is also the rank
+    /// of the next set bit.
     pub fn position(&self) -> u64 {
         self.position
     }
+    /// Returns `true` when the gap precedes the lowest set bit.
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
+    /// Returns `true` when the gap follows the highest set bit.
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
+    /// Returns the set bit immediately before the gap, or `None` at the start.
     pub fn peek_previous(&self) -> Option<i32> {
         self.position
             .checked_sub(1)
             .and_then(|rank| self.set.select(rank))
     }
+    /// Returns the set bit immediately after the gap, or `None` at the end.
     pub fn peek_next(&self) -> Option<i32> {
         self.set.select(self.position)
     }
+    /// Returns a cursor one set bit earlier, or `None` at the start. The receiver is unchanged.
     pub fn move_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .and_then(|position| self.set.cursor_at(position))
     }
+    /// Returns a cursor one set bit later, or `None` at the end. The receiver is unchanged.
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
             set: self.set.clone(),
             position: self.position + 1,
         })
     }
+    /// Jumps to the gap at `position` within the same set version, or `None` when `position` exceeds
+    /// the population count.
     pub fn seek_rank(&self, position: u64) -> Option<Self> {
         if position == self.position {
             Some(self.clone())
@@ -584,6 +651,10 @@ impl PersistentChunkedBitSetCursor {
             self.set.cursor_at(position)
         }
     }
+    /// Sets `bit_index` and returns a cursor positioned just after it, failing on a negative index.
+    ///
+    /// The gap moves to the bit's ascending position rather than staying where the receiver was,
+    /// since a bit set's order is decided by index.
     pub fn insert(&self, bit_index: i32) -> Result<Self, NegativeBitIndex> {
         let set = self.set.insert(bit_index)?;
         if self.set.contains(bit_index) {
@@ -599,6 +670,7 @@ impl PersistentChunkedBitSetCursor {
             position: position + 1,
         })
     }
+    /// Clears the set bit before the gap and returns a cursor in its place, or `None` at the start.
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
         let bit = self.set.select(position)?;
@@ -607,6 +679,7 @@ impl PersistentChunkedBitSetCursor {
             position,
         })
     }
+    /// Clears the set bit after the gap and returns a cursor in its place, or `None` at the end.
     pub fn delete_next(&self) -> Option<Self> {
         let bit = self.set.select(self.position)?;
         Some(Self {
@@ -614,6 +687,7 @@ impl PersistentChunkedBitSetCursor {
             position: self.position,
         })
     }
+    /// Borrows the set version this cursor is positioned in.
     pub fn snapshot(&self) -> &PersistentChunkedBitSet {
         &self.set
     }

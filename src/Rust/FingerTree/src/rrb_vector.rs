@@ -1,3 +1,21 @@
+//! Persistent relaxed radix-balanced vector.
+//!
+//! [`RrbVector`] is an immutable indexed sequence with 32-way branching. A plain radix-balanced
+//! vector gives effectively constant-time indexing and end operations but cannot concatenate or
+//! split cheaply, because those break the strict radix layout. The relaxed variant fixes that by
+//! allowing *irregular* nodes that carry a cumulative size table, so concatenation and splitting
+//! become O(log n) while regular nodes keep using pure radix arithmetic and store no size table at
+//! all.
+//!
+//! Concatenation rebalances only the seam between the two operands; it does not impose a global
+//! minimum occupancy on unrelated nodes, which keeps repeated concatenation cheap at the cost of
+//! permitting one extra level of height slack. [`RrbVector::validate_structure`] checks the
+//! representation and returns [`RrbVectorStatistics`] or the first [`RrbVectorInvariantError`].
+//!
+//! [`RrbVectorBuilder`] builds a vector in bulk without publishing intermediate versions;
+//! [`RrbVectorCursor`] walks one snapshot; [`RrbVectorSplit`] and [`RrbVectorPop`] carry the pieces
+//! produced by structural operations.
+
 use std::fmt;
 use std::iter::FusedIterator;
 use std::ops::Index;
@@ -157,11 +175,13 @@ impl<T> RrbVector<T> {
         RrbVectorBuilder::from_vector(self)
     }
 
+    /// Returns the number of elements. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.root.as_deref().map_or(0, Node::count)
     }
 
+    /// Returns `true` when the vector holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
@@ -191,21 +211,29 @@ impl<T> RrbVector<T> {
         self.root.as_deref().map_or(0, Node::height)
     }
 
+    /// Borrows the element at `index`, or `None` when out of range.
+    ///
+    /// Effectively constant time: the tree has 32-way branching, so its depth is at most seven for any
+    /// vector that fits in memory. Regular nodes are addressed by radix arithmetic; only relaxed nodes
+    /// consult a size table.
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
         (index < self.len()).then(|| get_node(self.root.as_deref().expect("non-empty root"), index))
     }
 
+    /// Borrows the first element, or `None` when empty.
     #[must_use]
     pub fn first(&self) -> Option<&T> {
         self.get(0)
     }
 
+    /// Borrows the last element, or `None` when empty.
     #[must_use]
     pub fn last(&self) -> Option<&T> {
         self.len().checked_sub(1).and_then(|index| self.get(index))
     }
 
+    /// Iterates the elements in index order.
     pub fn iter(&self) -> RrbVectorIter<'_, T> {
         RrbVectorIter::new(self)
     }
@@ -434,31 +462,37 @@ impl<T> RrbVector<T> {
 }
 
 impl<T> RrbVectorCursor<T> {
+    /// Returns the element count of the vector version this cursor is positioned in.
     #[must_use]
     pub fn len(&self) -> usize {
         self.vector.len()
     }
 
+    /// Returns `true` when that vector version holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.vector.is_empty()
     }
 
+    /// Returns the cursor's gap index in `0..=len`.
     #[must_use]
     pub fn position(&self) -> usize {
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first element.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last element.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
 
+    /// Borrows the element immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
@@ -466,11 +500,13 @@ impl<T> RrbVectorCursor<T> {
             .and_then(|index| self.vector.get(index))
     }
 
+    /// Borrows the element immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<&T> {
         self.vector.get(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         Some(Self {
@@ -479,6 +515,7 @@ impl<T> RrbVectorCursor<T> {
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -487,6 +524,8 @@ impl<T> RrbVectorCursor<T> {
         })
     }
 
+    /// Jumps to the gap at `position` within the same vector version, or `None` when `position`
+    /// exceeds the element count.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         (position <= self.len()).then(|| Self {
@@ -495,6 +534,7 @@ impl<T> RrbVectorCursor<T> {
         })
     }
 
+    /// Returns the vector version this cursor is positioned in. O(1); the root is shared.
     #[must_use]
     pub fn snapshot(&self) -> RrbVector<T> {
         self.vector.clone()
@@ -505,6 +545,10 @@ impl<T> RrbVectorCursor<T>
 where
     T: Clone,
 {
+    /// Inserts `value` at the gap and returns a cursor positioned after it.
+    ///
+    /// Implemented as a split and two concatenations, so it costs O(log n) rather than shifting the
+    /// tail. The receiver keeps its own version.
     #[must_use]
     pub fn insert(&self, value: T) -> Self {
         Self {
@@ -516,6 +560,11 @@ where
         }
     }
 
+    /// Inserts every element of `values` at the gap, in order, and returns a cursor positioned after
+    /// the last one.
+    ///
+    /// Splits once and concatenates once regardless of how many elements are inserted, so this is
+    /// cheaper than repeated [`Self::insert`] calls.
     #[must_use]
     pub fn insert_range<I>(&self, values: I) -> Self
     where
@@ -544,6 +593,7 @@ where
         }
     }
 
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -556,6 +606,7 @@ where
         })
     }
 
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -572,6 +623,8 @@ impl<T> RrbVectorCursor<T>
 where
     T: Clone + PartialEq,
 {
+    /// Replaces the element after the gap with `value`, keeping the gap where it is, or returns
+    /// `None` at the end.
     #[must_use]
     pub fn replace_next(&self, value: T) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -588,11 +641,14 @@ impl<T> RrbVector<T>
 where
     T: Clone,
 {
+    /// Copies the elements into a standard vector, in index order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         self.iter().cloned().collect()
     }
 
+    /// Removes the first element, returning it together with the remaining vector, or `None` when
+    /// empty. The receiver is unchanged.
     #[must_use]
     pub fn pop_front(&self) -> Option<RrbVectorPop<T>> {
         Some(RrbVectorPop {
@@ -601,6 +657,8 @@ where
         })
     }
 
+    /// Removes the last element, returning it together with the remaining vector, or `None` when
+    /// empty. The receiver is unchanged.
     #[must_use]
     pub fn pop_back(&self) -> Option<RrbVectorPop<T>> {
         Some(RrbVectorPop {
@@ -779,6 +837,7 @@ pub struct RrbVectorBuilder<T> {
 }
 
 impl<T> RrbVectorBuilder<T> {
+    /// Creates an empty builder.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -789,6 +848,7 @@ impl<T> RrbVectorBuilder<T> {
         }
     }
 
+    /// Creates a builder seeded with `vector`'s elements, leaving `vector` itself untouched.
     #[must_use]
     pub fn from_vector(vector: &RrbVector<T>) -> Self {
         Self {
@@ -799,6 +859,7 @@ impl<T> RrbVectorBuilder<T> {
         }
     }
 
+    /// Returns the number of elements accumulated so far. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.prefix
@@ -807,6 +868,7 @@ impl<T> RrbVectorBuilder<T> {
             .expect("RRB vector builder length overflow")
     }
 
+    /// Returns `true` when nothing has been accumulated yet.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.prefix.is_empty() && self.staged_len == 0

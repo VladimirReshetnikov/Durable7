@@ -1,5 +1,22 @@
 #![forbid(unsafe_code)]
-#![doc = "Persistent measured sequences with algebraic lazy range updates for Rust."]
+//! Persistent measured sequences with algebraic lazy range updates.
+//!
+//! An ordinary persistent sequence has to touch every element of a range to update it. This crate's
+//! sequence instead stores a pending *tag* at the root of each fully covered subtree and pushes it
+//! down only when someone descends there, so applying an update to a range — add 5 to positions
+//! 1000..9000, say — costs O(log n) rather than O(range length), and the cached measures stay
+//! correct without being recomputed element by element.
+//!
+//! That works only if the tags behave algebraically, which is what [`RangeUpdateAlgebra`]
+//! specifies: tags form a monoid under `compose`, `compose(newer, older)` means "older first, then
+//! newer", and a tag's action on a cached measure must agree with its action on the individual
+//! elements. When those laws hold, a deferred tag and an applied tag are indistinguishable to any
+//! observer; when they do not, results are unspecified.
+//!
+//! Because the structure is persistent, pushing a tag down is a path copy rather than a mutation,
+//! so every earlier version keeps observing the values it always had. Sequence length is capped at
+//! [`MAXIMUM_COUNT`] to match the signed-32-bit count contract shared by the other ports. This
+//! crate forbids `unsafe`.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -83,7 +100,9 @@ pub struct RangeUpdateSplit<T, A>
 where
     A: RangeUpdateAlgebra<T>,
 {
+    /// The elements before the split point.
     pub left: RangeUpdateSequence<T, A>,
+    /// The elements at and after the split point.
     pub right: RangeUpdateSequence<T, A>,
 }
 
@@ -102,22 +121,34 @@ where
 /// Representation statistics returned by [`RangeUpdateSequence::validate_structure`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RangeUpdateSequenceStatistics {
+    /// The number of elements.
     pub count: usize,
+    /// The number of reachable tree nodes.
     pub node_count: usize,
+    /// The tree height.
     pub height: u32,
+    /// The largest absolute AVL balance factor observed, which a valid tree keeps at most 1.
     pub maximum_absolute_balance_factor: u32,
+    /// How many nodes still carry an undelivered range-update tag.
     pub pending_tag_node_count: usize,
+    /// The greatest depth at which an undelivered tag sits.
     pub maximum_pending_tag_depth: usize,
 }
 
 /// An invariant failure found by [`RangeUpdateSequence::validate_structure`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RangeUpdateInvariantError {
+    /// A node's AVL balance factor is outside `[-1, 1]`.
     BalanceFactor,
+    /// A node's cached height disagrees with its children's.
     CachedHeight,
+    /// A node's cached subtree count disagrees with its children's.
     CachedCount,
+    /// A node retains a tag the algebra recognizes as the identity, which should never be stored.
     IdentityPendingTag,
+    /// A node's cached measure disagrees with its subtree's actual measure.
     CachedMeasure,
+    /// Walking the tree reaches a different number of nodes than the root count claims.
     ReachableNodeCount,
 }
 
@@ -243,11 +274,13 @@ where
         Self::from_items(items.iter().cloned())
     }
 
+    /// Returns the number of elements. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         count_of(&self.root)
     }
 
+    /// Returns `true` when the sequence holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.root.is_none()
@@ -595,31 +628,38 @@ where
     T: Clone,
     A: RangeUpdateAlgebra<T>,
 {
+    /// Returns the element count of the sequence version this cursor is positioned in.
     #[must_use]
     pub fn len(&self) -> usize {
         self.sequence.len()
     }
 
+    /// Returns `true` when that sequence version holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.sequence.is_empty()
     }
 
+    /// Returns the cursor's gap index in `0..=len`.
     #[must_use]
     pub fn position(&self) -> usize {
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first element.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last element.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
 
+    /// Returns the combined measure of every element before the gap, with all pending range-update
+    /// tags accounted for. O(log n).
     #[must_use]
     pub fn measure_before(&self) -> A::Measure {
         self.sequence
@@ -627,6 +667,8 @@ where
             .expect("a cursor prefix is a valid range")
     }
 
+    /// Returns the combined measure of every element at or after the gap, with all pending tags
+    /// accounted for. O(log n).
     #[must_use]
     pub fn measure_after(&self) -> A::Measure {
         self.sequence
@@ -634,6 +676,10 @@ where
             .expect("a cursor suffix is a valid range")
     }
 
+    /// Returns the element immediately before the gap, or `None` at the start.
+    ///
+    /// The element is returned by value because pending tags along its path must be applied to
+    /// produce its current logical value; there is no stored element to borrow.
     #[must_use]
     pub fn peek_previous(&self) -> Option<T> {
         self.position
@@ -641,11 +687,14 @@ where
             .and_then(|index| self.sequence.get(index))
     }
 
+    /// Returns the element immediately after the gap, or `None` at the end. By value, for the reason
+    /// given on [`Self::peek_previous`].
     #[must_use]
     pub fn peek_next(&self) -> Option<T> {
         self.sequence.get(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         Some(Self {
@@ -654,6 +703,7 @@ where
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -662,10 +712,16 @@ where
         })
     }
 
+    /// Jumps to the gap at `position` within the same sequence version, failing when `position`
+    /// exceeds the element count.
     pub fn seek(&self, position: usize) -> Result<Self, RangeUpdateError> {
         self.sequence.cursor_at(position)
     }
 
+    /// Inserts `item` at the gap and returns a cursor positioned after it.
+    ///
+    /// `item` is inserted as a literal value: it is unaffected by tags already pending over the
+    /// surrounding range. Fails when the sequence would exceed [`MAXIMUM_COUNT`].
     pub fn insert(&self, item: T) -> Result<Self, RangeUpdateError> {
         Ok(Self {
             sequence: self.sequence.insert(self.position, item)?,
@@ -673,6 +729,7 @@ where
         })
     }
 
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -685,6 +742,7 @@ where
         })
     }
 
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -696,6 +754,8 @@ where
         })
     }
 
+    /// Replaces the element after the gap with `item`, keeping the gap where it is, or returns `None`
+    /// at the end. `item` replaces the element's current logical value literally.
     #[must_use]
     pub fn replace_next(&self, item: T) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -707,16 +767,25 @@ where
         })
     }
 
+    /// Returns the combined measure of the `count` elements immediately before the gap, failing when
+    /// fewer than `count` elements precede it.
     pub fn measure_previous(&self, count: usize) -> Result<A::Measure, RangeUpdateError> {
         self.check_directional_count(count, self.position)?;
         self.sequence.measure_range(self.position - count, count)
     }
 
+    /// Returns the combined measure of the `count` elements immediately after the gap, failing when
+    /// fewer than `count` elements follow it.
     pub fn measure_next(&self, count: usize) -> Result<A::Measure, RangeUpdateError> {
         self.check_directional_count(count, self.len() - self.position)?;
         self.sequence.measure_range(self.position, count)
     }
 
+    /// Applies `tag` to the `count` elements immediately before the gap, failing when fewer than
+    /// `count` elements precede it.
+    ///
+    /// O(log n): the tag is deferred at the roots of the covered subtrees rather than pushed to every
+    /// element. The receiver keeps its own version.
     pub fn apply_previous(&self, count: usize, tag: A::Tag) -> Result<Self, RangeUpdateError> {
         self.check_directional_count(count, self.position)?;
         Ok(Self {
@@ -727,6 +796,8 @@ where
         })
     }
 
+    /// Applies `tag` to the `count` elements immediately after the gap, failing when fewer than
+    /// `count` elements follow it. O(log n), as for [`Self::apply_previous`].
     pub fn apply_next(&self, count: usize, tag: A::Tag) -> Result<Self, RangeUpdateError> {
         self.check_directional_count(count, self.len() - self.position)?;
         Ok(Self {
@@ -735,6 +806,7 @@ where
         })
     }
 
+    /// Returns the sequence version this cursor is positioned in. O(1); the root is shared.
     #[must_use]
     pub fn snapshot(&self) -> RangeUpdateSequence<T, A> {
         self.sequence.clone()

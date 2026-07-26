@@ -1,3 +1,10 @@
+//! Tests for the persistent set-valued hash multimap.
+//!
+//! Covers the separately tracked distinct-key and pair cardinalities, first-representative
+//! retention in both the key and value domains, and the nonempty-group invariant: removing a key's
+//! last value contracts the group so the key itself disappears, and removing a whole key hands back
+//! a still-usable persistent group.
+
 use std::collections::hash_map::RandomState;
 use durable7_hamt::PersistentHashMultimap;
 

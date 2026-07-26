@@ -1,3 +1,11 @@
+//! Integration tests for the persistent priority search queue.
+//!
+//! Exercises the two indexes together: key-addressed lookup, insertion, deletion, and priority
+//! adjustment on one side, and minimum-by-priority access on the other, including how ties between
+//! equal priorities are broken. Also covers retained key and priority ordering policies, range
+//! enumeration and its inverted-range rejection, structural validation, and concurrent read-only
+//! sharing of one snapshot.
+
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;

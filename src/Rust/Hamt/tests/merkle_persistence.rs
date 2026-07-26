@@ -1,3 +1,12 @@
+//! Tests for Merkle block storage, verification, proofs, synchronization, and three-way merge.
+//!
+//! Verification is exercised against adversarial input - corrupted, substituted, and missing blocks
+//! - to confirm it fails rather than trusting them, and against exhausted verification budgets to
+//! confirm untrusted data cannot force unbounded work. Proof tests cover membership, absence, and
+//! range claims in both the accepting and rejecting directions; synchronization tests confirm that
+//! subtrees whose digests already agree are pruned; merge tests cover conflict detection and
+//! caller resolution.
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};

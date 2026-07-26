@@ -1,3 +1,10 @@
+//! Tests for the persistent counted multiset.
+//!
+//! Covers the two counting domains: positive `i32` per-class multiplicities and the widened `i64`
+//! total, including that a negative copy count or a class exceeding `i32::MAX` fails rather than
+//! wrapping. Also covers receiver-policy multiset algebra, stored-representative retention across
+//! operations, and atomicity when a caller-supplied hasher panics.
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::panic::{AssertUnwindSafe, catch_unwind};

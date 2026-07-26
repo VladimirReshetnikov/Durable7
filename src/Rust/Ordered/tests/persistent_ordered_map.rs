@@ -1,3 +1,11 @@
+//! Tests for the persistent insertion-ordered map.
+//!
+//! Covers the identity-versus-position split: construction retains the first key representative
+//! and the last distinct value, re-adding an existing key keeps its position while replacing the
+//! payload, and explicit movement preserves payloads. Also covers strict add, movement failures
+//! for missing keys and out-of-range positions, and persistence of earlier versions across
+//! removal, range operations, reversal, and stable sorting.
+
 use durable7_ordered::{OrderedMapMoveError, PersistentOrderedMap};
 
 #[test]

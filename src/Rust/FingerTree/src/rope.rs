@@ -1,11 +1,38 @@
+//! Persistent chunked sequences (ropes), in generic, measured, and text flavors.
+//!
+//! A rope stores its elements in contiguous chunks held at the leaves of a measured finger tree
+//! rather than one element per leaf. Chunking is what makes bulk work fast: scanning and copying run
+//! over slices instead of tree nodes, while the tree above the chunks still gives O(log n) indexing,
+//! splitting, and concatenation. Chunks are kept between [`MIN_CHUNK_SIZE`] and [`MAX_CHUNK_SIZE`]
+//! elements so that neither the tree nor the individual chunks degenerate.
+//!
+//! Three layers are provided:
+//!
+//! * [`Rope`] — a positional sequence measured only by length.
+//! * [`MeasuredRope`] — the same structure carrying a caller-chosen
+//!   [`MeasurePolicy`](crate::MeasurePolicy) as well, so it also supports measure-directed seeks and
+//!   splits ([`MeasuredRopeSplit`], [`MeasuredRopeLocate`]).
+//! * [`TextRope`] — a `char` rope that additionally caches newline counts through
+//!   [`NewlineMeasure`], giving O(log n) conversion between an offset and a [`LineColumn`].
+//!
+//! Each layer has an immutable gap cursor ([`RopeCursor`], [`MeasuredRopeCursor`],
+//! [`TextRopeCursor`]) denoting a position in `0..=len`; edits return new cursors, so retained
+//! cursors branch independently instead of being invalidated. [`RopeBuilder`] and
+//! [`MeasuredRopeBuilder`] amortize bulk construction by filling chunks before publishing them.
+
 use crate::measured::{FingerTree, MeasurePolicy};
 use std::fmt;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+/// The smallest number of elements a chunk is normally allowed to hold.
 const MIN_CHUNK_SIZE: usize = 256;
+/// The largest number of elements a chunk may hold before it is split.
 const MAX_CHUNK_SIZE: usize = 2048;
 
+/// One leaf chunk: a shared backing buffer plus the window of it that this chunk owns.
+///
+/// The `start`/`len` window lets a split share the original buffer instead of copying it.
 struct RopeChunk<T> {
     data: Arc<[T]>,
     start: usize,
@@ -163,6 +190,7 @@ pub struct RopeCursor<T> {
     position: usize,
 }
 
+/// Borrowing iterator over a [`Rope`], in sequence order.
 pub struct RopeIter<'a, T> {
     chunks: crate::measured::Iter<'a, RopeChunk<T>, usize>,
     current: Option<std::slice::Iter<'a, T>>,
@@ -186,6 +214,7 @@ impl<T> Clone for RopeCursor<T> {
 }
 
 impl<T> Rope<T> {
+    /// Creates an empty rope.
     #[must_use]
     pub fn new() -> Self {
         Self::from_tree(RopeTree::new())
@@ -218,26 +247,33 @@ impl<T> Rope<T> {
         })
     }
 
+    /// Returns the number of elements. O(1); the total length is cached at the root.
     #[must_use]
     pub fn len(&self) -> usize {
         *self.chunks.measure()
     }
 
+    /// Returns `true` when the rope holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
 
+    /// Borrows the first element, or `None` when empty.
     #[must_use]
     pub fn front(&self) -> Option<&T> {
         self.chunks.front().and_then(RopeChunk::first)
     }
 
+    /// Borrows the last element, or `None` when empty.
     #[must_use]
     pub fn back(&self) -> Option<&T> {
         self.chunks.back().and_then(RopeChunk::last)
     }
 
+    /// Borrows the element at `index`, or `None` when out of range.
+    ///
+    /// O(log n) to reach the chunk, then a direct offset within it.
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len() {
@@ -249,6 +285,7 @@ impl<T> Rope<T> {
         self.chunks.get(located.index)?.get(offset)
     }
 
+    /// Iterates the elements in sequence order, walking each chunk as a contiguous slice.
     pub fn iter(&self) -> RopeIter<'_, T> {
         RopeIter {
             chunks: self.chunks.iter(),
@@ -256,6 +293,8 @@ impl<T> Rope<T> {
         }
     }
 
+    /// Reports whether two ropes are backed by the same chunk tree, so neither can observe an edit
+    /// made to the other. A representation test, not an equality test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.chunks.shares_storage_with(&other.chunks)
@@ -513,6 +552,10 @@ impl<T> Rope<T>
 where
     T: Clone,
 {
+    /// Builds a rope from ready-made chunks, concatenated in order.
+    ///
+    /// Cheaper than element-by-element construction when the data already arrives in blocks; the
+    /// chunks are normalized to the rope's size bounds.
     #[must_use]
     pub fn from_chunks<I, C>(chunks: I) -> Self
     where
@@ -522,6 +565,7 @@ where
         Self::from_tree(tree_from_chunks(chunks))
     }
 
+    /// Copies the elements into a vector in sequence order. O(n), copied chunk by chunk.
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         let mut items = Vec::with_capacity(self.len());
@@ -531,6 +575,10 @@ where
         items
     }
 
+    /// Copies `destination.len()` elements starting at `index` into `destination`, or returns `None`
+    /// when that range falls outside the rope.
+    ///
+    /// Copies whole slices where it can rather than one element at a time.
     pub fn copy_to(&self, index: usize, destination: &mut [T]) -> Option<()> {
         if index > self.len() || destination.len() > self.len() - index {
             return None;
@@ -583,6 +631,9 @@ where
             .expect("back insertion index is always valid")
     }
 
+    /// Replaces the element at `index`, or returns `None` when out of range.
+    ///
+    /// O(log n) plus a copy of the one affected chunk; every other chunk is shared with the receiver.
     #[must_use]
     pub fn set_item(&self, index: usize, item: T) -> Option<Self> {
         if index >= self.len() {
@@ -668,6 +719,7 @@ where
         Some(left.concat(&middle).concat(&right))
     }
 
+    /// Removes the element at `index`, or returns `None` when out of range.
     #[must_use]
     pub fn remove_at(&self, index: usize) -> Option<Self> {
         if index >= self.len() {
@@ -690,6 +742,8 @@ where
         )))
     }
 
+    /// Removes `count` elements starting at `index`, or returns `None` when the range falls outside
+    /// the rope. Two splits and a join, regardless of `count`.
     #[must_use]
     pub fn remove_range(&self, index: usize, count: usize) -> Option<Self> {
         if index > self.len() || count > self.len() - index {
@@ -705,6 +759,8 @@ where
         Some(left.concat(&right))
     }
 
+    /// Returns the `count` elements starting at `index` as a new rope, or `None` when the range falls
+    /// outside the rope. The result shares chunks with the receiver.
     #[must_use]
     pub fn slice(&self, index: usize, count: usize) -> Option<Self> {
         if index > self.len() || count > self.len() - index {
@@ -724,6 +780,8 @@ where
         Some(range)
     }
 
+    /// Splits into the elements before `index` and those from `index` on, or returns `None` when
+    /// `index` exceeds the length. O(log n); both halves share chunks with the receiver.
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<(Self, Self)> {
         if index > self.len() {
@@ -791,6 +849,10 @@ where
         Self::from_tree(self.chunks.concat(&other.chunks))
     }
 
+    /// Returns an equal rope whose chunks have been merged toward the maximum chunk size.
+    ///
+    /// Many small splits can leave a rope with more, smaller chunks than it needs; compacting trades
+    /// one O(n) rebuild for cheaper subsequent traversal. Contents are unchanged.
     #[must_use]
     pub fn compact(&self) -> Self {
         Self::from_vec(self.to_vec())
@@ -988,6 +1050,11 @@ where
 
 type MeasuredRopeTree<T, P> = FingerTree<MeasuredRopeChunk<T, P>, MeasuredChunkMeasure<T, P>>;
 
+/// A persistent chunked sequence that also caches a caller-chosen measure.
+///
+/// Adds measure-directed search and splitting to what [`Rope`] provides, so the same structure can
+/// answer positional questions and monoid questions. Every operation returns a new rope and leaves
+/// the receiver valid and unchanged.
 pub struct MeasuredRope<T, P>
 where
     P: MeasurePolicy<T>,
@@ -1020,6 +1087,7 @@ where
     pub found: bool,
 }
 
+/// Borrowing iterator over a [`MeasuredRope`], in sequence order.
 pub struct MeasuredRopeIter<'a, T, P>
 where
     P: MeasurePolicy<T>,
@@ -1028,6 +1096,7 @@ where
     current: Option<std::slice::Iter<'a, T>>,
 }
 
+/// The two measured ropes produced by a split, each with its own recomputed measure.
 #[derive(Clone)]
 pub struct MeasuredRopeSplit<T, P>
 where
@@ -1037,6 +1106,7 @@ where
     pub right: MeasuredRope<T, P>,
 }
 
+/// Where a measure-directed search landed, reported without splitting the rope.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MeasuredRopeLocate<T, M> {
     pub index: usize,
@@ -1097,6 +1167,7 @@ impl<T, P> MeasuredRope<T, P>
 where
     P: MeasurePolicy<T>,
 {
+    /// Creates an empty measured rope.
     #[must_use]
     pub fn new() -> Self {
         Self::from_tree(MeasuredRopeTree::new())
@@ -1153,21 +1224,25 @@ where
         self.cursor().seek_by_measure(predicate)
     }
 
+    /// Returns the number of elements. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.tree.measure().0
     }
 
+    /// Returns `true` when the rope holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.tree.is_empty()
     }
 
+    /// Returns the combined measure of every element, in sequence order. O(1); it is cached.
     #[must_use]
     pub fn measure(&self) -> &P::Measure {
         &self.tree.measure().1
     }
 
+    /// Borrows the element at `index`, or `None` when out of range. O(log n).
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len() {
@@ -1179,6 +1254,7 @@ where
         self.tree.get(located.index)?.get(offset)
     }
 
+    /// Iterates the elements in sequence order.
     pub fn iter(&self) -> MeasuredRopeIter<'_, T, P> {
         MeasuredRopeIter {
             chunks: self.tree.iter(),
@@ -1186,11 +1262,15 @@ where
         }
     }
 
+    /// Reports whether two ropes are backed by the same chunk tree. A representation test, not an
+    /// equality test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.tree.shares_storage_with(&other.tree)
     }
 
+    /// Returns the combined measure of the first `count` elements, or `None` when `count` exceeds the
+    /// length. O(log n) plus bounded work inside one chunk.
     #[must_use]
     pub fn prefix_measure(&self, count: usize) -> Option<P::Measure> {
         if count > self.len() {
@@ -1214,11 +1294,17 @@ where
         ))
     }
 
+    /// Splits at a positional boundary in `0..=len`, or returns `None` when `index` exceeds the
+    /// length.
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<MeasuredRopeSplit<T, P>> {
         self.split_at_count(index)
     }
 
+    /// Splits at the first position whose inclusive prefix measure satisfies `predicate`.
+    ///
+    /// `predicate` is expected to be monotone — false up to some boundary and true from there on.
+    /// When no prefix satisfies it, everything lands in the left half. O(log n).
     #[must_use]
     pub fn split_by_measure<F>(&self, mut predicate: F) -> MeasuredRopeSplit<T, P>
     where
@@ -1250,6 +1336,8 @@ where
         }
     }
 
+    /// Concatenates two ropes, placing every element of `other` after every element of `self`.
+    /// O(log n); chunks are shared rather than copied.
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
         self.len()
@@ -1357,11 +1445,13 @@ where
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first element.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last element.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
@@ -1386,6 +1476,7 @@ where
             .clone()
     }
 
+    /// Borrows the element immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
@@ -1393,11 +1484,13 @@ where
             .and_then(|index| self.rope.get(index))
     }
 
+    /// Borrows the element immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<&T> {
         self.rope.get(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         Some(Self {
@@ -1406,6 +1499,7 @@ where
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         if self.is_at_end() {
@@ -1418,6 +1512,8 @@ where
         })
     }
 
+    /// Jumps to the gap at `position` within the same rope version, or `None` when `position` exceeds
+    /// the length.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         if position > self.len() {
@@ -1461,6 +1557,8 @@ where
     T: Clone,
     P: MeasurePolicy<T>,
 {
+    /// Inserts `item` at the gap and returns a cursor positioned after it. The receiver keeps its own
+    /// version.
     #[must_use]
     pub fn insert(&self, item: T) -> Self {
         let position = self
@@ -1474,6 +1572,8 @@ where
         Self { rope, position }
     }
 
+    /// Inserts every element of `items` at the gap, in order, and returns a cursor positioned after
+    /// the last one. O(m + log n) for `m` inserted elements.
     #[must_use]
     pub fn insert_range<I>(&self, items: I) -> Self
     where
@@ -1495,6 +1595,7 @@ where
         Self { rope, position }
     }
 
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -1505,6 +1606,7 @@ where
         Some(Self { rope, position })
     }
 
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         if self.is_at_end() {
@@ -1592,6 +1694,7 @@ where
         }
     }
 
+    /// Returns the number of elements accumulated so far. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.prefix
@@ -1600,6 +1703,7 @@ where
             .expect("measured rope length overflow")
     }
 
+    /// Returns `true` when nothing has been accumulated yet.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.prefix.is_empty() && self.tail.is_empty()
@@ -1690,6 +1794,7 @@ where
     T: Clone,
     P: MeasurePolicy<T>,
 {
+    /// Builds a measured rope from ready-made chunks, concatenated in order.
     #[must_use]
     pub fn from_chunks<I, C>(chunks: I) -> Self
     where
@@ -1699,6 +1804,7 @@ where
         Self::from_tree(measured_tree_from_chunks::<T, P, I, C>(chunks))
     }
 
+    /// Copies the elements into a vector in sequence order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         let mut items = Vec::with_capacity(self.len());
@@ -1708,6 +1814,8 @@ where
         items
     }
 
+    /// Copies `destination.len()` elements starting at `index` into `destination`, or returns `None`
+    /// when that range falls outside the rope.
     pub fn copy_to(&self, index: usize, destination: &mut [T]) -> Option<()> {
         if index > self.len() || destination.len() > self.len() - index {
             return None;
@@ -1738,6 +1846,7 @@ where
         Some(())
     }
 
+    /// Returns a rope with `item` appended. Amortized O(1); the receiver is unchanged.
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
         self.len()
@@ -1879,6 +1988,8 @@ where
         Some(range_and_right.left)
     }
 
+    /// Replaces the element at `index`, recomputing the affected measures, or returns `None` when out
+    /// of range.
     #[must_use]
     pub fn set_item(&self, index: usize, item: T) -> Option<Self> {
         if index >= self.len() {
@@ -1895,6 +2006,10 @@ where
         ))
     }
 
+    /// Reports where the first element satisfying `predicate` sits, without splitting the rope.
+    ///
+    /// The result carries the element's index, the measure of everything before it, and the element
+    /// itself; on a miss it describes the end position. O(log n).
     #[must_use]
     pub fn locate_by_measure<F>(&self, mut predicate: F) -> MeasuredRopeLocate<T, P::Measure>
     where
@@ -2068,6 +2183,7 @@ where
     }
 }
 
+/// Counts line feeds, giving a `char` rope O(log n) conversion between offsets and line/column.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NewlineMeasure;
 
@@ -2087,6 +2203,11 @@ impl MeasurePolicy<char> for NewlineMeasure {
     }
 }
 
+/// A persistent text rope over `char`s, with newline counts cached in its measure.
+///
+/// Positions are `char` offsets rather than byte offsets, so they never land inside a multi-byte
+/// encoding, and the cached newline counts make offset-to-line/column conversion logarithmic
+/// instead of a scan. Every edit returns a new rope and leaves earlier versions intact.
 pub struct TextRope {
     chars: MeasuredRope<char, NewlineMeasure>,
 }
@@ -2108,6 +2229,7 @@ pub struct TextRopeCursorSearch {
     pub found: bool,
 }
 
+/// A zero-based line and column position within a [`TextRope`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LineColumn {
     pub line: usize,
@@ -2115,6 +2237,7 @@ pub struct LineColumn {
 }
 
 impl TextRope {
+    /// Creates an empty text rope.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -2122,6 +2245,10 @@ impl TextRope {
         }
     }
 
+    /// Builds a text rope from `text`, one element per `char`.
+    ///
+    /// Positions throughout this type are `char` offsets, not byte offsets, so they never fall inside
+    /// a multi-byte encoding.
     #[must_use]
     pub fn from_text(text: &str) -> Self {
         Self {
@@ -2164,16 +2291,19 @@ impl TextRope {
         }
     }
 
+    /// Returns the number of `char`s. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.chars.len()
     }
 
+    /// Returns `true` when the rope holds no characters.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.chars.is_empty()
     }
 
+    /// Materializes the whole rope as a `String`. O(n).
     #[must_use]
     pub fn as_string(&self) -> String {
         self.chars.iter().copied().collect()
@@ -2184,6 +2314,9 @@ impl TextRope {
         self.chars.iter()
     }
 
+    /// Returns the number of lines, counting the trailing line even when it is empty.
+    ///
+    /// O(1): newline counts are cached in the rope's measure.
     #[must_use]
     pub fn line_count(&self) -> usize {
         self.chars
@@ -2192,11 +2325,14 @@ impl TextRope {
             .expect("text rope line count overflow")
     }
 
+    /// Returns the zero-based line containing `offset`, or `None` when `offset` exceeds the length.
+    /// O(log n) — the cached newline counts avoid scanning the text.
     #[must_use]
     pub fn line_of_offset(&self, offset: usize) -> Option<usize> {
         self.chars.prefix_measure(offset)
     }
 
+    /// Returns the offset at which `line` begins, or `None` when `line` is out of range. O(log n).
     #[must_use]
     pub fn line_start_offset(&self, line: usize) -> Option<usize> {
         if line > *self.chars.measure() {
@@ -2211,6 +2347,8 @@ impl TextRope {
         located.value.map(|_| located.index + 1)
     }
 
+    /// Converts a character offset into a zero-based line and column, or `None` when `offset` exceeds
+    /// the length. O(log n).
     #[must_use]
     pub fn line_column_of(&self, offset: usize) -> Option<LineColumn> {
         let line = self.line_of_offset(offset)?;
@@ -2221,6 +2359,8 @@ impl TextRope {
         })
     }
 
+    /// Converts a zero-based line and column back into a character offset, or `None` when the
+    /// position does not exist. The inverse of [`Self::line_column_of`]. O(log n).
     #[must_use]
     pub fn offset_of(&self, line: usize, column: usize) -> Option<usize> {
         let start = self.line_start_offset(line)?;
@@ -2229,6 +2369,7 @@ impl TextRope {
         (offset <= end).then_some(offset)
     }
 
+    /// Returns `line`'s text without its terminator, or `None` when `line` is out of range.
     #[must_use]
     pub fn get_line(&self, line: usize) -> Option<String> {
         let start = self.line_start_offset(line)?;
@@ -2239,6 +2380,7 @@ impl TextRope {
         Some(slice.iter().copied().collect())
     }
 
+    /// Returns every line's text, without terminators. O(n).
     #[must_use]
     pub fn lines(&self) -> Vec<String> {
         // A single pass over the rope, matching the C# reference's Lines: the final
@@ -2257,11 +2399,14 @@ impl TextRope {
         lines
     }
 
+    /// Returns the underlying character sequence as a plain [`Rope`], dropping the newline measure.
     #[must_use]
     pub fn to_char_rope(&self) -> Rope<char> {
         self.chars.iter().copied().collect()
     }
 
+    /// Returns the underlying sequence as a [`MeasuredRope`] that keeps the newline measure, for code
+    /// written against the generic measured API.
     #[must_use]
     pub fn to_measured_rope(&self) -> MeasuredRope<char, NewlineMeasure> {
         self.chars.clone()
@@ -2300,51 +2445,61 @@ impl Clone for TextRopeCursorSearch {
 }
 
 impl TextRopeCursor {
+    /// Returns the character count of the rope version this cursor is positioned in.
     #[must_use]
     pub fn len(&self) -> usize {
         self.measured.len()
     }
 
+    /// Returns `true` when that rope version holds no characters.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.measured.is_empty()
     }
 
+    /// Returns the cursor's character offset in `0..=len`.
     #[must_use]
     pub fn position(&self) -> usize {
         self.measured.position()
     }
 
+    /// Returns `true` when the gap precedes the first character.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.measured.is_at_start()
     }
 
+    /// Returns `true` when the gap follows the last character.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.measured.is_at_end()
     }
 
+    /// Returns the number of newlines before the gap. O(log n).
     #[must_use]
     pub fn measure_before(&self) -> usize {
         self.measured.measure_before()
     }
 
+    /// Returns the number of newlines at or after the gap. O(log n).
     #[must_use]
     pub fn measure_after(&self) -> usize {
         self.measured.measure_after()
     }
 
+    /// Borrows the character immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<&char> {
         self.measured.peek_previous()
     }
 
+    /// Borrows the character immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<&char> {
         self.measured.peek_next()
     }
 
+    /// Returns a cursor one character earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         Some(Self {
@@ -2352,6 +2507,7 @@ impl TextRopeCursor {
         })
     }
 
+    /// Returns a cursor one character later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         Some(Self {
@@ -2359,6 +2515,8 @@ impl TextRopeCursor {
         })
     }
 
+    /// Jumps to character offset `position` within the same rope version, or `None` when `position`
+    /// exceeds the length.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         Some(Self {
@@ -2394,6 +2552,8 @@ impl TextRopeCursor {
         }
     }
 
+    /// Inserts `value` at the gap and returns a cursor positioned after it. The receiver keeps its
+    /// own version, so retained cursors and snapshots are unaffected.
     #[must_use]
     pub fn insert(&self, value: char) -> Self {
         Self {
@@ -2401,6 +2561,8 @@ impl TextRopeCursor {
         }
     }
 
+    /// Inserts every character of `values` at the gap, in order, and returns a cursor positioned
+    /// after the last one.
     #[must_use]
     pub fn insert_range<I>(&self, values: I) -> Self
     where
@@ -2411,6 +2573,8 @@ impl TextRopeCursor {
         }
     }
 
+    /// Removes the character before the gap and returns a cursor in its place, or `None` at the
+    /// start.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         Some(Self {
@@ -2418,6 +2582,7 @@ impl TextRopeCursor {
         })
     }
 
+    /// Removes the character after the gap and returns a cursor in its place, or `None` at the end.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         Some(Self {
@@ -2425,6 +2590,8 @@ impl TextRopeCursor {
         })
     }
 
+    /// Replaces the character after the gap with `value`, keeping the gap where it is, or returns
+    /// `None` at the end.
     #[must_use]
     pub fn replace_next(&self, value: char) -> Option<Self> {
         Some(Self {
@@ -2500,6 +2667,10 @@ impl fmt::Display for TextRope {
     }
 }
 
+/// A mutable accumulator for building a character or text rope in bulk.
+///
+/// Deliberately mutable and not a snapshot: text is appended into a plain buffer and only turned
+/// into a persistent rope on demand, so bulk construction avoids per-append tree work.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RopeBuilder {
     text: String,
@@ -2508,38 +2679,48 @@ pub struct RopeBuilder {
 }
 
 impl RopeBuilder {
+    /// Creates an empty builder.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Returns the number of characters accumulated so far.
     #[must_use]
     pub fn len(&self) -> usize {
         self.length
     }
 
+    /// Returns `true` when nothing has been accumulated yet.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.text.is_empty()
     }
 
+    /// Borrows the accumulated text without building a rope.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.text
     }
 
+    /// Appends `text`, returning the builder for chaining.
+    ///
+    /// Unlike the rope types, the builder is mutable and publishes nothing until asked; this is what
+    /// makes bulk construction cheap.
     pub fn append(&mut self, text: &str) -> &mut Self {
         self.text.push_str(text);
         self.length += text.chars().count();
         self
     }
 
+    /// Appends one character, returning the builder for chaining.
     pub fn append_char(&mut self, value: char) -> &mut Self {
         self.text.push(value);
         self.length += 1;
         self
     }
 
+    /// Appends `text` followed by a line feed, returning the builder for chaining.
     pub fn append_line(&mut self, text: &str) -> &mut Self {
         self.text.push_str(text);
         self.text.push('\n');
@@ -2547,17 +2728,20 @@ impl RopeBuilder {
         self
     }
 
+    /// Discards the accumulated text, returning the builder for chaining.
     pub fn clear(&mut self) -> &mut Self {
         self.text.clear();
         self.length = 0;
         self
     }
 
+    /// Builds a plain character [`Rope`] from the accumulated text, leaving the builder usable.
     #[must_use]
     pub fn to_rope(&self) -> Rope<char> {
         self.text.chars().collect()
     }
 
+    /// Builds a [`TextRope`] from the accumulated text, leaving the builder usable.
     #[must_use]
     pub fn to_text_rope(&self) -> TextRope {
         TextRope::from_text(&self.text)

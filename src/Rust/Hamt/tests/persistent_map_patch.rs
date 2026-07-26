@@ -1,3 +1,10 @@
+//! Tests for the strict, invertible, composable map patch.
+//!
+//! Covers the all-or-nothing application contract - a conflicting entry aborts the whole patch and
+//! returns the source unchanged - plus inversion restoring the original map, composition matching
+//! sequential application, round-trip changes cancelling out, and the `Option`-of-`Option` case
+//! where absence must stay distinguishable from a present `None`.
+
 use durable7_hamt::{MapPatchEntry, PersistentHashMap, PersistentMapPatch};
 
 #[test]

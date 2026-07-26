@@ -1,3 +1,9 @@
+//! Tests for the persistent many-to-many relation.
+//!
+//! Covers forward and reverse adjacency staying in agreement, duplicate pairs sharing both indexes
+//! rather than being stored twice, reuse of global representatives across adjacency groups, and
+//! inversion exchanging the existing roots instead of rebuilding the pair set.
+
 use durable7_hamt::PersistentRelation;
 
 #[test]

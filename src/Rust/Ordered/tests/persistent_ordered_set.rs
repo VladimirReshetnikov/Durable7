@@ -1,3 +1,9 @@
+//! Tests for the persistent insertion-ordered set.
+//!
+//! Covers insertion-order iteration, first-representative retention when an equivalent element is
+//! re-added, explicit movement and its failure cases, stable sorting, and atomicity when a
+//! caller-supplied hasher panics mid-operation.
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::panic::{AssertUnwindSafe, catch_unwind};

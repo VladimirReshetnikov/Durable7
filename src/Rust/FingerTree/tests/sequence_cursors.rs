@@ -1,3 +1,12 @@
+//! Cross-structure tests for the positional sequence cursor surface.
+//!
+//! [`PersistentDeque`], [`ReversibleDeque`], [`RrbVector`], and [`FingerTree`] all expose the same
+//! gap-cursor vocabulary. These tests assert that the vocabulary agrees across them: boundary
+//! positions in `0..=len`, peeking on either side of the gap, movement, editing through the cursor,
+//! and that each retained cursor keeps its own version rather than observing later edits. A stored
+//! `None` element is used deliberately to distinguish "no element there" from "the element is
+//! `None`".
+
 use durable7_fingertree::{
     FingerTree, PersistentDeque, ReversibleDeque, RrbVector, SumMeasure,
 };

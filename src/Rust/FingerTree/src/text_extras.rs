@@ -1,3 +1,13 @@
+//! Unicode-aware text conveniences layered on the rope types.
+//!
+//! This module holds the text-only operations that do not belong in the generic rope core: newline
+//! classification ([`NewlineStyle`]) and grapheme-cluster-aware inspection of [`Rope<char>`] and
+//! [`TextRope`]. Keeping them here confines the `unicode-segmentation` dependency to text ropes and
+//! leaves [`crate::rope`] generic over element type.
+//!
+//! Grapheme boundaries follow Unicode extended grapheme clusters, so a user-perceived character
+//! made of several `char` values is treated as one unit.
+
 use crate::{Rope, TextRope};
 use unicode_segmentation::UnicodeSegmentation;
 

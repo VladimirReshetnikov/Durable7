@@ -1,3 +1,21 @@
+//! Canonical byte encodings and digests underpinning the Merkle search tree.
+//!
+//! A content-addressed structure is only well defined if every value has exactly one byte
+//! representation, so a [`MerkleCodec`] must be *injective* and *canonical*: distinct values encode
+//! to distinct bytes, and a value encodes to one specific byte string rather than any acceptable
+//! one. Decoding correspondingly consumes the whole slice and rejects noncanonical input —
+//! wrong widths, unknown tags, trailing bytes, malformed UTF-8 — as a [`MerkleCodecError`] instead
+//! of accepting it leniently. Lenient decoding here would let two peers agree on a value while
+//! disagreeing on its digest.
+//!
+//! Each codec carries a versioned identifier ending in `-v` followed by decimal digits. That
+//! identifier is mixed into the tree's digest domain, so changing an encoding changes every digest
+//! derived from it rather than silently reinterpreting existing data.
+//!
+//! The module supplies the strict codecs for the primitive value types, [`MerkleDigest`] (exactly
+//! 32 binary bytes, or 64 hexadecimal characters in text form), and the length-framed hashing
+//! helpers that the tree uses to derive its domain digest and per-key digests.
+
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
 use std::error::Error;

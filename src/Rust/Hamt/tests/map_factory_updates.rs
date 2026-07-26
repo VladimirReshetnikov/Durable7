@@ -1,3 +1,10 @@
+//! Tests for the persistent map's single-pass `get_or_add` / `add_or_update` factories.
+//!
+//! The contract these enforce is that a factory update hashes once, descends once, and invokes
+//! exactly one caller-supplied factory - no retry loop, no speculative second call. The tests count
+//! hasher and factory invocations to confirm that, check that a factory which panics leaves the
+//! source map untouched, and compare results against a `BTreeMap` reference model.
+
 use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};

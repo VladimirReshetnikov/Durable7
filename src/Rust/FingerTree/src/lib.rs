@@ -1,5 +1,32 @@
 #![forbid(unsafe_code)]
-#![doc = "Persistent FingerTree-family data structures for Rust."]
+//! Persistent FingerTree-family data structures for Rust.
+//!
+//! Every collection in this crate is *persistent*: an operation returns a new version and leaves
+//! the version it was derived from untouched and still usable. Versions share structure, so an
+//! update copies a path rather than the whole collection, and holding on to an old version costs
+//! only the nodes that later versions no longer share. Snapshots are `Send + Sync` whenever their
+//! elements are, so readers can work concurrently without locking.
+//!
+//! The crate is organized around the measured finger tree [`FingerTree`], a persistent sequence
+//! that caches a monoidal [`MeasurePolicy`] at every node. Choosing a different measure specializes
+//! the same tree into a different structure, which is why so much of the crate reuses it:
+//!
+//! * **Sequences** — [`PersistentDeque`] and [`ReversibleDeque`], [`Rope`]/[`MeasuredRope`]/
+//!   [`TextRope`], and [`RrbVector`].
+//! * **Ordered collections** — [`SortedBag`], [`SortedSet`], [`SortedMap`], and the
+//!   history-independent [`CanonicalSortedSet`].
+//! * **Priority structures** — [`PriorityQueue`], [`PrioritySearchQueue`], and
+//!   [`BrodalOkasakiHeap`].
+//! * **Interval and bit structures** — [`IntervalTree`], [`PersistentIntervalMap`], and
+//!   [`PersistentChunkedBitSet`].
+//!
+//! The one deliberate exception to persistence is [`DabaLite`], a mutable sliding-window aggregate
+//! documented as mutable at its own definition.
+//!
+//! Ordered structures take comparison from a retained [`OrderPolicy`] value rather than from an
+//! `Ord` bound, so a collection remembers how it was ordered and binary operations can reject
+//! mismatched operands instead of silently producing malformed results. The crate forbids
+//! `unsafe`.
 
 mod brodal_okasaki_heap;
 mod canonical_sorted_set;

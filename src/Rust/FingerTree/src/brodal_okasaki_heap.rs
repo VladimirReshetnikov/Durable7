@@ -1,3 +1,15 @@
+//! Persistent Brodal-Okasaki meldable priority queue.
+//!
+//! [`BrodalOkasakiHeap`] is a bootstrapped skew-binomial forest: the root minimum is stored outside
+//! the forest, so peeking is a field read and melding is a single root comparison plus a forest
+//! link. Every version is immutable and shares structure with the versions it was derived from.
+//!
+//! Ordering is supplied by a retained [`OrderPolicy`](crate::ordering::OrderPolicy) rather than by
+//! `Ord`, so equivalence classes are defined by the policy. Melding two heaps whose policies are
+//! incompatible fails with [`BrodalMeldError`] instead of silently reordering elements.
+//! [`BrodalOkasakiHeap::validate_structure`] walks the whole representation and reports the first
+//! violation as a [`BrodalInvariantError`], returning [`BrodalOkasakiHeapStatistics`] otherwise.
+
 use crate::ordering::{OrderComparer, OrderPolicy};
 use std::collections::HashSet;
 use std::error::Error;

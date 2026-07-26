@@ -1,5 +1,22 @@
 #![forbid(unsafe_code)]
-#![doc = "Neutral persistent insertion-ordered collections for Rust."]
+//! Persistent insertion-ordered collections, with explicit repositioning.
+//!
+//! [`PersistentOrderedSet`], [`PersistentOrderedMap`], and [`PersistentOrderedMultimap`] separate
+//! two things that hash collections conflate and sorted collections tie together: *identity*, which
+//! is decided by hashing and equality, and *position*, which is insertion order unless the caller
+//! moves an element. Re-adding an existing element keeps both its original position and its first
+//! stored representative, so identity is stable while payloads may be replaced in place.
+//!
+//! Each collection pairs a CHAMP map from element to order stamp with a
+//! [`durable7_fingertree::PersistentDeque`] of stamped entries, so membership
+//! stays O(1) while ordered traversal stays sequential. Stamps are spaced widely apart, which lets
+//! a move usually assign a stamp between its new neighbors instead of restamping the whole
+//! sequence.
+//!
+//! Movement is explicit and fallible: moving a missing key or naming an out-of-range position
+//! reports an error ([`OrderedSetMoveError`], [`OrderedMapMoveError`]) rather than guessing. Stable
+//! sorting is available where a caller wants order derived from a comparison instead of from
+//! insertion history. This crate forbids `unsafe`.
 
 mod cursors;
 mod ordered_map;
@@ -157,16 +174,19 @@ impl<T, S> PersistentOrderedSet<T, S> {
         }
     }
 
+    /// Returns the number of distinct elements. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.order.len()
     }
 
+    /// Returns `true` when the set holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.order.is_empty()
     }
 
+    /// Borrows the retained hash policy that defines this set's equivalence classes.
     #[must_use]
     pub fn hasher(&self) -> &S {
         self.stamps.hasher()
@@ -254,6 +274,8 @@ where
         Self::build_from_distinct(distinct, hasher)
     }
 
+    /// Reports whether `item`'s equivalence class is present. O(1) — membership goes through the
+    /// hash index, not the order sequence.
     #[must_use]
     pub fn contains(&self, item: &T) -> bool {
         self.stamps.contains_key(item)
@@ -522,6 +544,7 @@ where
         }
     }
 
+    /// [`Self::intersect`] against another ordered set, avoiding an intermediate iterator.
     #[must_use]
     pub fn intersect_set(&self, other: &Self) -> Self {
         self.intersect(other.iter().cloned())
@@ -546,6 +569,7 @@ where
         }
     }
 
+    /// [`Self::except`] against another ordered set, avoiding an intermediate iterator.
     #[must_use]
     pub fn except_set(&self, other: &Self) -> Self {
         self.except(other.iter().cloned())
@@ -575,11 +599,16 @@ where
         Self::build_from_distinct(items, self.hasher().clone())
     }
 
+    /// [`Self::symmetric_except`] against another ordered set, avoiding an intermediate iterator.
     #[must_use]
     pub fn symmetric_except_set(&self, other: &Self) -> Self {
         self.symmetric_except(other.iter().cloned())
     }
 
+    /// Reports whether every element of this set also occurs in `other`.
+    ///
+    /// `other` is normalized under this set's hash policy first, so a repeated element in `other`
+    /// counts once. Order is irrelevant to every predicate in this group.
     #[must_use]
     pub fn is_subset_of<I>(&self, other: I) -> bool
     where
@@ -592,6 +621,8 @@ where
                 .all(|item| argument.membership.contains_key(item))
     }
 
+    /// Reports whether this set is a subset of `other` and `other` has at least one element this
+    /// set lacks.
     #[must_use]
     pub fn is_proper_subset_of<I>(&self, other: I) -> bool
     where
@@ -604,6 +635,7 @@ where
                 .all(|item| argument.membership.contains_key(item))
     }
 
+    /// Reports whether every distinct element of `other` also occurs in this set.
     #[must_use]
     pub fn is_superset_of<I>(&self, other: I) -> bool
     where
@@ -617,6 +649,8 @@ where
                 .all(|item| self.stamps.contains_key(item))
     }
 
+    /// Reports whether this set is a superset of `other` and holds at least one element `other`
+    /// lacks.
     #[must_use]
     pub fn is_proper_superset_of<I>(&self, other: I) -> bool
     where
@@ -630,6 +664,7 @@ where
                 .all(|item| self.stamps.contains_key(item))
     }
 
+    /// Reports whether this set and `other` share at least one element.
     #[must_use]
     pub fn overlaps<I>(&self, other: I) -> bool
     where
@@ -642,6 +677,10 @@ where
             .any(|item| self.stamps.contains_key(item))
     }
 
+    /// Reports whether this set and `other` hold the same elements, disregarding order.
+    ///
+    /// Two sets built by inserting the same elements in different orders are `set_equals` even
+    /// though they iterate differently.
     #[must_use]
     pub fn set_equals<I>(&self, other: I) -> bool
     where

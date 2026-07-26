@@ -1,3 +1,15 @@
+//! Immutable cursors over the insertion-ordered collections.
+//!
+//! Each cursor pairs a retained collection version with a gap position in `0..=len`, so moving,
+//! seeking, and editing all return new cursors and never invalidate the ones already held. Two
+//! cursors taken from the same collection can therefore be advanced and edited independently.
+//!
+//! Lookups and insertions report their outcome through two deliberately separate types:
+//! [`OrderedCursorSearch`] carries `found`, meaning an equivalent entry is already present, while
+//! [`OrderedCursorInsert`] carries `added`, meaning an entry was actually created. Keeping them
+//! distinct prevents generic code written over either result from confusing "was there" with "was
+//! inserted".
+
 use std::hash::{BuildHasher, Hash};
 
 use durable7_hamt::DuplicateKey;
@@ -11,7 +23,9 @@ use crate::{PersistentOrderedMap, PersistentOrderedMultimap, PersistentOrderedSe
 /// be confused by generic code written over either type.
 #[derive(Clone)]
 pub struct OrderedCursorSearch<C> {
+    /// Whether an equivalent entry is already present.
     pub found: bool,
+    /// The located cursor. On a miss this is still usable, positioned at the end.
     pub cursor: C,
 }
 
@@ -22,7 +36,9 @@ pub struct OrderedCursorSearch<C> {
 /// unchanged.
 #[derive(Clone)]
 pub struct OrderedCursorInsert<C> {
+    /// Whether a new entry was actually published.
     pub added: bool,
+    /// The resulting cursor. On a rejected insertion it focuses the retained equivalent entry.
     pub cursor: C,
 }
 
@@ -45,6 +61,8 @@ impl<T, S> PersistentOrderedSet<T, S>
 where
     S: Clone,
 {
+    /// Creates a cursor at the gap `position` in `0..=len`, or `None` when it exceeds the element
+    /// count. O(1).
     #[must_use]
     pub fn cursor_at(&self, position: usize) -> Option<PersistentOrderedSetCursor<T, S>> {
         (position <= self.len()).then(|| PersistentOrderedSetCursor {
@@ -59,6 +77,10 @@ where
     T: Eq + Hash + Clone,
     S: BuildHasher + Clone,
 {
+    /// Seeks to `value` and reports whether it is present.
+    ///
+    /// On a miss the cursor is positioned at the end and remains usable. Membership is decided by the
+    /// retained hash policy.
     #[must_use]
     pub fn find_cursor(&self, value: &T) -> OrderedCursorSearch<PersistentOrderedSetCursor<T, S>> {
         let position = self.index_of(value);
@@ -75,31 +97,37 @@ impl<T, S> PersistentOrderedSetCursor<T, S>
 where
     S: Clone,
 {
+    /// Returns the element count of the set version this cursor is positioned in.
     #[must_use]
     pub fn len(&self) -> usize {
         self.set.len()
     }
 
+    /// Returns `true` when that set version holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.set.is_empty()
     }
 
+    /// Returns the cursor's gap index in `0..=len`.
     #[must_use]
     pub fn position(&self) -> usize {
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first element.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last element.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
 
+    /// Borrows the element immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
@@ -107,11 +135,13 @@ where
             .and_then(|index| self.set.get(index))
     }
 
+    /// Borrows the element immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<&T> {
         self.set.get(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         self.position.checked_sub(1).map(|position| Self {
@@ -120,6 +150,7 @@ where
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -128,6 +159,8 @@ where
         })
     }
 
+    /// Jumps to the gap at `position` within the same set version, or `None` when `position` exceeds
+    /// the element count.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         if position == self.position {
@@ -137,6 +170,7 @@ where
         }
     }
 
+    /// Borrows the set version this cursor is positioned in.
     #[must_use]
     pub fn snapshot(&self) -> &PersistentOrderedSet<T, S> {
         &self.set
@@ -148,6 +182,12 @@ where
     T: Eq + Hash + Clone,
     S: BuildHasher + Clone,
 {
+    /// Inserts `value` at the gap and returns a cursor positioned after it.
+    ///
+    /// Because the collection is insertion-ordered rather than sorted, the cursor decides *where* the
+    /// element goes. An already present class is a no-op: the existing element keeps its position and
+    /// representative, and the returned cursor stays at this gap. Use [`Self::try_insert`] to tell
+    /// the two outcomes apart.
     #[must_use]
     pub fn insert(&self, value: T) -> Self {
         let set = self
@@ -176,6 +216,8 @@ where
         }
     }
 
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
+    /// The receiver keeps its own version.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -188,6 +230,8 @@ where
         })
     }
 
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
+    /// The receiver keeps its own version.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         Some(Self {
@@ -216,6 +260,8 @@ impl<K, V, S> PersistentOrderedMap<K, V, S>
 where
     S: Clone,
 {
+    /// Creates a cursor at the gap `position` in `0..=len`, or `None` when it exceeds the entry
+    /// count. O(1).
     #[must_use]
     pub fn cursor_at(&self, position: usize) -> Option<PersistentOrderedMapCursor<K, V, S>> {
         (position <= self.len()).then(|| PersistentOrderedMapCursor {
@@ -230,6 +276,8 @@ where
     K: Eq + Hash,
     S: BuildHasher + Clone,
 {
+    /// Seeks to `key` and reports whether it is present. On a miss the cursor is positioned at the
+    /// end and remains usable.
     #[must_use]
     pub fn find_cursor(&self, key: &K) -> OrderedCursorSearch<PersistentOrderedMapCursor<K, V, S>> {
         let position = self.index_of(key);
@@ -246,31 +294,37 @@ impl<K, V, S> PersistentOrderedMapCursor<K, V, S>
 where
     S: Clone,
 {
+    /// Returns the entry count of the map version this cursor is positioned in.
     #[must_use]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
+    /// Returns `true` when that map version holds no entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
 
+    /// Returns the cursor's gap index in `0..=len`.
     #[must_use]
     pub fn position(&self) -> usize {
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first entry.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last entry.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
 
+    /// Borrows the entry immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<(&K, &V)> {
         self.position
@@ -278,11 +332,13 @@ where
             .and_then(|index| self.map.get_at(index))
     }
 
+    /// Borrows the entry immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<(&K, &V)> {
         self.map.get_at(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         self.position.checked_sub(1).map(|position| Self {
@@ -291,6 +347,7 @@ where
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -299,6 +356,8 @@ where
         })
     }
 
+    /// Jumps to the gap at `position` within the same map version, or `None` when `position` exceeds
+    /// the entry count.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         if position == self.position {
@@ -308,6 +367,7 @@ where
         }
     }
 
+    /// Borrows the map version this cursor is positioned in.
     #[must_use]
     pub fn snapshot(&self) -> &PersistentOrderedMap<K, V, S> {
         &self.map
@@ -320,6 +380,11 @@ where
     V: Clone + PartialEq,
     S: BuildHasher + Clone,
 {
+    /// Inserts a new entry at the gap and returns a cursor positioned after it.
+    ///
+    /// Strict: an already present key fails with [`DuplicateKey`] rather than moving or overwriting
+    /// it. Use [`Self::try_insert`] to get the existing entry's position instead of an error, or
+    /// [`Self::set_next_value`] to change a value in place.
     pub fn insert(&self, key: K, value: V) -> Result<Self, DuplicateKey> {
         self.map.insert(self.position, key, value).map(|map| Self {
             map: map.expect("cursor insertion position is valid"),
@@ -348,6 +413,8 @@ where
         }
     }
 
+    /// Replaces the value of the entry after the gap, keeping its key and position, or returns `None`
+    /// at the end.
     #[must_use]
     pub fn set_next_value(&self, value: V) -> Option<Self> {
         let (key, _) = self.peek_next()?;
@@ -357,6 +424,7 @@ where
         })
     }
 
+    /// Removes the entry before the gap and returns a cursor in its place, or `None` at the start.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -366,6 +434,7 @@ where
         })
     }
 
+    /// Removes the entry after the gap and returns a cursor in its place, or `None` at the end.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         Some(Self {
@@ -395,6 +464,11 @@ where
     SK: Clone,
     SV: Clone,
 {
+    /// Creates a cursor at the gap `position` in `0..=pair_count`, or `None` when it exceeds the pair
+    /// count.
+    ///
+    /// Multimap cursors rank over the *flattened* pair sequence — every key's values in order, key
+    /// groups in order — not over the keys alone.
     #[must_use]
     pub fn cursor_at(
         &self,
@@ -414,6 +488,8 @@ where
     SK: BuildHasher + Clone,
     SV: BuildHasher + Clone,
 {
+    /// Seeks to the pair `(key, value)` and reports whether it is present. On a miss the cursor is
+    /// positioned at the end and remains usable.
     #[must_use]
     pub fn find_cursor(
         &self,
@@ -431,6 +507,9 @@ where
         }
     }
 
+    /// Seeks to the *first* pair belonging to `key` and reports whether the key is present.
+    ///
+    /// Useful for walking one key's group; on a miss the cursor is positioned at the end.
     #[must_use]
     pub fn find_group_cursor(
         &self,
@@ -451,26 +530,32 @@ where
     SK: Clone,
     SV: Clone,
 {
+    /// Returns the pair count of the multimap version this cursor is positioned in, which is the
+    /// length of the flattened sequence the cursor ranks over.
     #[must_use]
     pub fn pair_count(&self) -> usize {
         self.map.pair_count()
     }
 
+    /// Returns the cursor's gap index in `0..=pair_count`.
     #[must_use]
     pub fn position(&self) -> usize {
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first pair.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last pair.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.pair_count()
     }
 
+    /// Borrows the pair immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<(&K, &V)> {
         self.position
@@ -478,11 +563,13 @@ where
             .and_then(|position| self.map.iter().nth(position))
     }
 
+    /// Borrows the pair immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<(&K, &V)> {
         self.map.iter().nth(self.position)
     }
 
+    /// Returns a cursor one pair earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         self.position.checked_sub(1).map(|position| Self {
@@ -491,6 +578,7 @@ where
         })
     }
 
+    /// Returns a cursor one pair later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -499,6 +587,8 @@ where
         })
     }
 
+    /// Jumps to the gap at `position` within the same multimap version, or `None` when `position`
+    /// exceeds the pair count.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         if position == self.position {
@@ -508,6 +598,7 @@ where
         }
     }
 
+    /// Borrows the multimap version this cursor is positioned in.
     #[must_use]
     pub fn snapshot(&self) -> &PersistentOrderedMultimap<K, V, SK, SV> {
         &self.map
@@ -521,6 +612,11 @@ where
     SK: BuildHasher + Clone,
     SV: BuildHasher + Clone,
 {
+    /// Inserts the pair `(key, value)` and returns a cursor positioned after it.
+    ///
+    /// The pair joins `key`'s existing group if there is one, so the resulting gap follows that
+    /// group's new last member rather than the cursor's old position. An already present pair is a
+    /// no-op.
     #[must_use]
     pub fn insert(&self, key: K, value: V) -> Self {
         let key_probe = key.clone();
@@ -569,12 +665,16 @@ where
         }
     }
 
+    /// Removes the pair before the gap and returns a cursor in its place, or `None` at the start.
+    /// A key that loses its last value disappears with it.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
         self.deleted_pair(position)
     }
 
+    /// Removes the pair after the gap and returns a cursor in its place, or `None` at the end.
+    /// A key that loses its last value disappears with it.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         self.deleted_pair(self.position)

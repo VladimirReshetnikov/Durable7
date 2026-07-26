@@ -1,7 +1,26 @@
+//! Persistent catenable deques, with and without O(1) reversal.
+//!
+//! [`PersistentDeque`] is a size-annotated binary tree behind an [`Arc`](std::sync::Arc): pushes and
+//! pops at either end, indexing, splitting, and concatenation all share structure with the version
+//! they were derived from, and every prior version stays valid.
+//!
+//! [`ReversibleDeque`] wraps that same representation and adds a reversal that is O(1) because it
+//! flips an orientation flag instead of rebuilding the tree; all sequence operations then read
+//! through the current orientation.
+//!
+//! Both types come with immutable gap cursors ([`PersistentDequeCursor`],
+//! [`ReversibleDequeCursor`]) denoting a position in `0..=len`, and with result types that report
+//! the pieces of a structural operation: [`DequePop`], [`DequeSplit`], [`DequeItemSplit`],
+//! [`DequeRangeSplit`], [`ReversibleDequePop`], and [`ReversibleDequeSplit`].
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::sync::Arc;
 
+/// A persistent double-ended queue with structural sharing between versions.
+///
+/// Cloning is O(1) and shares the whole representation; every operation returns a new deque and
+/// leaves the receiver untouched.
 pub struct PersistentDeque<T> {
     root: Arc<DequeTree<T>>,
 }
@@ -21,12 +40,15 @@ impl<T> Clone for PersistentDeque<T> {
     }
 }
 
+/// The two deques produced by a positional split.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DequeSplit<T> {
     pub left: PersistentDeque<T>,
     pub right: PersistentDeque<T>,
 }
 
+/// The pieces produced by splitting around one element: what precedes it, the element, and what
+/// follows it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DequeItemSplit<T> {
     pub left: PersistentDeque<T>,
@@ -34,6 +56,7 @@ pub struct DequeItemSplit<T> {
     pub right: PersistentDeque<T>,
 }
 
+/// The three deques produced by splitting out a range: before it, the range itself, and after it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DequeRangeSplit<T> {
     pub before: PersistentDeque<T>,
@@ -41,18 +64,21 @@ pub struct DequeRangeSplit<T> {
     pub after: PersistentDeque<T>,
 }
 
+/// An endpoint element and the deque that remains after removing it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DequePop<T> {
     pub value: T,
     pub rest: PersistentDeque<T>,
 }
 
+/// The two reversible deques produced by a positional split, each keeping the source orientation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReversibleDequeSplit<T> {
     pub left: ReversibleDeque<T>,
     pub right: ReversibleDeque<T>,
 }
 
+/// An endpoint element and the reversible deque that remains after removing it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReversibleDequePop<T> {
     pub value: T,
@@ -524,6 +550,7 @@ impl<T> DequeTree<T> {
 }
 
 impl<T> PersistentDeque<T> {
+    /// Creates an empty deque.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -538,11 +565,13 @@ impl<T> PersistentDeque<T> {
         }
     }
 
+    /// Returns the number of elements. O(1); the count is cached at the root.
     #[must_use]
     pub fn len(&self) -> usize {
         self.root.len()
     }
 
+    /// Returns `true` when the deque holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.root.len() == 0
@@ -566,25 +595,31 @@ impl<T> PersistentDeque<T> {
         })
     }
 
+    /// Borrows the first element, or `None` when empty. O(log n).
     #[must_use]
     pub fn front(&self) -> Option<&T> {
         self.root.first()
     }
 
+    /// Borrows the last element, or `None` when empty. O(log n).
     #[must_use]
     pub fn back(&self) -> Option<&T> {
         self.root.last()
     }
 
+    /// Borrows the element at `index`, or `None` when out of range. O(log n).
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
         (index < self.len()).then(|| self.root.get(index)).flatten()
     }
 
+    /// Iterates the elements in sequence order.
     pub fn iter(&self) -> Iter<'_, T> {
         Iter::new(&self.root)
     }
 
+    /// Reports whether two deques are backed by the same tree, so neither can observe an edit made to
+    /// the other. A representation test, not an equality test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         fn shares_root<T>(left: &Arc<DequeTree<T>>, right: &Arc<DequeTree<T>>) -> bool {
@@ -609,6 +644,8 @@ impl<T> PersistentDeque<T> {
         }
     }
 
+    /// Returns a deque with `item` added at the front. The receiver is unchanged and shares almost
+    /// all of the result's structure.
     #[must_use]
     pub fn push_front(&self, item: T) -> Self {
         Self {
@@ -616,6 +653,7 @@ impl<T> PersistentDeque<T> {
         }
     }
 
+    /// Returns a deque with `item` added at the back. The receiver is unchanged.
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
         Self {
@@ -623,6 +661,10 @@ impl<T> PersistentDeque<T> {
         }
     }
 
+    /// Concatenates two deques, placing every element of `other` after every element of `self`.
+    ///
+    /// O(log n) rather than proportional to either operand: the two trees are joined, not copied.
+    /// Concatenating with an empty deque shares the non-empty operand.
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
         if self.is_empty() {
@@ -638,11 +680,15 @@ impl<T> PersistentDeque<T> {
         }
     }
 
+    /// Returns a deque without its first element, or `None` when empty. Use [`Self::pop_first`] to
+    /// recover the removed element as well.
     #[must_use]
     pub fn remove_first(&self) -> Option<Self> {
         (!self.is_empty()).then(|| self.split_at(1).expect("one is a valid split").right)
     }
 
+    /// Returns a deque without its last element, or `None` when empty. Use [`Self::pop_last`] to
+    /// recover the removed element as well.
     #[must_use]
     pub fn remove_last(&self) -> Option<Self> {
         let split_index = self.len().checked_sub(1)?;
@@ -653,6 +699,7 @@ impl<T> PersistentDeque<T> {
         )
     }
 
+    /// Replaces the element at `index`, or returns `None` when out of range. O(log n).
     #[must_use]
     pub fn set_item(&self, index: usize, item: T) -> Option<Self> {
         (index < self.len()).then(|| Self {
@@ -660,6 +707,11 @@ impl<T> PersistentDeque<T> {
         })
     }
 
+    /// Replaces the element at `index` with the result of applying `updater` to it, or returns `None`
+    /// when out of range.
+    ///
+    /// Avoids the caller having to read the element and write it back as two separate O(log n)
+    /// descents.
     #[must_use]
     pub fn update_at<F>(&self, index: usize, updater: F) -> Option<Self>
     where
@@ -669,6 +721,8 @@ impl<T> PersistentDeque<T> {
         self.set_item(index, updater(current))
     }
 
+    /// Inserts `item` so that it ends up at `index`, or returns `None` when `index` exceeds the
+    /// length. O(log n) — a split and two joins, not a shift of the tail.
     #[must_use]
     pub fn insert_at(&self, index: usize, item: T) -> Option<Self> {
         if index > self.len() {
@@ -679,6 +733,10 @@ impl<T> PersistentDeque<T> {
         Some(split.left.push_back(item).concat(&split.right))
     }
 
+    /// Inserts every element of `items` at `index`, in order, or returns `None` when `index` exceeds
+    /// the length.
+    ///
+    /// Splits once and joins once regardless of how many elements are inserted.
     #[must_use]
     pub fn insert_range<I>(&self, index: usize, items: I) -> Option<Self>
     where
@@ -697,6 +755,7 @@ impl<T> PersistentDeque<T> {
         Some(split.left.concat(&inserted).concat(&split.right))
     }
 
+    /// Removes the element at `index`, or returns `None` when out of range. O(log n).
     #[must_use]
     pub fn remove_at(&self, index: usize) -> Option<Self> {
         if index >= self.len() {
@@ -707,17 +766,23 @@ impl<T> PersistentDeque<T> {
         Some(split.before.concat(&split.after))
     }
 
+    /// Removes `count` elements starting at `index`, or returns `None` when the range falls outside
+    /// the deque. O(log n) regardless of `count`.
     #[must_use]
     pub fn remove_range(&self, index: usize, count: usize) -> Option<Self> {
         let split = self.split_range(index, count)?;
         Some(split.before.concat(&split.after))
     }
 
+    /// Returns the `count` elements starting at `index` as a new deque, or `None` when the range
+    /// falls outside the deque. O(log n); the result shares structure with the receiver.
     #[must_use]
     pub fn get_range(&self, index: usize, count: usize) -> Option<Self> {
         Some(self.split_range(index, count)?.range)
     }
 
+    /// Splits into the elements before `index` and those from `index` on, or returns `None` when
+    /// `index` exceeds the length. O(log n); both halves share structure with the receiver.
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<DequeSplit<T>> {
         if index > self.len() {
@@ -731,6 +796,8 @@ impl<T> PersistentDeque<T> {
         })
     }
 
+    /// Splits into the elements before `index`, the `count` elements from `index`, and the rest, or
+    /// returns `None` when the range falls outside the deque.
     #[must_use]
     pub fn split_range(&self, index: usize, count: usize) -> Option<DequeRangeSplit<T>> {
         let end = checked_range_end(self.len(), index, count)?;
@@ -743,6 +810,7 @@ impl<T> PersistentDeque<T> {
         })
     }
 
+    /// Appends every element of `items`, in order, publishing only the final deque.
     #[must_use]
     pub fn add_range<I>(&self, items: I) -> Self
     where
@@ -801,31 +869,37 @@ impl<T> PersistentDeque<T> {
 }
 
 impl<T> PersistentDequeCursor<T> {
+    /// Returns the element count of the deque version this cursor is positioned in.
     #[must_use]
     pub fn len(&self) -> usize {
         self.deque.len()
     }
 
+    /// Returns `true` when that deque version holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.deque.is_empty()
     }
 
+    /// Returns the cursor's gap index in `0..=len`.
     #[must_use]
     pub fn position(&self) -> usize {
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first element.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last element.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
 
+    /// Borrows the element immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
@@ -833,11 +907,13 @@ impl<T> PersistentDequeCursor<T> {
             .and_then(|index| self.deque.get(index))
     }
 
+    /// Borrows the element immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<&T> {
         self.deque.get(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         Some(Self {
@@ -846,6 +922,7 @@ impl<T> PersistentDequeCursor<T> {
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -854,6 +931,8 @@ impl<T> PersistentDequeCursor<T> {
         })
     }
 
+    /// Jumps to the gap at `position` within the same deque version, or `None` when `position`
+    /// exceeds the element count.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         (position <= self.len()).then(|| Self {
@@ -862,6 +941,8 @@ impl<T> PersistentDequeCursor<T> {
         })
     }
 
+    /// Inserts `item` at the gap and returns a cursor positioned after it. The receiver keeps its own
+    /// version, so cursors retained beforehand never see `item`.
     #[must_use]
     pub fn insert(&self, item: T) -> Self {
         Self {
@@ -873,6 +954,8 @@ impl<T> PersistentDequeCursor<T> {
         }
     }
 
+    /// Inserts every element of `items` at the gap, in order, and returns a cursor positioned after
+    /// the last one.
     #[must_use]
     pub fn insert_range<I>(&self, items: I) -> Self
     where
@@ -895,6 +978,7 @@ impl<T> PersistentDequeCursor<T> {
         }
     }
 
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -907,6 +991,7 @@ impl<T> PersistentDequeCursor<T> {
         })
     }
 
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -918,6 +1003,8 @@ impl<T> PersistentDequeCursor<T> {
         })
     }
 
+    /// Replaces the element after the gap with `item`, keeping the gap where it is, or returns `None`
+    /// at the end.
     #[must_use]
     pub fn replace_next(&self, item: T) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -929,6 +1016,7 @@ impl<T> PersistentDequeCursor<T> {
         })
     }
 
+    /// Returns the deque version this cursor is positioned in. O(1); the root is shared.
     #[must_use]
     pub fn snapshot(&self) -> PersistentDeque<T> {
         self.deque.clone()
@@ -939,6 +1027,7 @@ impl<T> PersistentDeque<T>
 where
     T: Clone,
 {
+    /// Copies the elements into a vector in sequence order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         let mut result = Vec::with_capacity(self.len());
@@ -946,6 +1035,8 @@ where
         result
     }
 
+    /// Removes the first element, returning it together with the remaining deque, or `None` when
+    /// empty. The receiver is unchanged.
     #[must_use]
     pub fn pop_first(&self) -> Option<DequePop<T>> {
         let value = self.front()?.clone();
@@ -953,6 +1044,8 @@ where
         Some(DequePop { value, rest })
     }
 
+    /// Removes the last element, returning it together with the remaining deque, or `None` when
+    /// empty. The receiver is unchanged.
     #[must_use]
     pub fn pop_last(&self) -> Option<DequePop<T>> {
         let value = self.back()?.clone();
@@ -960,6 +1053,8 @@ where
         Some(DequePop { value, rest })
     }
 
+    /// Splits around the element at `index`, returning the elements before it, that element, and the
+    /// elements after it, or `None` when `index` is out of range.
     #[must_use]
     pub fn split_item_at(&self, index: usize) -> Option<DequeItemSplit<T>> {
         if index >= self.len() {
@@ -1031,6 +1126,7 @@ impl<'a, T> IntoIterator for &'a PersistentDeque<T> {
     }
 }
 
+/// Owning iterator over a [`PersistentDeque`], in sequence order.
 pub struct IntoIter<T> {
     stack: Vec<(Arc<DequeTree<T>>, bool)>,
     remaining: usize,
@@ -1089,16 +1185,24 @@ impl<T> PersistentDeque<T>
 where
     T: Ord,
 {
+    /// Returns the index where `item` would be inserted before its equals, assuming the deque is
+    /// already sorted ascending.
+    ///
+    /// The sorted family treats an ordinary deque as a sorted sequence; none of them checks or
+    /// establishes that ordering, so results on an unsorted deque are unspecified. O(log n).
     #[must_use]
     pub fn sorted_lower_bound(&self, item: &T) -> usize {
         self.sorted_lower_bound_by(item, T::cmp)
     }
 
+    /// Returns the index just past any elements equal to `item`, assuming ascending order. O(log n).
     #[must_use]
     pub fn sorted_upper_bound(&self, item: &T) -> usize {
         self.sorted_upper_bound_by(item, T::cmp)
     }
 
+    /// Searches an ascending deque for `item`, returning `Ok(index)` when found and `Err(index)` with
+    /// the insertion point otherwise. O(log n).
     pub fn sorted_binary_search(&self, item: &T) -> Result<usize, usize> {
         let index = self.sorted_lower_bound(item);
         if index < self.len()
@@ -1112,31 +1216,37 @@ where
         }
     }
 
+    /// Reports whether an ascending deque contains `item`. O(log n).
     #[must_use]
     pub fn sorted_contains(&self, item: &T) -> bool {
         self.sorted_binary_search(item).is_ok()
     }
 
+    /// Splits an ascending deque so that the left half holds every element strictly below `item`.
     #[must_use]
     pub fn split_at_sorted_lower_bound(&self, item: &T) -> DequeSplit<T> {
         self.split_at_sorted_lower_bound_by(item, T::cmp)
     }
 
+    /// Splits an ascending deque so that the left half also holds the elements equal to `item`.
     #[must_use]
     pub fn split_at_sorted_upper_bound(&self, item: &T) -> DequeSplit<T> {
         self.split_at_sorted_upper_bound_by(item, T::cmp)
     }
 
+    /// Splits an ascending deque into the elements below `item`, those equal to it, and those above.
     #[must_use]
     pub fn split_at_sorted_equal_range(&self, item: &T) -> DequeRangeSplit<T> {
         self.split_at_sorted_equal_range_by(item, T::cmp)
     }
 
+    /// Inserts `item` at its sorted position, before any existing equals, keeping ascending order.
     #[must_use]
     pub fn insert_sorted(&self, item: T) -> Self {
         self.insert_sorted_by(item, T::cmp)
     }
 
+    /// Removes every element equal to `item` from an ascending deque, in one split-and-join.
     #[must_use]
     pub fn remove_all_sorted(&self, item: &T) -> Self {
         self.remove_all_sorted_by(item, T::cmp)
@@ -1144,6 +1254,10 @@ where
 }
 
 impl<T> PersistentDeque<T> {
+    /// [`Self::sorted_lower_bound`] under a caller-supplied comparison.
+    ///
+    /// The `_by` variants let the deque be ordered by a rule other than `Ord`; the deque must already
+    /// be sorted by that same rule.
     #[must_use]
     pub fn sorted_lower_bound_by<F>(&self, item: &T, mut compare: F) -> usize
     where
@@ -1152,6 +1266,7 @@ impl<T> PersistentDeque<T> {
         self.sorted_lower_bound_with(item, &mut compare)
     }
 
+    /// [`Self::sorted_upper_bound`] under a caller-supplied comparison.
     #[must_use]
     pub fn sorted_upper_bound_by<F>(&self, item: &T, mut compare: F) -> usize
     where
@@ -1160,6 +1275,7 @@ impl<T> PersistentDeque<T> {
         self.sorted_upper_bound_with(item, &mut compare)
     }
 
+    /// [`Self::split_at_sorted_lower_bound`] under a caller-supplied comparison.
     #[must_use]
     pub fn split_at_sorted_lower_bound_by<F>(&self, item: &T, mut compare: F) -> DequeSplit<T>
     where
@@ -1170,6 +1286,7 @@ impl<T> PersistentDeque<T> {
             .expect("a computed lower bound is always a valid split index")
     }
 
+    /// [`Self::split_at_sorted_upper_bound`] under a caller-supplied comparison.
     #[must_use]
     pub fn split_at_sorted_upper_bound_by<F>(&self, item: &T, mut compare: F) -> DequeSplit<T>
     where
@@ -1180,6 +1297,7 @@ impl<T> PersistentDeque<T> {
             .expect("a computed upper bound is always a valid split index")
     }
 
+    /// [`Self::split_at_sorted_equal_range`] under a caller-supplied comparison.
     #[must_use]
     pub fn split_at_sorted_equal_range_by<F>(&self, item: &T, mut compare: F) -> DequeRangeSplit<T>
     where
@@ -1191,6 +1309,7 @@ impl<T> PersistentDeque<T> {
             .expect("computed sorted bounds always describe a valid range")
     }
 
+    /// [`Self::insert_sorted`] under a caller-supplied comparison.
     #[must_use]
     pub fn insert_sorted_by<F>(&self, item: T, mut compare: F) -> Self
     where
@@ -1201,6 +1320,7 @@ impl<T> PersistentDeque<T> {
             .expect("a computed upper bound is always a valid insertion index")
     }
 
+    /// [`Self::remove_all_sorted`] under a caller-supplied comparison.
     #[must_use]
     pub fn remove_all_sorted_by<F>(&self, item: &T, mut compare: F) -> Self
     where
@@ -1233,6 +1353,7 @@ impl<T> PersistentDeque<T> {
     }
 }
 
+/// Borrowing iterator over a deque, in the sequence's current order.
 pub struct Iter<'a, T> {
     stack: Vec<(&'a DequeTree<T>, bool)>,
     remaining: usize,
@@ -1283,6 +1404,11 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
 impl<T> ExactSizeIterator for Iter<'_, T> {}
 
+/// A persistent deque whose element order can be reversed in O(1).
+///
+/// Reversal flips a stored orientation and shares the underlying tree rather than rebuilding the
+/// sequence; every other operation then reads and writes through that orientation. Otherwise this
+/// behaves exactly like [`PersistentDeque`].
 #[derive(Debug, PartialEq, Eq)]
 pub struct ReversibleDeque<T> {
     items: PersistentDeque<T>,
@@ -1297,6 +1423,7 @@ impl<T> Clone for ReversibleDeque<T> {
 }
 
 impl<T> ReversibleDeque<T> {
+    /// Creates an empty reversible deque.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -1313,11 +1440,13 @@ impl<T> ReversibleDeque<T> {
         Self { items }
     }
 
+    /// Returns the number of elements. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.items.len()
     }
 
+    /// Returns `true` when the deque holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
@@ -1341,6 +1470,10 @@ impl<T> ReversibleDeque<T> {
         })
     }
 
+    /// Returns this deque with its element order reversed.
+    ///
+    /// O(1): the orientation is flipped and the underlying tree is shared, rather than the sequence
+    /// being rebuilt. This is the whole reason for the type.
     #[must_use]
     pub fn reverse(&self) -> Self {
         Self {
@@ -1348,21 +1481,26 @@ impl<T> ReversibleDeque<T> {
         }
     }
 
+    /// Reports whether two deques are backed by the same underlying tree, so neither can observe an
+    /// edit made to the other. Two deques that differ only in orientation still share storage.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.items.shares_storage_with(&other.items)
     }
 
+    /// Borrows the first element in the current orientation, or `None` when empty.
     #[must_use]
     pub fn front(&self) -> Option<&T> {
         self.get(0)
     }
 
+    /// Borrows the last element in the current orientation, or `None` when empty.
     #[must_use]
     pub fn back(&self) -> Option<&T> {
         self.len().checked_sub(1).and_then(|index| self.get(index))
     }
 
+    /// Borrows the element at `index` in the current orientation, or `None` when out of range.
     #[must_use]
     pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.len() {
@@ -1372,35 +1510,46 @@ impl<T> ReversibleDeque<T> {
         self.items.get(index)
     }
 
+    /// Iterates the elements in the current orientation.
     pub fn iter(&self) -> Iter<'_, T> {
         self.items.iter()
     }
 
+    /// Returns a deque with `item` added at the current front.
     #[must_use]
     pub fn push_front(&self, item: T) -> Self {
         Self::from_deque(self.items.push_front(item))
     }
 
+    /// Returns a deque with `item` added at the current back.
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
         Self::from_deque(self.items.push_back(item))
     }
 
+    /// Replaces the element at `index` in the current orientation, or returns `None` when out of
+    /// range.
     #[must_use]
     pub fn set_item(&self, index: usize, item: T) -> Option<Self> {
         Some(Self::from_deque(self.items.set_item(index, item)?))
     }
 
+    /// Inserts `item` so that it ends up at `index` in the current orientation, or returns `None`
+    /// when `index` exceeds the length.
     #[must_use]
     pub fn insert_at(&self, index: usize, item: T) -> Option<Self> {
         Some(Self::from_deque(self.items.insert_at(index, item)?))
     }
 
+    /// Removes the element at `index` in the current orientation, or returns `None` when out of
+    /// range.
     #[must_use]
     pub fn remove_at(&self, index: usize) -> Option<Self> {
         Some(Self::from_deque(self.items.remove_at(index)?))
     }
 
+    /// Splits at `index` in the current orientation, or returns `None` when `index` exceeds the
+    /// length. Both halves keep this deque's orientation.
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<ReversibleDequeSplit<T>> {
         let split = self.items.split_at(index)?;
@@ -1410,6 +1559,8 @@ impl<T> ReversibleDeque<T> {
         })
     }
 
+    /// Concatenates two deques in their current orientations, placing `other`'s elements after this
+    /// deque's.
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
         Self::from_deque(self.items.concat(&other.items))
@@ -1417,31 +1568,37 @@ impl<T> ReversibleDeque<T> {
 }
 
 impl<T> ReversibleDequeCursor<T> {
+    /// Returns the element count of the deque version this cursor is positioned in.
     #[must_use]
     pub fn len(&self) -> usize {
         self.deque.len()
     }
 
+    /// Returns `true` when that deque version holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.deque.is_empty()
     }
 
+    /// Returns the cursor's gap index in `0..=len`, in the deque's current orientation.
     #[must_use]
     pub fn position(&self) -> usize {
         self.position
     }
 
+    /// Returns `true` when the gap precedes the first element in the current orientation.
     #[must_use]
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
 
+    /// Returns `true` when the gap follows the last element in the current orientation.
     #[must_use]
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
 
+    /// Borrows the element immediately before the gap, or `None` at the start.
     #[must_use]
     pub fn peek_previous(&self) -> Option<&T> {
         self.position
@@ -1449,11 +1606,13 @@ impl<T> ReversibleDequeCursor<T> {
             .and_then(|index| self.deque.get(index))
     }
 
+    /// Borrows the element immediately after the gap, or `None` at the end.
     #[must_use]
     pub fn peek_next(&self) -> Option<&T> {
         self.deque.get(self.position)
     }
 
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     #[must_use]
     pub fn move_previous(&self) -> Option<Self> {
         Some(Self {
@@ -1462,6 +1621,7 @@ impl<T> ReversibleDequeCursor<T> {
         })
     }
 
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     #[must_use]
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -1470,6 +1630,8 @@ impl<T> ReversibleDequeCursor<T> {
         })
     }
 
+    /// Jumps to the gap at `position` within the same deque version, or `None` when `position`
+    /// exceeds the element count.
     #[must_use]
     pub fn seek(&self, position: usize) -> Option<Self> {
         (position <= self.len()).then(|| Self {
@@ -1478,6 +1640,8 @@ impl<T> ReversibleDequeCursor<T> {
         })
     }
 
+    /// Inserts `item` at the gap and returns a cursor positioned after it. The receiver keeps its own
+    /// version.
     #[must_use]
     pub fn insert(&self, item: T) -> Self {
         Self {
@@ -1489,6 +1653,8 @@ impl<T> ReversibleDequeCursor<T> {
         }
     }
 
+    /// Inserts every element of `items` at the gap, in order, and returns a cursor positioned after
+    /// the last one.
     #[must_use]
     pub fn insert_range<I>(&self, items: I) -> Self
     where
@@ -1511,6 +1677,7 @@ impl<T> ReversibleDequeCursor<T> {
         }
     }
 
+    /// Removes the element before the gap and returns a cursor in its place, or `None` at the start.
     #[must_use]
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
@@ -1523,6 +1690,7 @@ impl<T> ReversibleDequeCursor<T> {
         })
     }
 
+    /// Removes the element after the gap and returns a cursor in its place, or `None` at the end.
     #[must_use]
     pub fn delete_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -1534,6 +1702,8 @@ impl<T> ReversibleDequeCursor<T> {
         })
     }
 
+    /// Replaces the element after the gap with `item`, keeping the gap where it is, or returns `None`
+    /// at the end.
     #[must_use]
     pub fn replace_next(&self, item: T) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
@@ -1554,6 +1724,7 @@ impl<T> ReversibleDequeCursor<T> {
         }
     }
 
+    /// Returns the deque version this cursor is positioned in. O(1); storage is shared.
     #[must_use]
     pub fn snapshot(&self) -> ReversibleDeque<T> {
         self.deque.clone()
@@ -1597,11 +1768,14 @@ impl<T> ReversibleDeque<T>
 where
     T: Clone,
 {
+    /// Copies the elements into a vector in the current orientation. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<T> {
         self.items.to_vec()
     }
 
+    /// Removes the first element in the current orientation, returning it with the remaining deque,
+    /// or `None` when empty.
     #[must_use]
     pub fn pop_front(&self) -> Option<ReversibleDequePop<T>> {
         let popped = self.items.pop_first()?;
@@ -1611,6 +1785,8 @@ where
         })
     }
 
+    /// Removes the last element in the current orientation, returning it with the remaining deque,
+    /// or `None` when empty.
     #[must_use]
     pub fn pop_back(&self) -> Option<ReversibleDequePop<T>> {
         let popped = self.items.pop_last()?;

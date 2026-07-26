@@ -1,3 +1,10 @@
+//! Integration tests for the persistent Brodal-Okasaki meldable heap.
+//!
+//! Covers the heap's ordering-policy contract (custom comparers, retained policy identity, and
+//! rejection of melds between incompatible policies), persistence of earlier versions across
+//! insertion and deletion, structural validation, and concurrent read-only sharing of one snapshot
+//! across threads.
+
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;

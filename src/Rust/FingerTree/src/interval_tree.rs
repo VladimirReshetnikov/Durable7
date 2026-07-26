@@ -1,11 +1,30 @@
+//! Persistent interval tree supporting stabbing and overlap queries.
+//!
+//! [`IntervalTree`] stores [`Interval`] values ordered by low endpoint inside a
+//! [`FingerTree`](crate::FingerTree) whose measure caches the maximum high endpoint of each subtree.
+//! A query descends only into subtrees whose cached maximum can still reach the query point or
+//! range, which is what keeps a search proportional to the tree depth plus the number of results
+//! rather than to the number of stored intervals.
+//!
+//! Intervals are closed and are compared lexicographically by `(low, high)`. Duplicates are
+//! permitted: this is a bag of intervals, not a set. [`IntervalTreeCursor`] provides immutable
+//! ordered traversal over one snapshot, and [`IntervalCursorSearch`] reports whether a seek landed
+//! on a match.
+
 use crate::measured::{FingerTree, MeasurePolicy};
 use std::cmp::Ordering;
 use std::fmt;
 use std::marker::PhantomData;
 
+/// A closed interval `[low, high]`.
+///
+/// The low endpoint never exceeds the high endpoint; [`Interval::new`] panics rather than
+/// constructing an inverted interval.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Interval<T> {
+    /// The inclusive lower endpoint.
     pub low: T,
+    /// The inclusive upper endpoint, never below [`low`](Self::low).
     pub high: T,
 }
 
@@ -13,6 +32,12 @@ impl<T> Interval<T>
 where
     T: Ord,
 {
+    /// Creates the closed interval `[low, high]`.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `low` exceeds `high`. An inverted interval has no meaningful contents, so it is
+    /// rejected at construction rather than allowed to produce silently empty query results.
     #[must_use]
     pub fn new(low: T, high: T) -> Self {
         assert!(
@@ -22,11 +47,14 @@ where
         Self { low, high }
     }
 
+    /// Reports whether the two closed intervals share at least one point. Touching endpoints count as
+    /// overlapping.
     #[must_use]
     pub fn overlaps(&self, other: &Self) -> bool {
         self.low <= other.high && other.low <= self.high
     }
 
+    /// Reports whether `point` lies within this closed interval, endpoints included.
     #[must_use]
     pub fn contains_point(&self, point: &T) -> bool {
         self.low <= *point && *point <= self.high
@@ -75,6 +103,11 @@ where
 
 type IntervalStorage<T> = FingerTree<Interval<T>, IntervalMeasure<T>>;
 
+/// A persistent bag of closed intervals supporting stabbing and overlap queries.
+///
+/// Intervals are held in ascending `(low, high)` order with each subtree's maximum high endpoint
+/// cached, so a query visits only the subtrees that can still contain a match. Duplicates are
+/// permitted. Every operation returns a new tree and leaves the receiver valid and unchanged.
 pub struct IntervalTree<T>
 where
     T: Ord + Clone,
@@ -130,16 +163,19 @@ impl<T> IntervalTree<T>
 where
     T: Ord + Clone,
 {
+    /// Creates an empty interval tree.
     #[must_use]
     pub fn new() -> Self {
         Self::from_storage(IntervalStorage::new())
     }
 
+    /// Returns the number of stored intervals, counting duplicates separately. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.intervals.len()
     }
 
+    /// Returns `true` when no interval is stored.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.intervals.is_empty()
@@ -159,17 +195,25 @@ where
         Self::from_storage(split.left.append(interval).concat(&split.right))
     }
 
+    /// Reports whether an interval with exactly these endpoints is stored. O(log n).
+    ///
+    /// This is endpoint identity, not overlap; see [`Self::find_overlap`] for the latter.
     #[must_use]
     pub fn contains(&self, interval: &Interval<T>) -> bool {
         self.index_of(interval).is_some()
     }
 
+    /// Removes one interval with exactly these endpoints. Removing an absent interval is a no-op.
+    ///
+    /// Because duplicates are permitted, this removes a single occurrence.
     #[must_use]
     pub fn remove(&self, interval: &Interval<T>) -> Self {
         self.try_remove(interval)
             .map_or_else(|| self.clone(), |(tree, _)| tree)
     }
 
+    /// Removes one interval with exactly these endpoints, returning the resulting tree and the stored
+    /// interval, or `None` when absent.
     #[must_use]
     pub fn try_remove(&self, interval: &Interval<T>) -> Option<(Self, Interval<T>)> {
         let index = self.index_of(interval)?;
@@ -200,6 +244,10 @@ where
         None
     }
 
+    /// Borrows some stored interval overlapping `probe`, or `None` when none does.
+    ///
+    /// O(log n): the cached maximum high endpoint lets the search skip subtrees that cannot reach
+    /// `probe`. Which of several overlapping intervals is returned is unspecified.
     #[must_use]
     pub fn find_overlap(&self, probe: &Interval<T>) -> Option<&Interval<T>> {
         let end = self.upper_low_bound_index(&probe.high);
@@ -211,6 +259,7 @@ where
         })
     }
 
+    /// Borrows some stored interval containing `point`, or `None` when none does. O(log n).
     #[must_use]
     pub fn find_containing(&self, point: &T) -> Option<&Interval<T>> {
         let end = self.upper_low_bound_index(point);
@@ -222,6 +271,9 @@ where
         })
     }
 
+    /// Collects every stored interval overlapping `probe`, in ascending `(low, high)` order.
+    ///
+    /// O(log n + k) for `k` results, rather than a scan of all stored intervals.
     #[must_use]
     pub fn find_overlaps(&self, probe: &Interval<T>) -> Vec<Interval<T>> {
         let mut remaining = self.candidate_prefix(&probe.high);
@@ -238,6 +290,7 @@ where
         overlaps
     }
 
+    /// Counts the stored intervals overlapping `probe`, without materializing them.
     #[must_use]
     pub fn count_overlaps(&self, probe: &Interval<T>) -> usize {
         let mut remaining = self.candidate_prefix(&probe.high);
@@ -254,6 +307,10 @@ where
         count
     }
 
+    /// Returns a tree in which overlapping and touching intervals have been merged into maximal runs.
+    ///
+    /// The result covers exactly the same set of points using the fewest intervals, so duplicates and
+    /// partial overlaps disappear. O(n).
     #[must_use]
     pub fn coalesce(&self) -> Self {
         let mut iter = self.intervals.iter();
@@ -278,11 +335,14 @@ where
         Self::from_storage(IntervalStorage::from_vec(merged))
     }
 
+    /// Copies the stored intervals into a vector in ascending `(low, high)` order. O(n).
     #[must_use]
     pub fn to_vec(&self) -> Vec<Interval<T>> {
         self.intervals.to_vec()
     }
 
+    /// Reports whether two trees are backed by the same sequence, so neither can observe an edit made
+    /// to the other. A representation test, not an equality test.
     #[must_use]
     pub fn shares_storage_with(&self, other: &Self) -> bool {
         self.intervals.shares_storage_with(&other.intervals)
@@ -338,22 +398,26 @@ pub struct IntervalTreeCursor<T: Ord + Clone> {
 }
 
 impl<T: Ord + Clone> IntervalTree<T> {
+    /// Creates a cursor at the gap `position` in `0..=len` of the ascending interval sequence, or
+    /// `None` when it exceeds the interval count.
     pub fn cursor_at(&self, position: usize) -> Option<IntervalTreeCursor<T>> {
         (position <= self.len()).then(|| IntervalTreeCursor {
             tree: self.clone(),
             position,
         })
     }
+    /// Creates a cursor before the first interval whose low endpoint is not below `low`. O(log n).
     pub fn cursor_at_lower_bound(&self, low: &T) -> IntervalTreeCursor<T> {
         self.cursor_at(lower_bound_by_low(&self.intervals, low))
             .expect("lower bound is valid")
     }
+    /// Creates a cursor after every interval whose low endpoint equals `low`. O(log n).
     pub fn cursor_at_upper_bound(&self, low: &T) -> IntervalTreeCursor<T> {
         self.cursor_at(self.upper_low_bound_index(low))
             .expect("upper bound is valid")
     }
     /// Locates the first stored interval matching both endpoints by [`Ord::cmp`], not by
-    /// [`PartialEq`], agreeing with [`IntervalTree::index_of`] and the sibling ports.
+    /// [`PartialEq`], agreeing with [`IntervalTree::remove`] and the sibling ports.
     ///
     /// A miss returns a cursor at the low-endpoint lower bound.
     pub fn find_cursor(&self, interval: &Interval<T>) -> IntervalCursorSearch<T> {
@@ -373,9 +437,14 @@ impl<T: Ord + Clone> IntervalTree<T> {
                 .expect("search rank is valid"),
         }
     }
+    /// Seeks to the first interval overlapping `probe` and reports whether one exists.
+    ///
+    /// Advancing from the returned cursor with [`IntervalTreeCursor::seek_next_overlap`] enumerates
+    /// the remaining matches without collecting them all first.
     pub fn find_overlap_cursor(&self, probe: &Interval<T>) -> IntervalCursorSearch<T> {
         self.find_overlap_cursor_from(0, probe)
     }
+    /// Seeks to the first interval containing `point` and reports whether one exists.
     pub fn find_containing_cursor(&self, point: &T) -> IntervalCursorSearch<T> {
         self.find_overlap_cursor(&Interval::new(point.clone(), point.clone()))
     }
@@ -403,40 +472,51 @@ impl<T: Ord + Clone> IntervalTree<T> {
 }
 
 impl<T: Ord + Clone> IntervalTreeCursor<T> {
+    /// Returns the interval count of the tree version this cursor is positioned in.
     pub fn len(&self) -> usize {
         self.tree.len()
     }
+    /// Returns `true` when that tree version stores no intervals.
     pub fn is_empty(&self) -> bool {
         self.tree.is_empty()
     }
+    /// Returns the cursor's gap index in `0..=len`.
     pub fn position(&self) -> usize {
         self.position
     }
+    /// Returns `true` when the gap precedes the first interval.
     pub fn is_at_start(&self) -> bool {
         self.position == 0
     }
+    /// Returns `true` when the gap follows the last interval.
     pub fn is_at_end(&self) -> bool {
         self.position == self.len()
     }
+    /// Borrows the interval immediately before the gap, or `None` at the start.
     pub fn peek_previous(&self) -> Option<&Interval<T>> {
         self.position
             .checked_sub(1)
             .and_then(|rank| self.tree.intervals.get(rank))
     }
+    /// Borrows the interval immediately after the gap, or `None` at the end.
     pub fn peek_next(&self) -> Option<&Interval<T>> {
         self.tree.intervals.get(self.position)
     }
+    /// Returns a cursor one position earlier, or `None` at the start. The receiver is unchanged.
     pub fn move_previous(&self) -> Option<Self> {
         self.position
             .checked_sub(1)
             .and_then(|position| self.tree.cursor_at(position))
     }
+    /// Returns a cursor one position later, or `None` at the end. The receiver is unchanged.
     pub fn move_next(&self) -> Option<Self> {
         (!self.is_at_end()).then(|| Self {
             tree: self.tree.clone(),
             position: self.position + 1,
         })
     }
+    /// Jumps to the gap at `position` within the same tree version, or `None` when `position` exceeds
+    /// the interval count.
     pub fn seek_rank(&self, position: usize) -> Option<Self> {
         if position == self.position {
             Some(self.clone())
@@ -444,6 +524,11 @@ impl<T: Ord + Clone> IntervalTreeCursor<T> {
             self.tree.cursor_at(position)
         }
     }
+    /// Advances to the next interval at or after the gap that overlaps `probe`, reporting whether one
+    /// was found.
+    ///
+    /// Repeated calls stream the matches one at a time instead of collecting them, as
+    /// [`IntervalTree::find_overlaps`] does.
     pub fn seek_next_overlap(&self, probe: &Interval<T>) -> IntervalCursorSearch<T> {
         self.tree.find_overlap_cursor_from(
             if self.position < self.len() {
@@ -454,6 +539,10 @@ impl<T: Ord + Clone> IntervalTreeCursor<T> {
             probe,
         )
     }
+    /// Inserts `interval` and returns a cursor just after it.
+    ///
+    /// The gap moves to the interval's sorted position rather than staying where the receiver was,
+    /// since placement is decided by the endpoints. Duplicates are permitted.
     pub fn insert(&self, interval: Interval<T>) -> Self {
         let position = lower_bound_by_low(&self.tree.intervals, &interval.low);
         Self {
@@ -461,12 +550,14 @@ impl<T: Ord + Clone> IntervalTreeCursor<T> {
             position: position + 1,
         }
     }
+    /// Removes the interval before the gap and returns a cursor in its place, or `None` at the start.
     pub fn delete_previous(&self) -> Option<Self> {
         let position = self.position.checked_sub(1)?;
         self.tree
             .remove_at_index(position)
             .map(|(tree, _)| Self { tree, position })
     }
+    /// Removes the interval after the gap and returns a cursor in its place, or `None` at the end.
     pub fn delete_next(&self) -> Option<Self> {
         self.tree
             .remove_at_index(self.position)
@@ -475,6 +566,7 @@ impl<T: Ord + Clone> IntervalTreeCursor<T> {
                 position: self.position,
             })
     }
+    /// Borrows the tree version this cursor is positioned in.
     pub fn snapshot(&self) -> &IntervalTree<T> {
         &self.tree
     }

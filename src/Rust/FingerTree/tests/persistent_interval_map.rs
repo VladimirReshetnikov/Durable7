@@ -1,3 +1,10 @@
+//! Integration tests for the persistent interval-keyed map.
+//!
+//! Checks that interval keys are compared lexicographically by `(low, high)` and that overlap alone
+//! does not make two keys equal, that strict insertion and removal report [`IntervalMapError`]
+//! rather than overwriting or silently succeeding, and that stabbing and overlap queries return
+//! exactly the matching entries in key order.
+
 use durable7_fingertree::{
     Interval, IntervalMapEntry, IntervalMapError, PersistentIntervalMap,
 };

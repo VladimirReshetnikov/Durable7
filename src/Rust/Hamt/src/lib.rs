@@ -1,5 +1,30 @@
 #![forbid(unsafe_code)]
-#![doc = "Persistent HAMT map/set/bag/bimap/multimap/relation, Patricia, and canonical Merkle search-tree collections."]
+//! Persistent hash-trie collections, integer tries, and canonical Merkle search trees.
+//!
+//! Every collection here is persistent: an operation returns a new version and leaves the version
+//! it was derived from valid. Versions share their unchanged nodes, so an update copies one
+//! root-to-leaf path and cloning a collection is O(1).
+//!
+//! Three substrates, and the families composed from them:
+//!
+//! * **CHAMP hash tries** — [`PersistentHashMap`] and [`PersistentHashSet`], with 32-way
+//!   bitmap-indexed branching and immutable collision buckets. [`BulkBuilder`],
+//!   [`TransientHashMap`], and [`TransientHashSet`] build large collections without publishing
+//!   intermediate versions. Composed on top: [`PersistentHashBag`] (counted multiset),
+//!   [`PersistentBiMap`] (strict one-to-one), [`PersistentHashMultimap`] (set-valued),
+//!   [`PersistentRelation`] (many-to-many with both directions), [`PersistentDirectedGraph`],
+//!   [`PersistentIndexedMap`] (secondary index), and [`PersistentMapPatch`] (first-class diff).
+//!
+//! * **Patricia tries** — [`PersistentIntMap`], [`PersistentIntSet`], [`PersistentLongMap`], and
+//!   [`PersistentLongSet`] for fixed-width integer keys, bounded by key width rather than by entry
+//!   count and needing no hashing.
+//!
+//! * **Merkle search trees** — [`MerkleSearchTree`], a content-addressed ordered map whose shape
+//!   depends only on its contents, together with block storage, proofs, synchronization, and
+//!   three-way merge. Its bytes are identical across all nine language ports.
+//!
+//! Hash and equality behavior comes from a retained [`BuildHasher`], so a collection remembers the
+//! policy it was built with. The crate forbids `unsafe`.
 
 use std::collections::hash_map::RandomState;
 use std::fmt;
@@ -60,13 +85,18 @@ const BRANCH_FACTOR: usize = 32;
 /// Deepest shift at which a `Branch` node can appear (32-bit hash, 5 bits per level).
 const MAX_BRANCH_SHIFT: u32 = 30;
 
+/// A strict insertion was rejected because an equivalent key is already present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DuplicateKey;
 
+/// One entry-level difference between two maps, as reported by a diff.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MapDifference<K, V> {
+    /// The key is present only in the target map.
     Added { key: K, value: V },
+    /// The key is present only in the source map.
     Removed { key: K, value: V },
+    /// The key is present in both maps with different values.
     Changed { key: K, before: V, after: V },
 }
 
@@ -116,6 +146,20 @@ impl fmt::Display for DuplicateKey {
 
 impl std::error::Error for DuplicateKey {}
 
+/// A persistent hash map backed by a CHAMP trie.
+///
+/// Every operation returns a new map and leaves the receiver valid and unchanged; versions share
+/// their unchanged nodes, so an update copies one root-to-leaf path and cloning is O(1). Branching
+/// is 32-way and bitmap-indexed, and equal-hash keys are held in immutable collision buckets, so
+/// lookup, insertion, and removal are all O(1) expected.
+///
+/// Key equivalence comes from the retained hash policy `S`. A map also carries a *policy identity*
+/// shared only with the versions derived from it, which is what lets set algebra between two maps
+/// prune whole shared subtrees instead of comparing entry by entry. Maps built from separate
+/// constructor calls still combine correctly, just without that shortcut.
+///
+/// A no-op — writing a value equal to the stored one, removing an absent key — returns a map that
+/// shares the receiver's root, which [`Self::shares_root_with`] can confirm.
 pub struct PersistentHashMap<K, V, S = RandomState> {
     root: Option<Arc<Node<K, V>>>,
     len: usize,
@@ -267,6 +311,7 @@ struct RemoveResult<K, V> {
 }
 
 impl<K, V> PersistentHashMap<K, V, RandomState> {
+    /// Creates an empty map using a fresh default hash policy.
     #[must_use]
     pub fn new() -> Self {
         Self::with_hasher(RandomState::new())
@@ -274,6 +319,12 @@ impl<K, V> PersistentHashMap<K, V, RandomState> {
 }
 
 impl<K, V, S> PersistentHashMap<K, V, S> {
+    /// Creates an empty map under the supplied hash policy.
+    ///
+    /// The map is stamped with a fresh policy *identity*. Maps derived from this one share that
+    /// identity and so qualify for structural set algebra; a map built by a separate call to this
+    /// constructor does not, even with an equivalent hasher, because agreement between two
+    /// independently created policies cannot be proven.
     #[must_use]
     pub fn with_hasher(hasher: S) -> Self {
         Self {
@@ -284,21 +335,30 @@ impl<K, V, S> PersistentHashMap<K, V, S> {
         }
     }
 
+    /// Returns the number of entries. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Returns `true` when the map holds no entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    /// Borrows the retained hash policy that defines this map's key equivalence.
     #[must_use]
     pub fn hasher(&self) -> &S {
         &self.hasher
     }
 
+    /// Reports whether two maps are backed by the same trie root, so neither can observe an edit
+    /// made to the other.
+    ///
+    /// A representation test rather than an equality test: it answers "did these versions come from
+    /// the same node?" in O(1), and is how a no-op operation can be shown to have avoided copying.
+    /// Two maps holding equal entries but built independently return `false`.
     #[must_use]
     pub fn shares_root_with(&self, other: &Self) -> bool {
         match (&self.root, &other.root) {
@@ -312,6 +372,10 @@ impl<K, V, S> PersistentHashMap<K, V, S> {
         Arc::ptr_eq(&self.policy_identity, &other.policy_identity)
     }
 
+    /// Iterates the entries in canonical CHAMP order.
+    ///
+    /// The order depends only on the keys' hashes under this map's policy, so it is stable for a
+    /// given version but is not insertion order and should not be relied on across policies.
     #[must_use]
     pub fn iter(&self) -> Iter<'_, K, V> {
         let mut stack = Vec::new();
@@ -325,10 +389,12 @@ impl<K, V, S> PersistentHashMap<K, V, S> {
         }
     }
 
+    /// Iterates the keys, in the same order as [`Self::iter`].
     pub fn keys(&self) -> impl Iterator<Item = &K> {
         self.iter().map(|(key, _)| key)
     }
 
+    /// Iterates the values, in the same order as [`Self::iter`].
     pub fn values(&self) -> impl Iterator<Item = &V> {
         self.iter().map(|(_, value)| value)
     }
@@ -345,6 +411,9 @@ impl<K, V, S> PersistentHashMap<K, V, S> {
 }
 
 impl<K, V, S: Clone> PersistentHashMap<K, V, S> {
+    /// Returns an empty map retaining this map's hash policy and policy identity.
+    ///
+    /// Clearing an already empty map is a no-op that shares the receiver's representation.
     #[must_use]
     pub fn clear(&self) -> Self {
         if self.is_empty() {
@@ -376,16 +445,22 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
+    /// Reports whether `key`'s equivalence class is present. O(1) expected.
     #[must_use]
     pub fn contains_key(&self, key: &K) -> bool {
         self.get(key).is_some()
     }
 
+    /// Borrows the value stored for `key`, or `None` when absent. O(1) expected.
     #[must_use]
     pub fn get(&self, key: &K) -> Option<&V> {
         self.get_key_value(key).map(|(_, value)| value)
     }
 
+    /// Borrows both the stored key representative and its value, or `None` when absent.
+    ///
+    /// The stored key is the first representative inserted for its equivalence class, which need not
+    /// be the concrete value passed in; this is how a caller recovers it.
     #[must_use]
     pub fn get_key_value(&self, key: &K) -> Option<(&K, &V)> {
         let hash = self.hash_key(key);
@@ -464,18 +539,27 @@ where
         }
     }
 
+    /// Returns a map without `key`. Removing an absent key is a no-op that shares the receiver's
+    /// root.
     #[must_use]
     pub fn remove(&self, key: &K) -> Self {
         self.try_remove(key)
             .map_or_else(|| self.clone(), |(map, _)| map)
     }
 
+    /// Removes `key`, returning the resulting map and the removed value, or `None` when the key was
+    /// absent.
+    ///
+    /// `None` means "nothing was there", which stays unambiguous even when `V` is itself an
+    /// `Option`.
     #[must_use]
     pub fn try_remove(&self, key: &K) -> Option<(Self, V)> {
         self.try_remove_entry(key)
             .map(|(map, _, value)| (map, value))
     }
 
+    /// Removes `key`, returning the resulting map together with the stored key representative and
+    /// its value, or `None` when the key was absent.
     #[must_use]
     pub fn try_remove_entry(&self, key: &K) -> Option<(Self, K, V)> {
         let root = self.root.as_ref()?;
@@ -532,6 +616,11 @@ where
         )
     }
 
+    /// Adds `key`, or replaces its value when already present.
+    ///
+    /// Replacing keeps the *stored* key representative and adopts the new value. Writing a value
+    /// equal to the stored one is a no-op that shares the receiver's root. Use [`Self::add`] when an
+    /// existing key should be rejected instead of overwritten.
     #[must_use]
     pub fn insert(&self, key: K, value: V) -> Self {
         let hash = self.hash_key(&key);
@@ -554,11 +643,18 @@ where
         }
     }
 
+    /// Adds a new entry, failing with [`DuplicateKey`] when `key` is already present.
+    ///
+    /// The receiver is left untouched on failure.
     pub fn add(&self, key: K, value: V) -> Result<Self, DuplicateKey> {
         let (map, added) = self.try_add(key, value);
         if added { Ok(map) } else { Err(DuplicateKey) }
     }
 
+    /// Adds a new entry, reporting whether it was added instead of returning a `Result`.
+    ///
+    /// On a duplicate the receiver is returned unchanged and `false` is reported; no value is
+    /// overwritten.
     #[must_use]
     pub fn try_add(&self, key: K, value: V) -> (Self, bool) {
         let hash = self.hash_key(&key);
@@ -591,6 +687,10 @@ where
         }
     }
 
+    /// Applies [`Self::insert`] for each item in turn, so later items overwrite earlier ones.
+    ///
+    /// Only the final map is published; intermediate versions are not observable. For building a
+    /// large map from scratch, [`BulkBuilder`] avoids the per-item path copies entirely.
     #[must_use]
     pub fn set_items<I>(&self, items: I) -> Self
     where
@@ -610,16 +710,27 @@ where
         self.combine_map(other, ChampOperation::Union)
     }
 
+    /// Keeps only the entries whose keys occur in both maps, taking values from the receiver.
+    ///
+    /// Structural when both maps descend from the same policy identity: subtrees present in only one
+    /// operand are discarded without being visited. Otherwise falls back to an entry-by-entry
+    /// combination with the same result.
     #[must_use]
     pub fn intersect_map(&self, other: &Self) -> Self {
         self.combine_map(other, ChampOperation::Intersect)
     }
 
+    /// Removes every key that occurs in `other`, keeping the receiver's remaining entries.
+    ///
+    /// Structural under a shared policy identity, elementwise otherwise; see [`Self::intersect_map`].
     #[must_use]
     pub fn except_map(&self, other: &Self) -> Self {
         self.combine_map(other, ChampOperation::Except)
     }
 
+    /// Keeps the entries whose keys occur in exactly one of the two maps.
+    ///
+    /// Structural under a shared policy identity, elementwise otherwise; see [`Self::intersect_map`].
     #[must_use]
     pub fn symmetric_except_map(&self, other: &Self) -> Self {
         self.combine_map(other, ChampOperation::SymmetricExcept)
@@ -827,16 +938,19 @@ impl<K, V, S> TransientHashMap<K, V, S> {
         PersistentHashMap::with_hasher(hasher).into_transient()
     }
 
+    /// Returns the number of entries currently in the session. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
+    /// Returns `true` when the session holds no entries.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
 
+    /// Borrows the retained hash policy that defines key equivalence.
     #[must_use]
     pub fn hasher(&self) -> &S {
         self.map.hasher()
@@ -847,10 +961,12 @@ impl<K, V, S> TransientHashMap<K, V, S> {
         self.map.iter()
     }
 
+    /// Iterates the keys, in the same order as [`Self::iter`].
     pub fn keys(&self) -> impl Iterator<Item = &K> {
         self.map.keys()
     }
 
+    /// Iterates the values, in the same order as [`Self::iter`].
     pub fn values(&self) -> impl Iterator<Item = &V> {
         self.map.values()
     }
@@ -867,11 +983,13 @@ where
     K: Eq + Hash,
     S: BuildHasher,
 {
+    /// Reports whether `key` is present in the session's current state. O(1) expected.
     #[must_use]
     pub fn contains_key(&self, key: &K) -> bool {
         self.map.contains_key(key)
     }
 
+    /// Borrows the value stored for `key` in the session's current state, or `None` when absent.
     #[must_use]
     pub fn get(&self, key: &K) -> Option<&V> {
         self.map.get(key)
@@ -1000,6 +1118,7 @@ enum MutableNode<K, V> {
 }
 
 impl<K, V> BulkBuilder<K, V, RandomState> {
+    /// Creates an empty builder using a fresh default hash policy.
     #[must_use]
     pub fn new() -> Self {
         Self::with_hasher(RandomState::new())
@@ -1013,6 +1132,7 @@ impl<K, V, S: Default> Default for BulkBuilder<K, V, S> {
 }
 
 impl<K, V, S> BulkBuilder<K, V, S> {
+    /// Creates an empty builder under the supplied hash policy.
     #[must_use]
     pub fn with_hasher(hasher: S) -> Self {
         Self {
@@ -1023,16 +1143,19 @@ impl<K, V, S> BulkBuilder<K, V, S> {
         }
     }
 
+    /// Returns the number of entries accumulated so far. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Returns `true` when nothing has been accumulated yet.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    /// Borrows the retained hash policy that defines key equivalence.
     #[must_use]
     pub fn hasher(&self) -> &S {
         &self.hasher
@@ -1103,6 +1226,7 @@ where
     }
 }
 
+/// Borrowing iterator over a [`PersistentHashMap`]'s entries, in canonical CHAMP order.
 pub struct Iter<'a, K, V> {
     stack: Vec<IterFrame<'a, K, V>>,
     remaining: usize,
@@ -1189,6 +1313,15 @@ impl<K, V> ExactSizeIterator for Iter<'_, K, V> {}
 
 impl<K, V> FusedIterator for Iter<'_, K, V> {}
 
+/// A persistent hash set backed by the same CHAMP trie as [`PersistentHashMap`].
+///
+/// Every operation returns a new set and leaves the receiver valid and unchanged, sharing all
+/// unchanged nodes. Membership, insertion, and removal are O(1) expected.
+///
+/// The set retains the *first* representative of each equivalence class: re-adding an equivalent
+/// element is a no-op that keeps the value already stored, which [`Self::get`] can recover.
+/// Set algebra judges membership under the receiver's hash policy, and prunes shared subtrees
+/// structurally when both operands descend from the same policy identity.
 pub struct PersistentHashSet<T, S = RandomState> {
     map: PersistentHashMap<T, (), S>,
 }
@@ -1202,6 +1335,7 @@ impl<T, S: Clone> Clone for PersistentHashSet<T, S> {
 }
 
 impl<T> PersistentHashSet<T, RandomState> {
+    /// Creates an empty set using a fresh default hash policy.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -1211,6 +1345,11 @@ impl<T> PersistentHashSet<T, RandomState> {
 }
 
 impl<T, S> PersistentHashSet<T, S> {
+    /// Creates an empty set under the supplied hash policy.
+    ///
+    /// As with [`PersistentHashMap::with_hasher`], the set is stamped with a fresh policy identity
+    /// that only its derived versions share; that identity is what qualifies a pair of sets for
+    /// structural set algebra.
     #[must_use]
     pub fn with_hasher(hasher: S) -> Self {
         Self {
@@ -1218,26 +1357,34 @@ impl<T, S> PersistentHashSet<T, S> {
         }
     }
 
+    /// Returns the number of distinct elements. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
+    /// Returns `true` when the set holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
 
+    /// Borrows the retained hash policy that defines this set's equivalence classes.
     #[must_use]
     pub fn hasher(&self) -> &S {
         self.map.hasher()
     }
 
+    /// Reports whether two sets are backed by the same trie root, so neither can observe an edit made
+    /// to the other. A representation test, not an equality test; see
+    /// [`PersistentHashMap::shares_root_with`].
     #[must_use]
     pub fn shares_root_with(&self, other: &Self) -> bool {
         self.map.shares_root_with(&other.map)
     }
 
+    /// Iterates the elements in canonical CHAMP order: stable for a given version, determined by the
+    /// elements' hashes rather than by insertion order.
     #[must_use]
     pub fn iter(&self) -> SetIter<'_, T> {
         SetIter {
@@ -1255,6 +1402,8 @@ impl<T, S> PersistentHashSet<T, S> {
 }
 
 impl<T, S: Clone> PersistentHashSet<T, S> {
+    /// Returns an empty set retaining this set's hash policy and policy identity. Clearing an already
+    /// empty set is a no-op that shares the receiver's representation.
     #[must_use]
     pub fn clear(&self) -> Self {
         Self {
@@ -1276,11 +1425,16 @@ where
     T: Eq + Hash,
     S: BuildHasher,
 {
+    /// Reports whether `value`'s equivalence class is present. O(1) expected.
     #[must_use]
     pub fn contains(&self, value: &T) -> bool {
         self.map.contains_key(value)
     }
 
+    /// Borrows the stored representative equivalent to `value`, or `None` when absent.
+    ///
+    /// The stored representative is the first one inserted for its class, which need not be the
+    /// concrete value passed in.
     #[must_use]
     pub fn get(&self, value: &T) -> Option<&T> {
         self.map.get_key_value(value).map(|(key, _)| key)
@@ -1320,6 +1474,8 @@ where
         Self::bulk_from_items(self.map.hasher().clone(), items)
     }
 
+    /// Returns a set containing `value`. Inserting an already present class is a no-op that retains
+    /// the existing representative and shares the receiver's root.
     #[must_use]
     pub fn insert(&self, value: T) -> Self {
         Self {
@@ -1327,16 +1483,21 @@ where
         }
     }
 
+    /// Adds `value`, failing with [`DuplicateKey`] when its class is already present. The receiver is
+    /// left untouched on failure.
     pub fn add(&self, value: T) -> Result<Self, DuplicateKey> {
         self.map.add(value, ()).map(|map| Self { map })
     }
 
+    /// Adds `value`, reporting whether it was added instead of returning a `Result`.
     #[must_use]
     pub fn try_add(&self, value: T) -> (Self, bool) {
         let (map, added) = self.map.try_add(value, ());
         (Self { map }, added)
     }
 
+    /// Returns a set without `value`'s class. Removing an absent element is a no-op that shares the
+    /// receiver's root.
     #[must_use]
     pub fn remove(&self, value: &T) -> Self {
         Self {
@@ -1344,12 +1505,18 @@ where
         }
     }
 
+    /// Removes `value`'s class, returning the resulting set and the stored representative that was
+    /// removed, or `None` when absent.
     #[must_use]
     pub fn try_remove(&self, value: &T) -> Option<(Self, T)> {
         let (map, actual, ()) = self.map.try_remove_entry(value)?;
         Some((Self { map }, actual))
     }
 
+    /// Returns a set holding every element of this set and of `other`.
+    ///
+    /// Elements already present retain the receiver's stored representative. `other` may be any
+    /// iterable, so it need not be a set; duplicates in it collapse.
     #[must_use]
     pub fn union<I>(&self, other: I) -> Self
     where
@@ -1363,6 +1530,11 @@ where
         result
     }
 
+    /// Returns the elements this set and `other` have in common, keeping the receiver's stored
+    /// representatives.
+    ///
+    /// `other` is first deduplicated under *this* set's hash policy, so membership is judged the way
+    /// the receiver defines it rather than however the argument was built.
     #[must_use]
     pub fn intersect<I>(&self, other: I) -> Self
     where
@@ -1375,6 +1547,7 @@ where
         )
     }
 
+    /// Returns this set's elements that do not occur in `other`, judged under this set's hash policy.
     #[must_use]
     pub fn except<I>(&self, other: I) -> Self
     where
@@ -1388,6 +1561,8 @@ where
         result
     }
 
+    /// Returns the elements occurring in exactly one of this set and `other`, judged under this set's
+    /// hash policy.
     #[must_use]
     pub fn symmetric_except<I>(&self, other: I) -> Self
     where
@@ -1414,6 +1589,8 @@ where
         }
     }
 
+    /// [`Self::intersect`] against another set, which can prune shared subtrees structurally when both
+    /// sets descend from the same policy identity.
     #[must_use]
     pub fn intersect_set(&self, other: &Self) -> Self {
         Self {
@@ -1421,6 +1598,7 @@ where
         }
     }
 
+    /// [`Self::except`] against another set, structural under a shared policy identity.
     #[must_use]
     pub fn except_set(&self, other: &Self) -> Self {
         Self {
@@ -1428,6 +1606,7 @@ where
         }
     }
 
+    /// [`Self::symmetric_except`] against another set, structural under a shared policy identity.
     #[must_use]
     pub fn symmetric_except_set(&self, other: &Self) -> Self {
         Self {
@@ -1435,6 +1614,7 @@ where
         }
     }
 
+    /// Reports whether every element of this set occurs in `other`.
     #[must_use]
     pub fn is_subset_of_set(&self, other: &Self) -> bool {
         if Arc::ptr_eq(&self.map.policy_identity, &other.map.policy_identity) {
@@ -1448,21 +1628,27 @@ where
         }
     }
 
+    /// Reports whether every element of `other` occurs in this set.
     #[must_use]
     pub fn is_superset_of_set(&self, other: &Self) -> bool {
         other.is_subset_of_set(self)
     }
 
+    /// Reports whether this set is a subset of `other` and `other` holds at least one element this
+    /// set lacks.
     #[must_use]
     pub fn is_proper_subset_of_set(&self, other: &Self) -> bool {
         self.len() < other.len() && self.is_subset_of_set(other)
     }
 
+    /// Reports whether this set is a superset of `other` and holds at least one element `other`
+    /// lacks.
     #[must_use]
     pub fn is_proper_superset_of_set(&self, other: &Self) -> bool {
         self.len() > other.len() && other.is_subset_of_set(self)
     }
 
+    /// Reports whether the two sets share at least one element.
     #[must_use]
     pub fn overlaps_set(&self, other: &Self) -> bool {
         if Arc::ptr_eq(&self.map.policy_identity, &other.map.policy_identity) {
@@ -1472,11 +1658,16 @@ where
         }
     }
 
+    /// Reports whether the two sets hold the same elements.
     #[must_use]
     pub fn set_equals_set(&self, other: &Self) -> bool {
         self == other
     }
 
+    /// Reports whether every element of this set occurs in `other`.
+    ///
+    /// `other` is deduplicated under this set's hash policy first, so an iterable with repeats is
+    /// treated as the set of its distinct elements.
     #[must_use]
     pub fn is_subset_of<I>(&self, other: I) -> bool
     where
@@ -1486,6 +1677,7 @@ where
         self.iter().all(|value| probe.contains(value))
     }
 
+    /// Reports whether every distinct element of `other` occurs in this set.
     #[must_use]
     pub fn is_superset_of<I>(&self, other: I) -> bool
     where
@@ -1494,6 +1686,8 @@ where
         other.into_iter().all(|value| self.contains(&value))
     }
 
+    /// Reports whether this set is a subset of `other`'s distinct elements and lacks at least one of
+    /// them.
     #[must_use]
     pub fn is_proper_subset_of<I>(&self, other: I) -> bool
     where
@@ -1503,6 +1697,8 @@ where
         self.len() < probe.len() && self.iter().all(|value| probe.contains(value))
     }
 
+    /// Reports whether this set is a superset of `other`'s distinct elements and holds at least one
+    /// they lack.
     #[must_use]
     pub fn is_proper_superset_of<I>(&self, other: I) -> bool
     where
@@ -1512,6 +1708,7 @@ where
         self.len() > probe.len() && probe.iter().all(|value| self.contains(value))
     }
 
+    /// Reports whether this set shares at least one element with `other`.
     #[must_use]
     pub fn overlaps<I>(&self, other: I) -> bool
     where
@@ -1520,6 +1717,7 @@ where
         other.into_iter().any(|value| self.contains(&value))
     }
 
+    /// Reports whether this set holds exactly `other`'s distinct elements.
     #[must_use]
     pub fn set_equals<I>(&self, other: I) -> bool
     where
@@ -1562,16 +1760,19 @@ impl<T, S> TransientHashSet<T, S> {
         }
     }
 
+    /// Returns the number of elements currently in the session. O(1).
     #[must_use]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
+    /// Returns `true` when the session holds no elements.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
 
+    /// Borrows the retained hash policy that defines element equivalence.
     #[must_use]
     pub fn hasher(&self) -> &S {
         self.map.hasher()
@@ -1598,6 +1799,7 @@ where
     T: Eq + Hash,
     S: BuildHasher,
 {
+    /// Reports whether `value` is present in the session's current state. O(1) expected.
     #[must_use]
     pub fn contains(&self, value: &T) -> bool {
         self.map.contains_key(value)
@@ -1764,6 +1966,7 @@ where
 {
 }
 
+/// Borrowing iterator over a [`PersistentHashSet`]'s elements, in canonical CHAMP order.
 pub struct SetIter<'a, T> {
     inner: Iter<'a, T, ()>,
 }

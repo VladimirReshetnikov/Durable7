@@ -1,3 +1,9 @@
+//! Tests for the persistent insertion-ordered multimap.
+//!
+//! Covers ordering at both levels - keys in the order they first acquired a value, values in the
+//! order they were first added to their key - first-representative retention in both domains, and
+//! duplicate pairs behaving as root-sharing no-ops that disturb neither ordering.
+
 use std::sync::Arc;
 
 use durable7_ordered::PersistentOrderedMultimap;
