@@ -658,6 +658,36 @@ Separate enumerators are independent and safe for concurrent reads. Do not copy 
 enumerator to fork a traversal: copies share traversal state, and the stale copy fails fast after
 the other advances.
 
+## Contextual Rank Sequence (Experimental)
+
+Use `ContextualRankSequence<TElement, TMachine>` when an event's weight depends on finite state to
+its left. A two-state quoted-delimiter machine, for example, can rank and select only commas outside
+quotes after persistent edits:
+
+```csharp
+readonly struct QuotedComma : IContextualEventMachine<char>
+{
+    public static int StateCount => 2;
+    public static ContextualEventTransition Transition(int state, char value) => value switch
+    {
+        '"' => new(1 - state, 0),
+        ',' when state == 0 => new(state, 1),
+        _ => new(state, 0)
+    };
+}
+
+var text = ContextualRankSequence<char, QuotedComma>
+    .Create("\"a,b\",c,d".AsSpan());
+long separators = text.Evaluate(0).EventCount; // 2
+text.TrySelectEvent(0, 0, out var first);       // first.ElementIndex == 5
+var branch = text.Insert(0, '"');               // text remains valid
+```
+
+For a fixed `s`-state machine, evaluation is O(1), while prefix rank, event select, and arbitrary
+edits are O(s log n) amortized. The `s` factor and O(s n) cached storage are explicit when machine
+size is not constant. See the
+[research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md).
+
 ## Persistent Chunked Bit Set
 
 Use `PersistentChunkedBitSet` for a sparse nonnegative integer set when population rank/select and
@@ -694,6 +724,7 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
 | Persistent indexed sequence with logarithmic range actions and aggregate queries | `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` |
+| Persistent rank/select for events depending on finite left context | `ContextualRankSequence<TElement, TMachine>` (experimental) |
 | Sparse nonnegative integer set with population rank/select | `PersistentChunkedBitSet` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | Policy-scoped canonical sorted shape and memoized digest | `CanonicalSortedSet<T>` |

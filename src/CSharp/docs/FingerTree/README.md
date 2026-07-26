@@ -26,6 +26,9 @@ project.
   and Release. At the pre-bimap Range shipment checkpoint, the full serialized C# solution passed
   1,417/1,417 tests with zero build warnings or errors in both configurations. Benchmarks remain
   postponed until they can run in isolation.
+- [Contextual Rank Sequence research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md)
+  specifies the experimental persistent finite-context event rank/select lift, its transducer
+  monoid, exact asymptotic comparison, novelty boundary, and C# validation evidence.
 - [Validation](validation.md) records the local .NET restore/build/test commands, XML-documentation gate,
   sample and benchmark validation boundaries, stress controls, and test-suite coverage.
 - [Tests README](../../tests/Durable7.FingerTree.Tests/README.md) maps the xUnit/CsCheck test project,
