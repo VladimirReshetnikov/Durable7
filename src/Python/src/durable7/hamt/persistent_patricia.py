@@ -52,6 +52,8 @@ class _PatriciaBranch(_PatriciaNode[K, V]):
     count: int = field(init=False)
 
     def __post_init__(self) -> None:
+        """Cache the subtree's entry count from its two children."""
+
         object.__setattr__(self, "count", self.left.count + self.right.count)
 
 
@@ -182,11 +184,15 @@ class _PatriciaCore(Generic[K, V]):
         size: int,
         encode: Callable[[K], int],
     ) -> None:
+        """Wrap an already-built trie root; the public families construct these."""
+
         self._root = root
         self.size = size
         self._encode = encode
 
     def get(self, key: K) -> V | None:
+        """The value stored for ``key``, or ``None`` when absent."""
+
         path = self._encode(key)
         if self._root is None:
             return None
@@ -194,10 +200,16 @@ class _PatriciaCore(Generic[K, V]):
         return None if leaf is None else leaf.value
 
     def contains_key(self, key: K) -> bool:
+        """Whether ``key`` is present."""
+
         path = self._encode(key)
         return self._root is not None and _find_leaf(self._root, path) is not None
 
     def entry_at(self, index: int) -> tuple[K, V] | None:
+        """The entry at ordinal ``index`` in ascending key order, or ``None`` when out of range.
+        Descends by cached subtree counts rather than walking the entries.
+        """
+
         if index < 0 or index >= self.size or self._root is None:
             return None
         current = self._root
@@ -212,6 +224,11 @@ class _PatriciaCore(Generic[K, V]):
         return current.key, current.value
 
     def lower_bound_rank(self, key: K) -> tuple[int, bool]:
+        """The rank where ``key`` belongs, and whether it is actually present. Branch prefixes let
+        whole subtrees be skipped, so the descent is bounded by the key width rather than by the
+        entry count.
+        """
+
         path = self._encode(key)
         current = self._root
         rank = 0
@@ -229,12 +246,18 @@ class _PatriciaCore(Generic[K, V]):
         return (rank + 1, False) if current.path < path else (rank, current.path == path)
 
     def put(self, key: K, value: V) -> _PatriciaCore[K, V]:
+        """Return a trie with ``key`` mapped to ``value``; a write that changes nothing returns the
+        receiver.
+        """
+
         change = _put_node(self._root, self._encode(key), key, value)
         if not change.changed:
             return self
         return _PatriciaCore(change.node, self.size + int(change.added), self._encode)
 
     def remove(self, key: K) -> _PatriciaCore[K, V]:
+        """Return a trie without ``key``; a no-op when the key is absent."""
+
         change = _remove_node(self._root, self._encode(key))
         return (
             self if not change.changed else _PatriciaCore(change.node, self.size - 1, self._encode)
@@ -245,6 +268,10 @@ class _PatriciaCore(Generic[K, V]):
         other: _PatriciaCore[K, V],
         combine: Callable[[K, V, V], V] | None = None,
     ) -> _PatriciaCore[K, V]:
+        """Merge ``other`` into this trie, resolving shared keys with ``combine``. Without
+        ``combine``, ``other``'s value wins.
+        """
+
         result = self
         for key, right in other:
             found = None if result._root is None else _find_leaf(result._root, result._encode(key))
@@ -261,6 +288,10 @@ class _PatriciaCore(Generic[K, V]):
         other: _PatriciaCore[K, V],
         combine: Callable[[K, V, V], V] | None = None,
     ) -> _PatriciaCore[K, V]:
+        """Keep only the keys present in both, resolving values with ``combine``. Without
+        ``combine``, this trie's value is kept.
+        """
+
         result = _PatriciaCore[K, V](None, 0, self._encode)
         for key, left in self:
             right = None if other._root is None else _find_leaf(other._root, other._encode(key))
@@ -271,12 +302,16 @@ class _PatriciaCore(Generic[K, V]):
         return self if result.content_equals(self) else result
 
     def except_(self, other: _PatriciaCore[K, W]) -> _PatriciaCore[K, V]:
+        """Remove every key that occurs in ``other``."""
+
         result = self
         for key, _value in other:
             result = result.remove(key)
         return result
 
     def content_equals(self, other: _PatriciaCore[K, V]) -> bool:
+        """Whether both tries hold the same entries."""
+
         if self is other:
             return True
         if self.size != other.size:
@@ -288,9 +323,15 @@ class _PatriciaCore(Generic[K, V]):
         return True
 
     def shares_root_with(self, other: _PatriciaCore[K, V]) -> bool:
+        """Whether both tries reference the same root, so neither can observe an edit made to the
+        other. A representation test, not an equality test.
+        """
+
         return self._root is other._root
 
     def __iter__(self) -> Iterator[tuple[K, V]]:
+        """Iterate the entries in ascending unsigned key order."""
+
         return iter(()) if self._root is None else _iterate(self._root)
 
 
@@ -312,14 +353,20 @@ class PersistentIntMap(Generic[V]):
     __slots__ = ("_core",)
 
     def __init__(self, core: _PatriciaCore[int, V]) -> None:
+        """Wrap an already-built core; use :meth:`empty` or the ``from_`` factory."""
+
         self._core = core
 
     @classmethod
     def empty(cls) -> PersistentIntMap[V]:
+        """Return the empty map."""
+
         return cls(_PatriciaCore(None, 0, _encode_int32))
 
     @classmethod
     def from_items(cls, items: Iterable[tuple[int, V]]) -> PersistentIntMap[V]:
+        """Build a map from pairs; a repeated key keeps the last value."""
+
         result = cls.empty()
         for key, value in items:
             result = result.put(key, value)
@@ -327,19 +374,29 @@ class PersistentIntMap(Generic[V]):
 
     @property
     def size(self) -> int:
+        """Number of entries."""
+
         return self._core.size
 
     @property
     def is_empty(self) -> bool:
+        """Whether the map holds no entries."""
+
         return self.size == 0
 
     def __len__(self) -> int:
+        """Number of entries, matching :attr:`size`."""
+
         return self.size
 
     def get(self, key: int) -> V | None:
+        """The value stored for ``key``, or ``None`` when absent."""
+
         return self._core.get(key)
 
     def contains_key(self, key: int) -> bool:
+        """Whether ``key`` is present."""
+
         return self._core.contains_key(key)
 
     def cursor(self, position: int = 0) -> PersistentIntMapCursor[V]:
@@ -366,12 +423,20 @@ class PersistentIntMap(Generic[V]):
         return PatriciaCursorSearch(PersistentIntMapCursor(self, rank), found)
 
     def put(self, key: int, value: V) -> PersistentIntMap[V]:
+        """Return a map with ``key`` mapped to ``value``, adding or replacing as needed. Only the
+        path from the root to the affected branch is copied.
+        """
+
         return self._with_core(self._core.put(key, value))
 
     def remove(self, key: int) -> PersistentIntMap[V]:
+        """Return a map without that key; a no-op when it is absent."""
+
         return self._with_core(self._core.remove(key))
 
     def clear(self) -> PersistentIntMap[V]:
+        """Return the empty map; a no-op when already empty."""
+
         return self if self.is_empty else PersistentIntMap.empty()
 
     def union(
@@ -379,6 +444,10 @@ class PersistentIntMap(Generic[V]):
         other: PersistentIntMap[V],
         combine: Callable[[int, V, V], V] | None = None,
     ) -> PersistentIntMap[V]:
+        """Return the entries of both maps. Subtrees the operands already share are adopted whole
+        rather than re-entered.
+        """
+
         return self._with_core(self._core.union(other._core, combine))
 
     def intersect(
@@ -386,15 +455,27 @@ class PersistentIntMap(Generic[V]):
         other: PersistentIntMap[V],
         combine: Callable[[int, V, V], V] | None = None,
     ) -> PersistentIntMap[V]:
+        """Return the entries present in both maps."""
+
         return self._with_core(self._core.intersect(other._core, combine))
 
     def except_(self, other: PersistentIntMap[W]) -> PersistentIntMap[V]:
+        """Return this map's entries that are absent from ``other``. Named with a trailing
+        underscore because ``except`` is a Python keyword.
+        """
+
         return self._with_core(self._core.except_(other._core))
 
     def shares_root_with(self, other: PersistentIntMap[V]) -> bool:
+        """Whether both maps reference the same trie root. A representation test, not an equality
+        test.
+        """
+
         return self._core.shares_root_with(other._core)
 
     def __iter__(self) -> Iterator[tuple[int, V]]:
+        """Iterate the entries in ascending key order."""
+
         return iter(self._core)
 
     def _entry_at(self, index: int) -> PatriciaMapEntry[int, V] | None:
@@ -414,14 +495,20 @@ class PersistentLongMap(Generic[V]):
     __slots__ = ("_core",)
 
     def __init__(self, core: _PatriciaCore[int, V]) -> None:
+        """Wrap an already-built core; use :meth:`empty` or the ``from_`` factory."""
+
         self._core = core
 
     @classmethod
     def empty(cls) -> PersistentLongMap[V]:
+        """Return the empty map."""
+
         return cls(_PatriciaCore(None, 0, _encode_int64))
 
     @classmethod
     def from_items(cls, items: Iterable[tuple[int, V]]) -> PersistentLongMap[V]:
+        """Build a map from pairs; a repeated key keeps the last value."""
+
         result = cls.empty()
         for key, value in items:
             result = result.put(key, value)
@@ -429,19 +516,29 @@ class PersistentLongMap(Generic[V]):
 
     @property
     def size(self) -> int:
+        """Number of entries."""
+
         return self._core.size
 
     @property
     def is_empty(self) -> bool:
+        """Whether the map holds no entries."""
+
         return self.size == 0
 
     def __len__(self) -> int:
+        """Number of entries, matching :attr:`size`."""
+
         return self.size
 
     def get(self, key: int) -> V | None:
+        """The value stored for ``key``, or ``None`` when absent."""
+
         return self._core.get(key)
 
     def contains_key(self, key: int) -> bool:
+        """Whether ``key`` is present."""
+
         return self._core.contains_key(key)
 
     def cursor(self, position: int = 0) -> PersistentLongMapCursor[V]:
@@ -468,12 +565,20 @@ class PersistentLongMap(Generic[V]):
         return PatriciaCursorSearch(PersistentLongMapCursor(self, rank), found)
 
     def put(self, key: int, value: V) -> PersistentLongMap[V]:
+        """Return a map with ``key`` mapped to ``value``, adding or replacing as needed. Only the
+        path from the root to the affected branch is copied.
+        """
+
         return self._with_core(self._core.put(key, value))
 
     def remove(self, key: int) -> PersistentLongMap[V]:
+        """Return a map without that key; a no-op when it is absent."""
+
         return self._with_core(self._core.remove(key))
 
     def clear(self) -> PersistentLongMap[V]:
+        """Return the empty map; a no-op when already empty."""
+
         return self if self.is_empty else PersistentLongMap.empty()
 
     def union(
@@ -481,6 +586,10 @@ class PersistentLongMap(Generic[V]):
         other: PersistentLongMap[V],
         combine: Callable[[int, V, V], V] | None = None,
     ) -> PersistentLongMap[V]:
+        """Return the entries of both maps. Subtrees the operands already share are adopted whole
+        rather than re-entered.
+        """
+
         return self._with_core(self._core.union(other._core, combine))
 
     def intersect(
@@ -488,15 +597,27 @@ class PersistentLongMap(Generic[V]):
         other: PersistentLongMap[V],
         combine: Callable[[int, V, V], V] | None = None,
     ) -> PersistentLongMap[V]:
+        """Return the entries present in both maps."""
+
         return self._with_core(self._core.intersect(other._core, combine))
 
     def except_(self, other: PersistentLongMap[W]) -> PersistentLongMap[V]:
+        """Return this map's entries that are absent from ``other``. Named with a trailing
+        underscore because ``except`` is a Python keyword.
+        """
+
         return self._with_core(self._core.except_(other._core))
 
     def shares_root_with(self, other: PersistentLongMap[V]) -> bool:
+        """Whether both maps reference the same trie root. A representation test, not an equality
+        test.
+        """
+
         return self._core.shares_root_with(other._core)
 
     def __iter__(self) -> Iterator[tuple[int, V]]:
+        """Iterate the entries in ascending key order."""
+
         return iter(self._core)
 
     def _entry_at(self, index: int) -> PatriciaMapEntry[int, V] | None:
@@ -518,37 +639,57 @@ class PersistentIntMapCursor(Generic[V]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         _validate_cursor_position(self.position, self.map.size)
 
     @property
     def count(self) -> int:
+        """Number of entries in the map version this cursor is positioned in."""
+
         return self.map.size
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first entry."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last entry."""
+
         return self.position == self.count
 
     def peek_previous(self) -> PatriciaMapEntry[int, V] | None:
+        """The entry immediately before the gap, or ``None`` at the start."""
+
         return None if self.is_at_start else self.map._entry_at(self.position - 1)
 
     def peek_next(self) -> PatriciaMapEntry[int, V] | None:
+        """The entry immediately after the gap, or ``None`` at the end."""
+
         return self.map._entry_at(self.position)
 
     def move_previous(self) -> PersistentIntMapCursor[V]:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return PersistentIntMapCursor(self.map, self.position - 1)
 
     def move_next(self) -> PersistentIntMapCursor[V]:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return PersistentIntMapCursor(self.map, self.position + 1)
 
     def seek(self, position: int) -> PersistentIntMapCursor[V]:
+        """A cursor at ``position`` within the same map version, raising when out of range."""
+
         return self if position == self.position else PersistentIntMapCursor(self.map, position)
 
     def insert(self, key: int, value: V) -> PersistentIntMapCursor[V]:
@@ -569,6 +710,10 @@ class PersistentIntMapCursor(Generic[V]):
         return PersistentIntMapCursor(edited, self.position if found else self.position + 1)
 
     def set_next_value(self, value: V) -> PersistentIntMapCursor[V]:
+        """Replace the value of the entry after the gap, keeping its key and position. Raises
+        :class:`IndexError` at the end.
+        """
+
         next_entry = self.peek_next()
         if next_entry is None:
             raise IndexError("No entry follows the cursor gap.")
@@ -576,18 +721,25 @@ class PersistentIntMapCursor(Generic[V]):
         return self if edited is self.map else PersistentIntMapCursor(edited, self.position)
 
     def delete_previous(self) -> PersistentIntMapCursor[V]:
+        """Remove the entry before the gap and return a cursor in its place, raising at the start.
+        """
+
         previous = self.peek_previous()
         if previous is None:
             raise IndexError("No entry precedes the cursor gap.")
         return PersistentIntMapCursor(self.map.remove(previous.key), self.position - 1)
 
     def delete_next(self) -> PersistentIntMapCursor[V]:
+        """Remove the entry after the gap and return a cursor in its place, raising at the end."""
+
         next_entry = self.peek_next()
         if next_entry is None:
             raise IndexError("No entry follows the cursor gap.")
         return PersistentIntMapCursor(self.map.remove(next_entry.key), self.position)
 
     def snapshot(self) -> PersistentIntMap[V]:
+        """The map version this cursor is positioned in."""
+
         return self.map
 
     def _ensure_current_gap(self, rank: int, key: int) -> None:
@@ -605,40 +757,65 @@ class PersistentLongMapCursor(Generic[V]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         _validate_cursor_position(self.position, self.map.size)
 
     @property
     def count(self) -> int:
+        """Number of entries in the map version this cursor is positioned in."""
+
         return self.map.size
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first entry."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last entry."""
+
         return self.position == self.count
 
     def peek_previous(self) -> PatriciaMapEntry[int, V] | None:
+        """The entry immediately before the gap, or ``None`` at the start."""
+
         return None if self.is_at_start else self.map._entry_at(self.position - 1)
 
     def peek_next(self) -> PatriciaMapEntry[int, V] | None:
+        """The entry immediately after the gap, or ``None`` at the end."""
+
         return self.map._entry_at(self.position)
 
     def move_previous(self) -> PersistentLongMapCursor[V]:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return PersistentLongMapCursor(self.map, self.position - 1)
 
     def move_next(self) -> PersistentLongMapCursor[V]:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return PersistentLongMapCursor(self.map, self.position + 1)
 
     def seek(self, position: int) -> PersistentLongMapCursor[V]:
+        """A cursor at ``position`` within the same map version, raising when out of range."""
+
         return self if position == self.position else PersistentLongMapCursor(self.map, position)
 
     def insert(self, key: int, value: V) -> PersistentLongMapCursor[V]:
+        """Strictly insert a new entry at the gap and return the gap after it. Raises
+        :class:`KeyError` when the key is already present, and rejects a key that does not belong
+        at this gap rather than silently relocating the cursor.
+        """
+
         rank, found = self.map._lower_bound_rank(key)
         if found:
             raise KeyError(f"The key {key!r} is already present.")
@@ -646,6 +823,10 @@ class PersistentLongMapCursor(Generic[V]):
         return PersistentLongMapCursor(self.map.put(key, value), self.position + 1)
 
     def put(self, key: int, value: V) -> PersistentLongMapCursor[V]:
+        """Update the entry at the gap, or insert one there when the key is absent. Rejects a key
+        that does not belong at this gap.
+        """
+
         rank, found = self.map._lower_bound_rank(key)
         self._ensure_current_gap(rank, key)
         edited = self.map.put(key, value)
@@ -654,6 +835,10 @@ class PersistentLongMapCursor(Generic[V]):
         return PersistentLongMapCursor(edited, self.position if found else self.position + 1)
 
     def set_next_value(self, value: V) -> PersistentLongMapCursor[V]:
+        """Replace the value of the entry after the gap, keeping its key and position. Raises
+        :class:`IndexError` at the end.
+        """
+
         next_entry = self.peek_next()
         if next_entry is None:
             raise IndexError("No entry follows the cursor gap.")
@@ -661,18 +846,25 @@ class PersistentLongMapCursor(Generic[V]):
         return self if edited is self.map else PersistentLongMapCursor(edited, self.position)
 
     def delete_previous(self) -> PersistentLongMapCursor[V]:
+        """Remove the entry before the gap and return a cursor in its place, raising at the start.
+        """
+
         previous = self.peek_previous()
         if previous is None:
             raise IndexError("No entry precedes the cursor gap.")
         return PersistentLongMapCursor(self.map.remove(previous.key), self.position - 1)
 
     def delete_next(self) -> PersistentLongMapCursor[V]:
+        """Remove the entry after the gap and return a cursor in its place, raising at the end."""
+
         next_entry = self.peek_next()
         if next_entry is None:
             raise IndexError("No entry follows the cursor gap.")
         return PersistentLongMapCursor(self.map.remove(next_entry.key), self.position)
 
     def snapshot(self) -> PersistentLongMap[V]:
+        """The map version this cursor is positioned in."""
+
         return self.map
 
     def _ensure_current_gap(self, rank: int, key: int) -> None:
@@ -688,14 +880,20 @@ class PersistentIntSet:
     __slots__ = ("_map",)
 
     def __init__(self, map_value: PersistentIntMap[bool]) -> None:
+        """Wrap an already-built core; use :meth:`empty` or the ``from_`` factory."""
+
         self._map = map_value
 
     @classmethod
     def empty(cls) -> PersistentIntSet:
+        """Return the empty set."""
+
         return cls(PersistentIntMap.empty())
 
     @classmethod
     def from_values(cls, values: Iterable[int]) -> PersistentIntSet:
+        """Build a set from values, ignoring repeats."""
+
         result = cls.empty()
         for value in values:
             result = result.add(value)
@@ -703,52 +901,88 @@ class PersistentIntSet:
 
     @property
     def size(self) -> int:
+        """Number of elements."""
+
         return self._map.size
 
     @property
     def is_empty(self) -> bool:
+        """Whether the set holds no elements."""
+
         return self._map.is_empty
 
     def __len__(self) -> int:
+        """Number of elements, matching :attr:`size`."""
+
         return self.size
 
     def contains(self, value: int) -> bool:
+        """Whether ``value`` is present."""
+
         return self._map.contains_key(value)
 
     def cursor(self, position: int = 0) -> PersistentIntSetCursor:
+        """A cursor at gap ``position`` of the ascending element sequence."""
+
         return PersistentIntSetCursor(self, position)
 
     def cursor_at_end(self) -> PersistentIntSetCursor:
+        """A cursor after the last element."""
+
         return PersistentIntSetCursor(self, self.size)
 
     def lower_bound_cursor(self, value: int) -> PersistentIntSetCursor:
+        """A cursor before the first key not less than ``key``."""
+
         rank, _found = self._map._lower_bound_rank(value)
         return PersistentIntSetCursor(self, rank)
 
     def upper_bound_cursor(self, value: int) -> PersistentIntSetCursor:
+        """A cursor before the first key greater than ``key``."""
+
         rank, found = self._map._lower_bound_rank(value)
         return PersistentIntSetCursor(self, rank + int(found))
 
     def cursor_at_item(self, value: int) -> PatriciaCursorSearch[PersistentIntSetCursor]:
+        """A usable lower-bound cursor together with an exact-match discriminator. On a miss the
+        cursor still sits at the insertion point.
+        """
+
         rank, found = self._map._lower_bound_rank(value)
         return PatriciaCursorSearch(PersistentIntSetCursor(self, rank), found)
 
     def add(self, value: int) -> PersistentIntSet:
+        """Return a set containing ``value``; a no-op when it is already present."""
+
         return self._with_map(self._map.put(value, True))
 
     def remove(self, value: int) -> PersistentIntSet:
+        """Return a set without that key; a no-op when it is absent."""
+
         return self._with_map(self._map.remove(value))
 
     def union(self, other: PersistentIntSet) -> PersistentIntSet:
+        """Return the elements of both sets. Subtrees the operands already share are adopted whole
+        rather than re-entered.
+        """
+
         return self._with_map(self._map.union(other._map))
 
     def intersect(self, other: PersistentIntSet) -> PersistentIntSet:
+        """Return the elements present in both sets."""
+
         return self._with_map(self._map.intersect(other._map))
 
     def except_(self, other: PersistentIntSet) -> PersistentIntSet:
+        """Return this set's elements that are absent from ``other``. Named with a trailing
+        underscore because ``except`` is a Python keyword.
+        """
+
         return self._with_map(self._map.except_(other._map))
 
     def __iter__(self) -> Iterator[int]:
+        """Iterate the elements in ascending key order."""
+
         return (key for key, _value in self._map)
 
     def _item_at(self, index: int) -> int | None:
@@ -768,14 +1002,20 @@ class PersistentLongSet:
     __slots__ = ("_map",)
 
     def __init__(self, map_value: PersistentLongMap[bool]) -> None:
+        """Wrap an already-built core; use :meth:`empty` or the ``from_`` factory."""
+
         self._map = map_value
 
     @classmethod
     def empty(cls) -> PersistentLongSet:
+        """Return the empty set."""
+
         return cls(PersistentLongMap.empty())
 
     @classmethod
     def from_values(cls, values: Iterable[int]) -> PersistentLongSet:
+        """Build a set from values, ignoring repeats."""
+
         result = cls.empty()
         for value in values:
             result = result.add(value)
@@ -783,52 +1023,88 @@ class PersistentLongSet:
 
     @property
     def size(self) -> int:
+        """Number of elements."""
+
         return self._map.size
 
     @property
     def is_empty(self) -> bool:
+        """Whether the set holds no elements."""
+
         return self._map.is_empty
 
     def __len__(self) -> int:
+        """Number of elements, matching :attr:`size`."""
+
         return self.size
 
     def contains(self, value: int) -> bool:
+        """Whether ``value`` is present."""
+
         return self._map.contains_key(value)
 
     def cursor(self, position: int = 0) -> PersistentLongSetCursor:
+        """A cursor at gap ``position`` of the ascending element sequence."""
+
         return PersistentLongSetCursor(self, position)
 
     def cursor_at_end(self) -> PersistentLongSetCursor:
+        """A cursor after the last element."""
+
         return PersistentLongSetCursor(self, self.size)
 
     def lower_bound_cursor(self, value: int) -> PersistentLongSetCursor:
+        """A cursor before the first key not less than ``key``."""
+
         rank, _found = self._map._lower_bound_rank(value)
         return PersistentLongSetCursor(self, rank)
 
     def upper_bound_cursor(self, value: int) -> PersistentLongSetCursor:
+        """A cursor before the first key greater than ``key``."""
+
         rank, found = self._map._lower_bound_rank(value)
         return PersistentLongSetCursor(self, rank + int(found))
 
     def cursor_at_item(self, value: int) -> PatriciaCursorSearch[PersistentLongSetCursor]:
+        """A usable lower-bound cursor together with an exact-match discriminator. On a miss the
+        cursor still sits at the insertion point.
+        """
+
         rank, found = self._map._lower_bound_rank(value)
         return PatriciaCursorSearch(PersistentLongSetCursor(self, rank), found)
 
     def add(self, value: int) -> PersistentLongSet:
+        """Return a set containing ``value``; a no-op when it is already present."""
+
         return self._with_map(self._map.put(value, True))
 
     def remove(self, value: int) -> PersistentLongSet:
+        """Return a set without that key; a no-op when it is absent."""
+
         return self._with_map(self._map.remove(value))
 
     def union(self, other: PersistentLongSet) -> PersistentLongSet:
+        """Return the elements of both sets. Subtrees the operands already share are adopted whole
+        rather than re-entered.
+        """
+
         return self._with_map(self._map.union(other._map))
 
     def intersect(self, other: PersistentLongSet) -> PersistentLongSet:
+        """Return the elements present in both sets."""
+
         return self._with_map(self._map.intersect(other._map))
 
     def except_(self, other: PersistentLongSet) -> PersistentLongSet:
+        """Return this set's elements that are absent from ``other``. Named with a trailing
+        underscore because ``except`` is a Python keyword.
+        """
+
         return self._with_map(self._map.except_(other._map))
 
     def __iter__(self) -> Iterator[int]:
+        """Iterate the elements in ascending key order."""
+
         return (key for key, _value in self._map)
 
     def _item_at(self, index: int) -> int | None:
@@ -850,57 +1126,88 @@ class PersistentIntSetCursor:
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         _validate_cursor_position(self.position, self.set.size)
 
     @property
     def count(self) -> int:
+        """Number of elements in the set version this cursor is positioned in."""
+
         return self.set.size
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first element."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last element."""
+
         return self.position == self.count
 
     def peek_previous(self) -> int | None:
+        """The element immediately before the gap, or ``None`` at the start."""
+
         return None if self.is_at_start else self.set._item_at(self.position - 1)
 
     def peek_next(self) -> int | None:
+        """The element immediately after the gap, or ``None`` at the end."""
+
         return self.set._item_at(self.position)
 
     def move_previous(self) -> PersistentIntSetCursor:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return PersistentIntSetCursor(self.set, self.position - 1)
 
     def move_next(self) -> PersistentIntSetCursor:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return PersistentIntSetCursor(self.set, self.position + 1)
 
     def seek(self, position: int) -> PersistentIntSetCursor:
+        """A cursor at ``position`` within the same set version, raising when out of range."""
+
         return self if position == self.position else PersistentIntSetCursor(self.set, position)
 
     def add(self, value: int) -> PersistentIntSetCursor:
+        """Insert ``value`` and return a cursor just after it. The gap moves to the value's
+        ascending position, since placement is decided by the key ordering.
+        """
+
         rank, found = self.set._lower_bound_rank(value)
         self._ensure_current_gap(rank, value)
         return self if found else PersistentIntSetCursor(self.set.add(value), self.position + 1)
 
     def delete_previous(self) -> PersistentIntSetCursor:
+        """Remove the element before the gap and return a cursor in its place, raising at the start.
+        """
+
         previous = self.peek_previous()
         if previous is None:
             raise IndexError("No item precedes the cursor gap.")
         return PersistentIntSetCursor(self.set.remove(previous), self.position - 1)
 
     def delete_next(self) -> PersistentIntSetCursor:
+        """Remove the element after the gap and return a cursor in its place, raising at the end."""
+
         next_item = self.peek_next()
         if next_item is None:
             raise IndexError("No item follows the cursor gap.")
         return PersistentIntSetCursor(self.set.remove(next_item), self.position)
 
     def snapshot(self) -> PersistentIntSet:
+        """The set version this cursor is positioned in."""
+
         return self.set
 
     def _ensure_current_gap(self, rank: int, value: int) -> None:
@@ -918,57 +1225,88 @@ class PersistentLongSetCursor:
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         _validate_cursor_position(self.position, self.set.size)
 
     @property
     def count(self) -> int:
+        """Number of elements in the set version this cursor is positioned in."""
+
         return self.set.size
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first element."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last element."""
+
         return self.position == self.count
 
     def peek_previous(self) -> int | None:
+        """The element immediately before the gap, or ``None`` at the start."""
+
         return None if self.is_at_start else self.set._item_at(self.position - 1)
 
     def peek_next(self) -> int | None:
+        """The element immediately after the gap, or ``None`` at the end."""
+
         return self.set._item_at(self.position)
 
     def move_previous(self) -> PersistentLongSetCursor:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return PersistentLongSetCursor(self.set, self.position - 1)
 
     def move_next(self) -> PersistentLongSetCursor:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return PersistentLongSetCursor(self.set, self.position + 1)
 
     def seek(self, position: int) -> PersistentLongSetCursor:
+        """A cursor at ``position`` within the same set version, raising when out of range."""
+
         return self if position == self.position else PersistentLongSetCursor(self.set, position)
 
     def add(self, value: int) -> PersistentLongSetCursor:
+        """Insert ``value`` and return a cursor just after it. The gap moves to the value's
+        ascending position, since placement is decided by the key ordering.
+        """
+
         rank, found = self.set._lower_bound_rank(value)
         self._ensure_current_gap(rank, value)
         return self if found else PersistentLongSetCursor(self.set.add(value), self.position + 1)
 
     def delete_previous(self) -> PersistentLongSetCursor:
+        """Remove the element before the gap and return a cursor in its place, raising at the start.
+        """
+
         previous = self.peek_previous()
         if previous is None:
             raise IndexError("No item precedes the cursor gap.")
         return PersistentLongSetCursor(self.set.remove(previous), self.position - 1)
 
     def delete_next(self) -> PersistentLongSetCursor:
+        """Remove the element after the gap and return a cursor in its place, raising at the end."""
+
         next_item = self.peek_next()
         if next_item is None:
             raise IndexError("No item follows the cursor gap.")
         return PersistentLongSetCursor(self.set.remove(next_item), self.position)
 
     def snapshot(self) -> PersistentLongSet:
+        """The set version this cursor is positioned in."""
+
         return self.set
 
     def _ensure_current_gap(self, rank: int, value: int) -> None:

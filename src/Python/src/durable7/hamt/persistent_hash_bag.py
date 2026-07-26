@@ -50,11 +50,19 @@ class PersistentHashBag(Generic[T]):
     __slots__ = ("_counts", "_total_count")
 
     def __init__(self, counts: PersistentHashMap[T, int], total_count: int) -> None:
+        """Wrap an already-built count map; use :meth:`empty` or :meth:`from_values` instead.
+
+        The caller is responsible for ``total_count`` matching ``counts`` and for every stored count
+        being positive.
+        """
+
         self._counts = counts
         self._total_count = total_count
 
     @classmethod
     def empty(cls, policy: HashPolicy[T] | None = None) -> PersistentHashBag[T]:
+        """Return an empty bag retaining the exact policy object."""
+
         effective_policy = default_hash_policy() if policy is None else policy
         if effective_policy is default_hash_policy():
             global _DEFAULT_EMPTY_BAG
@@ -74,6 +82,11 @@ class PersistentHashBag(Generic[T]):
         values: Iterable[T],
         policy: HashPolicy[T] | None = None,
     ) -> PersistentHashBag[T]:
+        """Build a bag from values, collapsing equivalent ones into counted classes.
+
+        The first occurrence of each class becomes its stored representative.
+        """
+
         builder = PersistentHashMap[T, int].create_bulk_builder(policy)
         total_count = 0
         for value in values:
@@ -85,45 +98,81 @@ class PersistentHashBag(Generic[T]):
 
     @property
     def distinct_count(self) -> int:
+        """Number of distinct equivalence classes, ignoring multiplicities."""
+
         return self._counts.size
 
     @property
     def total_count(self) -> int:
+        """Total number of occurrences, summed across classes.
+
+        Widened beyond the per-class 32-bit count domain so that summing in-range classes cannot
+        overflow.
+        """
+
         return self._total_count
 
     @property
     def is_empty(self) -> bool:
+        """Whether the bag holds no occurrences."""
+
         return self._counts.is_empty
 
     @property
     def policy(self) -> HashPolicy[T]:
+        """The retained hash policy defining equivalence classes."""
+
         return self._counts.policy
 
     def __bool__(self) -> bool:
+        """Whether the bag holds at least one occurrence."""
+
         return not self.is_empty
 
     def contains(self, value: T) -> bool:
+        """Whether ``value``'s class occurs at least once."""
+
         return self._counts.contains_key(value)
 
     def __contains__(self, value: object) -> bool:
+        """Whether ``value``'s class occurs at least once, for the ``in`` operator."""
+
         return self.contains(cast("T", value))
 
     def count_of(self, value: T) -> int:
+        """Multiplicity of ``value``'s class, or zero when absent."""
+
         entry = self._counts.get_entry(value)
         return 0 if entry is None else entry.value
 
     def get(self, equal_value: T) -> T | None:
+        """Return the stored representative equivalent to ``equal_value``, or ``None`` when absent.
+
+        The stored representative is the first one added for its class, which need not be the value
+        passed in.
+        """
+
         entry = self._counts.get_entry(equal_value)
         return None if entry is None else entry.key
 
     def get_entry(self, equal_value: T) -> HashBagEntry[T] | None:
+        """Return the stored representative together with its count, or ``None`` when absent."""
+
         entry = self._counts.get_entry(equal_value)
         return None if entry is None else HashBagEntry(entry.key, entry.value)
 
     def add(self, value: T) -> PersistentHashBag[T]:
+        """Return a bag with one more occurrence of ``value``."""
+
         return self.add_copies(value, 1)
 
     def add_copies(self, value: T, count: int) -> PersistentHashBag[T]:
+        """Return a bag with ``count`` more occurrences of ``value``.
+
+        Adding zero copies is a receiver-returning no-op. A negative count, or a class that would
+        exceed the 32-bit per-class maximum, raises rather than wrapping.
+        """
+
         _validate_copy_count(count)
         if count == 0:
             return self
@@ -135,9 +184,17 @@ class PersistentHashBag(Generic[T]):
         return self._with_counts(update.map, self._total_count + count)
 
     def remove(self, value: T) -> PersistentHashBag[T]:
+        """Return a bag with one fewer occurrence of ``value``; a no-op when absent."""
+
         return self.remove_copies(value, 1)
 
     def remove_copies(self, value: T, count: int) -> PersistentHashBag[T]:
+        """Return a bag with ``count`` fewer occurrences of ``value``.
+
+        Removing at least the current multiplicity drops the class entirely rather than storing a
+        zero count. Removing zero copies, or removing from an absent class, returns the receiver.
+        """
+
         _validate_copy_count(count)
         if count == 0:
             return self
@@ -155,15 +212,26 @@ class PersistentHashBag(Generic[T]):
         )
 
     def remove_all(self, value: T) -> PersistentHashBag[T]:
+        """Return a bag without ``value``'s class, whatever its multiplicity; a no-op when absent.
+        """
+
         removed = self._counts.try_remove_entry(value)
         if removed is None:
             return self
         return self._with_counts(removed.map, self._total_count - removed.entry.value)
 
     def clear(self) -> PersistentHashBag[T]:
+        """Return an empty bag retaining this bag's policy."""
+
         return self._with_counts(self._counts.clear(), 0)
 
     def union(self, other: PersistentHashBag[T]) -> PersistentHashBag[T]:
+        """Return the multiset union: each class keeps the larger of the two multiplicities.
+
+        The argument is normalized to this bag's policy first, so membership is judged the way the
+        receiver defines it, and the receiver's stored representatives survive.
+        """
+
         normalized = self._normalize_argument(other)
         if normalized is self:
             return self
@@ -175,6 +243,11 @@ class PersistentHashBag(Generic[T]):
         return result
 
     def intersect(self, other: PersistentHashBag[T]) -> PersistentHashBag[T]:
+        """Return the multiset intersection: each class keeps the smaller of the two multiplicities.
+
+        Judged under the receiver's policy, as for :meth:`union`.
+        """
+
         normalized = self._normalize_argument(other)
         if normalized is self:
             return self
@@ -188,6 +261,12 @@ class PersistentHashBag(Generic[T]):
         return result
 
     def except_(self, other: PersistentHashBag[T]) -> PersistentHashBag[T]:
+        """Return this bag with the argument's multiplicities subtracted, floored at zero.
+
+        Named with a trailing underscore because ``except`` is a Python keyword. Judged under the
+        receiver's policy, as for :meth:`union`.
+        """
+
         normalized = self._normalize_argument(other)
         if normalized is self:
             return self.clear()
@@ -197,6 +276,11 @@ class PersistentHashBag(Generic[T]):
         return result
 
     def sum(self, other: PersistentHashBag[T]) -> PersistentHashBag[T]:
+        """Return the multiset sum: multiplicities are added rather than maximized.
+
+        This is the operation that differs from :meth:`union`, which takes the maximum.
+        """
+
         normalized = self._normalize_argument(other)
         result = self
         for entry in normalized.entries():
@@ -204,13 +288,22 @@ class PersistentHashBag(Generic[T]):
         return result
 
     def distinct_items(self) -> Iterator[T]:
+        """Iterate the stored representatives once each, ignoring multiplicities."""
+
         return self._counts.keys()
 
     def entries(self) -> Iterator[HashBagEntry[T]]:
+        """Iterate each stored representative together with its multiplicity."""
+
         for entry in self._counts:
             yield HashBagEntry(entry.key, entry.value)
 
     def to_list(self) -> list[T]:
+        """Return every occurrence as a list, repeating each representative by its count.
+
+        Raises :class:`OverflowError` when the expanded total exceeds what a Python list can hold.
+        """
+
         if self._total_count > sys.maxsize:
             raise OverflowError("The expanded bag does not fit in a Python list.")
         return list(self)
@@ -241,6 +334,9 @@ class PersistentHashBag(Generic[T]):
         return PersistentHashBag(counts, total_count)
 
     def __iter__(self) -> Iterator[T]:
+        """Iterate occurrences expanded, yielding each representative ``count`` times contiguously.
+        """
+
         for entry in self._counts:
             for _ in range(entry.value):
                 yield entry.key

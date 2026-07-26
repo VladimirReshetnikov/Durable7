@@ -26,6 +26,8 @@ V = TypeVar("V")
 
 
 class MerkleProofKind(StrEnum):
+    """Which claim a proof makes about the tree it was drawn from."""
+
     MEMBERSHIP = "membership"
     NONMEMBERSHIP = "nonmembership"
     RANGE = "range"
@@ -33,6 +35,8 @@ class MerkleProofKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MerkleMembershipQuery(Generic[K, V]):
+    """A claim that ``key`` maps to ``value``."""
+
     key: K
     value: V
     kind: MerkleProofKind = MerkleProofKind.MEMBERSHIP
@@ -40,12 +44,20 @@ class MerkleMembershipQuery(Generic[K, V]):
 
 @dataclass(frozen=True, slots=True)
 class MerkleNonmembershipQuery(Generic[K]):
+    """A claim that ``key`` is absent.
+
+    Proving absence is why the proof carries the separators bracketing where the key would sit,
+    rather than just a path to an entry.
+    """
+
     key: K
     kind: MerkleProofKind = MerkleProofKind.NONMEMBERSHIP
 
 
 @dataclass(frozen=True, slots=True)
 class MerkleRangeQuery(Generic[K]):
+    """A claim about exactly which entries lie in the inclusive key range ``[minimum, maximum]``."""
+
     minimum: K
     maximum: K
     kind: MerkleProofKind = MerkleProofKind.RANGE
@@ -58,10 +70,22 @@ MerkleProofQuery: TypeAlias = (
 
 @dataclass(frozen=True, slots=True, init=False)
 class MerkleProofStep:
+    """One block on the proof path, plus which of its children the proof also expands.
+
+    The unexpanded children are represented only by their digests, which is what keeps a proof
+    proportional to the path rather than to the tree.
+    """
+
     block: MerkleBlock
     expanded_child_indexes: tuple[int, ...]
 
     def __init__(self, block: MerkleBlock, expanded_child_indexes: Iterable[int]) -> None:
+        """Build a step, rejecting child indexes that are not sorted, unique, and nonnegative.
+
+        Verification walks the indexes in order, so an unsorted or repeated list could otherwise let
+        a crafted proof pair a block with the wrong child.
+        """
+
         indexes = tuple(expanded_child_indexes)
         if any(
             isinstance(value, bool)
@@ -77,6 +101,12 @@ class MerkleProofStep:
 
 @dataclass(frozen=True, slots=True, init=False)
 class MerkleProof(Generic[K, V]):
+    """A self-contained ``MSP2`` proof, verifiable against a trusted root digest alone.
+
+    Carries the algorithm and domain identifiers so a proof cannot be checked against a tree built
+    under a different policy, the claimed root, the encoded query, and the block path.
+    """
+
     algorithm_id: str
     domain_digest: MerkleDigest
     root_hash: MerkleDigest
@@ -93,6 +123,10 @@ class MerkleProof(Generic[K, V]):
         query_bytes: bytes | bytearray | memoryview,
         steps: Iterable[MerkleProofStep],
     ) -> None:
+        """Capture the envelope fields, copying the query bytes and step sequence so the proof is
+        immutable once built.
+        """
+
         object.__setattr__(self, "algorithm_id", algorithm_id)
         object.__setattr__(self, "domain_digest", domain_digest)
         object.__setattr__(self, "root_hash", root_hash)
@@ -102,10 +136,18 @@ class MerkleProof(Generic[K, V]):
 
     @property
     def kind(self) -> MerkleProofKind:
+        """Which claim this proof makes, taken from its query."""
+
         return self.query.kind
 
 
 class MerkleProofFailure(StrEnum):
+    """Why verification rejected a proof, or ``NONE`` when it accepted.
+
+    Distinguishing the causes lets a caller tell a malformed or over-budget proof from one that
+    is well formed but proves the wrong thing.
+    """
+
     NONE = "none"
     INVALID_ENVELOPE = "invalid-envelope"
     BUDGET_EXCEEDED = "budget-exceeded"
@@ -117,6 +159,11 @@ class MerkleProofFailure(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MerkleProofVerificationResult(Generic[K, V]):
+    """The outcome of verifying a proof, including what it cost. ``entries`` holds the entries the
+    proof establishes, and the accounted block and byte counts report the work charged against
+    the verification budget.
+    """
+
     valid: bool
     failure: MerkleProofFailure
     computed_root_hash: MerkleDigest
@@ -188,6 +235,8 @@ def _create_proof(tree: MerkleSearchTree[K, V], query: MerkleProofQuery[K, V]) -
     steps: list[MerkleProofStep] = []
 
     def walk(node: _Node[K, V] | None) -> None:
+        """Emit ``node``'s block, then recurse into only the children the query needs."""
+
         if node is None:
             return
         digests = tuple(
@@ -210,6 +259,12 @@ def _create_proof(tree: MerkleSearchTree[K, V], query: MerkleProofQuery[K, V]) -
 
 
 def create_merkle_proof(tree: MerkleSearchTree[K, V], key: K) -> MerkleProof[K, V]:
+    """Build a proof about ``key`` in ``tree``.
+
+    Produces a membership proof when the key is present and a nonmembership proof otherwise, so
+    the caller need not know which in advance.
+    """
+
     entry = tree.get_entry(key)
     query: MerkleProofQuery[K, V]
     if entry is None:
@@ -222,6 +277,11 @@ def create_merkle_proof(tree: MerkleSearchTree[K, V], key: K) -> MerkleProof[K, 
 def create_merkle_range_proof(
     tree: MerkleSearchTree[K, V], minimum: K, maximum: K
 ) -> MerkleProof[K, V]:
+    """Build a proof of exactly which entries lie in the inclusive range ``[minimum, maximum]``.
+
+    Raises :class:`ValueError` on an inverted range.
+    """
+
     if tree.policy.comparer(minimum, maximum) > 0:
         raise ValueError("minimum key exceeds maximum key")
     return _create_proof(tree, MerkleRangeQuery(minimum, maximum))
@@ -236,9 +296,19 @@ def verify_merkle_proof(
     policy: MerkleSearchTreePolicy[K, V],
     budget: MerkleVerificationBudget | None = None,
 ) -> MerkleProofVerificationResult[K, V]:
+    """Check a proof against ``policy``, re-deriving the root digest from the proof's own blocks.
+
+    A verifier needs only the trusted root digest, not the tree. Every block's digest is recomputed
+    from its bytes, so a corrupted or substituted block is rejected rather than trusted, and the
+    work is charged against ``budget`` so untrusted input cannot force unbounded verification.
+    Returns a result rather than raising; inspect its failure code for the reason.
+    """
+
     context = _VerificationContext(budget or MerkleVerificationBudget())
 
     def fail(failure: MerkleProofFailure) -> MerkleProofVerificationResult[K, V]:
+        """Build a rejecting result that still reports the work charged so far."""
+
         return MerkleProofVerificationResult(
             False,
             failure,
@@ -320,6 +390,8 @@ def verify_merkle_proof(
         has_maximum: bool,
         parent_level: int,
     ) -> None:
+        """Verify one proof step and descend into its expanded children, re-deriving digests."""
+
         nonlocal found
         key = str(digest)
         step = steps.get(key)
@@ -410,20 +482,31 @@ def verify_merkle_proof(
 
 @dataclass(frozen=True, slots=True)
 class MerkleMergeValue(Generic[V]):
+    """A key's state in one side of a merge: absent, or present holding a value.
+
+    The explicit presence flag is what keeps a stored ``None`` distinguishable from absence.
+    """
+
     present: bool
     value: V | None = None
 
     @classmethod
     def absent(cls) -> MerkleMergeValue[V]:
+        """The state meaning the key is not in this tree."""
+
         return cls(False)
 
     @classmethod
     def of(cls, value: V) -> MerkleMergeValue[V]:
+        """The state meaning the key holds ``value``, even when that value is ``None``."""
+
         return cls(True, value)
 
 
 @dataclass(frozen=True, slots=True)
 class MerkleThreeWayMergeConflict(Generic[K, V]):
+    """One key the two sides changed incompatibly, with all three states for the caller to judge."""
+
     key: K
     base: MerkleMergeValue[V]
     left: MerkleMergeValue[V]
@@ -431,6 +514,8 @@ class MerkleThreeWayMergeConflict(Generic[K, V]):
 
 
 class MerkleMergeResolutionKind(StrEnum):
+    """How a caller chose to settle a conflict."""
+
     UNRESOLVED = "unresolved"
     BASE = "base"
     LEFT = "left"
@@ -441,36 +526,54 @@ class MerkleMergeResolutionKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class MerkleMergeResolution(Generic[V]):
+    """A caller's decision about one conflict, produced by the merge resolver."""
+
     kind: MerkleMergeResolutionKind
     value: V | None = None
 
     @classmethod
     def unresolved(cls) -> MerkleMergeResolution[V]:
+        """Decline to settle this conflict, which makes the whole merge fail and report it."""
+
         return cls(MerkleMergeResolutionKind.UNRESOLVED)
 
     @classmethod
     def base(cls) -> MerkleMergeResolution[V]:
+        """Keep the common ancestor's state for this key."""
+
         return cls(MerkleMergeResolutionKind.BASE)
 
     @classmethod
     def left(cls) -> MerkleMergeResolution[V]:
+        """Keep the left side's state for this key."""
+
         return cls(MerkleMergeResolutionKind.LEFT)
 
     @classmethod
     def right(cls) -> MerkleMergeResolution[V]:
+        """Keep the right side's state for this key."""
+
         return cls(MerkleMergeResolutionKind.RIGHT)
 
     @classmethod
     def delete(cls) -> MerkleMergeResolution[V]:
+        """Leave this key out of the merged tree entirely."""
+
         return cls(MerkleMergeResolutionKind.DELETE)
 
     @classmethod
     def use_value(cls, value: V) -> MerkleMergeResolution[V]:
+        """Store ``value`` for this key, which need not come from any of the three sides."""
+
         return cls(MerkleMergeResolutionKind.VALUE, value)
 
 
 @dataclass(frozen=True, slots=True)
 class MerkleThreeWayMergeResult(Generic[K, V]):
+    """The outcome of a three-way merge. ``tree`` is present only when every conflict was settled;
+    otherwise ``conflicts`` lists the keys that blocked it.
+    """
+
     succeeded: bool
     tree: MerkleSearchTree[K, V] | None
     conflicts: tuple[MerkleThreeWayMergeConflict[K, V], ...]
@@ -501,6 +604,15 @@ def merge_merkle_trees(
     resolver: Callable[[MerkleThreeWayMergeConflict[K, V]], MerkleMergeResolution[V]] | None = None,
     values_equal: Callable[[V, V], bool] = lambda left, right: bool(left == right),
 ) -> MerkleThreeWayMergeResult[K, V]:
+    """Merge two descendants of a common ``base`` tree, consulting ``resolver`` on conflicts.
+
+    A key changed on only one side takes that side's state without consulting the resolver; a key
+    changed on both sides to states that ``values_equal`` treats as equal is likewise not a
+    conflict. Everything else is reported to ``resolver``, and an unresolved conflict fails the
+    whole merge rather than producing a partly merged tree. Identical roots short-circuit.
+    All three trees must share a policy domain.
+    """
+
     if not base.policy.is_compatible_with(
         cast("MerkleSearchTreePolicy[object, object]", left.policy)
     ) or not base.policy.is_compatible_with(

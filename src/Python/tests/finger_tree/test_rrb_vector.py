@@ -1,3 +1,10 @@
+"""Tests for the persistent relaxed radix-balanced vector.
+
+Covers sequences that straddle the regular and relaxed radix boundaries, builder snapshots being
+cached, isolated, and versioned, point and range edits alongside the Python sequence protocol,
+and agreement with a list reference model under randomized edits and concatenations.
+"""
+
 from __future__ import annotations
 
 import pytest

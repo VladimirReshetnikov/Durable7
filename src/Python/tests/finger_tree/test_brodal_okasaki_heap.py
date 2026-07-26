@@ -1,3 +1,10 @@
+"""Tests for the persistent Brodal-Okasaki meldable heap.
+
+Covers draining adversarial insertion orders in sorted order, comparator identity governing
+which heaps may meld, unambiguous empty and minimum views, bounded and failure-atomic callback
+behavior, and agreement with a sorted reference model under randomized multisets and melds.
+"""
+
 from __future__ import annotations
 
 import pytest
@@ -63,6 +70,10 @@ def test_brodal_empty_and_minimum_views_are_unambiguous() -> None:
 
 def test_brodal_insert_meld_callbacks_are_bounded_and_failure_atomic() -> None:
     class Comparator:
+        """A counting comparator that can be armed to raise, so the test can bound callback counts
+        and check failure atomicity.
+        """
+
         def __init__(self) -> None:
             self.calls = 0
             self.fail = False

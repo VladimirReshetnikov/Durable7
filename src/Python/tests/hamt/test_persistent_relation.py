@@ -1,3 +1,10 @@
+"""Tests for the persistent many-to-many relation.
+
+Covers adjacency in both directions, one global representative per equivalence class, the cached
+constant-time involutive inverse, symmetric pair removal that preserves the source, removal of
+complete left and right groups, and identity preservation for duplicate and missing edits.
+"""
+
 from dataclasses import dataclass
 
 from durable7.hamt import (
@@ -9,6 +16,10 @@ from durable7.hamt import (
 
 @dataclass(frozen=True)
 class Box:
+    """A value wrapper with controlled equality, so the test can check which representative is
+    retained.
+    """
+
     identifier: int
     name: str
 

@@ -1,3 +1,11 @@
+"""Tests for the persistent insertion-ordered multimap.
+
+Covers grouped ordering at both levels, survival of first representatives in both domains,
+receiver identity for duplicates and removal misses, group contraction when a key loses its
+final value together with re-adding appending a fresh group, whole-group removal, policy-bound
+empty lookup, and nested invariants across retained branches.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +19,10 @@ from durable7 import (
 
 @dataclass(frozen=True)
 class Box:
+    """A value wrapper with controlled equality, so the test can check which representative is
+    retained.
+    """
+
     identifier: int
     name: str
 

@@ -1,3 +1,11 @@
+"""Tests for the persistent set-valued hash multimap.
+
+Covers first-representative retention in both domains, contraction when a key loses its final
+pair, whole-key removal, identity and root preservation for duplicate and missing edits,
+independent key and value policies with retained branches, and count validation together with
+presence-safe lookup that distinguishes an absent key from an empty group.
+"""
+
 from dataclasses import dataclass
 
 from durable7.hamt import (
@@ -9,6 +17,10 @@ from durable7.hamt import (
 
 @dataclass(frozen=True)
 class Box:
+    """A value wrapper with controlled equality, so the test can check which representative is
+    retained.
+    """
+
     identifier: int
     name: str
 

@@ -30,6 +30,10 @@ class _BitSetMeasure:
     identity = _BitSetSummary(0, 0, OptionalValue.none())
 
     def combine(self, left: _BitSetSummary, right: _BitSetSummary) -> _BitSetSummary:
+        """Add two subtree summaries: chunk counts and population counts sum, and the rightmost word
+        index wins.
+        """
+
         return _BitSetSummary(
             left.chunk_count + right.chunk_count,
             left.pop_count + right.pop_count,
@@ -37,6 +41,8 @@ class _BitSetMeasure:
         )
 
     def measure(self, element: _BitSetChunk) -> _BitSetSummary:
+        """Summarize a single chunk: one word, its population count, and its index."""
+
         return _BitSetSummary(1, element.bits.bit_count(), OptionalValue.some(element.word_index))
 
 
@@ -62,11 +68,21 @@ class ChunkedBitSetStatistics:
 
 @dataclass(frozen=True, slots=True)
 class ChunkedBitSetCursorPeek:
+    """A set bit found next to a cursor gap.
+
+    Wrapping the index keeps "there is a bit here, index 0" distinct from "nothing here".
+    """
+
     value: int
 
 
 @dataclass(frozen=True, slots=True)
 class ChunkedBitSetCursorSearch:
+    """The outcome of seeking a cursor to a bit index.
+
+    On a miss the cursor still sits before the next set bit, so it remains usable.
+    """
+
     found: bool
     cursor: PersistentChunkedBitSetCursor
 
@@ -81,14 +97,22 @@ class PersistentChunkedBitSet:
     __slots__ = ("_chunks",)
 
     def __init__(self, chunks: MeasuredSequence[_BitSetChunk, _BitSetSummary]) -> None:
+        """Wrap an already-built chunk sequence; use :meth:`empty` or :meth:`from_values` instead.
+        """
+
         self._chunks = chunks
 
     @classmethod
     def empty(cls) -> PersistentChunkedBitSet:
+        """Return the empty bit set."""
+
         return _EMPTY_BIT_SET
 
     @classmethod
     def from_values(cls, bit_indexes: Iterable[int]) -> PersistentChunkedBitSet:
+        """Build a bit set with every listed index set, sorting and deduplicating them in one pass.
+        """
+
         if bit_indexes is None:
             raise TypeError("bit_indexes must be iterable.")
         words: dict[int, int] = {}
@@ -103,23 +127,42 @@ class PersistentChunkedBitSet:
 
     @property
     def count(self) -> int:
+        """Number of set bits, read from the cached population count rather than recounted."""
+
         return self._chunks.measure.pop_count
 
     @property
     def chunk_count(self) -> int:
+        """Number of stored words, that is, how many 64-bit blocks contain at least one set bit.
+
+        A measure of representation size rather than of contents.
+        """
+
         return self._chunks.measure.chunk_count
 
     @property
     def is_empty(self) -> bool:
+        """Whether no bit is set."""
+
         return self._chunks.is_empty
 
     def __len__(self) -> int:
+        """Number of set bits, matching :attr:`count`."""
+
         return self.count
 
     def __bool__(self) -> bool:
+        """Whether at least one bit is set."""
+
         return not self.is_empty
 
     def contains(self, bit_index: int) -> bool:
+        """Whether ``bit_index`` is set.
+
+        An index outside the nonnegative signed-32-bit domain is simply absent rather than an error,
+        so membership tests never raise.
+        """
+
         if type(bit_index) is not int or bit_index < 0 or bit_index > _MAXIMUM_BIT_INDEX:
             return False
         word_index = bit_index >> 6
@@ -132,9 +175,17 @@ class PersistentChunkedBitSet:
         )
 
     def __contains__(self, bit_index: object) -> bool:
+        """Whether ``bit_index`` is set, for the ``in`` operator."""
+
         return self.contains(bit_index) if type(bit_index) is int else False
 
     def add(self, bit_index: int) -> PersistentChunkedBitSet:
+        """Return a bit set with ``bit_index`` set.
+
+        Setting an already set bit returns the receiver. An index outside the nonnegative
+        signed-32-bit domain raises, since silently dropping a write would be worse than failing.
+        """
+
         _require_bit_index(bit_index)
         word_index = bit_index >> 6
         bit = 1 << (bit_index & 63)
@@ -151,10 +202,18 @@ class PersistentChunkedBitSet:
         return PersistentChunkedBitSet(chunks)
 
     def try_add(self, bit_index: int) -> ChunkedBitSetUpdateResult:
+        """Set ``bit_index``, reporting whether it had been clear."""
+
         result = self.add(bit_index)
         return ChunkedBitSetUpdateResult(result is not self, result)
 
     def remove(self, bit_index: int) -> PersistentChunkedBitSet:
+        """Return a bit set with ``bit_index`` clear.
+
+        Clearing an unset or out-of-domain index returns the receiver, and a word emptied by the
+        removal is dropped so the representation stays sparse.
+        """
+
         if type(bit_index) is not int or bit_index < 0 or bit_index > _MAXIMUM_BIT_INDEX:
             return self
         word_index = bit_index >> 6
@@ -178,6 +237,8 @@ class PersistentChunkedBitSet:
         return PersistentChunkedBitSet(chunks)
 
     def try_remove(self, bit_index: int) -> ChunkedBitSetUpdateResult:
+        """Clear ``bit_index``, reporting whether it had been set."""
+
         result = self.remove(bit_index)
         return ChunkedBitSetUpdateResult(result is not self, result)
 
@@ -199,12 +260,22 @@ class PersistentChunkedBitSet:
         return located.measure_before.pop_count + (located.value.bits & mask).bit_count()
 
     def select(self, rank: int) -> int:
+        """The bit index at zero-based population ``rank``, raising :class:`IndexError` when out of
+        range.
+        """
+
         selected = self.try_select(rank)
         if selected is None:
             raise IndexError("rank must identify a set bit.")
         return selected
 
     def try_select(self, rank: int) -> int | None:
+        """The bit index at zero-based population ``rank``, or ``None`` when out of range.
+
+        Descends by cached population counts to the right word, then clears low bits to reach the
+        requested one, so it does not scan the set.
+        """
+
         if type(rank) is not int or rank < 0 or rank >= self.count:
             return None
         located = self._chunks.locate(lambda summary: summary.pop_count > rank)
@@ -217,27 +288,53 @@ class PersistentChunkedBitSet:
         return (located.value.word_index << 6) + offset
 
     def union(self, other: PersistentChunkedBitSet) -> PersistentChunkedBitSet:
+        """Return the bits set in either operand.
+
+        Merges word by word rather than bit by bit, so the cost follows the number of stored words
+        and not the index range.
+        """
+
         return self if other is self or other.is_empty else self._combine(other, "union")
 
     def intersect(self, other: PersistentChunkedBitSet) -> PersistentChunkedBitSet:
+        """Return the bits set in both operands. Wordwise, as for :meth:`union`."""
+
         return self if other is self else self._combine(other, "intersect")
 
     def except_(self, other: PersistentChunkedBitSet) -> PersistentChunkedBitSet:
+        """Return this set's bits that are clear in ``other``. Wordwise, as for :meth:`union`.
+
+        Named with a trailing underscore because ``except`` is a Python keyword.
+        """
+
         return self.empty() if other is self else self._combine(other, "except")
 
     def symmetric_except(self, other: PersistentChunkedBitSet) -> PersistentChunkedBitSet:
+        """Return the bits set in exactly one operand. Wordwise, as for :meth:`union`."""
+
         return self.empty() if other is self else self._combine(other, "symmetric_except")
 
     def clear(self) -> PersistentChunkedBitSet:
+        """Return the empty bit set; a no-op when already empty."""
+
         return self if self.is_empty else self.empty()
 
     def cursor_at(self, position: int = 0) -> PersistentChunkedBitSetCursor:
+        """A cursor at gap ``position`` of the ascending set-bit sequence."""
+
         return PersistentChunkedBitSetCursor(self, position)
 
     def cursor_at_or_after(self, bit_index: int) -> PersistentChunkedBitSetCursor:
+        """A cursor positioned before the first set bit at or after ``bit_index``."""
+
         return self.cursor_at(0 if bit_index <= 0 else self.rank(bit_index - 1))
 
     def find_cursor(self, bit_index: int) -> ChunkedBitSetCursorSearch:
+        """Seek to ``bit_index`` and report whether it is set.
+
+        On a miss the cursor sits before the next set bit, so it remains usable.
+        """
+
         cursor = self.cursor_at_or_after(bit_index)
         candidate = cursor.peek_next()
         return ChunkedBitSetCursorSearch(
@@ -245,6 +342,8 @@ class PersistentChunkedBitSet:
         )
 
     def __iter__(self) -> Iterator[int]:
+        """Iterate the set bit indexes in ascending order."""
+
         for chunk in self._chunks:
             bits = chunk.bits
             while bits:
@@ -253,9 +352,21 @@ class PersistentChunkedBitSet:
                 bits &= bits - 1
 
     def shares_storage_with(self, other: PersistentChunkedBitSet) -> bool:
+        """Whether both sets reference the same chunk sequence.
+
+        A representation test used to confirm that a no-op avoided copying, not an equality test.
+        """
+
         return self._chunks.shares_structure_with(other._chunks)
 
     def validate_structure(self) -> ChunkedBitSetStatistics:
+        """Check the stored words against their cached measure and return the recounted statistics.
+
+        Verifies strictly ascending word indexes, that no all-zero word is retained, and that the
+        cached population count matches the bits actually set. A defensive audit; ordinary
+        operations maintain these invariants.
+        """
+
         chunk_count = 0
         pop_count = 0
         previous = -1
@@ -335,22 +446,32 @@ class PersistentChunkedBitSetCursor:
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         if self.position < 0 or self.position > self.set.count:
             raise IndexError("Cursor position is outside the chunked bit set.")
 
     @property
     def count(self) -> int:
+        """Population count of the set version this cursor is positioned in."""
+
         return self.set.count
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the lowest set bit."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the highest set bit."""
+
         return self.position == self.count
 
     def peek_previous(self) -> ChunkedBitSetCursorPeek | None:
+        """The set bit immediately before the gap, or ``None`` at the start."""
+
         return (
             None
             if self.is_at_start
@@ -358,24 +479,41 @@ class PersistentChunkedBitSetCursor:
         )
 
     def peek_next(self) -> ChunkedBitSetCursorPeek | None:
+        """The set bit immediately after the gap, or ``None`` at the end."""
+
         return None if self.is_at_end else ChunkedBitSetCursorPeek(self.set.select(self.position))
 
     def move_previous(self) -> PersistentChunkedBitSetCursor:
+        """A cursor one set bit earlier, raising :class:`IndexError` at the start.
+
+        The receiver is unchanged; movement produces a new cursor over the same set version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return PersistentChunkedBitSetCursor(self.set, self.position - 1)
 
     def move_next(self) -> PersistentChunkedBitSetCursor:
+        """A cursor one set bit later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return PersistentChunkedBitSetCursor(self.set, self.position + 1)
 
     def seek_rank(self, position: int) -> PersistentChunkedBitSetCursor:
+        """A cursor at gap ``position`` within the same set version, raising when out of range."""
+
         return (
             self if position == self.position else PersistentChunkedBitSetCursor(self.set, position)
         )
 
     def add(self, bit_index: int) -> PersistentChunkedBitSetCursor:
+        """Set ``bit_index`` and return a cursor positioned just after it.
+
+        The gap moves to the bit's ascending position rather than staying where the receiver was,
+        since a bit set's order is decided by index and not by the cursor.
+        """
+
         updated = self.set.add(bit_index)
         if updated is self.set:
             return self
@@ -383,18 +521,25 @@ class PersistentChunkedBitSetCursor:
         return PersistentChunkedBitSetCursor(updated, position + 1)
 
     def delete_previous(self) -> PersistentChunkedBitSetCursor:
+        """Clear the set bit before the gap and return a cursor in its place, raising at the start.
+        """
+
         bit = self.peek_previous()
         if bit is None:
             raise IndexError("No set bit precedes the cursor.")
         return PersistentChunkedBitSetCursor(self.set.remove(bit.value), self.position - 1)
 
     def delete_next(self) -> PersistentChunkedBitSetCursor:
+        """Clear the set bit after the gap and return a cursor in its place, raising at the end."""
+
         bit = self.peek_next()
         if bit is None:
             raise IndexError("No set bit follows the cursor.")
         return PersistentChunkedBitSetCursor(self.set.remove(bit.value), self.position)
 
     def snapshot(self) -> PersistentChunkedBitSet:
+        """The set version this cursor is positioned in."""
+
         return self.set
 
 

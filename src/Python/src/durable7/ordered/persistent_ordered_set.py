@@ -81,6 +81,11 @@ class PersistentOrderedSet(Generic[T]):
         order: PersistentDeque[_Entry[T]],
         stamps: PersistentHashMap[T, int],
     ) -> None:
+        """Wrap an already-built order sequence and stamp index; use the factory methods instead.
+
+        The caller is responsible for the two indexes describing the same elements.
+        """
+
         if len(order) != stamps.size:
             raise ValueError("The order and membership indexes must have equal counts.")
         self._order = order
@@ -123,13 +128,19 @@ class PersistentOrderedSet(Generic[T]):
         return len(self._order)
 
     def __len__(self) -> int:
+        """Number of distinct elements, matching :attr:`size`."""
+
         return self.size
 
     @property
     def is_empty(self) -> bool:
+        """Whether the set holds no elements."""
+
         return self._order.is_empty
 
     def __bool__(self) -> bool:
+        """Whether the set holds at least one element."""
+
         return not self.is_empty
 
     @property
@@ -155,9 +166,16 @@ class PersistentOrderedSet(Generic[T]):
         return cast("_Entry[T]", self._order.back()).value
 
     def contains(self, value: T) -> bool:
+        """Whether ``value``'s equivalence class is present.
+
+        Answered through the hash index, so it does not scan the order sequence.
+        """
+
         return self._stamps.contains_key(value)
 
     def __contains__(self, value: object) -> bool:
+        """Whether ``value``'s equivalence class is present, for the ``in`` operator."""
+
         return self.contains(cast("T", value))
 
     def try_get_value(self, equal_value: T) -> OrderedSetValueResult[T]:
@@ -183,9 +201,13 @@ class PersistentOrderedSet(Generic[T]):
         return self._order[index].value
 
     def __getitem__(self, index: int) -> T:
+        """The element at ordinal ``index``, raising :class:`IndexError` when out of range."""
+
         return self.get_at(index)
 
     def index_of(self, equal_value: T) -> int:
+        """Ordinal position of ``equal_value``'s class, or ``-1`` when absent."""
+
         indexed = self._stamps.get_entry(equal_value)
         return -1 if indexed is None else self._index_of_stamp(indexed.value)
 
@@ -220,9 +242,13 @@ class PersistentOrderedSet(Generic[T]):
         return self._insert_core(index, value)
 
     def move_to_first(self, equal_value: T) -> PersistentOrderedSet[T]:
+        """Move a stored representative to the front, keeping the representative itself."""
+
         return self._move_existing(0, equal_value)
 
     def move_to_last(self, equal_value: T) -> PersistentOrderedSet[T]:
+        """Move a stored representative to the back, keeping the representative itself."""
+
         return self._move_existing(self.size - 1, equal_value)
 
     def move_to(self, index: int, equal_value: T) -> PersistentOrderedSet[T]:
@@ -232,6 +258,11 @@ class PersistentOrderedSet(Generic[T]):
         return self._move_existing(index, equal_value)
 
     def remove(self, equal_value: T) -> PersistentOrderedSet[T]:
+        """Return a set without ``equal_value``'s class, closing the gap in the order.
+
+        Removing an absent element returns the receiver.
+        """
+
         return self.try_remove(equal_value).set
 
     def try_remove(self, equal_value: T) -> OrderedSetRemoveResult[T]:
@@ -260,11 +291,15 @@ class PersistentOrderedSet(Generic[T]):
         return self._wrap(order, removed.map)
 
     def remove_first(self) -> PersistentOrderedSet[T]:
+        """Return a set without its first element, raising :class:`IndexError` when empty."""
+
         if self.is_empty:
             raise IndexError("The ordered set is empty.")
         return self.remove_at(0)
 
     def remove_last(self) -> PersistentOrderedSet[T]:
+        """Return a set without its last element, raising :class:`IndexError` when empty."""
+
         if self.is_empty:
             raise IndexError("The ordered set is empty.")
         return self.remove_at(self.size - 1)
@@ -299,10 +334,14 @@ class PersistentOrderedSet(Generic[T]):
         return PersistentOrderedSet(kept, stamps)
 
     def take(self, count: int) -> PersistentOrderedSet[T]:
+        """Return the first ``count`` elements as a new set, preserving their order."""
+
         self._check_count(count)
         return self.get_range(0, count)
 
     def drop(self, count: int) -> PersistentOrderedSet[T]:
+        """Return every element after the first ``count``, preserving their order."""
+
         self._check_count(count)
         return self.get_range(count, self.size - count)
 
@@ -328,6 +367,11 @@ class PersistentOrderedSet(Generic[T]):
         entries = self._order.to_list()
 
         def compare(left: _Entry[T], right: _Entry[T]) -> int:
+            """Order by the caller's comparator, breaking ties by existing position.
+
+            Falling back to the order stamp is what makes the sort stable.
+            """
+
             by_value = effective(left.value, right.value)
             if by_value != 0:
                 return by_value
@@ -391,34 +435,53 @@ class PersistentOrderedSet(Generic[T]):
         return self._build_from_items(result, self.policy)
 
     def is_subset_of(self, other: Iterable[T]) -> bool:
+        """Whether every element of this set also occurs in ``other``. ``other`` is normalized under
+        this set's policy first, so a repeated element counts once. Order is irrelevant to every
+        predicate in this group.
+        """
+
         argument = self._normalize(other)
         return self.size <= len(argument.items) and all(
             argument.membership.contains_key(entry.value) for entry in self._order
         )
 
     def is_proper_subset_of(self, other: Iterable[T]) -> bool:
+        """Whether this set is a subset of ``other`` and ``other`` has an element it lacks."""
+
         argument = self._normalize(other)
         return self.size < len(argument.items) and all(
             argument.membership.contains_key(entry.value) for entry in self._order
         )
 
     def is_superset_of(self, other: Iterable[T]) -> bool:
+        """Whether every distinct element of ``other`` occurs in this set."""
+
         argument = self._normalize(other)
         return self.size >= len(argument.items) and all(
             self._stamps.contains_key(value) for value in argument.items
         )
 
     def is_proper_superset_of(self, other: Iterable[T]) -> bool:
+        """Whether this set is a superset of ``other`` and holds an element ``other`` lacks."""
+
         argument = self._normalize(other)
         return self.size > len(argument.items) and all(
             self._stamps.contains_key(value) for value in argument.items
         )
 
     def overlaps(self, other: Iterable[T]) -> bool:
+        """Whether this set and ``other`` share at least one element."""
+
         argument = self._normalize(other)
         return any(self._stamps.contains_key(value) for value in argument.items)
 
     def set_equals(self, other: Iterable[T]) -> bool:
+        """Whether this set holds exactly ``other``'s distinct elements, disregarding order.
+
+        Two sets built by inserting the same elements in different orders are equal here even though
+        they iterate differently.
+        """
+
         argument = self._normalize(other)
         return self.size == len(argument.items) and all(
             self._stamps.contains_key(value) for value in argument.items
@@ -430,6 +493,8 @@ class PersistentOrderedSet(Generic[T]):
         return [entry.value for entry in self._order]
 
     def __iter__(self) -> Iterator[T]:
+        """Iterate the stored representatives in the set's order."""
+
         for entry in self._order:
             yield entry.value
 
@@ -654,22 +719,36 @@ class PersistentOrderedSetCursor(Generic[T]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..size``, so every cursor names a real gap."""
+
         if type(self.position) is not int or self.position < 0 or self.position > self.set.size:
             raise IndexError("Cursor position is outside the ordered set.")
 
     @property
     def size(self) -> int:
+        """Element count of the set version this cursor is positioned in."""
+
         return self.set.size
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first element."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last element."""
+
         return self.position == self.size
 
     def peek_previous(self) -> OrderedSetCursorPeek[T]:
+        """The element immediately before the gap, reported presence-safely.
+
+        The result carries a found flag, so a stored ``None`` stays distinguishable from "nothing
+        there".
+        """
+
         return (
             OrderedSetCursorPeek(False)
             if self.is_at_start
@@ -677,6 +756,8 @@ class PersistentOrderedSetCursor(Generic[T]):
         )
 
     def peek_next(self) -> OrderedSetCursorPeek[T]:
+        """The element immediately after the gap, reported presence-safely."""
+
         return (
             OrderedSetCursorPeek(False)
             if self.is_at_end
@@ -684,34 +765,57 @@ class PersistentOrderedSetCursor(Generic[T]):
         )
 
     def move_previous(self) -> PersistentOrderedSetCursor[T]:
+        """A cursor one position earlier, raising :class:`IndexError` at the start.
+
+        The receiver is unchanged; movement produces a new cursor over the same set version.
+        """
+
         if self.is_at_start:
             raise IndexError("The ordered-set cursor is already at the start.")
         return PersistentOrderedSetCursor(self.set, self.position - 1)
 
     def move_next(self) -> PersistentOrderedSetCursor[T]:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("The ordered-set cursor is already at the end.")
         return PersistentOrderedSetCursor(self.set, self.position + 1)
 
     def seek(self, position: int) -> PersistentOrderedSetCursor[T]:
+        """A cursor at ``position`` within the same set version, raising when it is out of range."""
+
         return self if position == self.position else PersistentOrderedSetCursor(self.set, position)
 
     def insert(self, value: T) -> PersistentOrderedSetCursor[T]:
+        """Insert ``value`` at the gap and return a cursor positioned after it.
+
+        Because the set is insertion-ordered rather than sorted, the cursor decides where the
+        element goes. An already present class is a no-op that returns the receiver, keeping the
+        existing position and representative; use :meth:`try_insert` to tell the two outcomes apart.
+        """
+
         updated = self.set.insert(self.position, value)
         return (
             self if updated is self.set else PersistentOrderedSetCursor(updated, self.position + 1)
         )
 
     def try_insert(self, value: T) -> tuple[bool, PersistentOrderedSetCursor[T]]:
+        """Insert ``value``, returning whether it was added along with the resulting cursor."""
+
         cursor = self.insert(value)
         return cursor is not self, cursor
 
     def delete_previous(self) -> PersistentOrderedSetCursor[T]:
+        """Remove the element before the gap and return a cursor in its place, raising at the start.
+        """
+
         if self.is_at_start:
             raise IndexError("The ordered-set cursor has no previous representative.")
         return PersistentOrderedSetCursor(self.set.remove_at(self.position - 1), self.position - 1)
 
     def delete_next(self) -> PersistentOrderedSetCursor[T]:
+        """Remove the element after the gap and return a cursor in its place, raising at the end."""
+
         if self.is_at_end:
             raise IndexError("The ordered-set cursor has no next representative.")
         return PersistentOrderedSetCursor(self.set.remove_at(self.position), self.position)

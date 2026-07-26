@@ -1,3 +1,11 @@
+"""Tests for the persistent insertion-ordered set.
+
+Covers canonical empty construction, nullable lookup, first-representative retention, movement
+indexes interpreted against the resulting order, order-stamp relabeling under repeated midpoint
+insertion and exhausted gaps, atomicity when a rebuild fails, ranges, clear, reversal, boundary
+identities, and stable one-shot sorting.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Sequence
@@ -43,6 +51,8 @@ def _reference_policy() -> HashPolicy[_Representative]:
 
 class _SwitchablePolicy(HashPolicy[_Representative]):
     def __init__(self, hash_buckets: int = 1) -> None:
+        """Start with the policy in its initial mode and the counters at zero."""
+
         self.hash_buckets = hash_buckets
         self.throw_hash = False
         self.throw_equality = False
@@ -51,18 +61,24 @@ class _SwitchablePolicy(HashPolicy[_Representative]):
         self.equality_calls = 0
 
     def hash(self, key: _Representative) -> int:
+        """Hash under the currently selected mode."""
+
         self.hash_calls += 1
         if self.throw_hash or self.hash_calls == self.fail_hash_at:
             raise RuntimeError("hash failure")
         return key.equivalence_class % self.hash_buckets
 
     def equivalent(self, left: _Representative, right: _Representative) -> bool:
+        """Compare under the currently selected mode."""
+
         self.equality_calls += 1
         if self.throw_equality:
             raise RuntimeError("equality failure")
         return left.equivalence_class == right.equivalence_class
 
     def reset(self) -> None:
+        """Return to the initial mode and zero the counters."""
+
         self.hash_calls = 0
         self.equality_calls = 0
 

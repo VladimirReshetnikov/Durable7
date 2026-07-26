@@ -76,9 +76,13 @@ class _FunctionHashPolicy(HashPolicy[K]):
     equivalent_function: Callable[[K, K], bool]
 
     def hash(self, key: K) -> int:
+        """Return the caller's hash, narrowed to the signed 32-bit domain shared by every port."""
+
         return _signed_int32(self.hash_function(key))
 
     def equivalent(self, left: K, right: K) -> bool:
+        """Return whether the caller's predicate treats the two keys as one class."""
+
         return bool(self.equivalent_function(left, right))
 
 

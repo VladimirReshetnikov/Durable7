@@ -17,6 +17,8 @@ W = TypeVar("W")
 
 @dataclass(frozen=True, slots=True)
 class MerkleEntry(Generic[K, V]):
+    """One key-value pair as the tree presents it to callers."""
+
     key: K
     value: V
 
@@ -49,6 +51,10 @@ MerkleMapDifferenceKind = Literal["left-only", "right-only", "different-value"]
 
 @dataclass(frozen=True, slots=True)
 class MerkleMapDifference(Generic[K, V]):
+    """One entry-level difference between two trees. The presence flags keep a stored ``None``
+    distinguishable from a key that is simply absent on that side.
+    """
+
     kind: MerkleMapDifferenceKind
     key: K
     left_present: bool
@@ -59,6 +65,8 @@ class MerkleMapDifference(Generic[K, V]):
 
 @dataclass(frozen=True, slots=True)
 class MerkleSearchTreeStatistics:
+    """Shape and encoding measurements returned by a successful structural audit."""
+
     count: int
     height: int
     block_count: int
@@ -70,6 +78,8 @@ class MerkleSearchTreeStatistics:
 
 @dataclass(frozen=True, slots=True)
 class MerkleEncodedBlock:
+    """One block of the content-addressed encoding: its digest and its canonical bytes."""
+
     digest: MerkleDigest
     bytes: bytes
 
@@ -110,11 +120,17 @@ class MerkleSearchTree(Generic[K, V]):
         policy: MerkleSearchTreePolicy[K, V],
         root: _Node[K, V] | None = None,
     ) -> None:
+        """Wrap an already-built root; use :meth:`empty` or :meth:`from_entries` instead."""
+
         self._policy = policy
         self._root = root
 
     @classmethod
     def empty(cls, policy: MerkleSearchTreePolicy[K, V]) -> MerkleSearchTree[K, V]:
+        """Return the empty tree under ``policy``. The policy fixes the key ordering, both codecs,
+        and the digest domain, so trees built under different policies are never interchangeable.
+        """
+
         return cls(policy)
 
     @classmethod
@@ -123,6 +139,11 @@ class MerkleSearchTree(Generic[K, V]):
         entries: Iterable[tuple[K, V] | MerkleEntry[K, V]],
         policy: MerkleSearchTreePolicy[K, V],
     ) -> MerkleSearchTree[K, V]:
+        """Build a tree from ``entries``. The result depends only on the set of entries, not on the
+        order they arrive in: sorting and the level rule together give one canonical shape. A
+        repeated key keeps the first representative and the last value.
+        """
+
         prepared: list[_StoredEntry[K, V]] = []
         for item in entries:
             key, value = (item.key, item.value) if isinstance(item, MerkleEntry) else item
@@ -146,29 +167,46 @@ class MerkleSearchTree(Generic[K, V]):
 
     @property
     def policy(self) -> MerkleSearchTreePolicy[K, V]:
+        """The retained policy fixing key order, codecs, and digest domain."""
+
         return self._policy
 
     @property
     def count(self) -> int:
+        """Number of entries."""
+
         return 0 if self._root is None else self._root.count
 
     def __len__(self) -> int:
+        """Number of entries, matching :attr:`count`."""
+
         return self.count
 
     @property
     def is_empty(self) -> bool:
+        """Whether the tree holds no entries."""
+
         return self._root is None
 
     @property
     def height(self) -> int:
+        """Number of block levels from the root down to a leaf."""
+
         return 0 if self._root is None else self._root.height
 
     @property
     def block_count(self) -> int:
+        """Number of blocks the tree encodes into."""
+
         return 0 if self._root is None else self._root.block_count
 
     @property
     def root_hash(self) -> MerkleDigest:
+        """The digest identifying this tree's exact contents. Because the shape is history
+        independent, two trees hold the same entries exactly when their root digests agree, which
+        is what lets peers compare whole maps by exchanging one digest.
+        """
+
         return self._policy.empty_digest if self._root is None else self._root.digest
 
     def cursor(self, position: int = 0) -> MerkleSearchTreeCursor[K, V]:
@@ -235,17 +273,30 @@ class MerkleSearchTree(Generic[K, V]):
         return rank, False
 
     def get_entry(self, key: K) -> MerkleEntry[K, V] | None:
+        """Return the stored representative and value for ``key``, or ``None`` when absent."""
+
         found = self._find_record(key)
         return None if found is None else MerkleEntry(found.key, found.value)
 
     def get(self, key: K, default: W | None = None) -> V | W | None:
+        """Return the value stored for ``key``, or ``default`` when absent. Use :meth:`get_entry`
+        when a stored ``None`` must stay distinct from absence.
+        """
+
         found = self._find_record(key)
         return default if found is None else found.value
 
     def contains_key(self, key: K) -> bool:
+        """Whether ``key`` is present."""
+
         return self._find_record(key) is not None
 
     def set_item(self, key: K, value: V) -> MerkleSearchTree[K, V]:
+        """Return a tree with ``key`` mapped to ``value``, adding or replacing as needed. Writing a
+        value whose encoded bytes match the stored one returns the receiver, since a content-
+        addressed structure cannot distinguish them. Only the affected block path is rebuilt.
+        """
+
         existing = self._find_record(key)
         if existing is not None:
             value_bytes = bytes(self._policy.value_codec.encode(value))
@@ -270,20 +321,36 @@ class MerkleSearchTree(Generic[K, V]):
     set = set_item
 
     def remove(self, key: K) -> MerkleSearchTree[K, V]:
+        """Return a tree without ``key``; a no-op when the key is absent."""
+
         root, removed = self._remove_node(self._root, key)
         return MerkleSearchTree(self._policy, root) if removed else self
 
     def clear(self) -> MerkleSearchTree[K, V]:
+        """Return the empty tree under the same policy."""
+
         return self if self.is_empty else MerkleSearchTree.empty(self._policy)
 
     def shares_root_with(self, other: MerkleSearchTree[K, V]) -> bool:
+        """Whether both trees reference the very same root object. A representation test, distinct
+        from :meth:`content_equals`, which compares digests.
+        """
+
         return self._root is other._root
 
     def shared_block_count(self, other: MerkleSearchTree[K, V]) -> int:
+        """Number of block nodes the two trees have in common by object identity. Used by the tests
+        to show that a derived version really shares structure rather than having been rebuilt.
+        """
+
         identities = {id(node) for node in self._nodes_preorder()}
         return sum(id(node) in identities for node in other._nodes_preorder())
 
     def content_equals(self, other: MerkleSearchTree[K, V]) -> bool:
+        """Whether both trees hold the same entries, decided by comparing root digests. Constant
+        time, and only meaningful between compatible policy domains, which this checks.
+        """
+
         return (
             self._policy.is_compatible_with(
                 cast("MerkleSearchTreePolicy[object, object]", other.policy)
@@ -296,6 +363,11 @@ class MerkleSearchTree(Generic[K, V]):
         other: MerkleSearchTree[K, V],
         values_equal: Callable[[V, V], bool] = _value_equal,
     ) -> bool:
+        """Whether both trees hold the same entries, comparing values with ``values_equal``. Use
+        this when equality should follow the caller's notion of value equality rather than the
+        encoded bytes that :meth:`content_equals` compares.
+        """
+
         if self.count != other.count:
             return False
         for left, right in zip(self, other, strict=True):
@@ -310,6 +382,10 @@ class MerkleSearchTree(Generic[K, V]):
         other: MerkleSearchTree[K, V],
         values_equal: Callable[[V, V], bool] = _value_equal,
     ) -> tuple[MerkleMapDifference[K, V], ...]:
+        """Return the entry-level differences between this tree and ``other``. Identical roots
+        short-circuit to no differences. Both trees must share a policy domain.
+        """
+
         if not self._policy.is_compatible_with(
             cast("MerkleSearchTreePolicy[object, object]", other.policy)
         ):
@@ -371,6 +447,10 @@ class MerkleSearchTree(Generic[K, V]):
         return tuple(result)
 
     def range(self, minimum: K, maximum: K) -> Iterator[MerkleEntry[K, V]]:
+        """Iterate the entries whose keys lie in the inclusive range, in key order. Raises
+        :class:`ValueError` on an inverted range.
+        """
+
         if self._policy.comparer(minimum, maximum) > 0:
             raise ValueError("minimum key exceeds maximum key")
         for entry in self:
@@ -381,16 +461,27 @@ class MerkleSearchTree(Generic[K, V]):
             yield entry
 
     def keys(self) -> Iterator[K]:
+        """Iterate the keys in ascending order."""
+
         for entry in self:
             yield entry.key
 
     def values(self) -> Iterator[V]:
+        """Iterate the values in their keys' ascending order."""
+
         for entry in self:
             yield entry.value
 
     @property
     def shape(self) -> str:
+        """A compact textual rendering of the block structure, for diagnostics. Two trees with the
+        same entries render identically, which makes this useful for showing cross-port shape
+        agreement in tests.
+        """
+
         def visit(node: _Node[K, V] | None) -> str:
+            """Render one node and its children, or ``.`` for an absent child."""
+
             if node is None:
                 return "."
             return f"L{node.level}[{len(node.entries)}]({','.join(map(visit, node.children))})"
@@ -398,10 +489,18 @@ class MerkleSearchTree(Generic[K, V]):
         return visit(self._root)
 
     def blocks_preorder(self) -> Iterator[MerkleEncodedBlock]:
+        """Iterate the encoded blocks in preorder, each with its digest."""
+
         for node in self._nodes_preorder():
             yield MerkleEncodedBlock(node.digest, node.block_bytes)
 
     def validate_structure(self) -> MerkleSearchTreeStatistics:
+        """Walk the whole tree and return its measurements. Checks key ordering and the bounds
+        inherited from each parent, that entry levels match the block they sit in, that cached
+        counts and digests agree with the encoded bytes, and that no cycle exists. Raises on the
+        first violation. A defensive audit, not part of normal use.
+        """
+
         maximum_entries = maximum_children = encoded_bytes = maximum_level = 0
         blocks = logical_count = height = 0
         seen: set[int] = set()
@@ -477,6 +576,8 @@ class MerkleSearchTree(Generic[K, V]):
         )
 
     def __iter__(self) -> Iterator[MerkleEntry[K, V]]:
+        """Iterate the entries in ascending key order."""
+
         stack: list[tuple[_Node[K, V], int]] = []
         node = self._root
         while node is not None or stack:
@@ -750,38 +851,58 @@ class MerkleSearchTreeCursor(Generic[K, V]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         if self.position < 0 or self.position > self.tree.count:
             raise IndexError(f"Cursor position {self.position} is outside 0 .. {self.tree.count}.")
 
     @property
     def count(self) -> int:
+        """Entry count of the tree version this cursor is positioned in."""
+
         return self.tree.count
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first entry."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last entry."""
+
         return self.position == self.count
 
     def peek_previous(self) -> MerkleEntry[K, V] | None:
+        """The entry immediately before the gap, or ``None`` at the start."""
+
         return None if self.is_at_start else self.tree._entry_at_for_cursor(self.position - 1)
 
     def peek_next(self) -> MerkleEntry[K, V] | None:
+        """The entry immediately after the gap, or ``None`` at the end."""
+
         return self.tree._entry_at_for_cursor(self.position)
 
     def move_previous(self) -> MerkleSearchTreeCursor[K, V]:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same tree version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return MerkleSearchTreeCursor(self.tree, self.position - 1)
 
     def move_next(self) -> MerkleSearchTreeCursor[K, V]:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return MerkleSearchTreeCursor(self.tree, self.position + 1)
 
     def seek(self, position: int) -> MerkleSearchTreeCursor[K, V]:
+        """A cursor at ``position`` within the same tree version, raising when out of range."""
+
         return self if position == self.position else MerkleSearchTreeCursor(self.tree, position)
 
     def insert(self, key: K, value: V) -> MerkleSearchTreeCursor[K, V]:
@@ -804,6 +925,10 @@ class MerkleSearchTreeCursor(Generic[K, V]):
     set = set_item
 
     def set_next_value(self, value: V) -> MerkleSearchTreeCursor[K, V]:
+        """Replace the value of the entry after the gap, keeping its key and position. Raises
+        :class:`IndexError` at the end; an encoded-value-identical write returns the receiver.
+        """
+
         next_entry = self.peek_next()
         if next_entry is None:
             raise IndexError("No entry follows the cursor gap.")
@@ -811,18 +936,25 @@ class MerkleSearchTreeCursor(Generic[K, V]):
         return self if edited is self.tree else MerkleSearchTreeCursor(edited, self.position)
 
     def delete_previous(self) -> MerkleSearchTreeCursor[K, V]:
+        """Remove the entry before the gap and return a cursor in its place, raising at the start.
+        """
+
         previous = self.peek_previous()
         if previous is None:
             raise IndexError("No entry precedes the cursor gap.")
         return MerkleSearchTreeCursor(self.tree.remove(previous.key), self.position - 1)
 
     def delete_next(self) -> MerkleSearchTreeCursor[K, V]:
+        """Remove the entry after the gap and return a cursor in its place, raising at the end."""
+
         next_entry = self.peek_next()
         if next_entry is None:
             raise IndexError("No entry follows the cursor gap.")
         return MerkleSearchTreeCursor(self.tree.remove(next_entry.key), self.position)
 
     def snapshot(self) -> MerkleSearchTree[K, V]:
+        """The tree version this cursor is positioned in."""
+
         return self.tree
 
     def _ensure_current_gap(self, rank: int) -> None:

@@ -18,6 +18,8 @@ class _Block(Generic[T]):
     __slots__ = ("items", "next", "previous")
 
     def __init__(self) -> None:
+        """Allocate one fixed-capacity chunk of empty slots, unlinked from any neighbor."""
+
         self.items: list[T | object] = [_EMPTY] * _CHUNK_CAPACITY
         self.previous: _Block[T] | None = None
         self.next: _Block[T] | None = None
@@ -37,18 +39,30 @@ class _ChunkedQueue(Generic[T]):
     __slots__ = ("_first",)
 
     def __init__(self) -> None:
+        """Start a queue holding one empty chunk."""
+
         self._first = _Block[T]()
 
     @property
     def begin(self) -> _Cursor[T]:
+        """Cursor at the first slot of the first chunk."""
+
         return _Cursor(self._first, 0)
 
     @property
     def first_block(self) -> _Block[T]:
+        """The frontmost chunk, exposed for structural validation."""
+
         return self._first
 
     @staticmethod
     def read(cursor: _Cursor[T]) -> T:
+        """Return the value at ``cursor``, which must name an occupied slot.
+
+        Raises :class:`AssertionError` on an empty slot, since reading one would mean the
+        algorithm's cursors had drifted out of the live window.
+        """
+
         value = cursor.block.items[cursor.index]
         if value is _EMPTY:
             raise AssertionError("DABA Lite attempted to read an empty active slot.")
@@ -56,18 +70,33 @@ class _ChunkedQueue(Generic[T]):
 
     @staticmethod
     def read_raw(cursor: _Cursor[T]) -> T | object:
+        """Return the slot's contents, which may be the empty marker rather than a stored value.
+
+        Used by insertion to save a slot before overwriting it, so a failure can restore it.
+        """
+
         return cursor.block.items[cursor.index]
 
     @staticmethod
     def write(cursor: _Cursor[T], value: T | object) -> None:
+        """Store ``value``, or the empty marker, at ``cursor``."""
+
         cursor.block.items[cursor.index] = value
 
     def reset(self) -> _Cursor[T]:
+        """Discard every chunk, install a fresh one, and return a cursor to its first slot."""
+
         self._first = _Block()
         return self.begin
 
     @staticmethod
     def advance(cursor: _Cursor[T]) -> _Cursor[T]:
+        """Return the next cursor within the existing chunks, never allocating.
+
+        Raises :class:`AssertionError` past the final chunk; use :meth:`advance_end` when the queue
+        may need to grow.
+        """
+
         if cursor.index + 1 < _CHUNK_CAPACITY:
             return _Cursor(cursor.block, cursor.index + 1)
         if cursor.block.next is None:
@@ -76,6 +105,12 @@ class _ChunkedQueue(Generic[T]):
 
     @staticmethod
     def advance_end(cursor: _Cursor[T]) -> _Cursor[T]:
+        """Return the next cursor, appending a chunk when the current one is exhausted.
+
+        Growth is one chunk at a time, which is what keeps insertion worst-case constant rather than
+        amortized.
+        """
+
         if cursor.index + 1 < _CHUNK_CAPACITY:
             return _Cursor(cursor.block, cursor.index + 1)
         next_block = cursor.block.next
@@ -87,6 +122,8 @@ class _ChunkedQueue(Generic[T]):
 
     @staticmethod
     def retreat(cursor: _Cursor[T]) -> _Cursor[T]:
+        """Return the previous cursor. Raises :class:`AssertionError` before the front chunk."""
+
         if cursor.index != 0:
             return _Cursor(cursor.block, cursor.index - 1)
         if cursor.block.previous is None:
@@ -95,6 +132,11 @@ class _ChunkedQueue(Generic[T]):
 
     @staticmethod
     def restore_successor(block: _Block[T], successor: _Block[T] | None) -> None:
+        """Relink ``block`` to ``successor``, undoing a growth step.
+
+        Used to roll insertion back when a monoid callback raises after a chunk was appended.
+        """
+
         current = block.next
         if current is successor:
             return
@@ -105,6 +147,9 @@ class _ChunkedQueue(Generic[T]):
             current.previous = None
 
     def trim_before(self, front: _Cursor[T]) -> None:
+        """Drop the chunks entirely behind ``front`` so evicted slots stop retaining their values.
+        """
+
         if self._first is front.block:
             return
         predecessor = front.block.previous
@@ -116,6 +161,12 @@ class _ChunkedQueue(Generic[T]):
 
 @dataclass(frozen=True, slots=True)
 class DabaLiteStatistics:
+    """Cursor positions and chunk occupancy returned by a structural audit.
+
+    The four interior lengths describe how far the incremental reversal has progressed, which is
+    what the worst-case bounds are stated in terms of.
+    """
+
     count: int
     front_length: int
     back_length: int
@@ -149,6 +200,12 @@ class DabaLite(Generic[T]):
     )
 
     def __init__(self, monoid: Monoid[T]) -> None:
+        """Create an empty window aggregated by ``monoid``.
+
+        The monoid must be associative with its identity as a two-sided identity; it need not be
+        commutative or invertible, and the algorithm never assumes it is.
+        """
+
         self._monoid = monoid
         self._queue = _ChunkedQueue[T]()
         begin = self._queue.begin
@@ -163,23 +220,42 @@ class DabaLite(Generic[T]):
         self._count = 0
 
     def __len__(self) -> int:
+        """Number of values currently in the window."""
+
         return self._count
 
     @property
     def count(self) -> int:
+        """Number of values currently in the window."""
+
         return self._count
 
     @property
     def is_empty(self) -> bool:
+        """Whether the window holds no values."""
+
         return self._count == 0
 
     @property
     def aggregate(self) -> T:
+        """The combination of every value in the window, in FIFO order.
+
+        At most one combine, because the incremental reversal keeps both halves summarized. An empty
+        window aggregates to the monoid identity.
+        """
+
         if self._count == 0:
             return self._monoid.identity
         return self._monoid.combine(self._queue.read(self._f), self._aggregate_b)
 
     def insert(self, value: T) -> None:
+        """Append ``value`` to the back of the window.
+
+        At most three combines, and one bounded step of the incremental reversal. The combine
+        happens before any structural change, so a monoid that raises leaves the window exactly as
+        it was.
+        """
+
         if self._count == sys.maxsize:
             raise OverflowError("The DABA Lite window is too large.")
         old_end = self._e
@@ -205,10 +281,22 @@ class DabaLite(Generic[T]):
             raise
 
     def evict(self) -> None:
+        """Remove the value at the front of the window.
+
+        Raises :class:`IndexError` when the window is empty; use :meth:`try_evict` to test and
+        remove at once.
+        """
+
         if not self.try_evict():
             raise IndexError("Cannot evict from an empty DABA Lite window.")
 
     def try_evict(self) -> bool:
+        """Remove the front value, reporting whether there was one to remove.
+
+        At most two combines. A monoid that raises restores the front cursor and count, so the
+        window is unchanged.
+        """
+
         if self._count == 0:
             return False
         old_front = self._f
@@ -226,6 +314,12 @@ class DabaLite(Generic[T]):
         return True
 
     def clear(self) -> None:
+        """Discard every value and return to the empty window.
+
+        The identity is read before anything is discarded, so a monoid that raises cannot leave the
+        window half-cleared.
+        """
+
         if self._count == 0:
             return
         # Acquire identity first so a fallible policy cannot partially clear the queue.
@@ -242,6 +336,14 @@ class DabaLite(Generic[T]):
         self._count = 0
 
     def validate_structure(self) -> DabaLiteStatistics:
+        """Walk the chunk list and the six cursors, returning the measurements they imply.
+
+        Checks that the cursors are in range, ordered as the algorithm requires, and reachable from
+        the first chunk, and that the chunk list is acyclic and correctly linked in both directions.
+        Raises :class:`ValueError` on the first violation. A defensive audit, not part of normal
+        use.
+        """
+
         cursors = (self._f, self._l, self._r, self._a, self._b, self._e)
         for name, cursor in zip(("F", "L", "R", "A", "B", "E"), cursors, strict=True):
             if cursor.index < 0 or cursor.index >= _CHUNK_CAPACITY:

@@ -75,6 +75,11 @@ class PersistentOrderedMultimap(Generic[K, V]):
         value_policy: HashPolicy[V],
         pair_count: int,
     ) -> None:
+        """Wrap an already-built group map; use :meth:`empty` or :meth:`from_items` instead.
+
+        The caller is responsible for ``pair_count`` matching the groups and for none being empty.
+        """
+
         self._groups = groups
         self._value_policy = value_policy
         self._pair_count = pair_count
@@ -85,6 +90,8 @@ class PersistentOrderedMultimap(Generic[K, V]):
         key_policy: HashPolicy[K] | None = None,
         value_policy: HashPolicy[V] | None = None,
     ) -> PersistentOrderedMultimap[K, V]:
+        """Return an empty multimap retaining both exact policy objects."""
+
         effective_keys = default_hash_policy() if key_policy is None else key_policy
         effective_values = default_hash_policy() if value_policy is None else value_policy
         groups = PersistentOrderedMap[K, PersistentOrderedSet[V]].empty(effective_keys, _same_set)
@@ -97,6 +104,8 @@ class PersistentOrderedMultimap(Generic[K, V]):
         key_policy: HashPolicy[K] | None = None,
         value_policy: HashPolicy[V] | None = None,
     ) -> PersistentOrderedMultimap[K, V]:
+        """Build a multimap from pairs, keeping first-occurrence order in both domains."""
+
         if items is None:
             raise TypeError("items must be iterable.")
         result = cls.empty(key_policy, value_policy)
@@ -106,42 +115,64 @@ class PersistentOrderedMultimap(Generic[K, V]):
 
     @property
     def key_count(self) -> int:
+        """Number of distinct keys. Every key has at least one value."""
+
         return self._groups.size
 
     @property
     def pair_count(self) -> int:
+        """Number of ``(key, value)`` pairs, maintained incrementally."""
+
         return self._pair_count
 
     @property
     def is_empty(self) -> bool:
+        """Whether the multimap holds no pairs, and therefore no keys."""
+
         return self._pair_count == 0
 
     @property
     def key_policy(self) -> HashPolicy[K]:
+        """The retained hash policy defining key equivalence."""
+
         return self._groups.key_policy
 
     @property
     def value_policy(self) -> HashPolicy[V]:
+        """The retained hash policy defining value equivalence within each group."""
+
         return self._value_policy
 
     def __len__(self) -> int:
+        """Number of pairs, matching :attr:`pair_count` rather than the key count."""
+
         return self._pair_count
 
     def __bool__(self) -> bool:
+        """Whether the multimap holds at least one pair."""
+
         return not self.is_empty
 
     def contains_key(self, key: K) -> bool:
+        """Whether ``key`` has at least one value."""
+
         return self._groups.contains_key(key)
 
     def contains(self, key: K, value: V) -> bool:
+        """Whether the pair ``(key, value)`` is present."""
+
         group = self._groups.try_get_entry(key)
         return bool(group.found and group.entry is not None and group.entry.value.contains(value))
 
     def count_values(self, key: K) -> int:
+        """How many distinct values ``key`` has, or zero when absent."""
+
         group = self._groups.try_get_entry(key)
         return 0 if not group.found or group.entry is None else group.entry.value.size
 
     def get_values(self, key: K) -> PersistentOrderedSet[V]:
+        """``key``'s ordered value set, or a policy-preserving empty set when the key is absent."""
+
         group = self._groups.try_get_entry(key)
         return (
             PersistentOrderedSet.empty(self._value_policy)
@@ -150,6 +181,10 @@ class PersistentOrderedMultimap(Generic[K, V]):
         )
 
     def try_get_values(self, key: K) -> OrderedMultimapValuesResult[V]:
+        """``key``'s value group, reported presence-safely so absence stays distinct from an empty
+        group.
+        """
+
         group = self._groups.try_get_entry(key)
         return (
             OrderedMultimapValuesResult(False, PersistentOrderedSet.empty(self._value_policy))
@@ -158,6 +193,8 @@ class PersistentOrderedMultimap(Generic[K, V]):
         )
 
     def try_get_key(self, key: K) -> OrderedMultimapKeyResult[K]:
+        """The stored key representative equivalent to ``key``, reported presence-safely."""
+
         group = self._groups.try_get_entry(key)
         return (
             OrderedMultimapKeyResult(False)
@@ -166,6 +203,8 @@ class PersistentOrderedMultimap(Generic[K, V]):
         )
 
     def try_get_value(self, key: K, value: V) -> OrderedSetValueResult[V]:
+        """The stored value representative for ``value`` under ``key``, reported presence-safely."""
+
         group = self._groups.try_get_entry(key)
         return (
             OrderedSetValueResult(False, value)
@@ -238,6 +277,13 @@ class PersistentOrderedMultimap(Generic[K, V]):
         return group_end if seen_group else position
 
     def add(self, key: K, value: V) -> PersistentOrderedMultimap[K, V]:
+        """Return a multimap containing the pair ``(key, value)``.
+
+        A new key is appended after the existing keys; a new value is appended after that key's
+        existing values. Re-adding a present pair returns the receiver and disturbs neither
+        ordering.
+        """
+
         group = self._groups.try_get_entry(key)
         if group.found and group.entry is not None:
             values = group.entry.value.add(value)
@@ -256,10 +302,18 @@ class PersistentOrderedMultimap(Generic[K, V]):
         )
 
     def try_add(self, key: K, value: V) -> OrderedMultimapAddResult[K, V]:
+        """Add the pair, reporting whether it was new along with the resulting multimap."""
+
         result = self.add(key, value)
         return OrderedMultimapAddResult(result is not self, result)
 
     def remove(self, key: K, value: V) -> PersistentOrderedMultimap[K, V]:
+        """Return a multimap without the pair ``(key, value)``.
+
+        A key that loses its last value disappears with it, keeping every group non-empty. Removing
+        an absent pair returns the receiver.
+        """
+
         group = self._groups.try_get_entry(key)
         if not group.found or group.entry is None:
             return self
@@ -274,6 +328,9 @@ class PersistentOrderedMultimap(Generic[K, V]):
         return PersistentOrderedMultimap(groups, self._value_policy, self._pair_count - 1)
 
     def remove_key(self, key: K) -> PersistentOrderedMultimap[K, V]:
+        """Return a multimap without ``key`` and all of its values; a no-op when the key is absent.
+        """
+
         group = self._groups.try_get_entry(key)
         if not group.found or group.entry is None:
             return self
@@ -284,26 +341,47 @@ class PersistentOrderedMultimap(Generic[K, V]):
         )
 
     def clear(self) -> PersistentOrderedMultimap[K, V]:
+        """Return an empty multimap retaining both policies; a no-op when already empty."""
+
         return self if self.is_empty else self.empty(self.key_policy, self._value_policy)
 
     def keys(self) -> Iterator[K]:
+        """Iterate the keys in the order they first acquired a value."""
+
         return self._groups.keys()
 
     def groups(self) -> Iterator[tuple[K, PersistentOrderedSet[V]]]:
+        """Iterate each key with its ordered value set, keys in key order. Every set is non-empty.
+        """
+
         for group in self._groups:
             yield group.key, group.value
 
     def __iter__(self) -> Iterator[OrderedMultimapEntry[K, V]]:
+        """Iterate every pair in grouped order: keys in key order, and within each key, values in
+        the order they were first added to it.
+        """
+
         for group in self._groups:
             for value in group.value:
                 yield OrderedMultimapEntry(group.key, value)
 
     def shares_groups_roots_with(self, other: PersistentOrderedMultimap[K, V]) -> bool:
+        """Whether both multimaps reference the same group-map roots.
+
+        A representation test used to confirm that a no-op avoided copying, not an equality test.
+        """
+
         return self._groups.shares_order_storage_with(
             other._groups
         ) and self._groups.shares_membership_root_with(other._groups)
 
     def validate_structure(self) -> bool:
+        """Check the maintained pair count against the groups and that no group is empty.
+
+        A defensive audit; ordinary operations maintain these invariants.
+        """
+
         if not self._groups.validate_structure():
             return False
         pair_count = 0
@@ -330,6 +408,8 @@ class PersistentOrderedMultimapCursor(Generic[K, V]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..pair_count``, so every cursor names a real gap."""
+
         if (
             type(self.position) is not int
             or self.position < 0
@@ -339,33 +419,56 @@ class PersistentOrderedMultimapCursor(Generic[K, V]):
 
     @property
     def pair_count(self) -> int:
+        """Pair count of the multimap version this cursor is positioned in, which is the length of
+        the flattened sequence the cursor ranks over.
+        """
+
         return self.map.pair_count
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first pair."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last pair."""
+
         return self.position == self.pair_count
 
     def peek_previous(self) -> OrderedMultimapEntry[K, V] | None:
+        """The pair immediately before the gap, or ``None`` at the start."""
+
         return None if self.is_at_start else self.map._cursor_entry_at(self.position - 1)
 
     def peek_next(self) -> OrderedMultimapEntry[K, V] | None:
+        """The pair immediately after the gap, or ``None`` at the end."""
+
         return None if self.is_at_end else self.map._cursor_entry_at(self.position)
 
     def move_previous(self) -> PersistentOrderedMultimapCursor[K, V]:
+        """A cursor one pair earlier, raising :class:`IndexError` at the start.
+
+        The receiver is unchanged; movement produces a new cursor over the same version.
+        """
+
         if self.is_at_start:
             raise IndexError("The ordered-multimap cursor is already at the start.")
         return PersistentOrderedMultimapCursor(self.map, self.position - 1)
 
     def move_next(self) -> PersistentOrderedMultimapCursor[K, V]:
+        """A cursor one pair later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("The ordered-multimap cursor is already at the end.")
         return PersistentOrderedMultimapCursor(self.map, self.position + 1)
 
     def seek(self, position: int) -> PersistentOrderedMultimapCursor[K, V]:
+        """A cursor at ``position`` within the same multimap version, raising when it is out of
+        range.
+        """
+
         return (
             self
             if position == self.position
@@ -388,6 +491,8 @@ class PersistentOrderedMultimapCursor(Generic[K, V]):
         return PersistentOrderedMultimapCursor(updated, updated._cursor_group_end(key))
 
     def try_add(self, key: K, value: V) -> tuple[bool, PersistentOrderedMultimapCursor[K, V]]:
+        """Add the pair, returning whether it was new along with the resulting cursor."""
+
         cursor = self.add(key, value)
         return cursor is not self, cursor
 

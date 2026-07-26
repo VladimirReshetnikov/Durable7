@@ -45,6 +45,8 @@ class BiMapConflictError(ValueError):
     """Raised when one side of a strict bijection is already represented."""
 
     def __init__(self, conflict: Literal["key", "value"]) -> None:
+        """Record which side of the bijection was already represented."""
+
         super().__init__(f"An equivalent {conflict} is already present.")
         self.conflict = conflict
 
@@ -63,6 +65,11 @@ class PersistentBiMap(Generic[K, V]):
         forward: PersistentHashMap[K, V],
         inverse: PersistentHashMap[V, K],
     ) -> None:
+        """Wrap already-built forward and inverse maps; use the factory methods instead.
+
+        The caller is responsible for the two maps describing the same pair set.
+        """
+
         self._forward = forward
         self._inverse = inverse
         self._inverse_lock = Lock()
@@ -139,9 +146,13 @@ class PersistentBiMap(Generic[K, V]):
             return current
 
     def __len__(self) -> int:
+        """Number of pairs, which is both the key count and the value count."""
+
         return self.size
 
     def __bool__(self) -> bool:
+        """Whether the bimap holds at least one pair."""
+
         return not self.is_empty
 
     def contains_key(self, key: K) -> bool:
@@ -155,9 +166,16 @@ class PersistentBiMap(Generic[K, V]):
         return self._inverse.contains_key(value)
 
     def __contains__(self, key: object) -> bool:
+        """Whether a key equivalence class exists, for the ``in`` operator.
+
+        Membership is tested against keys only; use :meth:`contains_value` for the other side.
+        """
+
         return self.contains_key(key)  # type: ignore[arg-type]
 
     def __getitem__(self, key: K) -> V:
+        """Return the value paired with ``key``, raising :class:`KeyError` when absent."""
+
         return self._forward[key]
 
     def get(self, key: K) -> BiMapLookupResult[V]:
@@ -279,6 +297,8 @@ class PersistentBiMap(Generic[K, V]):
         return iter(self)
 
     def __iter__(self) -> Iterator[HamtEntry[K, V]]:
+        """Iterate the pairs in the forward map's order."""
+
         return iter(self._forward)
 
     def validate_structure(self) -> bool:

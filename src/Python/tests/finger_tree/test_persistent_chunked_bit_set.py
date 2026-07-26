@@ -1,3 +1,11 @@
+"""Tests for the persistent sparse chunked bit set.
+
+Covers construction sorting and deduplicating indices across word boundaries, enforcement of the
+nonnegative signed-32-bit domain, receiver identity for point no-ops, inclusive rank, zero-based
+select, all four algebra operations, and contraction of emptied words together with snapshot and
+annotation consistency.
+"""
+
 from __future__ import annotations
 
 import pytest

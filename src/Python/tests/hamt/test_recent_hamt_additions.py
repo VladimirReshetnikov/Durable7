@@ -35,6 +35,8 @@ class _Value:
     identity: int
 
     def __eq__(self, other: object) -> bool:
+        """Compare by payload, so the test can distinguish equal values held as separate objects."""
+
         return isinstance(other, _Value) and self.semantic == other.semantic
 
 
@@ -43,23 +45,35 @@ class _EqualityFailingValue:
     identity: int
 
     def __eq__(self, other: object) -> bool:
+        """Always raise, so the test can check that a failed comparison leaves the collection
+        unchanged.
+        """
+
         raise ValueError("value equality failure")
 
 
 class _CountingPolicy(HashPolicy[_Key]):
     def __init__(self) -> None:
+        """Start with the call counters at zero."""
+
         self.hash_calls = 0
         self.equivalent_calls = 0
 
     def hash(self, key: _Key) -> int:
+        """Hash the key and count the call."""
+
         self.hash_calls += 1
         return sum(ord(character) for character in key.text.casefold())
 
     def equivalent(self, left: _Key, right: _Key) -> bool:
+        """Compare keys and count the call."""
+
         self.equivalent_calls += 1
         return left.text.casefold() == right.text.casefold()
 
     def reset(self) -> None:
+        """Zero the counters between phases of a test."""
+
         self.hash_calls = 0
         self.equivalent_calls = 0
 

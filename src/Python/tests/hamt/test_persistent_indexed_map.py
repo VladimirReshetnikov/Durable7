@@ -1,3 +1,11 @@
+"""Tests for the persistent map with an automatically maintained secondary index.
+
+The index must never drift from the primary map, so these tests count index-selector
+invocations: duplicate adds and equal-value updates must skip it, a changed value must move the
+entry between groups, removal must not call it, and a selector that raises must leave the source
+reusable. Also covers representative retention in both the primary and secondary indexes.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,6 +22,10 @@ from durable7 import (
 
 @dataclass(frozen=True)
 class Key:
+    """A key wrapper with controlled equality, so the test can check which representative is
+    retained.
+    """
+
     identifier: int
     name: str
 

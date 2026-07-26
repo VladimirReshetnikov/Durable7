@@ -1,3 +1,11 @@
+"""Cross-structure tests for the ordered and query cursor surface.
+
+Asserts that the sorted, canonical, interval, chunked-bit-set, and priority-search cursors share
+one vocabulary and one set of repair rules: occurrence and representative retention, strictness,
+deletion of exact occurrences, population-rank addressing, value-based rather than
+identity-based replacement, and peeks that descend by rank without materializing the sequence.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Iterator

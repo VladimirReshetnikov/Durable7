@@ -1,3 +1,12 @@
+"""Tests for the lazily range-updating persistent sequence.
+
+Covers the public surface and the functional algebra adapter, the order sensitivity of the tag
+and measure algebra laws, factories and edits together with split, concat, range, and identity
+retention, one-time capture of the empty measure, the signed-32-bit count limit taking effect
+before policy callbacks, overflow-safe range validation ordering, and composition direction under
+nested additive, assigning, and affine tags.
+"""
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
@@ -32,14 +41,20 @@ class _Tag:
 
     @classmethod
     def identity(cls, flavor: int = 0) -> _Tag:
+        """The tag or measure identity for this algebra."""
+
         return cls(1, 0, flavor)
 
     @classmethod
     def add(cls, value: int) -> _Tag:
+        """A tag that adds a constant to each element."""
+
         return cls(1, value)
 
     @classmethod
     def assign(cls, value: int) -> _Tag:
+        """A tag that replaces each element with a constant."""
+
         return cls(0, value)
 
 
@@ -55,9 +70,13 @@ class _AffineAlgebra:
 
     @property
     def identity(self) -> _Measure:
+        """The tag or measure identity for this algebra."""
+
         return _Measure(0, 0, 0)
 
     def combine(self, left: _Measure, right: _Measure) -> _Measure:
+        """Combine two measures in sequence order."""
+
         return _Measure(
             left.count + right.count,
             left.total + right.total,
@@ -65,12 +84,18 @@ class _AffineAlgebra:
         )
 
     def measure(self, element: int) -> _Measure:
+        """The measure of a single element."""
+
         return _Measure(1, element, 0)
 
     def is_identity(self, tag: _Tag) -> bool:
+        """Whether the tag acts as the identity."""
+
         return tag.multiplier == 1 and tag.offset == 0
 
     def compose(self, newer: _Tag, older: _Tag) -> _Tag:
+        """Compose two tags, ``older`` applied first, so the test can observe composition order."""
+
         if newer.multiplier == 1 and newer.offset == 0:
             return older
         if older.multiplier == 1 and older.offset == 0:
@@ -81,9 +106,13 @@ class _AffineAlgebra:
         )
 
     def apply_element(self, tag: _Tag, element: int) -> int:
+        """Apply a tag to one element."""
+
         return tag.multiplier * element + tag.offset
 
     def apply_measure(self, tag: _Tag, measure: _Measure, count: int) -> _Measure:
+        """Apply a tag to the cached measure of ``count`` elements."""
+
         if count == 0:
             return self.identity
         return _Measure(
@@ -234,10 +263,15 @@ def test_factories_edits_split_concat_ranges_and_identity_retention() -> None:
 
 class _CountingIdentityAlgebra(_AffineAlgebra):
     def __init__(self) -> None:
+        """Start with the call counters at zero and no failure armed."""
+
         self.identity_reads = 0
 
     @property
     def identity(self) -> _Measure:
+        """Return the identity and count the call, so the test can assert it is captured only once.
+        """
+
         self.identity_reads += 1
         return _Measure(0, 0, 0)
 
@@ -367,6 +401,8 @@ class _NullableAlgebra:
         return "<null>;" if value is None else f"<{len(value)}:{value}>;"
 
     def combine(self, left: _NullableMeasure, right: _NullableMeasure) -> _NullableMeasure:
+        """Combine two measures in sequence order."""
+
         return _NullableMeasure(
             left.count + right.count,
             left.non_null_count + right.non_null_count,
@@ -374,18 +410,28 @@ class _NullableAlgebra:
         )
 
     def measure(self, element: str | None) -> _NullableMeasure:
+        """The measure of a single element."""
+
         return _NullableMeasure(1, int(element is not None), self._token(element))
 
     def is_identity(self, tag: object) -> bool:
+        """Whether the tag acts as the identity."""
+
         return tag is _NULL_IDENTITY
 
     def compose(self, newer: object, older: object) -> object:
+        """Compose two tags, ``older`` applied first, so the test can observe composition order."""
+
         return older if self.is_identity(newer) else newer
 
     def apply_element(self, tag: object, element: str | None) -> str | None:
+        """Apply a tag to one element."""
+
         return element if self.is_identity(tag) else cast(str | None, tag)
 
     def apply_measure(self, tag: object, measure: _NullableMeasure, count: int) -> _NullableMeasure:
+        """Apply a tag to the cached measure of ``count`` elements."""
+
         if self.is_identity(tag):
             return measure
         replacement = cast(str | None, tag)
@@ -504,6 +550,8 @@ def test_all_small_splits_rejoin_and_retain_balanced_shapes() -> None:
 
 class _CallbackFailure(RuntimeError):
     def __init__(self, callback: str, ordinal: int) -> None:
+        """Start with the call counters at zero and no failure armed."""
+
         super().__init__(f"range-update callback {callback} failed at invocation {ordinal}")
         self.callback = callback
         self.ordinal = ordinal
@@ -511,16 +559,22 @@ class _CallbackFailure(RuntimeError):
 
 class _ThrowingAlgebra(_AffineAlgebra):
     def __init__(self) -> None:
+        """Start with the call counters at zero and no failure armed."""
+
         self.armed_callback: str | None = None
         self.armed_ordinal = 0
         self.matching_invocations = 0
 
     def disable(self) -> None:
+        """Disarm the failure, so later calls succeed."""
+
         self.armed_callback = None
         self.armed_ordinal = 0
         self.matching_invocations = 0
 
     def arm(self, callback: str, ordinal: int) -> None:
+        """Arrange for the named callback to raise on its next invocation."""
+
         if ordinal < 1:
             raise ValueError("ordinal must be positive")
         self.armed_callback = callback
@@ -535,26 +589,38 @@ class _ThrowingAlgebra(_AffineAlgebra):
             raise _CallbackFailure(callback, self.matching_invocations)
 
     def combine(self, left: _Measure, right: _Measure) -> _Measure:
+        """Combine two measures in sequence order."""
+
         self._hit("combine")
         return super().combine(left, right)
 
     def measure(self, element: int) -> _Measure:
+        """The measure of a single element."""
+
         self._hit("measure")
         return super().measure(element)
 
     def is_identity(self, tag: _Tag) -> bool:
+        """Whether the tag acts as the identity."""
+
         self._hit("is_identity")
         return super().is_identity(tag)
 
     def compose(self, newer: _Tag, older: _Tag) -> _Tag:
+        """Compose two tags, ``older`` applied first, so the test can observe composition order."""
+
         self._hit("compose")
         return super().compose(newer, older)
 
     def apply_element(self, tag: _Tag, element: int) -> int:
+        """Apply a tag to one element."""
+
         self._hit("apply_element")
         return super().apply_element(tag, element)
 
     def apply_measure(self, tag: _Tag, measure: _Measure, count: int) -> _Measure:
+        """Apply a tag to the cached measure of ``count`` elements."""
+
         self._hit("apply_measure")
         return super().apply_measure(tag, measure, count)
 

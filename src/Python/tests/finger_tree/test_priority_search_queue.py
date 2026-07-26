@@ -1,3 +1,11 @@
+"""Tests for the persistent priority search queue.
+
+Covers the cached minimum and its key-based tie-breaking, range pruning, first-key retention,
+no-op and try-result shapes, AVL balance and node sharing under ascending updates, empty views,
+failure atomicity, safety of immutable snapshots for parallel readers, and agreement with a map
+reference model under randomized updates and drains.
+"""
+
 from __future__ import annotations
 
 import math
@@ -96,6 +104,10 @@ def test_psq_empty_views_and_failure_atomicity() -> None:
         empty.delete_minimum()
 
     class Comparator:
+        """A counting comparator that can be armed to raise, for callback-count and failure-
+        atomicity assertions.
+        """
+
         fail = False
 
         def __call__(self, left: int, right: int) -> int:

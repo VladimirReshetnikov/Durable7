@@ -29,21 +29,31 @@ class _Value:
     identity: int
 
     def __eq__(self, other: object) -> bool:
+        """Compare by payload, so the test can distinguish equal values held as separate objects."""
+
         return isinstance(other, _Value) and self.semantic == other.semantic
 
 
 class _ReentrantIntPolicy(HashPolicy[int]):
     def __init__(self) -> None:
+        """Start with both reentrancy hooks disarmed."""
+
         self._hash_hook: Callable[[], None] | None = None
         self._equivalent_hook: Callable[[], None] | None = None
 
     def arm_hash(self, hook: Callable[[], None]) -> None:
+        """Arrange for the next hash call to re-enter the facade, exercising the retry path."""
+
         self._hash_hook = hook
 
     def arm_equivalent(self, hook: Callable[[], None]) -> None:
+        """Arrange for the next equality call to re-enter the facade, exercising the retry path."""
+
         self._equivalent_hook = hook
 
     def hash(self, _key: int) -> int:
+        """Hash the key, first running any armed reentrant callback."""
+
         hook = self._hash_hook
         self._hash_hook = None
         if hook is not None:
@@ -51,6 +61,8 @@ class _ReentrantIntPolicy(HashPolicy[int]):
         return 0
 
     def equivalent(self, left: int, right: int) -> bool:
+        """Compare keys, first running any armed reentrant callback."""
+
         hook = self._equivalent_hook
         self._equivalent_hook = None
         if hook is not None:

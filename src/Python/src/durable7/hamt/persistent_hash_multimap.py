@@ -54,6 +54,12 @@ class PersistentHashMultimap(Generic[K, V]):
         value_policy: HashPolicy[V],
         pair_count: int,
     ) -> None:
+        """Wrap already-built indexes; use :meth:`empty` or :meth:`from_items` instead.
+
+        The caller is responsible for ``pair_count`` matching ``groups`` and for every group being
+        non-empty.
+        """
+
         self._groups = groups
         self._value_policy = value_policy
         self._pair_count = pair_count
@@ -89,34 +95,52 @@ class PersistentHashMultimap(Generic[K, V]):
 
     @property
     def key_count(self) -> int:
+        """Number of distinct keys. Every key has at least one value."""
+
         return self._groups.size
 
     @property
     def pair_count(self) -> int:
+        """Number of ``(key, value)`` pairs, maintained incrementally."""
+
         return self._pair_count
 
     @property
     def is_empty(self) -> bool:
+        """Whether the multimap holds no pairs, and therefore no keys."""
+
         return self._pair_count == 0
 
     @property
     def key_policy(self) -> HashPolicy[K]:
+        """The retained hash policy defining key equivalence."""
+
         return self._groups.policy
 
     @property
     def value_policy(self) -> HashPolicy[V]:
+        """The retained hash policy defining value equivalence within each group."""
+
         return self._value_policy
 
     def __len__(self) -> int:
+        """Number of pairs, matching :attr:`pair_count` rather than the key count."""
+
         return self._pair_count
 
     def __bool__(self) -> bool:
+        """Whether the multimap holds at least one pair."""
+
         return not self.is_empty
 
     def contains_key(self, key: K) -> bool:
+        """Whether ``key`` has at least one value."""
+
         return self._groups.contains_key(key)
 
     def contains(self, key: K, value: V) -> bool:
+        """Whether the pair ``(key, value)`` is present."""
+
         group = self._groups.get_entry(key)
         return group is not None and group.value.contains(value)
 
@@ -137,6 +161,12 @@ class PersistentHashMultimap(Generic[K, V]):
         return PersistentHashSet.empty(self._value_policy) if group is None else group.value
 
     def try_get_values(self, key: K) -> HashMultimapValuesResult[V]:
+        """Return ``key``'s value group without conflating absence with an empty group.
+
+        On a miss the result carries ``found=False`` and a policy-preserving empty set, so callers
+        never receive a group that the multimap itself would not store.
+        """
+
         group = self._groups.get_entry(key)
         return (
             HashMultimapValuesResult(False, PersistentHashSet.empty(self._value_policy))
@@ -196,12 +226,18 @@ class PersistentHashMultimap(Generic[K, V]):
         )
 
     def clear(self) -> PersistentHashMultimap[K, V]:
+        """Return an empty multimap retaining both policies; a no-op when already empty."""
+
         return self if self.is_empty else self.empty(self.key_policy, self._value_policy)
 
     def keys(self) -> Iterator[K]:
+        """Iterate the distinct keys in the outer map's order."""
+
         return self._groups.keys()
 
     def __iter__(self) -> Iterator[HashMultimapEntry[K, V]]:
+        """Iterate every ``(key, value)`` pair, flattening the groups."""
+
         for group in self._groups:
             for value in group.value:
                 yield HashMultimapEntry(group.key, value)

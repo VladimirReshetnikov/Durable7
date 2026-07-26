@@ -16,6 +16,12 @@ V = TypeVar("V")
 
 
 class MerklePersistenceFailure(StrEnum):
+    """Why untrusted persistence input was rejected.
+
+    Naming the cause lets a caller tell a corrupt or over-budget input from a well-formed one that
+    simply belongs to a different policy domain.
+    """
+
     CONFLICTING_BLOCK = "conflicting-block"
     MISSING_BLOCK = "missing-block"
     DIGEST_MISMATCH = "digest-mismatch"
@@ -30,28 +36,52 @@ class MerklePersistenceError(ValueError):
     """Typed rejection of untrusted Merkle persistence input."""
 
     def __init__(self, kind: MerklePersistenceFailure, message: str) -> None:
+        """Record the failure kind alongside the human-readable message."""
+
         super().__init__(message)
         self.kind = kind
 
 
 @dataclass(frozen=True, slots=True, init=False)
 class MerkleBlock:
+    """One content-addressed block: its digest and the exact bytes that hash to it."""
+
     digest: MerkleDigest
     content: bytes
 
     def __init__(self, digest: MerkleDigest, content: bytes | bytearray | memoryview) -> None:
+        """Capture the digest and copy the content, so the block is immutable once built."""
+
         object.__setattr__(self, "digest", digest)
         object.__setattr__(self, "content", bytes(content))
 
 
 class MerkleBlockStore(Protocol):
-    def get(self, digest: MerkleDigest) -> MerkleBlock | None: ...
+    """Content-addressed store holding the blocks a Merkle tree decomposes into.
 
-    def put(self, block: MerkleBlock) -> bool: ...
+    Blocks are immutable and keyed by their own digest, so a store never has to reconcile two
+    versions of one block: either the bytes match what is already stored or the input is bad.
+    """
 
-    def contains(self, digest: MerkleDigest) -> bool: ...
+    def get(self, digest: MerkleDigest) -> MerkleBlock | None:
+        """Return the block with this digest, or ``None`` when it is not stored."""
+        ...
 
-    def digests(self) -> tuple[MerkleDigest, ...]: ...
+    def put(self, block: MerkleBlock) -> bool:
+        """Store ``block``, returning whether it was newly written.
+
+        Storing a block that is already present is a no-op reporting ``False``. Conflicting bytes
+        under an existing digest must be rejected rather than overwritten.
+        """
+        ...
+
+    def contains(self, digest: MerkleDigest) -> bool:
+        """Return whether a block with this digest is stored."""
+        ...
+
+    def digests(self) -> tuple[MerkleDigest, ...]:
+        """Return every stored digest."""
+        ...
 
 
 class InMemoryMerkleBlockStore:
@@ -60,30 +90,50 @@ class InMemoryMerkleBlockStore:
     __slots__ = ("_blocks", "_lock")
 
     def __init__(self, blocks: Iterable[MerkleBlock] = ()) -> None:
+        """Create a store seeded with ``blocks``, published atomically."""
+
         self._blocks: dict[str, MerkleBlock] = {}
         self._lock = RLock()
         self.put_many_atomic(blocks)
 
     @property
     def count(self) -> int:
+        """Number of distinct blocks held."""
+
         with self._lock:
             return len(self._blocks)
 
     def __len__(self) -> int:
+        """Number of distinct blocks held, matching :attr:`count`."""
+
         return self.count
 
     def get(self, digest: MerkleDigest) -> MerkleBlock | None:
+        """Return the block with this digest, or ``None`` when it is not stored."""
+
         with self._lock:
             return self._blocks.get(str(digest))
 
     def contains(self, digest: MerkleDigest) -> bool:
+        """Return whether a block with this digest is stored."""
+
         with self._lock:
             return str(digest) in self._blocks
 
     def put(self, block: MerkleBlock) -> bool:
+        """Store one block, returning whether it was newly written."""
+
         return self.put_many_atomic((block,)) == 1
 
     def put_many_atomic(self, blocks: Iterable[MerkleBlock]) -> int:
+        """Store every block or none of them, returning how many were newly written.
+
+        The batch is checked for internal conflicts and against what is already stored before
+        anything is written, so a rejected batch leaves the store untouched. Conflicting bytes under
+        an existing digest raise rather than overwriting - under content addressing that can only
+        mean the input is wrong.
+        """
+
         incoming: dict[str, MerkleBlock] = {}
         for block in blocks:
             key = str(block.digest)
@@ -110,12 +160,20 @@ class InMemoryMerkleBlockStore:
             return written
 
     def digests(self) -> tuple[MerkleDigest, ...]:
+        """Return every stored digest, in ascending order."""
+
         with self._lock:
             return tuple(sorted(block.digest for block in self._blocks.values()))
 
 
 @dataclass(frozen=True, slots=True, init=False)
 class MerkleBlockPack:
+    """A transferable bundle of blocks, tagged with the tree they describe.
+
+    The algorithm and domain identifiers travel with the blocks so a receiver can reject a pack
+    built under a different policy instead of importing it as if it matched.
+    """
+
     algorithm_id: str
     domain_digest: MerkleDigest
     root_hash: MerkleDigest
@@ -128,6 +186,10 @@ class MerkleBlockPack:
         root_hash: MerkleDigest,
         blocks: Iterable[MerkleBlock],
     ) -> None:
+        """Capture the envelope and deduplicate the blocks, rejecting repeated digests whose bytes
+        differ.
+        """
+
         unique: dict[str, MerkleBlock] = {}
         for block in blocks:
             key = str(block.digest)
@@ -146,15 +208,30 @@ class MerkleBlockPack:
 
     @property
     def block_count(self) -> int:
+        """Number of distinct blocks in the pack."""
+
         return len(self.blocks)
 
     @property
     def contains_root_block(self) -> bool:
+        """Whether the pack carries the block naming its own claimed root.
+
+        A pack without it can still be useful for synchronization, where the receiver already holds
+        the root.
+        """
+
         return any(block.digest == self.root_hash for block in self.blocks)
 
 
 @dataclass(frozen=True, slots=True)
 class MerkleVerificationBudget:
+    """Ceilings that bound the work untrusted Merkle input may force.
+
+    Without them a crafted pack or proof could demand unbounded memory or time - a deep chain, a
+    huge block, an enormous entry count. Every limit is charged during verification, and
+    exceeding one fails the operation rather than continuing.
+    """
+
     maximum_blocks: int = 1_000_000
     maximum_total_bytes: int = 1_073_741_824
     maximum_block_bytes: int = 16_777_216
@@ -164,6 +241,12 @@ class MerkleVerificationBudget:
     maximum_query_bytes: int | None = None
 
     def __post_init__(self) -> None:
+        """Default the query ceiling to the block ceiling and reject nonsensical limits.
+
+        Each limit must be a positive integer, and neither the per-block nor the per-query ceiling
+        may exceed the total byte ceiling.
+        """
+
         if self.maximum_query_bytes is None:
             object.__setattr__(self, "maximum_query_bytes", self.maximum_block_bytes)
         values = (
@@ -189,6 +272,8 @@ class _VerificationContext:
     __slots__ = ("blocks", "budget", "bytes", "entries", "seen")
 
     def __init__(self, budget: MerkleVerificationBudget) -> None:
+        """Start an accounting context that charges work against ``budget``."""
+
         self.budget = budget
         self.seen: set[str] = set()
         self.blocks = 0
@@ -196,10 +281,18 @@ class _VerificationContext:
         self.entries = 0
 
     def check_depth(self, depth: int) -> None:
+        """Fail when ``depth`` exceeds the budget, bounding how deep a chain input may force."""
+
         if depth > self.budget.maximum_depth:
             self._exceeded("maximum Merkle depth exceeded")
 
     def account_block(self, block: MerkleBlock, depth: int) -> bool:
+        """Charge one block, returning whether it had not already been accounted for.
+
+        Blocks already seen are not charged twice, which is what lets a shared subtree be visited
+        without inflating the cost.
+        """
+
         self.check_depth(depth)
         if len(block.content) > self.budget.maximum_block_bytes:
             self._exceeded("maximum Merkle block size exceeded")
@@ -216,11 +309,15 @@ class _VerificationContext:
         return True
 
     def account_entries(self, count: int) -> None:
+        """Charge ``count`` decoded entries against the budget."""
+
         self.entries += count
         if self.entries > self.budget.maximum_entries:
             self._exceeded("maximum decoded-entry count exceeded")
 
     def account_query(self, count: int) -> None:
+        """Charge a proof query's bytes, against both the per-query and total ceilings."""
+
         if count > cast(int, self.budget.maximum_query_bytes):
             self._exceeded("maximum proof-query size exceeded")
         self.bytes += count
@@ -245,10 +342,18 @@ class _Reader:
     __slots__ = ("data", "offset")
 
     def __init__(self, data: bytes) -> None:
+        """Start reading ``data`` from its first byte."""
+
         self.data = data
         self.offset = 0
 
     def take(self, length: int) -> bytes:
+        """Consume and return the next ``length`` bytes.
+
+        A length that runs past the end is a malformed block, not an internal error, so this raises
+        a typed persistence failure rather than an index error.
+        """
+
         if length < 0 or self.offset + length > len(self.data):
             raise MerklePersistenceError(
                 MerklePersistenceFailure.INVALID_BLOCK,
@@ -259,9 +364,13 @@ class _Reader:
         return result
 
     def byte(self) -> int:
+        """Consume and return the next byte."""
+
         return self.take(1)[0]
 
     def int32(self) -> int:
+        """Consume the next four bytes as a big-endian signed 32-bit integer."""
+
         return int.from_bytes(self.take(4), "big", signed=True)
 
 
@@ -348,19 +457,33 @@ class _OverlayStore:
     __slots__ = ("destination", "staged")
 
     def __init__(self, staged: dict[str, MerkleBlock], destination: MerkleBlockStore) -> None:
+        """Read through ``staged`` first, then ``destination``.
+
+        Lets an incoming pack be verified against blocks it has not yet been allowed to publish.
+        """
+
         self.staged = staged
         self.destination = destination
 
     def get(self, digest: MerkleDigest) -> MerkleBlock | None:
+        """Return a staged block if there is one, otherwise the destination's."""
+
         return self.staged.get(str(digest)) or self.destination.get(digest)
 
     def put(self, block: MerkleBlock) -> bool:  # pragma: no cover - verification never writes
+        """Always raises: verification must never write through this overlay."""
+
         raise RuntimeError("read-only verification overlay")
 
     def contains(self, digest: MerkleDigest) -> bool:
+        """Whether either the staging area or the destination holds this digest."""
+
         return str(digest) in self.staged or self.destination.contains(digest)
 
     def digests(self) -> tuple[MerkleDigest, ...]:
+        """Always empty; enumeration is not needed during verification and would be misleading here.
+        """
+
         return ()
 
 
@@ -389,6 +512,12 @@ def _load_with_store(
         has_maximum: bool,
         parent_level: int,
     ) -> _Node[K, V] | None:
+        """Re-derive one node from its stored block, verifying it and recursing into its children.
+
+        Checks the digest against the bytes, enforces the key bounds inherited from the parent, and
+        detects cycles, so a corrupted or adversarial store cannot produce a malformed tree.
+        """
+
         if digest == policy.empty_digest:
             return None
         verification.check_depth(depth)
@@ -479,6 +608,11 @@ def _load_with_store(
 def export_merkle_pack(
     tree: MerkleSearchTree[K, V], digests: Iterable[MerkleDigest] | None = None
 ) -> MerkleBlockPack:
+    """Bundle a tree's blocks into a pack, or just the ``digests`` requested.
+
+    Requesting a digest the tree does not contain raises rather than silently omitting it.
+    """
+
     blocks = tuple(MerkleBlock(block.digest, block.bytes) for block in tree.blocks_preorder())
     if digests is None:
         selected = blocks
@@ -525,6 +659,11 @@ def _publish_blocks(blocks: tuple[MerkleBlock, ...], store: MerkleBlockStore) ->
 
 
 def save_merkle_tree(tree: MerkleSearchTree[K, V], store: MerkleBlockStore) -> int:
+    """Write every block of ``tree`` into ``store``, returning how many were newly written.
+
+    Conflicting bytes at an existing digest abort the write before anything is published.
+    """
+
     return _publish_blocks(export_merkle_pack(tree).blocks, store)
 
 
@@ -534,6 +673,12 @@ def load_merkle_tree(
     store: MerkleBlockStore,
     budget: MerkleVerificationBudget | None = None,
 ) -> MerkleSearchTree[K, V]:
+    """Rebuild the tree with this root digest from ``store``, verifying every block.
+
+    Each block's digest is recomputed from its bytes, so a corrupted or substituted block is
+    rejected rather than trusted. Work is charged against ``budget``.
+    """
+
     actual_budget = budget or MerkleVerificationBudget()
     return _load_with_store(root_hash, policy, store, actual_budget)
 
@@ -544,6 +689,12 @@ def import_merkle_pack(
     destination: MerkleBlockStore | None = None,
     budget: MerkleVerificationBudget | None = None,
 ) -> MerkleSearchTree[K, V]:
+    """Verify a received pack and publish its blocks, returning the tree it describes.
+
+    The pack is verified in full before anything is written, so a bad pack leaves the destination
+    untouched. Its declared policy domain must match ``policy``.
+    """
+
     if (
         pack.algorithm_id != MerkleSearchTreePolicy.ALGORITHM_ID
         or pack.domain_digest != policy.domain_digest
@@ -576,6 +727,12 @@ def import_merkle_pack(
 
 @dataclass(frozen=True, slots=True)
 class MerkleSyncPlan:
+    """What a receiver still needs in order to reach a target root.
+
+    The examined counts report how much of the tree the comparison had to walk, which stays small
+    when the two sides mostly agree.
+    """
+
     target_root: MerkleDigest
     roots_match: bool
     requested_digests: tuple[MerkleDigest, ...]
@@ -584,12 +741,20 @@ class MerkleSyncPlan:
 
     @property
     def requires_blocks(self) -> bool:
+        """Whether the receiver is missing anything at all."""
+
         return bool(self.requested_digests)
 
 
 def create_merkle_sync_pack(
     tree: MerkleSearchTree[K, V], receiver: MerkleBlockStore
 ) -> MerkleBlockPack:
+    """Bundle exactly the blocks of ``tree`` that ``receiver`` does not already hold.
+
+    A subtree the receiver already has is skipped whole on one digest lookup, so the pack is
+    proportional to the difference rather than to the tree.
+    """
+
     missing: list[MerkleBlock] = []
     root = tree._root
     pending = [] if root is None else [root]
@@ -612,6 +777,12 @@ def plan_merkle_sync(
     published_local: MerkleSearchTree[K, V],
     receiver: MerkleBlockStore,
 ) -> MerkleSyncPlan:
+    """Work out which blocks a receiver needs to move from one tree to another, without sending any.
+
+    Descends only where the two roots disagree, so subtrees that already match cost one digest
+    comparison regardless of size. Both trees must share a policy domain.
+    """
+
     if not target.policy.is_compatible_with(
         cast("MerkleSearchTreePolicy[object, object]", published_local.policy)
     ):

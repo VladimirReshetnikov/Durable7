@@ -1,3 +1,11 @@
+"""Tests for the persistent interval-keyed map.
+
+Covers lexicographic ordering of equal-low keys and duplicate rejection, first-key retention with
+receiver identity for equal values, rejection of intervals invalid under the map comparator,
+overlap and stabbing queries driven by the cached maximum endpoint, exact-key removal leaving
+retained snapshots intact, and policy preservation with annotation validation.
+"""
+
 import pytest
 
 from durable7.finger_tree import (

@@ -21,6 +21,8 @@ def _equal_value(left: object, right: object) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchEntry(Generic[K, P, V]):
+    """One queue entry: the unique key it is addressed by, its priority, and its payload."""
+
     key: K
     priority: P
     value: V
@@ -42,6 +44,11 @@ class _Node(Generic[K, P, V]):
         right: _Node[K, P, V] | None,
         winner: PrioritySearchEntry[K, P, V],
     ) -> None:
+        """Build a node, deriving its height and subtree count from its children. ``winner`` is the
+        minimum-priority entry of this whole subtree, cached so the overall minimum is available
+        at the root without a search.
+        """
+
         object.__setattr__(self, "entry", entry)
         object.__setattr__(self, "left", left)
         object.__setattr__(self, "right", right)
@@ -60,6 +67,8 @@ class _Node(Generic[K, P, V]):
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchQueueStatistics:
+    """Shape measurements returned by a successful structural audit."""
+
     count: int
     height: int
     maximum_absolute_balance_factor: int
@@ -67,23 +76,38 @@ class PrioritySearchQueueStatistics:
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchCursorPeek(Generic[K, P, V]):
+    """An entry found next to a cursor gap. Wrapping it keeps a stored ``None`` payload distinct
+    from "nothing there".
+    """
+
     value: PrioritySearchEntry[K, P, V]
 
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchCursorSearch(Generic[K, P, V]):
+    """The outcome of seeking a cursor to a key. On a miss the cursor sits at the lower bound and
+    remains usable.
+    """
+
     found: bool
     cursor: PrioritySearchQueueCursor[K, P, V]
 
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchAddResult(Generic[K, P, V]):
+    """The outcome of a non-overwriting insertion; the queue is the receiver when nothing was added.
+    """
+
     added: bool
     queue: PrioritySearchQueue[K, P, V]
 
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchRemoveResult(Generic[K, P, V]):
+    """The outcome of a keyed removal. The explicit ``removed`` flag keeps an entry whose payload is
+    ``None`` distinct from nothing having been removed.
+    """
+
     removed: bool
     entry: PrioritySearchEntry[K, P, V] | None
     queue: PrioritySearchQueue[K, P, V]
@@ -91,6 +115,8 @@ class PrioritySearchRemoveResult(Generic[K, P, V]):
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchMinimumView(Generic[K, P, V]):
+    """The minimum-priority entry together with the queue that remains once it is removed."""
+
     entry: PrioritySearchEntry[K, P, V]
     remainder: PrioritySearchQueue[K, P, V]
 
@@ -113,6 +139,8 @@ class PrioritySearchQueue(Generic[K, P, V]):
         key_comparator: Comparator[K],
         priority_comparator: Comparator[P],
     ) -> None:
+        """Wrap an already-built root; use :meth:`empty` or :meth:`from_iterable` instead."""
+
         self._root = root
         self.key_comparator = key_comparator
         self.priority_comparator = priority_comparator
@@ -123,6 +151,11 @@ class PrioritySearchQueue(Generic[K, P, V]):
         key_comparator: Comparator[K] = default_comparator,
         priority_comparator: Comparator[P] = default_comparator,
     ) -> PrioritySearchQueue[K, P, V]:
+        """Return an empty queue ordered by the two comparators. Both are retained by identity, and
+        operations mixing queues built with different comparator objects are rejected rather than
+        producing a malformed queue.
+        """
+
         return cls(None, key_comparator, priority_comparator)
 
     @classmethod
@@ -132,37 +165,55 @@ class PrioritySearchQueue(Generic[K, P, V]):
         key_comparator: Comparator[K] = default_comparator,
         priority_comparator: Comparator[P] = default_comparator,
     ) -> PrioritySearchQueue[K, P, V]:
+        """Build a queue from entries; a repeated key keeps the last priority and payload."""
+
         result = cls.empty(key_comparator, priority_comparator)
         for entry in entries:
             result = result.set_item(entry.key, entry.priority, entry.value)
         return result
 
     def __len__(self) -> int:
+        """Number of entries."""
+
         return 0 if self._root is None else self._root.count
 
     @property
     def count(self) -> int:
+        """Number of entries."""
+
         return len(self)
 
     @property
     def size(self) -> int:
+        """Number of entries."""
+
         return len(self)
 
     @property
     def is_empty(self) -> bool:
+        """Whether the queue holds no entries."""
+
         return self._root is None
 
     @property
     def height(self) -> int:
+        """Height of the balanced tree, exposed for structural diagnostics."""
+
         return 0 if self._root is None else self._root.height
 
     @property
     def minimum(self) -> PrioritySearchEntry[K, P, V]:
+        """The entry with the smallest priority, raising :class:`IndexError` when empty. Reads the
+        root's cached winner, so no search is needed. Ties are broken by key order.
+        """
+
         if self._root is None:
             raise IndexError("The priority search queue is empty.")
         return self._root.winner
 
     def minimum_or_none(self) -> PrioritySearchEntry[K, P, V] | None:
+        """The entry with the smallest priority, or ``None`` when the queue is empty."""
+
         return None if self._root is None else self._root.winner
 
     def _find(self, key: K) -> _Node[K, P, V] | None:
@@ -175,12 +226,20 @@ class PrioritySearchQueue(Generic[K, P, V]):
         return None
 
     def contains_key(self, key: K) -> bool:
+        """Whether ``key`` is present."""
+
         return self._find(key) is not None
 
     def __contains__(self, key: object) -> bool:
+        """Whether ``key`` is present, for the ``in`` operator."""
+
         return self.contains_key(cast(K, key))
 
     def get_entry(self, key: K) -> PrioritySearchEntry[K, P, V] | None:
+        """The entry stored under ``key``, or ``None`` when absent. Addressed by key rather than by
+        priority, which is what a plain priority queue cannot do.
+        """
+
         found = self._find(key)
         return None if found is None else found.entry
 
@@ -299,12 +358,19 @@ class PrioritySearchQueue(Generic[K, P, V]):
         )
 
     def set_item(self, key: K, priority: P, value: V) -> PrioritySearchQueue[K, P, V]:
+        """Add ``key``, or replace its priority and payload when present. Changing a priority re-
+        places the entry in the priority index while leaving key order intact. A write that
+        changes nothing returns the receiver.
+        """
+
         result = self._set(self._root, PrioritySearchEntry(key, priority, value), True)
         if result.node is self._root:
             return self
         return PrioritySearchQueue(result.node, self.key_comparator, self.priority_comparator)
 
     def try_add(self, key: K, priority: P, value: V) -> PrioritySearchAddResult[K, P, V]:
+        """Add a new entry, reporting whether it was added. An existing key is left untouched."""
+
         result = self._set(self._root, PrioritySearchEntry(key, priority, value), False)
         queue = (
             PrioritySearchQueue(result.node, self.key_comparator, self.priority_comparator)
@@ -347,6 +413,8 @@ class PrioritySearchQueue(Generic[K, P, V]):
         return self._balance(self._node(node.entry, node.left, right)), removed
 
     def remove(self, key: K) -> PrioritySearchQueue[K, P, V]:
+        """Return a queue without ``key``; a no-op when the key is absent."""
+
         node, entry = self._remove(self._root, key)
         return (
             self
@@ -355,6 +423,8 @@ class PrioritySearchQueue(Generic[K, P, V]):
         )
 
     def try_remove(self, key: K) -> PrioritySearchRemoveResult[K, P, V]:
+        """Remove ``key`` and report the entry that went with it, presence-safely."""
+
         node, entry = self._remove(self._root, key)
         queue = (
             self
@@ -364,6 +434,10 @@ class PrioritySearchQueue(Generic[K, P, V]):
         return PrioritySearchRemoveResult(entry is not None, entry, queue)
 
     def delete_minimum(self) -> PrioritySearchMinimumView[K, P, V]:
+        """Remove the minimum-priority entry, returning it with the remaining queue. Raises
+        :class:`IndexError` when empty; use :meth:`minimum_view` to test and remove at once.
+        """
+
         entry = self.minimum
         node, removed = self._remove(self._root, entry.key)
         if removed is None:
@@ -373,11 +447,19 @@ class PrioritySearchQueue(Generic[K, P, V]):
         )
 
     def minimum_view(self) -> PrioritySearchMinimumView[K, P, V] | None:
+        """The minimum-priority entry and the remaining queue, or ``None`` when empty."""
+
         return None if self.is_empty else self.delete_minimum()
 
     def enumerate_at_most(
         self, minimum_key: K, maximum_key: K, maximum_priority: P
     ) -> Iterator[PrioritySearchEntry[K, P, V]]:
+        """Iterate the entries in the inclusive key range whose priority is at most
+        ``maximum_priority``. Subtrees whose cached winner already exceeds the priority bound are
+        skipped whole, so this does not scan the key range. Raises :class:`ValueError` on an
+        inverted key range.
+        """
+
         if self.key_comparator(minimum_key, maximum_key) > 0:
             raise ValueError("The minimum key must not follow the maximum key.")
         if self._root is None:
@@ -404,6 +486,11 @@ class PrioritySearchQueue(Generic[K, P, V]):
                 pending.append((node.left, False))
 
     def validate_structure(self) -> PrioritySearchQueueStatistics:
+        """Walk the whole tree and return its shape measurements. Checks AVL balance, cached heights
+        and counts, key ordering, and that every node's cached winner really is its subtree's
+        minimum. Raises on the first violation. A defensive audit, not part of normal use.
+        """
+
         if self._root is None:
             return PrioritySearchQueueStatistics(0, 0, 0)
         pending: list[tuple[_Node[K, P, V], object, object]] = [(self._root, _MISSING, _MISSING)]
@@ -440,7 +527,13 @@ class PrioritySearchQueue(Generic[K, P, V]):
         return PrioritySearchQueueStatistics(count, self.height, maximum_balance)
 
     def shared_node_count(self, other: PrioritySearchQueue[K, P, V]) -> int:
+        """Number of nodes the two queues have in common by object identity. Used by the tests to
+        show that a derived version really shares structure rather than having been rebuilt.
+        """
+
         def collect(root: _Node[K, P, V] | None) -> set[int]:
+            """Gather the identities of every node reachable from a root."""
+
             destination: set[int] = set()
             pending = [] if root is None else [root]
             while pending:
@@ -483,15 +576,25 @@ class PrioritySearchQueue(Generic[K, P, V]):
         raise IndexError("Rank is outside the priority-search queue.")
 
     def cursor_at(self, position: int = 0) -> PrioritySearchQueueCursor[K, P, V]:
+        """A cursor at gap ``position`` of the key-ordered sequence."""
+
         return PrioritySearchQueueCursor(self, position)
 
     def cursor_at_lower_bound(self, key: K) -> PrioritySearchQueueCursor[K, P, V]:
+        """A cursor before the first entry whose key is not below ``key``."""
+
         return self.cursor_at(self._bound_rank(key, False))
 
     def cursor_at_upper_bound(self, key: K) -> PrioritySearchQueueCursor[K, P, V]:
+        """A cursor after any entry whose key equals ``key``."""
+
         return self.cursor_at(self._bound_rank(key, True))
 
     def find_cursor(self, key: K) -> PrioritySearchCursorSearch[K, P, V]:
+        """Seek to ``key`` and report whether it is present. On a miss the cursor sits at the lower
+        bound, where the key would be inserted.
+        """
+
         cursor = self.cursor_at_lower_bound(key)
         candidate = cursor.peek_next()
         return PrioritySearchCursorSearch(
@@ -500,6 +603,11 @@ class PrioritySearchQueue(Generic[K, P, V]):
         )
 
     def cursor_at_minimum_priority(self) -> PrioritySearchQueueCursor[K, P, V]:
+        """A cursor positioned at the minimum-priority entry. This is the bridge between the queue's
+        two indexes: the entry is found by priority, and the cursor that comes back walks the key
+        order from there. An empty queue yields a start cursor.
+        """
+
         return (
             self.cursor_at()
             if self._root is None
@@ -507,6 +615,8 @@ class PrioritySearchQueue(Generic[K, P, V]):
         )
 
     def __iter__(self) -> Iterator[PrioritySearchEntry[K, P, V]]:
+        """Iterate the entries in ascending key order, not priority order."""
+
         pending: list[_Node[K, P, V]] = []
         current = self._root
         while current is not None or pending:
@@ -526,47 +636,72 @@ class PrioritySearchQueueCursor(Generic[K, P, V]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         if self.position < 0 or self.position > len(self.queue):
             raise IndexError("Cursor position is outside the priority-search queue.")
 
     @property
     def count(self) -> int:
+        """Entry count of the queue version this cursor is positioned in."""
+
         return len(self.queue)
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first entry in key order."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last entry in key order."""
+
         return self.position == self.count
 
     def peek_previous(self) -> PrioritySearchCursorPeek[K, P, V] | None:
+        """The entry immediately before the gap, or ``None`` at the start."""
+
         if self.is_at_start:
             return None
         return PrioritySearchCursorPeek(self.queue._entry_at(self.position - 1))
 
     def peek_next(self) -> PrioritySearchCursorPeek[K, P, V] | None:
+        """The entry immediately after the gap, or ``None`` at the end."""
+
         if self.is_at_end:
             return None
         return PrioritySearchCursorPeek(self.queue._entry_at(self.position))
 
     def move_previous(self) -> PrioritySearchQueueCursor[K, P, V]:
+        """A cursor one position earlier in key order, raising :class:`IndexError` at the start. The
+        receiver is unchanged; movement produces a new cursor over the same version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return PrioritySearchQueueCursor(self.queue, self.position - 1)
 
     def move_next(self) -> PrioritySearchQueueCursor[K, P, V]:
+        """A cursor one position later in key order, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return PrioritySearchQueueCursor(self.queue, self.position + 1)
 
     def seek_rank(self, position: int) -> PrioritySearchQueueCursor[K, P, V]:
+        """A cursor at ``position`` within the same queue version, raising when out of range."""
+
         return (
             self if position == self.position else PrioritySearchQueueCursor(self.queue, position)
         )
 
     def insert(self, key: K, priority: P, value: V) -> PrioritySearchQueueCursor[K, P, V]:
+        """Add a new entry and return a cursor just after it in key order. Raises on an existing
+        key. The gap moves to the key's ordered position, since placement is decided by the key
+        ordering rather than by the cursor.
+        """
+
         position = self.queue._bound_rank(key, False)
         result = self.queue.try_add(key, priority, value)
         if not result.added:
@@ -574,6 +709,10 @@ class PrioritySearchQueueCursor(Generic[K, P, V]):
         return PrioritySearchQueueCursor(result.queue, position + 1)
 
     def try_insert(self, key: K, priority: P, value: V) -> PrioritySearchCursorSearch[K, P, V]:
+        """Add a new entry, reporting whether it was added. On a duplicate the returned cursor
+        focuses the retained entry and the queue is unchanged.
+        """
+
         position = self.queue._bound_rank(key, False)
         result = self.queue.try_add(key, priority, value)
         cursor = (
@@ -584,6 +723,8 @@ class PrioritySearchQueueCursor(Generic[K, P, V]):
         return PrioritySearchCursorSearch(result.added, cursor)
 
     def set_item(self, key: K, priority: P, value: V) -> PrioritySearchQueueCursor[K, P, V]:
+        """Add ``key``, or replace its priority and payload, returning a cursor at the entry."""
+
         location = self.queue.find_cursor(key)
         return PrioritySearchQueueCursor(
             self.queue.set_item(key, priority, value),
@@ -591,6 +732,10 @@ class PrioritySearchQueueCursor(Generic[K, P, V]):
         )
 
     def set_next(self, priority: P, value: V) -> PrioritySearchQueueCursor[K, P, V]:
+        """Replace the priority and payload of the entry after the gap, keeping its key and
+        position. Raises :class:`IndexError` at the end.
+        """
+
         entry = self.peek_next()
         if entry is None:
             raise IndexError("No entry follows the cursor.")
@@ -599,18 +744,25 @@ class PrioritySearchQueueCursor(Generic[K, P, V]):
         )
 
     def delete_previous(self) -> PrioritySearchQueueCursor[K, P, V]:
+        """Remove the entry before the gap and return a cursor in its place, raising at the start.
+        """
+
         entry = self.peek_previous()
         if entry is None:
             raise IndexError("No entry precedes the cursor.")
         return PrioritySearchQueueCursor(self.queue.remove(entry.value.key), self.position - 1)
 
     def delete_next(self) -> PrioritySearchQueueCursor[K, P, V]:
+        """Remove the entry after the gap and return a cursor in its place, raising at the end."""
+
         entry = self.peek_next()
         if entry is None:
             raise IndexError("No entry follows the cursor.")
         return PrioritySearchQueueCursor(self.queue.remove(entry.value.key), self.position)
 
     def snapshot(self) -> PrioritySearchQueue[K, P, V]:
+        """The queue version this cursor is positioned in."""
+
         return self.queue
 
 

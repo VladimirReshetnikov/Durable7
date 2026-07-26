@@ -110,9 +110,13 @@ class _KeyedWeight:
     weight: int
 
     def __eq__(self, other: object) -> bool:
+        """Compare by key only, so two weights can be equal while carrying different payloads."""
+
         return isinstance(other, _KeyedWeight) and self.key == other.key
 
     def __hash__(self) -> int:
+        """Hash by key only, matching the key-only equality."""
+
         return hash(self.key)
 
 
@@ -120,9 +124,13 @@ class _WeightMeasure:
     identity = 0
 
     def combine(self, left: int, right: int) -> int:
+        """Add two weights."""
+
         return left + right
 
     def measure(self, element: _KeyedWeight) -> int:
+        """An element measures as its own weight."""
+
         return element.weight
 
 

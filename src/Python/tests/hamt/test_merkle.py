@@ -51,12 +51,16 @@ from durable7.hamt.merkle_search_tree import (
 
 
 def compare_int(left: int, right: int) -> int:
+    """Three-way integer comparison, used as the Merkle key comparator."""
+
     return (left > right) - (left < right)
 
 
 def string_policy(
     policy_id: str = "golden-int-string-v1",
 ) -> MerkleSearchTreePolicy[int, str | None]:
+    """Build a Merkle policy over integer keys and nullable string values."""
+
     return MerkleSearchTreePolicy(
         policy_id,
         compare_int,
@@ -68,6 +72,8 @@ def string_policy(
 def make_tree(
     policy: MerkleSearchTreePolicy[int, str | None], count: int = 513
 ) -> MerkleSearchTree[int, str | None]:
+    """Build a Merkle search tree from pairs under the shared test policy."""
+
     first = -(count // 2)
     return MerkleSearchTree.from_entries(
         ((key, None if key % 29 == 0 else f"value:{key}") for key in range(first, first + count)),
@@ -214,6 +220,10 @@ def test_canonical_codecs_digest_and_policy_vectors() -> None:
     for invalid in ("", " ", "codec", "-v1", "codec-v", "codec-vx", " codec-v1", "codec-v1 "):
 
         class InvalidCodec:
+            """A deliberately noncanonical codec, so the test can confirm that policy construction
+            rejects it.
+            """
+
             encoding_id = invalid
 
             @staticmethod

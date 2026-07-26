@@ -1,3 +1,11 @@
+"""Tests for the DABA Lite sliding-window aggregate.
+
+Uses a non-commutative monoid so that operand order is observable, and tracks a FIFO reference
+model across chunk churn. Also covers the worst-case ceiling on callback invocations per
+operation, failure atomicity when a callback raises, and the empty, clear, and eviction
+contracts.
+"""
+
 from __future__ import annotations
 
 from collections import deque
@@ -14,6 +22,8 @@ class _StringMonoid:
 
     @staticmethod
     def combine(left: str, right: str) -> str:
+        """Concatenate, which is associative but not commutative, so operand order is observable."""
+
         return left + right
 
 
@@ -40,6 +50,10 @@ def test_daba_tracks_noncommutative_fifo_model_through_chunk_churn() -> None:
 
 def test_daba_callback_ceilings_are_worst_case_bounded() -> None:
     class CountingMonoid:
+        """A concatenating monoid that counts its combine calls, so the test can assert the worst-
+        case ceiling per operation.
+        """
+
         identity = ""
 
         def __init__(self) -> None:
@@ -68,6 +82,10 @@ def test_daba_callback_ceilings_are_worst_case_bounded() -> None:
 
 def test_daba_mutation_callbacks_are_failure_atomic() -> None:
     class FailureMonoid:
+        """A monoid whose identity and combine can each be armed to raise, so the test can check
+        that a failed callback leaves the window unchanged.
+        """
+
         def __init__(self) -> None:
             self.fail_combine = False
             self.fail_identity = False

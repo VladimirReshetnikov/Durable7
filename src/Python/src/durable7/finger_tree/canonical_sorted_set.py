@@ -81,6 +81,11 @@ def stable_rank_hash(value: object) -> int:
 
 @dataclass(frozen=True, slots=True)
 class ZipTreeRank:
+    """One element's derived rank, deciding where it sits in the canonical shape. The geometric rank
+    is the primary priority; ``secondary`` and ``content`` break ties deterministically, so equal
+    geometric ranks still produce one well-defined tree.
+    """
+
     geometric: int
     secondary: int
     content: int
@@ -98,6 +103,8 @@ class ZipTreeRankPolicy(Generic[T]):
         rank_key: bytes,
         seed: int | None,
     ) -> None:
+        """Retain the comparator, rank hash, and HMAC key; use the factory methods instead."""
+
         self.comparator = comparator
         self._rank_hash = rank_hash
         self._rank_key = bytes(rank_key)
@@ -111,6 +118,13 @@ class ZipTreeRankPolicy(Generic[T]):
         rank_hash: Callable[[T], int] | None = None,
         seed: int | None = None,
     ) -> ZipTreeRankPolicy[T]:
+        """Create a policy, generating a fresh random rank key unless ``seed`` fixes one. Supplying
+        a comparator obliges the caller to supply a matching rank hash: the hash must be constant
+        on the comparator's equivalence classes, and the default hash only knows about the
+        default ordering. Without a seed the key is random per policy, so shapes are
+        unpredictable to an adversary but not reproducible across processes.
+        """
+
         if comparator is not None and rank_hash is None:
             raise TypeError("An explicit comparator requires an equivalence-coherent rank hash.")
         actual_comparator = default_comparator if comparator is None else comparator
@@ -128,6 +142,11 @@ class ZipTreeRankPolicy(Generic[T]):
         comparator: Comparator[T] | None = None,
         rank_hash: Callable[[T], int] | None = None,
     ) -> ZipTreeRankPolicy[T]:
+        """Create a policy from an explicit rank key of at least 32 bytes. This is how two processes
+        agree on one canonical shape: the same key and comparator yield identical trees for
+        identical contents.
+        """
+
         owned_key = bytes(rank_key)
         if len(owned_key) < 32:
             raise ValueError("A zip-zip rank key must contain at least 32 bytes.")
@@ -140,6 +159,12 @@ class ZipTreeRankPolicy(Generic[T]):
         return cls(actual_comparator, actual_rank_hash, owned_key, None)
 
     def rank(self, value: T) -> ZipTreeRank:
+        """Derive ``value``'s rank by HMAC over its rank hash. Keying the derivation is what makes
+        the shape resistant to adversarially chosen elements. It cannot repair a rank hash that
+        is unstable or inconsistent with the comparer's equivalence classes; those remain caller
+        obligations.
+        """
+
         source = (int(self._rank_hash(value)) & _MASK64).to_bytes(8, "big")
         digest = hmac.new(self._rank_key, source, hashlib.sha256).digest()
         primary = int.from_bytes(digest[:8], "big")
@@ -173,6 +198,10 @@ class _Node(Generic[T]):
         left: _Node[T] | None,
         right: _Node[T] | None,
     ) -> None:
+        """Build a node, deriving its subtree count and height from its children. The content digest
+        is left uncomputed until first requested.
+        """
+
         self.item = item
         self.rank = rank
         self.left = left
@@ -187,6 +216,11 @@ class _Node(Generic[T]):
         self._digest_lock = threading.Lock()
 
     def digest(self) -> int:
+        """The subtree's content digest, computed once and cached. Uses an explicit stack rather
+        than recursion, so a deep tree cannot overflow the interpreter stack, and takes a lock so
+        concurrent readers publish one consistent value.
+        """
+
         if self._digest is not None:
             return self._digest
         pending: list[tuple[_Node[T], bool]] = [(self, False)]
@@ -342,12 +376,20 @@ def _iterate(root: _Node[T]) -> Iterator[T]:
 
 @dataclass(frozen=True, slots=True)
 class CanonicalSetLookup(Generic[T]):
+    """A membership result carrying the stored representative. On a miss it echoes the probe, so
+    callers always have a value to work with.
+    """
+
     found: bool
     value: T
 
 
 @dataclass(frozen=True, slots=True)
 class CanonicalSortedSetStatistics:
+    """Shape measurements returned by a successful structural audit. The priority collision count
+    reports how often the geometric rank tied and the secondary ranks had to decide.
+    """
+
     count: int
     height: int
     maximum_geometric_rank: int
@@ -356,11 +398,19 @@ class CanonicalSortedSetStatistics:
 
 @dataclass(frozen=True, slots=True)
 class CanonicalCursorPeek(Generic[T]):
+    """An element found next to a cursor gap, wrapped so a stored ``None`` stays distinct from
+    "nothing there".
+    """
+
     value: T
 
 
 @dataclass(frozen=True, slots=True)
 class CanonicalCursorSearch(Generic[T]):
+    """The outcome of seeking a cursor. On a miss the cursor sits where the element would be
+    inserted.
+    """
+
     found: bool
     cursor: CanonicalSortedSetCursor[T]
 
@@ -371,43 +421,66 @@ class CanonicalSortedSet(Generic[T]):
     __slots__ = ("_root", "policy")
 
     def __init__(self, root: _Node[T] | None, policy: ZipTreeRankPolicy[T]) -> None:
+        """Wrap an already-built root; use :meth:`empty` or :meth:`from_iterable` instead."""
+
         self._root = root
         self.policy = policy
 
     @classmethod
     def empty(cls, policy: ZipTreeRankPolicy[T]) -> CanonicalSortedSet[T]:
+        """Return the empty set under ``policy``."""
+
         return cls(None, policy)
 
     @classmethod
     def from_iterable(
         cls, values: Iterable[T], policy: ZipTreeRankPolicy[T]
     ) -> CanonicalSortedSet[T]:
+        """Build a set from ``values``. The result depends only on which elements are present, not
+        on the order they arrive in: that is what history independence means here.
+        """
+
         result = cls.empty(policy)
         for value in values:
             result = result.add(value)
         return result
 
     def __len__(self) -> int:
+        """Number of distinct elements."""
+
         return 0 if self._root is None else self._root.count
 
     @property
     def size(self) -> int:
+        """Number of distinct elements."""
+
         return len(self)
 
     @property
     def count(self) -> int:
+        """Number of distinct elements."""
+
         return len(self)
 
     @property
     def is_empty(self) -> bool:
+        """Whether the set holds no elements."""
+
         return self._root is None
 
     @property
     def height(self) -> int:
+        """Height of the tree, exposed for structural diagnostics."""
+
         return 0 if self._root is None else self._root.height
 
     @property
     def content_hash(self) -> int:
+        """A digest identifying this set's contents. Because the shape is canonical, two sets under
+        the same policy hold the same elements exactly when their digests agree, so this compares
+        whole sets in constant time.
+        """
+
         return 0 if self._root is None else self._root.digest()
 
     def _find(self, value: T) -> _Node[T] | None:
@@ -420,12 +493,18 @@ class CanonicalSortedSet(Generic[T]):
         return None
 
     def contains(self, value: T) -> bool:
+        """Whether ``value``'s equivalence class is present."""
+
         return self._find(value) is not None
 
     def __contains__(self, value: object) -> bool:
+        """Whether ``value`` is present, for the ``in`` operator."""
+
         return self.contains(cast(T, value))
 
     def try_get_value(self, value: T) -> CanonicalSetLookup[T]:
+        """The stored representative equivalent to ``value``, reported presence-safely."""
+
         found = self._find(value)
         return (
             CanonicalSetLookup(False, value)
@@ -434,6 +513,12 @@ class CanonicalSortedSet(Generic[T]):
         )
 
     def add(self, value: T) -> CanonicalSortedSet[T]:
+        """Return a set containing ``value``; a no-op when its class is already present. Raises
+        :class:`ValueError` when the rank hash gives an existing equivalent element a different
+        rank, since that would mean the hash is not constant on the comparator's equivalence
+        classes and the canonical shape would be ill defined.
+        """
+
         rank = self.policy.rank(value)
         existing = self._find(value)
         if existing is not None:
@@ -445,10 +530,16 @@ class CanonicalSortedSet(Generic[T]):
         )
 
     def remove(self, value: T) -> CanonicalSortedSet[T]:
+        """Return a set without ``value``'s class; a no-op when absent. The result is the same
+        canonical tree that would arise from building the remaining elements from scratch.
+        """
+
         root, removed = _remove(self._root, value, self.policy.comparator)
         return CanonicalSortedSet(root, self.policy) if removed else self
 
     def clear(self) -> CanonicalSortedSet[T]:
+        """Return the empty set under the same policy; a no-op when already empty."""
+
         return self if self.is_empty else CanonicalSortedSet.empty(self.policy)
 
     def _require_compatible(self, other: CanonicalSortedSet[T]) -> None:
@@ -456,6 +547,10 @@ class CanonicalSortedSet(Generic[T]):
             raise TypeError("Canonical set algebra requires the same rank-policy object.")
 
     def union(self, other: CanonicalSortedSet[T]) -> CanonicalSortedSet[T]:
+        """Return the elements of both sets. Both must retain the same rank-policy object, since
+        elements ranked under different keys could not share one canonical shape.
+        """
+
         self._require_compatible(other)
         if self._root is other._root:
             return self
@@ -465,6 +560,8 @@ class CanonicalSortedSet(Generic[T]):
         return result
 
     def intersect(self, other: CanonicalSortedSet[T]) -> CanonicalSortedSet[T]:
+        """Return the elements present in both sets."""
+
         self._require_compatible(other)
         if self._root is other._root:
             return self
@@ -475,6 +572,10 @@ class CanonicalSortedSet(Generic[T]):
         return self if result.set_equals(self) else result
 
     def except_(self, other: CanonicalSortedSet[T]) -> CanonicalSortedSet[T]:
+        """Return this set's elements that are absent from ``other``. Named with a trailing
+        underscore because ``except`` is a Python keyword.
+        """
+
         self._require_compatible(other)
         if self._root is other._root:
             return self.clear()
@@ -484,6 +585,8 @@ class CanonicalSortedSet(Generic[T]):
         return result
 
     def set_equals(self, values: Iterable[T]) -> bool:
+        """Whether both sets hold the same elements, compared by content digest."""
+
         if isinstance(values, CanonicalSortedSet) and values.policy is self.policy:
             if self is values:
                 return True
@@ -498,24 +601,38 @@ class CanonicalSortedSet(Generic[T]):
         )
 
     def is_subset_of(self, values: Iterable[T]) -> bool:
+        """Whether every element of this set also occurs in ``other``."""
+
         other = CanonicalSortedSet.from_iterable(values, self.policy)
         return len(self) <= len(other) and all(other.contains(value) for value in self)
 
     def is_proper_subset_of(self, values: Iterable[T]) -> bool:
+        """Whether this set is a subset of ``other`` and ``other`` has an element it lacks."""
+
         other = CanonicalSortedSet.from_iterable(values, self.policy)
         return len(self) < len(other) and self.is_subset_of(other)
 
     def is_superset_of(self, values: Iterable[T]) -> bool:
+        """Whether every element of ``other`` occurs in this set."""
+
         return all(self.contains(value) for value in values)
 
     def is_proper_superset_of(self, values: Iterable[T]) -> bool:
+        """Whether this set is a superset of ``other`` and holds an element ``other`` lacks."""
+
         other = CanonicalSortedSet.from_iterable(values, self.policy)
         return len(self) > len(other) and self.is_superset_of(other)
 
     def overlaps(self, values: Iterable[T]) -> bool:
+        """Whether the two sets share at least one element."""
+
         return any(self.contains(value) for value in values)
 
     def shares_storage_with(self, other: CanonicalSortedSet[T]) -> bool:
+        """Whether both sets share any node by object identity. Used to confirm that a no-op avoided
+        copying, not an equality test.
+        """
+
         if self._root is None or other._root is None:
             return False
         if self._root is other._root:
@@ -564,6 +681,11 @@ class CanonicalSortedSet(Generic[T]):
         return tuple(result)
 
     def validate_structure(self) -> CanonicalSortedSetStatistics:
+        """Walk the whole tree and return its shape measurements. Checks ascending element order,
+        that every node's rank dominates its children's, and that cached counts and heights
+        agree. Raises on the first violation. A defensive audit, not part of normal use.
+        """
+
         if self._root is None:
             return CanonicalSortedSetStatistics(0, 0, 0, 0)
         pending: list[tuple[_Node[T], object, object, int]] = [(self._root, _MISSING, _MISSING, 1)]
@@ -643,15 +765,25 @@ class CanonicalSortedSet(Generic[T]):
         raise IndexError("Rank is outside the canonical sorted set.")
 
     def cursor_at(self, position: int = 0) -> CanonicalSortedSetCursor[T]:
+        """A cursor at gap ``position`` of the ascending element sequence."""
+
         return CanonicalSortedSetCursor(self, position)
 
     def cursor_at_lower_bound(self, value: T) -> CanonicalSortedSetCursor[T]:
+        """A cursor before the first element not below ``value``, where it would be inserted."""
+
         return self.cursor_at(self._bound_rank(value, False))
 
     def cursor_at_upper_bound(self, value: T) -> CanonicalSortedSetCursor[T]:
+        """A cursor after any element equivalent to ``value``."""
+
         return self.cursor_at(self._bound_rank(value, True))
 
     def find_cursor(self, value: T) -> CanonicalCursorSearch[T]:
+        """Seek to ``value`` and report whether it is present. On a miss the cursor sits at the
+        lower bound and remains usable.
+        """
+
         cursor = self.cursor_at_lower_bound(value)
         candidate = cursor.peek_next()
         return CanonicalCursorSearch(
@@ -660,6 +792,8 @@ class CanonicalSortedSet(Generic[T]):
         )
 
     def __iter__(self) -> Iterator[T]:
+        """Iterate the elements in ascending order."""
+
         return iter(()) if self._root is None else _iterate(self._root)
 
 
@@ -671,61 +805,93 @@ class CanonicalSortedSetCursor(Generic[T]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         if self.position < 0 or self.position > len(self.set):
             raise IndexError("Cursor position is outside the canonical sorted set.")
 
     @property
     def count(self) -> int:
+        """Element count of the set version this cursor is positioned in."""
+
         return len(self.set)
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first element."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last element."""
+
         return self.position == self.count
 
     def peek_previous(self) -> CanonicalCursorPeek[T] | None:
+        """The element immediately before the gap, or ``None`` at the start."""
+
         if self.is_at_start:
             return None
         return CanonicalCursorPeek(self.set._item_at(self.position - 1))
 
     def peek_next(self) -> CanonicalCursorPeek[T] | None:
+        """The element immediately after the gap, or ``None`` at the end."""
+
         if self.is_at_end:
             return None
         return CanonicalCursorPeek(self.set._item_at(self.position))
 
     def move_previous(self) -> CanonicalSortedSetCursor[T]:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same set version.
+        """
+
         if self.is_at_start:
             raise IndexError("Cursor is already at the start.")
         return CanonicalSortedSetCursor(self.set, self.position - 1)
 
     def move_next(self) -> CanonicalSortedSetCursor[T]:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return CanonicalSortedSetCursor(self.set, self.position + 1)
 
     def seek_rank(self, position: int) -> CanonicalSortedSetCursor[T]:
+        """A cursor at ``position`` within the same set version, raising when out of range."""
+
         return self if position == self.position else CanonicalSortedSetCursor(self.set, position)
 
     def add(self, value: T) -> CanonicalSortedSetCursor[T]:
+        """Insert ``value`` and return a cursor just after it. The gap moves to the element's sorted
+        position, since placement is decided by the ordering and the derived rank rather than by
+        the cursor.
+        """
+
         position = self.set._bound_rank(value, False)
         return CanonicalSortedSetCursor(self.set.add(value), position + 1)
 
     def delete_previous(self) -> CanonicalSortedSetCursor[T]:
+        """Remove the element before the gap and return a cursor in its place, raising at the start.
+        """
+
         item = self.peek_previous()
         if item is None:
             raise IndexError("No item precedes the cursor.")
         return CanonicalSortedSetCursor(self.set.remove(item.value), self.position - 1)
 
     def delete_next(self) -> CanonicalSortedSetCursor[T]:
+        """Remove the element after the gap and return a cursor in its place, raising at the end."""
+
         item = self.peek_next()
         if item is None:
             raise IndexError("No item follows the cursor.")
         return CanonicalSortedSetCursor(self.set.remove(item.value), self.position)
 
     def snapshot(self) -> CanonicalSortedSet[T]:
+        """The set version this cursor is positioned in."""
+
         return self.set
 
 

@@ -28,6 +28,11 @@ class _RangeUpdateOperationStatistics:
 
     @property
     def policy_callbacks(self) -> int:
+        """Total caller-supplied policy invocations, summed across all six callback kinds.
+
+        Used by the tests to assert that an operation stays within its documented callback budget.
+        """
+
         return (
             self.element_measure_callbacks
             + self.measure_combine_callbacks
@@ -57,6 +62,8 @@ class _RangeUpdateDiagnosticSession:
     )
 
     def __init__(self, previous: _RangeUpdateDiagnosticSession | None) -> None:
+        """Start a counter set that restores ``previous`` when closed."""
+
         self._previous = previous
         self._disposed = False
         self.node_visits = 0
@@ -74,6 +81,8 @@ class _RangeUpdateDiagnosticSession:
 
     @property
     def snapshot(self) -> _RangeUpdateOperationStatistics:
+        """Return the counters accumulated so far as an immutable value."""
+
         return _RangeUpdateOperationStatistics(
             node_visits=self.node_visits,
             node_allocations=self.node_allocations,
@@ -90,6 +99,8 @@ class _RangeUpdateDiagnosticSession:
         )
 
     def __enter__(self) -> _RangeUpdateDiagnosticSession:
+        """Return this session, so it can be used as a context manager."""
+
         return self
 
     def __exit__(
@@ -98,10 +109,18 @@ class _RangeUpdateDiagnosticSession:
         exception: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        """Close the session, whether or not the block raised."""
+
         del exception_type, exception, traceback
         self.close()
 
     def close(self) -> None:
+        """Restore the enclosing session, if any.
+
+        Closing twice is harmless. Closing out of order raises, because that would restore the wrong
+        enclosing session.
+        """
+
         if self._disposed:
             return
         if _current() is not self:

@@ -22,14 +22,28 @@ class MapPatchValue(Generic[V]):
 
     @classmethod
     def absent(cls) -> MapPatchValue[V]:
+        """Return the state meaning "this key is not in the map"."""
+
         return cls(False)
 
     @classmethod
     def present(cls, value: V) -> MapPatchValue[V]:
+        """Return the state meaning "this key holds ``value``".
+
+        Wrapping presence in an object rather than using ``None`` as a sentinel is what lets a
+        stored ``None`` stay distinguishable from absence.
+        """
+
         return cls(True, value)
 
     @property
     def value(self) -> V:
+        """The present value.
+
+        Raises :class:`ValueError` when the state is absent, so a caller cannot silently read a
+        missing value as ``None``.
+        """
+
         if not self.is_present:
             raise ValueError("An absent patch value has no value.")
         return cast("V", self._value)
@@ -56,6 +70,8 @@ class MapPatchConflictError(Exception):
     def __init__(
         self, key: object, expected: MapPatchValue[object], actual: MapPatchValue[object]
     ) -> None:
+        """Record the key whose state disagreed, along with the expected and actual states."""
+
         super().__init__("The map does not match the patch's expected state.")
         self.key = key
         self.expected = expected
@@ -71,6 +87,8 @@ class MapPatchCompositionError(Exception):
         left_after: MapPatchValue[object],
         right_before: MapPatchValue[object],
     ) -> None:
+        """Record the key whose intermediate state disagreed, with each patch's view of it."""
+
         super().__init__("The patches disagree about their intermediate map state.")
         self.key = key
         self.left_after = left_after
@@ -87,6 +105,10 @@ class PersistentMapPatch(Generic[K, V]):
         changes: PersistentHashMap[K, _Change[V]],
         value_equals: Callable[[V, V], bool],
     ) -> None:
+        """Wrap an already-built change map; use :meth:`empty`, :meth:`from_entries`, or
+        :meth:`between` instead.
+        """
+
         self._changes = changes
         self.value_equals = value_equals
 
@@ -96,6 +118,9 @@ class PersistentMapPatch(Generic[K, V]):
         key_policy: HashPolicy[K] | None = None,
         value_equals: Callable[[V, V], bool] = same_value,
     ) -> PersistentMapPatch[K, V]:
+        """Return a patch that changes nothing, retaining the exact key policy and value comparison.
+        """
+
         effective = default_hash_policy() if key_policy is None else key_policy
         return cls(PersistentHashMap.empty(effective), value_equals)
 
@@ -106,6 +131,13 @@ class PersistentMapPatch(Generic[K, V]):
         key_policy: HashPolicy[K] | None = None,
         value_equals: Callable[[V, V], bool] = same_value,
     ) -> PersistentMapPatch[K, V]:
+        """Build a patch from explicit before/after entries.
+
+        Entries whose before and after states agree record no change and are skipped, which keeps
+        :attr:`is_empty` meaning "applying this is an identity". A repeated key raises
+        :class:`DuplicateKeyError`.
+        """
+
         if entries is None:
             raise TypeError("entries must be iterable.")
         effective = default_hash_policy() if key_policy is None else key_policy
@@ -126,6 +158,13 @@ class PersistentMapPatch(Generic[K, V]):
         after: PersistentHashMap[K, V],
         value_equals: Callable[[V, V], bool] = same_value,
     ) -> PersistentMapPatch[K, V]:
+        """Compute the patch that turns ``before`` into ``after``.
+
+        Only the keys that actually differ are recorded, so applying the result to ``before`` yields
+        ``after`` and applying its inverse to ``after`` yields ``before``. Both maps must retain the
+        same hash-policy object.
+        """
+
         if before.policy is not after.policy:
             raise TypeError("Maps must retain the same hash-policy object.")
         if before.shares_root_with(after):
@@ -154,26 +193,46 @@ class PersistentMapPatch(Generic[K, V]):
 
     @property
     def size(self) -> int:
+        """Number of keys this patch changes."""
+
         return self._changes.size
 
     @property
     def is_empty(self) -> bool:
+        """Whether the patch changes nothing, so applying it is an identity."""
+
         return self._changes.is_empty
 
     @property
     def key_policy(self) -> HashPolicy[K]:
+        """The retained hash policy this patch's keys are indexed under."""
+
         return self._changes.policy
 
     def __len__(self) -> int:
+        """Number of changed keys, matching :attr:`size`."""
+
         return self.size
 
     def __bool__(self) -> bool:
+        """Whether the patch changes at least one key."""
+
         return not self.is_empty
 
     def keys(self) -> Iterator[K]:
+        """Iterate the keys this patch changes."""
+
         return self._changes.keys()
 
     def apply(self, source: PersistentHashMap[K, V]) -> PersistentHashMap[K, V]:
+        """Apply every change to ``source``, or apply none of them.
+
+        Each entry's recorded before-state is checked against ``source`` first; the first mismatch
+        raises :class:`MapPatchConflictError` and ``source`` is left untouched. That preflight is
+        what makes the patch strict - it cannot half-apply to a map that has drifted from the state
+        the patch was computed against. ``source`` must retain this patch's key policy.
+        """
+
         self._require_map(source)
         for entry in self._changes:
             actual_entry = source.get_entry(entry.key)
@@ -198,6 +257,13 @@ class PersistentMapPatch(Generic[K, V]):
         return result
 
     def invert(self) -> PersistentMapPatch[K, V]:
+        """Return the patch that undoes this one, by exchanging each entry's before and after
+        states.
+
+        Applying a patch and then its inverse restores the original map, which is why both endpoints
+        are recorded rather than just the intended result.
+        """
+
         if self.is_empty:
             return self
         changes = PersistentHashMap[K, _Change[V]].empty(self.key_policy)
@@ -206,6 +272,14 @@ class PersistentMapPatch(Generic[K, V]):
         return PersistentMapPatch(changes, self.value_equals)
 
     def compose(self, next_patch: PersistentMapPatch[K, V]) -> PersistentMapPatch[K, V]:
+        """Return one patch equivalent to applying this patch and then ``next_patch``.
+
+        Where both patches touch a key, this patch's after-state must equal ``next_patch``'s
+        before-state - the intermediate state they would otherwise disagree about - and a mismatch
+        raises :class:`MapPatchCompositionError`. Changes that cancel out are dropped rather than
+        recorded as no-ops. Both patches must retain the same key and value policy objects.
+        """
+
         self._require_patch(next_patch)
         if self.is_empty:
             return next_patch
@@ -231,16 +305,30 @@ class PersistentMapPatch(Generic[K, V]):
         return PersistentMapPatch(changes, self.value_equals)
 
     def clear(self) -> PersistentMapPatch[K, V]:
+        """Return an empty patch retaining both policies; a no-op when already empty."""
+
         return self if self.is_empty else self.empty(self.key_policy, self.value_equals)
 
     def shares_root_with(self, other: PersistentMapPatch[K, V]) -> bool:
+        """Whether both patches reference the same change-map root.
+
+        A representation test used to confirm that a no-op avoided copying, not an equality test.
+        """
+
         return self._changes.shares_root_with(other._changes)
 
     def __iter__(self) -> Iterator[MapPatchEntry[K, V]]:
+        """Iterate the recorded changes as :class:`MapPatchEntry` values."""
+
         for entry in self._changes:
             yield MapPatchEntry(entry.key, entry.value.before, entry.value.after)
 
     def validate_structure(self) -> bool:
+        """Check that no entry records a non-change, that is, equal before and after states.
+
+        The constructors already exclude such entries, so this is a defensive audit.
+        """
+
         return all(
             not self._states_equal(entry.value.before, entry.value.after, self.value_equals)
             for entry in self._changes

@@ -1,3 +1,12 @@
+"""Tests for the history-independent canonical sorted set.
+
+The defining property under test is convergence: sets built by different insertion and removal
+histories must reach one identical topology. Also covers exact keyed rank vectors, rank-hash
+stability and coherence with the comparer's equivalence classes, key ownership and minimum key
+length, stack safety under colliding priorities, algebra no-ops and root sharing, and consistent
+digest publication across concurrent readers.
+"""
+
 from __future__ import annotations
 
 import os

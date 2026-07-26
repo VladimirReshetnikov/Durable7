@@ -19,6 +19,8 @@ def reverse_comparator(comparator: Comparator[T]) -> Comparator[T]:
     """Reverse an existing comparator while preserving zero."""
 
     def reversed_comparator(left: T, right: T) -> int:
+        """Compare in the opposite order, leaving equivalence classes unchanged."""
+
         return comparator(right, left)
 
     return reversed_comparator

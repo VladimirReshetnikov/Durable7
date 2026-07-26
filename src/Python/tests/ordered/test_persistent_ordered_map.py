@@ -1,3 +1,11 @@
+"""Tests for the persistent insertion-ordered map.
+
+Covers the identity-versus-position split - first key and position win while the last distinct
+value is stored - strict insertion, value-only replacement, explicit movement with positional
+no-ops, keyed and positional removal preserving the source, ranges, reversal, stable sorting,
+and dual-index validation under sparse order-stamp relabeling pressure.
+"""
+
 from dataclasses import dataclass
 
 import pytest
@@ -12,6 +20,10 @@ from durable7 import (
 
 @dataclass(frozen=True)
 class Key:
+    """A key wrapper with controlled equality, so the test can check which representative is
+    retained.
+    """
+
     identifier: int
     name: str
 

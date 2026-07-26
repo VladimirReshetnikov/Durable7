@@ -1,3 +1,11 @@
+"""Tests for the persistent directed graph.
+
+Covers retention of explicitly added isolated vertices, edges implying their endpoints, self
+loops, the absence of parallel edges, reuse of vertex-set representatives at endpoints, the
+distinct semantics of edge versus vertex removal, reversal as an O(1) involutive facade, and
+root sharing for no-ops.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -11,6 +19,10 @@ from durable7 import (
 
 @dataclass(frozen=True)
 class Vertex:
+    """A vertex wrapper with controlled equality, so the test can check which representative the
+    graph retains.
+    """
+
     identifier: int
     name: str
 

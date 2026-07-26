@@ -1,3 +1,11 @@
+"""Tests for the strict, invertible, composable map patch.
+
+Covers diffing and application across additions, removals, and changes; a present ``None``
+staying distinct from absence; inversion restoring the source; composition matching sequential
+application and dropping round trips; conflicts leaving both inputs unchanged; and policy
+mismatch handling together with no-op elision.
+"""
+
 from __future__ import annotations
 
 import pytest

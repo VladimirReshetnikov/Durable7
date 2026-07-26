@@ -33,6 +33,8 @@ class _SplitForest(Generic[T]):
 
 @dataclass(frozen=True, slots=True)
 class BrodalOkasakiHeapStatistics:
+    """Shape measurements returned by a successful structural audit."""
+
     count: int
     root_forest_length: int
     maximum_rank: int
@@ -41,6 +43,12 @@ class BrodalOkasakiHeapStatistics:
 
 @dataclass(frozen=True, slots=True)
 class BrodalMinimumView(Generic[T]):
+    """The smallest element together with the heap that remains once it is removed.
+
+    Returning both at once lets a caller inspect the minimum and continue draining without a
+    second descent.
+    """
+
     minimum: T
     remainder: BrodalOkasakiHeap[T]
 
@@ -55,12 +63,22 @@ class BrodalOkasakiHeap(Generic[T]):
     __slots__ = ("_count", "_root", "comparator")
 
     def __init__(self, root: _Tree[T] | None, count: int, comparator: Comparator[T]) -> None:
+        """Wrap an already-built forest; use :meth:`empty` or :meth:`from_iterable` instead.
+
+        The caller is responsible for ``count`` matching ``root`` and for the heap order holding.
+        """
+
         self._root = root
         self._count = count
         self.comparator = comparator
 
     @classmethod
     def empty(cls, comparator: Comparator[T] = default_comparator) -> BrodalOkasakiHeap[T]:
+        """Return an empty heap ordered by ``comparator``.
+
+        The comparator is retained by identity, and only heaps sharing that exact object may meld.
+        """
+
         return cls(None, 0, comparator)
 
     @classmethod
@@ -69,24 +87,39 @@ class BrodalOkasakiHeap(Generic[T]):
         items: Iterable[T],
         comparator: Comparator[T] = default_comparator,
     ) -> BrodalOkasakiHeap[T]:
+        """Build a heap from ``items`` under ``comparator``."""
+
         result = cls.empty(comparator)
         for item in items:
             result = result.insert(item)
         return result
 
     def __len__(self) -> int:
+        """Number of elements, matching :attr:`count`."""
+
         return self._count
 
     @property
     def count(self) -> int:
+        """Number of elements, counting duplicates separately."""
+
         return self._count
 
     @property
     def is_empty(self) -> bool:
+        """Whether the heap holds no elements."""
+
         return self._root is None
 
     @property
     def minimum(self) -> T:
+        """The smallest element under the retained comparator.
+
+        Reads the bootstrapped root directly rather than searching the forest. Raises
+        :class:`IndexError` when the heap is empty; use :meth:`minimum_view` to test and read at
+        once.
+        """
+
         if self._root is None:
             raise IndexError("The heap is empty.")
         return self._root.value
@@ -122,6 +155,12 @@ class BrodalOkasakiHeap(Generic[T]):
         return _Forest(tree, forest)
 
     def insert(self, item: T) -> BrodalOkasakiHeap[T]:
+        """Return a heap with ``item`` added.
+
+        Either ``item`` becomes the new bootstrapped root or it is skew-linked into the existing
+        root's forest, so no forest traversal is needed.
+        """
+
         if self._root is None:
             return BrodalOkasakiHeap(_Tree(0, item, None), 1, self.comparator)
         if self._le(item, self._root.value):
@@ -135,6 +174,13 @@ class BrodalOkasakiHeap(Generic[T]):
         return BrodalOkasakiHeap(root, self._count + 1, self.comparator)
 
     def meld(self, other: BrodalOkasakiHeap[T]) -> BrodalOkasakiHeap[T]:
+        """Return a heap holding every element of both operands.
+
+        The two roots are compared and the loser is linked into the winner's forest, so melding does
+        not depend on either heap's size. Both heaps must retain the same comparator object; mixing
+        comparators raises :class:`TypeError` rather than producing a malformed heap.
+        """
+
         if self.comparator is not other.comparator:
             raise TypeError("Heap melding requires the same comparator object.")
         if self._root is None:
@@ -156,6 +202,11 @@ class BrodalOkasakiHeap(Generic[T]):
         return BrodalOkasakiHeap(root, self._count + other._count, self.comparator)
 
     def minimum_view(self) -> BrodalMinimumView[T] | None:
+        """Return the minimum and the remaining heap, or ``None`` when the heap is empty.
+
+        The presence-safe counterpart of :attr:`minimum`, which raises instead.
+        """
+
         return (
             None
             if self._root is None
@@ -253,6 +304,13 @@ class BrodalOkasakiHeap(Generic[T]):
         return self._union_unique(self._uniquify(left), self._uniquify(right))
 
     def delete_minimum(self) -> BrodalOkasakiHeap[T]:
+        """Return the heap without its smallest element.
+
+        Unlike insertion and melding, this must rebuild the root's forest, so it is the one
+        operation whose cost grows with the heap's rank. Raises :class:`IndexError` when the heap is
+        empty.
+        """
+
         if self._root is None:
             raise IndexError("The heap is empty.")
         if self._root.children is None:
@@ -322,6 +380,13 @@ class BrodalOkasakiHeap(Generic[T]):
         return length
 
     def validate_structure(self) -> BrodalOkasakiHeapStatistics:
+        """Walk the whole representation and return its shape measurements.
+
+        Checks the bootstrapped root's rank, the skew-binomial forest structure, the heap order
+        between every tree and its children, and agreement with the cached count. Raises
+        :class:`ValueError` on the first violation. A defensive audit, not part of normal use.
+        """
+
         if self._root is None:
             if self._count != 0:
                 raise ValueError("Empty heap count mismatch.")
@@ -348,7 +413,15 @@ class BrodalOkasakiHeap(Generic[T]):
         return BrodalOkasakiHeapStatistics(count, root_forest_length, maximum_rank, maximum_depth)
 
     def shared_tree_count(self, other: BrodalOkasakiHeap[T]) -> int:
+        """Number of tree nodes reachable from both heaps by object identity.
+
+        Used by the tests to show that a derived version really does share structure with the
+        version it came from, rather than having been rebuilt.
+        """
+
         def collect(root: _Tree[T] | None) -> set[int]:
+            """Gather the identities of every tree node reachable from ``root``."""
+
             destination: set[int] = set()
             pending = [] if root is None else [root]
             while pending:
@@ -366,6 +439,12 @@ class BrodalOkasakiHeap(Generic[T]):
         return len(collect(self._root) & collect(other._root))
 
     def __iter__(self) -> Iterator[T]:
+        """Iterate the elements in unspecified order.
+
+        This is a traversal of the forest, not a sorted drain; repeated :meth:`delete_minimum` gives
+        ascending order.
+        """
+
         pending = [] if self._root is None else [self._root]
         while pending:
             tree = pending.pop()

@@ -1,3 +1,10 @@
+"""Property-based tests for the persistent insertion-ordered set.
+
+Generates branching edit histories and checks construction and set algebra against an
+independent ordered-list model that keeps first representatives, covering behavior that
+hand-written cases are unlikely to reach.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

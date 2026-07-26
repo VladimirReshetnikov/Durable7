@@ -22,6 +22,8 @@ class _Leaf(Generic[T]):
     height: int = 0
 
     def __init__(self, items: Iterable[T]) -> None:
+        """Build a leaf from ``items``, rejecting a size outside the branch factor."""
+
         materialized = tuple(items)
         if not 1 <= len(materialized) <= _BRANCH_FACTOR:
             raise ValueError("Invalid RRB leaf size.")
@@ -38,6 +40,12 @@ class _Branch(Generic[T]):
     cumulative_sizes: tuple[int, ...] | None
 
     def __init__(self, children: Iterable[_Node[T]]) -> None:
+        """Build a branch, deriving its height and count and deciding whether it needs a size table.
+        A branch whose children fill the radix layout exactly is *regular* and stores no table;
+        addressing it is pure arithmetic. Only an irregular branch pays for cumulative sizes,
+        which is what makes cheap splits and concatenations affordable.
+        """
+
         materialized = tuple(children)
         if not 1 <= len(materialized) <= _BRANCH_FACTOR:
             raise ValueError("Invalid RRB branch factor.")
@@ -58,6 +66,11 @@ class _Branch(Generic[T]):
         )
 
     def find_child(self, index: int) -> tuple[int, int]:
+        """Return the child index covering ``index``, and how many elements precede that child. A
+        regular branch computes both by radix arithmetic; an irregular one binary-searches its
+        size table.
+        """
+
         if index < 0 or index >= self.count:
             raise IndexError("RRB child index is outside the branch.")
         if self.cumulative_sizes is None:
@@ -218,18 +231,26 @@ def _iterate(root: _Node[T]) -> Iterator[T]:
 
 @dataclass(frozen=True, slots=True)
 class RrbPop(Generic[T]):
+    """An endpoint element together with the vector that remains after removing it."""
+
     value: T
     rest: RrbVector[T]
 
 
 @dataclass(frozen=True, slots=True)
 class RrbVectorSplit(Generic[T]):
+    """The two vectors produced by a positional split; both share structure with the original."""
+
     left: RrbVector[T]
     right: RrbVector[T]
 
 
 @dataclass(frozen=True, slots=True)
 class RrbVectorStatistics:
+    """Shape measurements returned by a successful structural audit. The regular and relaxed branch
+    counts show how much of the tree still uses pure radix addressing.
+    """
+
     count: int
     height: int
     leaf_count: int
@@ -248,38 +269,59 @@ class RrbVector(Generic[T]):
     __slots__ = ("_root",)
 
     def __init__(self, root: _Node[T] | None = None) -> None:
+        """Wrap an already-built root; use :meth:`empty` or :meth:`from_iterable` instead."""
+
         self._root = _normalize_root(root)
 
     @classmethod
     def empty(cls) -> RrbVector[T]:
+        """Return the empty vector."""
+
         return cls()
 
     @classmethod
     def from_iterable(cls, values: Iterable[T]) -> RrbVector[T]:
+        """Build a vector from ``values`` through a builder, avoiding per-element tree work."""
+
         if isinstance(values, RrbVector):
             return values
         return RrbVectorBuilder[T]().append_all(values).to_immutable()
 
     @classmethod
     def builder(cls) -> RrbVectorBuilder[T]:
+        """Return an empty append builder."""
+
         return RrbVectorBuilder()
 
     def __len__(self) -> int:
+        """Number of elements."""
+
         return 0 if self._root is None else self._root.count
 
     @property
     def size(self) -> int:
+        """Number of elements."""
+
         return len(self)
 
     @property
     def is_empty(self) -> bool:
+        """Whether the vector holds no elements."""
+
         return self._root is None
 
     @property
     def height(self) -> int:
+        """Tree height, where a leaf has height zero."""
+
         return 0 if self._root is None else self._root.height
 
     def get(self, index: int) -> T | None:
+        """The element at ``index``, or ``None`` when out of range. Effectively constant time: with
+        32-way branching the tree is at most a handful of levels deep for any vector that fits in
+        memory.
+        """
+
         if index < 0 or index >= len(self):
             return None
         if self._root is None:
@@ -293,6 +335,14 @@ class RrbVector(Generic[T]):
     def __getitem__(self, index: slice) -> RrbVector[T]: ...
 
     def __getitem__(self, index: int | slice) -> T | RrbVector[T]:
+        """Index or slice the vector, following Python sequence conventions.
+
+        An integer index yields one element and raises :class:`IndexError` when out of range;
+        negative indices count from the end. A slice yields a vector. A unit-step slice is taken
+        by splitting, so it shares structure with the receiver; any other step falls back to
+        materializing the elements.
+        """
+
         if isinstance(index, slice):
             start, stop, step = index.indices(len(self))
             if step != 1:
@@ -311,18 +361,32 @@ class RrbVector(Generic[T]):
         return value  # type: ignore[return-value]
 
     def front(self) -> T | None:
+        """The first element, or ``None`` when empty."""
+
         return self.get(0)
 
     def back(self) -> T | None:
+        """The last element, or ``None`` when empty."""
+
         return self.get(len(self) - 1)
 
     def append(self, value: T) -> RrbVector[T]:
+        """Return a vector with ``value`` added at the end."""
+
         return self.concat(RrbVector(_Leaf((value,))))
 
     def prepend(self, value: T) -> RrbVector[T]:
+        """Return a vector with ``value`` added at the front. As cheap as :meth:`append`, because
+        prepending is a concatenation rather than a shift.
+        """
+
         return RrbVector(_Leaf((value,))).concat(self)
 
     def set_item(self, index: int, value: T) -> RrbVector[T] | None:
+        """Return a vector with the element at ``index`` replaced, or ``None`` when out of range.
+        Only the path from the root to the affected leaf is copied.
+        """
+
         if index < 0 or index >= len(self):
             return None
         if self._root is None:
@@ -331,6 +395,11 @@ class RrbVector(Generic[T]):
         return self if root is self._root else RrbVector(root)
 
     def concat(self, other: RrbVector[T]) -> RrbVector[T]:
+        """Return this vector's elements followed by ``other``'s. Rebalances only the seam between
+        the two operands rather than imposing a global occupancy rule, which is what keeps
+        repeated concatenation cheap.
+        """
+
         if self._root is None:
             return other
         if other._root is None:
@@ -340,6 +409,10 @@ class RrbVector(Generic[T]):
         return RrbVector(roots[0] if len(roots) == 1 else _Branch(roots))
 
     def split_at(self, index: int) -> RrbVectorSplit[T] | None:
+        """Split into the elements before ``index`` and those from ``index`` on. ``None`` when
+        ``index`` falls outside ``0..len``. Both halves share structure with the receiver.
+        """
+
         if index < 0 or index > len(self):
             return None
         if index == 0:
@@ -352,9 +425,17 @@ class RrbVector(Generic[T]):
         return RrbVectorSplit(RrbVector(left), RrbVector(right))
 
     def insert_at(self, index: int, value: T) -> RrbVector[T] | None:
+        """Return a vector with ``value`` inserted so that it ends up at ``index``. A split and two
+        concatenations, so it does not shift the tail.
+        """
+
         return self.insert_range(index, (value,))
 
     def insert_range(self, index: int, values: Iterable[T]) -> RrbVector[T] | None:
+        """Insert every element of ``values`` at ``index``, in order. Splits and joins once
+        regardless of how many elements are inserted.
+        """
+
         split = self.split_at(index)
         if split is None:
             return None
@@ -362,9 +443,15 @@ class RrbVector(Generic[T]):
         return self if middle.is_empty else split.left.concat(middle).concat(split.right)
 
     def remove_at(self, index: int) -> RrbVector[T] | None:
+        """Return a vector without the element at ``index``, or ``None`` when out of range."""
+
         return self.remove_range(index, 1)
 
     def remove_range(self, index: int, count: int) -> RrbVector[T] | None:
+        """Remove ``count`` elements starting at ``index``, or return ``None`` when the range falls
+        outside the vector.
+        """
+
         if index < 0 or count < 0 or index + count > len(self):
             return None
         if count == 0:
@@ -378,6 +465,9 @@ class RrbVector(Generic[T]):
         return first.left.concat(second.right)
 
     def try_remove_last(self) -> RrbPop[T] | None:
+        """Remove the last element, returning it with the remaining vector, or ``None`` when empty.
+        """
+
         if self.is_empty:
             return None
         value = self.back()
@@ -387,18 +477,32 @@ class RrbVector(Generic[T]):
         return RrbPop(value, rest)  # type: ignore[arg-type]
 
     def clear(self) -> RrbVector[T]:
+        """Return the empty vector."""
+
         return self if self.is_empty else RrbVector.empty()
 
     def to_builder(self) -> RrbVectorBuilder[T]:
+        """Return a builder seeded with this vector's elements, leaving the vector untouched."""
+
         return RrbVectorBuilder(self)
 
     def to_list(self) -> list[T]:
+        """Copy the elements into a list, in index order."""
+
         return list(self)
 
     def shares_root_with(self, other: RrbVector[T]) -> bool:
+        """Whether both vectors reference the same root. A representation test, not an equality
+        test.
+        """
+
         return self._root is other._root
 
     def shared_leaf_count(self, other: RrbVector[T]) -> int:
+        """Number of leaves the two vectors have in common by object identity. Used by the tests to
+        show that a derived version really shares structure rather than having been rebuilt.
+        """
+
         leaves: set[int] = set()
         stack = [] if self._root is None else [self._root]
         while stack:
@@ -418,6 +522,13 @@ class RrbVector(Generic[T]):
         return count
 
     def validate_structure(self) -> RrbVectorStatistics:
+        """Walk the whole tree and return its shape measurements. Checks node sizes and the branch
+        factor, that siblings have equal heights, that cached counts and heights agree, and above
+        all that a branch stores a size table exactly when its layout is irregular - a regular
+        branch with a table, or an irregular one without, would make radix addressing wrong.
+        Raises on the first violation.
+        """
+
         if self._root is None:
             return RrbVectorStatistics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         leaf_count = branch_count = regular = relaxed = 0
@@ -427,6 +538,8 @@ class RrbVector(Generic[T]):
         max_branch = 0
 
         def visit(node: _Node[T], is_root: bool) -> tuple[int, int]:
+            """Check one node and return its element count and height, recursing into children."""
+
             nonlocal leaf_count, branch_count, regular, relaxed
             nonlocal min_leaf, max_leaf, min_branch, max_branch
             if isinstance(node, _Leaf):
@@ -478,6 +591,8 @@ class RrbVector(Generic[T]):
         )
 
     def __iter__(self) -> Iterator[T]:
+        """Iterate the elements in index order."""
+
         return iter(()) if self._root is None else _iterate(self._root)
 
     def get_cursor(self, position: int = 0) -> RrbVectorCursor[T]:
@@ -494,47 +609,75 @@ class RrbVectorCursor(Generic[T]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         if self.position < 0 or self.position > len(self._snapshot):
             raise IndexError("cursor position is outside the RRB vector boundary range")
 
     @property
     def count(self) -> int:
+        """Element count of the vector version this cursor is positioned in."""
+
         return len(self._snapshot)
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first element."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last element."""
+
         return self.position == self.count
 
     def peek_previous(self) -> SequenceCursorPeek[T] | None:
+        """The element immediately before the gap, or ``None`` at the start."""
+
         return None if self.is_at_start else SequenceCursorPeek(self._snapshot[self.position - 1])
 
     def peek_next(self) -> SequenceCursorPeek[T] | None:
+        """The element immediately after the gap, or ``None`` at the end."""
+
         return None if self.is_at_end else SequenceCursorPeek(self._snapshot[self.position])
 
     def move_previous(self) -> RrbVectorCursor[T]:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same vector version.
+        """
+
         if self.is_at_start:
             raise IndexError("RRB vector cursor is already at the start")
         return RrbVectorCursor(self._snapshot, self.position - 1)
 
     def move_next(self) -> RrbVectorCursor[T]:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("RRB vector cursor is already at the end")
         return RrbVectorCursor(self._snapshot, self.position + 1)
 
     def seek(self, position: int) -> RrbVectorCursor[T]:
+        """A cursor at ``position`` within the same vector version, raising when out of range."""
+
         return self if position == self.position else RrbVectorCursor(self._snapshot, position)
 
     def insert(self, value: T) -> RrbVectorCursor[T]:
+        """Insert ``value`` at the gap and return a cursor positioned after it. The receiver keeps
+        its own version, so cursors retained beforehand never see ``value``.
+        """
+
         snapshot = self._snapshot.insert_at(self.position, value)
         if snapshot is None:
             raise AssertionError("validated cursor insertion failed")
         return RrbVectorCursor(snapshot, self.position + 1)
 
     def insert_range(self, values: Iterable[T] | RrbVector[T]) -> RrbVectorCursor[T]:
+        """Insert every element of ``values`` at the gap, in order, and return a cursor after the
+        last.
+        """
+
         if isinstance(values, RrbVector):
             if values.is_empty:
                 return self
@@ -552,6 +695,9 @@ class RrbVectorCursor(Generic[T]):
         return RrbVectorCursor(updated, self.position + len(materialized))
 
     def delete_previous(self) -> RrbVectorCursor[T]:
+        """Remove the element before the gap and return a cursor in its place, raising at the start.
+        """
+
         if self.is_at_start:
             raise IndexError("RRB vector cursor has no previous element")
         snapshot = self._snapshot.remove_at(self.position - 1)
@@ -560,6 +706,8 @@ class RrbVectorCursor(Generic[T]):
         return RrbVectorCursor(snapshot, self.position - 1)
 
     def delete_next(self) -> RrbVectorCursor[T]:
+        """Remove the element after the gap and return a cursor in its place, raising at the end."""
+
         if self.is_at_end:
             raise IndexError("RRB vector cursor has no next element")
         snapshot = self._snapshot.remove_at(self.position)
@@ -568,6 +716,8 @@ class RrbVectorCursor(Generic[T]):
         return RrbVectorCursor(snapshot, self.position)
 
     def replace_next(self, value: T) -> RrbVectorCursor[T]:
+        """Replace the element after the gap, keeping the gap where it is. Raises at the end."""
+
         if self.is_at_end:
             raise IndexError("RRB vector cursor has no next element")
         snapshot = self._snapshot.set_item(self.position, value)
@@ -576,6 +726,8 @@ class RrbVectorCursor(Generic[T]):
         return RrbVectorCursor(snapshot, self.position)
 
     def snapshot(self) -> RrbVector[T]:
+        """The vector version this cursor is positioned in."""
+
         return self._snapshot
 
 
@@ -585,6 +737,8 @@ class RrbVectorBuilder(Generic[T]):
     __slots__ = ("_leaves", "_prefix", "_staged_count", "_tail", "_version")
 
     def __init__(self, prefix: RrbVector[T] | None = None) -> None:
+        """Start a builder seeded with ``vector``'s elements, or empty."""
+
         self._prefix = RrbVector.empty() if prefix is None else prefix
         self._leaves: list[_Node[T]] = []
         self._tail: list[T] = []
@@ -592,13 +746,21 @@ class RrbVectorBuilder(Generic[T]):
         self._version = 0
 
     def __len__(self) -> int:
+        """Number of elements accumulated so far."""
+
         return _checked_count(len(self._prefix), self._staged_count)
 
     @property
     def size(self) -> int:
+        """Number of elements accumulated so far."""
+
         return len(self)
 
     def append(self, value: T) -> RrbVectorBuilder[T]:
+        """Append one element, mutating the builder in place. Nothing here is published, so this
+        avoids the tree work a persistent append would do.
+        """
+
         self._tail.append(value)
         self._staged_count += 1
         if len(self._tail) == _BRANCH_FACTOR:
@@ -608,11 +770,15 @@ class RrbVectorBuilder(Generic[T]):
         return self
 
     def append_all(self, values: Iterable[T]) -> RrbVectorBuilder[T]:
+        """Append every element of ``values``, in order."""
+
         for value in values:
             self.append(value)
         return self
 
     def clear(self) -> RrbVectorBuilder[T]:
+        """Discard everything accumulated so far."""
+
         if len(self) != 0:
             self._prefix = RrbVector.empty()
             self._leaves = []
@@ -622,6 +788,8 @@ class RrbVectorBuilder(Generic[T]):
         return self
 
     def to_immutable(self) -> RrbVector[T]:
+        """Freeze the accumulated elements into a persistent vector, leaving the builder usable."""
+
         if self._staged_count == 0:
             return self._prefix
         nodes = self._leaves if not self._tail else [*self._leaves, _Leaf(self._tail)]
@@ -633,6 +801,8 @@ class RrbVectorBuilder(Generic[T]):
         return self._prefix
 
     def __iter__(self) -> Iterator[T]:
+        """Iterate the elements accumulated so far, in order."""
+
         version = self._version
         for value in self.to_immutable():
             if version != self._version:

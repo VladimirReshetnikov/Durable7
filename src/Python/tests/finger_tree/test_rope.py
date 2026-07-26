@@ -114,10 +114,18 @@ def test_measured_cursor_entry_peeks_distinguish_stored_none_from_boundaries() -
 
 def test_cursor_replacement_always_publishes_a_fresh_edit_without_equality() -> None:
     class Value:
+        """A payload wrapper, so the test can tell stored objects apart by identity rather than
+        equality.
+        """
+
         def __eq__(self, other: object) -> bool:
             raise AssertionError("cursor replacement must not compare elements")
 
     class CountingMeasure:
+        """A measure policy that counts its calls, so the test can assert how little work a cached-
+        measure read does.
+        """
+
         identity = 0
 
         def __init__(self) -> None:

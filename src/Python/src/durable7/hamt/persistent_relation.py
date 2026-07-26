@@ -37,6 +37,12 @@ class PersistentRelation(Generic[L, R]):
         forward: PersistentHashMultimap[L, R],
         reverse: PersistentHashMultimap[R, L],
     ) -> None:
+        """Wrap two already-built, mutually inverse indexes; use :meth:`empty` or
+        :meth:`from_items`.
+
+        The caller is responsible for ``forward`` and ``reverse`` describing the same pair set.
+        """
+
         self._forward = forward
         self._reverse = reverse
         self._inverse_lock = Lock()
@@ -48,6 +54,8 @@ class PersistentRelation(Generic[L, R]):
         left_policy: HashPolicy[L] | None = None,
         right_policy: HashPolicy[R] | None = None,
     ) -> PersistentRelation[L, R]:
+        """Return an empty relation retaining both exact policy objects."""
+
         effective_left = default_hash_policy() if left_policy is None else left_policy
         effective_right = default_hash_policy() if right_policy is None else right_policy
         return cls(
@@ -62,6 +70,8 @@ class PersistentRelation(Generic[L, R]):
         left_policy: HashPolicy[L] | None = None,
         right_policy: HashPolicy[R] | None = None,
     ) -> PersistentRelation[L, R]:
+        """Build a relation from pairs, collapsing duplicates under the retained policies."""
+
         if items is None:
             raise TypeError("items must be iterable.")
         result = cls.empty(left_policy, right_policy)
@@ -71,26 +81,38 @@ class PersistentRelation(Generic[L, R]):
 
     @property
     def pair_count(self) -> int:
+        """Number of ``(left, right)`` pairs; both indexes agree on this."""
+
         return self._forward.pair_count
 
     @property
     def left_count(self) -> int:
+        """Number of distinct left values participating in at least one pair."""
+
         return self._forward.key_count
 
     @property
     def right_count(self) -> int:
+        """Number of distinct right values participating in at least one pair."""
+
         return self._reverse.key_count
 
     @property
     def is_empty(self) -> bool:
+        """Whether the relation holds no pairs."""
+
         return self._forward.is_empty
 
     @property
     def left_policy(self) -> HashPolicy[L]:
+        """The retained hash policy defining left-value equivalence."""
+
         return self._forward.key_policy
 
     @property
     def right_policy(self) -> HashPolicy[R]:
+        """The retained hash policy defining right-value equivalence."""
+
         return self._reverse.key_policy
 
     @property
@@ -109,24 +131,41 @@ class PersistentRelation(Generic[L, R]):
             return current
 
     def __len__(self) -> int:
+        """Number of pairs, matching :attr:`pair_count`."""
+
         return self.pair_count
 
     def __bool__(self) -> bool:
+        """Whether the relation holds at least one pair."""
+
         return not self.is_empty
 
     def contains(self, left: L, right: R) -> bool:
+        """Whether the pair ``(left, right)`` is present."""
+
         return self._forward.contains(left, right)
 
     def contains_left(self, left: L) -> bool:
+        """Whether ``left`` participates in at least one pair."""
+
         return self._forward.contains_key(left)
 
     def contains_right(self, right: R) -> bool:
+        """Whether ``right`` participates in at least one pair.
+
+        As cheap as :meth:`contains_left`, because the reverse index is materialized.
+        """
+
         return self._reverse.contains_key(right)
 
     def get_rights(self, left: L) -> PersistentHashSet[R]:
+        """Return the values related to ``left``, or a policy-preserving empty set when absent."""
+
         return self._forward.get_values(left)
 
     def get_lefts(self, right: R) -> PersistentHashSet[L]:
+        """Return the values related to ``right``, or a policy-preserving empty set when absent."""
+
         return self._reverse.get_values(right)
 
     def add(self, left: L, right: R) -> PersistentRelation[L, R]:
@@ -144,6 +183,11 @@ class PersistentRelation(Generic[L, R]):
         )
 
     def remove(self, left: L, right: R) -> PersistentRelation[L, R]:
+        """Remove the pair ``(left, right)`` from both indexes; a no-op when it is absent.
+
+        A value that loses its last pair drops out of the relation, keeping every group non-empty.
+        """
+
         left_lookup = self._forward.try_get_key(left)
         right_lookup = self._reverse.try_get_key(right)
         if not left_lookup.found or not right_lookup.found:
@@ -182,13 +226,22 @@ class PersistentRelation(Generic[L, R]):
         return PersistentRelation(forward, self._reverse.remove_key(stored_right))
 
     def clear(self) -> PersistentRelation[L, R]:
+        """Return an empty relation retaining both policies; a no-op when already empty."""
+
         return self if self.is_empty else self.empty(self.left_policy, self.right_policy)
 
     def __iter__(self) -> Iterator[RelationEntry[L, R]]:
+        """Iterate every ``(left, right)`` pair in the forward index's order."""
+
         for entry in self._forward:
             yield RelationEntry(entry.key, entry.value)
 
     def shares_roots_with(self, other: PersistentRelation[L, R]) -> bool:
+        """Whether both relations reference the same forward and reverse roots.
+
+        A representation test used to confirm that a no-op avoided copying, not an equality test.
+        """
+
         return self._forward.shares_root_with(other._forward) and self._reverse.shares_root_with(
             other._reverse
         )

@@ -45,22 +45,58 @@ class RangeUpdateAlgebra(Protocol[T, M, U]):
     """
 
     @property
-    def identity(self) -> M: ...
+    def identity(self) -> M:
+        """The two-sided identity for :meth:`combine`, and the measure of the empty sequence."""
+        ...
 
-    def combine(self, left: M, right: M) -> M: ...
+    def combine(self, left: M, right: M) -> M:
+        """Combine two measures in sequence order, ``left`` preceding ``right``.
 
-    def measure(self, element: T) -> M: ...
+        Must be associative. It need not be commutative; measures are always combined left to
+        right.
+        """
+        ...
+
+    def measure(self, element: T) -> M:
+        """Return the measure of a single element."""
+        ...
 
     @property
-    def identity_tag(self) -> U: ...
+    def identity_tag(self) -> U:
+        """A tag that changes nothing, used as the starting point for composition.
 
-    def is_identity(self, tag: U) -> bool: ...
+        Not a sentinel: :meth:`is_identity` decides whether a tag acts as the identity, and other
+        tag values may qualify.
+        """
+        ...
 
-    def compose(self, newer: U, older: U) -> U: ...
+    def is_identity(self, tag: U) -> bool:
+        """Whether ``tag`` acts as the identity, so storing it would be pointless.
 
-    def apply_element(self, tag: U, element: T) -> T: ...
+        Authoritative, and the only way the sequence recognizes a do-nothing tag. It lets, say,
+        "add 0" be recognized as inert even though it is not :attr:`identity_tag` itself.
+        """
+        ...
 
-    def apply_measure(self, tag: U, measure: M, count: int) -> M: ...
+    def compose(self, newer: U, older: U) -> U:
+        """Return the tag equivalent to applying ``older`` first and then ``newer``.
+
+        Directional: composition is not assumed commutative, so the argument order matters.
+        """
+        ...
+
+    def apply_element(self, tag: U, element: T) -> T:
+        """Apply ``tag`` to one current logical element."""
+        ...
+
+    def apply_measure(self, tag: U, measure: M, count: int) -> M:
+        """Apply ``tag`` to the cached measure of ``count`` elements.
+
+        Must agree with applying the tag to each element individually and recombining, and must
+        distribute over :meth:`combine`. Those laws are what make a deferred tag indistinguishable
+        from an applied one; without them, cached measures would drift from the elements.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,21 +111,33 @@ class _FunctionalRangeUpdateAlgebra(Generic[T, M, U]):
     _apply_measure: Callable[[U, M, int], M]
 
     def combine(self, left: M, right: M) -> M:
+        """Delegate to the caller-supplied combine function."""
+
         return self._combine(left, right)
 
     def measure(self, element: T) -> M:
+        """Delegate to the caller-supplied measure function."""
+
         return self._measure(element)
 
     def is_identity(self, tag: U) -> bool:
+        """Delegate to the caller-supplied identity predicate."""
+
         return self._is_identity(tag)
 
     def compose(self, newer: U, older: U) -> U:
+        """Delegate to the caller-supplied tag composition."""
+
         return self._compose(newer, older)
 
     def apply_element(self, tag: U, element: T) -> T:
+        """Delegate to the caller-supplied element action."""
+
         return self._apply_element(tag, element)
 
     def apply_measure(self, tag: U, measure: M, count: int) -> M:
+        """Delegate to the caller-supplied measure action."""
+
         return self._apply_measure(tag, measure, count)
 
 
@@ -684,6 +732,8 @@ class RangeUpdateSequence(Generic[T, M, U]):
         *,
         record_allocation: bool = True,
     ) -> None:
+        """Wrap an already-built root; use the factory methods instead."""
+
         if record_allocation:
             _record_facade_allocation()
         self._root = root
@@ -730,17 +780,27 @@ class RangeUpdateSequence(Generic[T, M, U]):
 
     @property
     def algebra(self) -> RangeUpdateAlgebra[T, M, U]:
+        """The retained algebra. Only sequences sharing that exact object may be concatenated."""
+
         return self._context.algebra
 
     def __len__(self) -> int:
+        """Number of elements, read from the root's cached count."""
+
         return _count(self._root)
 
     @property
     def is_empty(self) -> bool:
+        """Whether the sequence holds no elements."""
+
         return self._root is None
 
     @property
     def measure(self) -> M:
+        """The combined measure of every element, with all pending range tags accounted for. Read
+        from the root's cached measure rather than recomputed.
+        """
+
         return self._context.empty_measure if self._root is None else self._root.measure
 
     def _empty(self) -> RangeUpdateSequence[T, M, U]:
@@ -779,35 +839,56 @@ class RangeUpdateSequence(Generic[T, M, U]):
         return _get_element(self._root, index, self._context)
 
     def __getitem__(self, index: int) -> T:
+        """The logical element at ``index``, raising for a non-integer or out-of-range index."""
+
         if not isinstance(index, int):
             raise TypeError("range-update sequence indices must be integers")
         return self.get_at(index)
 
     def prepend(self, item: T) -> RangeUpdateSequence[T, M, U]:
+        """Return a sequence with ``item`` added at the front."""
+
         return self.insert(0, item)
 
     def append(self, item: T) -> RangeUpdateSequence[T, M, U]:
+        """Return a sequence with ``item`` added at the back."""
+
         return self.insert(len(self), item)
 
     def insert(self, index: int, item: T) -> RangeUpdateSequence[T, M, U]:
+        """Return a sequence with ``item`` inserted so that it ends up at ``index``. ``item`` is
+        inserted literally: tags already pending over the surrounding range do not apply to it.
+        Raises :class:`OverflowError` rather than exceeding the cross-port signed 32-bit element
+        count.
+        """
+
         self._check_boundary_index(index)
         if len(self) == _INT32_MAX:
             raise OverflowError("A sequence cannot contain more than Int32.MaxValue elements.")
         return self._wrap(_insert(self._root, index, item, self._context))
 
     def set_item(self, index: int, item: T) -> RangeUpdateSequence[T, M, U]:
+        """Return a sequence with the element at ``index`` replaced literally by ``item``."""
+
         self._check_element_index(index)
         if self._root is None:
             raise AssertionError("A validated replacement has no root.")
         return self._wrap(_set_item(self._root, index, item, self._context))
 
     def remove_at(self, index: int) -> RangeUpdateSequence[T, M, U]:
+        """Return a sequence without the element at ``index``."""
+
         self._check_element_index(index)
         if self._root is None:
             raise AssertionError("A validated removal has no root.")
         return self._wrap(_remove(self._root, index, self._context))
 
     def concat(self, other: RangeUpdateSequence[T, M, U]) -> RangeUpdateSequence[T, M, U]:
+        """Return this sequence's elements followed by ``other``'s. Both sequences must retain the
+        same algebra object, since their tags would otherwise not compose. Concatenating with an
+        empty sequence returns the other operand unchanged.
+        """
+
         if not isinstance(other, RangeUpdateSequence):
             raise TypeError("other must be a RangeUpdateSequence")
         if self.algebra is not other.algebra:
@@ -824,6 +905,10 @@ class RangeUpdateSequence(Generic[T, M, U]):
         return self._wrap(_join(self._root, pivot, right, self._context))
 
     def split_at(self, index: int) -> RangeUpdateSplit[T, M, U]:
+        """Split into the elements before ``index`` and those from ``index`` on. Splitting at either
+        end shares the receiver's root rather than rebuilding it.
+        """
+
         self._check_boundary_index(index)
         if index == 0:
             return RangeUpdateSplit(self._empty(), self)
@@ -833,6 +918,8 @@ class RangeUpdateSequence(Generic[T, M, U]):
         return RangeUpdateSplit(self._wrap(left), self._wrap(right))
 
     def get_range(self, index: int, count: int) -> RangeUpdateSequence[T, M, U]:
+        """Return ``count`` elements starting at ``index`` as a new sequence, tags applied."""
+
         self._check_range(index, count)
         if count == 0:
             return self._empty()
@@ -843,6 +930,13 @@ class RangeUpdateSequence(Generic[T, M, U]):
         return self._wrap(middle)
 
     def apply_range(self, index: int, count: int, tag: U) -> RangeUpdateSequence[T, M, U]:
+        """Return a sequence with ``tag`` applied to ``count`` elements starting at ``index``. This
+        is the operation the structure exists for: the tag is deferred at the roots of the
+        covered subtrees rather than pushed to every element, so the cost follows the tree depth
+        and not the range length. A tag the algebra recognizes as the identity, or an empty
+        range, returns the receiver.
+        """
+
         self._check_range(index, count)
         if count == 0:
             return self
@@ -862,6 +956,10 @@ class RangeUpdateSequence(Generic[T, M, U]):
         return self._wrap(_join_concatenated(root, right, self._context))
 
     def measure_range(self, index: int, count: int) -> M:
+        """The combined measure of ``count`` elements starting at ``index``, tags accounted for.
+        Reads cached subtree measures rather than visiting the elements.
+        """
+
         self._check_range(index, count)
         if count == 0:
             return self._context.empty_measure
@@ -872,11 +970,15 @@ class RangeUpdateSequence(Generic[T, M, U]):
         return _measure_range(self._root, index, count, False, None, self._context)
 
     def __iter__(self) -> Iterator[T]:
+        """Iterate the logical elements in sequence order, applying pending tags as it descends."""
+
         if self._root is None:
             return iter(())
         return _iterate(self._root, self._context)
 
     def to_list(self) -> list[T]:
+        """Copy the logical elements into a list, in sequence order."""
+
         return list(self)
 
     @property
@@ -992,45 +1094,71 @@ class RangeUpdateSequenceCursor(Generic[T, M, U]):
     position: int = 0
 
     def __post_init__(self) -> None:
+        """Reject a position outside ``0..count``, so every cursor names a real gap."""
+
         self._snapshot._check_boundary_index(self.position)
 
     @property
     def count(self) -> int:
+        """Element count of the sequence version this cursor is positioned in."""
+
         return len(self._snapshot)
 
     @property
     def is_at_start(self) -> bool:
+        """Whether the gap precedes the first element."""
+
         return self.position == 0
 
     @property
     def is_at_end(self) -> bool:
+        """Whether the gap follows the last element."""
+
         return self.position == self.count
 
     @property
     def measure_before(self) -> M:
+        """The combined measure of every element before the gap, pending tags accounted for."""
+
         return self._snapshot.measure_range(0, self.position)
 
     @property
     def measure_after(self) -> M:
+        """The combined measure of every element at or after the gap, pending tags accounted for."""
+
         return self._snapshot.measure_range(self.position, self.count - self.position)
 
     def peek_previous(self) -> SequenceCursorPeek[T] | None:
+        """The element immediately before the gap, or ``None`` at the start. Returned by value,
+        since pending tags must be applied to produce the current logical value.
+        """
+
         return None if self.is_at_start else SequenceCursorPeek(self._snapshot[self.position - 1])
 
     def peek_next(self) -> SequenceCursorPeek[T] | None:
+        """The element immediately after the gap, or ``None`` at the end."""
+
         return None if self.is_at_end else SequenceCursorPeek(self._snapshot[self.position])
 
     def move_previous(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
+        """
+
         if self.is_at_start:
             raise IndexError("range-update cursor is already at the start")
         return RangeUpdateSequenceCursor(self._snapshot, self.position - 1)
 
     def move_next(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        """A cursor one position later, raising :class:`IndexError` at the end."""
+
         if self.is_at_end:
             raise IndexError("range-update cursor is already at the end")
         return RangeUpdateSequenceCursor(self._snapshot, self.position + 1)
 
     def seek(self, position: int) -> RangeUpdateSequenceCursor[T, M, U]:
+        """A cursor at ``position`` within the same sequence version, raising when out of range."""
+
         return (
             self
             if position == self.position
@@ -1038,11 +1166,18 @@ class RangeUpdateSequenceCursor(Generic[T, M, U]):
         )
 
     def insert(self, value: T) -> RangeUpdateSequenceCursor[T, M, U]:
+        """Insert ``item`` at the gap and return a cursor positioned after it. ``item`` is inserted
+        literally, unaffected by tags pending over the surrounding range.
+        """
+
         return RangeUpdateSequenceCursor(
             self._snapshot.insert(self.position, value), self.position + 1
         )
 
     def delete_previous(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        """Remove the element before the gap and return a cursor in its place, raising at the start.
+        """
+
         if self.is_at_start:
             raise IndexError("range-update cursor has no previous element")
         return RangeUpdateSequenceCursor(
@@ -1050,11 +1185,17 @@ class RangeUpdateSequenceCursor(Generic[T, M, U]):
         )
 
     def delete_next(self) -> RangeUpdateSequenceCursor[T, M, U]:
+        """Remove the element after the gap and return a cursor in its place, raising at the end."""
+
         if self.is_at_end:
             raise IndexError("range-update cursor has no next element")
         return RangeUpdateSequenceCursor(self._snapshot.remove_at(self.position), self.position)
 
     def replace_next(self, value: T) -> RangeUpdateSequenceCursor[T, M, U]:
+        """Replace the element after the gap literally, keeping the gap where it is. Raises
+        :class:`IndexError` at the end.
+        """
+
         if self.is_at_end:
             raise IndexError("range-update cursor has no next element")
         return RangeUpdateSequenceCursor(
@@ -1062,14 +1203,26 @@ class RangeUpdateSequenceCursor(Generic[T, M, U]):
         )
 
     def measure_previous(self, count: int) -> M:
+        """The combined measure of the ``count`` elements before the gap, raising when fewer precede
+        it.
+        """
+
         self._check_directional_count(count, self.position)
         return self._snapshot.measure_range(self.position - count, count)
 
     def measure_next(self, count: int) -> M:
+        """The combined measure of the ``count`` elements after the gap, raising when fewer follow
+        it.
+        """
+
         self._check_directional_count(count, self.count - self.position)
         return self._snapshot.measure_range(self.position, count)
 
     def apply_previous(self, count: int, tag: U) -> RangeUpdateSequenceCursor[T, M, U]:
+        """Apply ``tag`` to the ``count`` elements before the gap, raising when fewer precede it.
+        Deferred at the covered subtree roots, as :meth:`RangeUpdateSequence.apply_range` is.
+        """
+
         self._check_directional_count(count, self.position)
         snapshot = self._snapshot.apply_range(self.position - count, count, tag)
         return (
@@ -1079,6 +1232,8 @@ class RangeUpdateSequenceCursor(Generic[T, M, U]):
         )
 
     def apply_next(self, count: int, tag: U) -> RangeUpdateSequenceCursor[T, M, U]:
+        """Apply ``tag`` to the ``count`` elements after the gap, raising when fewer follow it."""
+
         self._check_directional_count(count, self.count - self.position)
         snapshot = self._snapshot.apply_range(self.position, count, tag)
         return (
@@ -1088,6 +1243,8 @@ class RangeUpdateSequenceCursor(Generic[T, M, U]):
         )
 
     def snapshot(self) -> RangeUpdateSequence[T, M, U]:
+        """The sequence version this cursor is positioned in."""
+
         return self._snapshot
 
     @staticmethod
