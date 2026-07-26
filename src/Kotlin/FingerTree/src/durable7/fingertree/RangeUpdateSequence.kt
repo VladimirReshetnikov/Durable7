@@ -1,3 +1,11 @@
+/*
+ * Persistent measured sequence with algebraic lazy range updates.
+ *
+ * Applying an update to a range stores a pending tag at the root of each fully covered subtree
+ * instead of touching every element, so the cost follows the tree depth rather than the range
+ * length while cached measures stay correct. Pushing a tag down is a path copy, so earlier versions
+ * keep observing the values they always had.
+ */
 package durable7.fingertree
 
 import java.util.ArrayDeque

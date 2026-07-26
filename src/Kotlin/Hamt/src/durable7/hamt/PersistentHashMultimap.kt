@@ -1,7 +1,16 @@
+/*
+ * Persistent set-valued hash multimap.
+ *
+ * Maps each key to a nonempty value set, so adding a present pair is a no-op and removing a key's
+ * last value removes the key itself. Distinct-key and pair cardinalities are tracked separately,
+ * because neither can be derived from the other in constant time.
+ */
 package durable7.hamt
 
+/** One key-value pair as the multimap presents it. */
 public data class MultimapEntry<K, V>(public val key: K, public val value: V)
 
+/** Key and pair counts returned by a successful structural audit. */
 public data class PersistentHashMultimapStatistics(
     public val keyCount: Int,
     public val pairCount: Long,
@@ -110,6 +119,7 @@ public class PersistentHashMultimap<K, V> private constructor(
     }.iterator()
 }
 
+/** Left, right, and pair counts returned by a successful structural audit. */
 public data class PersistentRelationStatistics(
     public val leftCount: Int,
     public val rightCount: Int,

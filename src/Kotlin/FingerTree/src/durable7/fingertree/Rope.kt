@@ -1,3 +1,10 @@
+/*
+ * Persistent chunked sequences, in positional, measured, and text flavors.
+ *
+ * Elements live in contiguous chunks at the leaves rather than one per leaf, so bulk work runs over
+ * slices while the tree above still gives logarithmic indexing, splitting, and concatenation. The
+ * text layer caches newline counts, making offset-to-line conversion logarithmic instead of a scan.
+ */
 package durable7.fingertree
 
 /**
@@ -330,6 +337,7 @@ public class RopeCursor<T> private constructor(
     }
 }
 
+/** The two ropes produced by a split, each with its own recomputed measure. */
 public data class MeasuredRopeSplit<T, M>(
     public val left: MeasuredRope<T, M>,
     public val right: MeasuredRope<T, M>,
@@ -571,14 +579,25 @@ public class MeasuredRope<T, M> private constructor(
     override fun iterator(): Iterator<T> = items.iterator()
 }
 
+/** Counts line feeds, which is what gives a text rope logarithmic offset-to-line conversion. */
 public object NewlineMeasure : MeasurePolicy<Char, Int> {
+    /** The identity: zero line feeds. */
     override val empty: Int = 0
+
+    /** A line feed counts as one; every other character as zero. */
     override fun measure(element: Char): Int = if (element == '\n') 1 else 0
+
+    /** Add two line counts. */
     override fun combine(left: Int, right: Int): Int = left + right
 }
 
+/** A zero-based line and column position within a text rope. */
 public data class LineColumn(public val line: Int, public val column: Int)
 
+/**
+ * A persistent text rope over characters, with newline counts cached in its measure so converting between an offset and
+ * a line/column is logarithmic rather than a scan.
+ */
 public class TextRope private constructor(
     private val characters: MeasuredRope<Char, Int>,
 ) {
@@ -694,40 +713,54 @@ public class TextRope private constructor(
     }
 }
 
+/**
+ * A mutable accumulator for building a character or text rope in bulk. Deliberately mutable and not a snapshot: text is
+ * appended into a plain buffer and turned into a persistent rope only on demand.
+ */
 public class RopeBuilder {
     private val builder = StringBuilder()
 
+    /** Number of characters accumulated so far. */
     public val size: Int
         get() = builder.length
 
+    /** Whether nothing has been appended yet. */
     public val isEmpty: Boolean
         get() = builder.isEmpty()
 
+    /** The accumulated text, without building a rope. */
     public fun asString(): String = builder.toString()
 
+    /** Append text, returning the builder for chaining. */
     public fun append(text: String): RopeBuilder {
         builder.append(text)
         return this
     }
 
+    /** Append one character, returning the builder for chaining. */
     public fun appendChar(value: Char): RopeBuilder {
         builder.append(value)
         return this
     }
 
+    /** Append text followed by a line feed, returning the builder for chaining. */
     public fun appendLine(text: String): RopeBuilder {
         builder.append(text).append('\n')
         return this
     }
 
+    /** An empty rope retaining the same policies; returns the receiver when already empty. */
     public fun clear(): RopeBuilder {
         builder.clear()
         return this
     }
 
+    /** Build a character rope from the accumulated text, leaving the builder usable. */
     public fun toRope(): Rope<Char> = Rope.fromText(builder.toString())
 
+    /** Build a text rope from the accumulated text, leaving the builder usable. */
     public fun toTextRope(): TextRope = TextRope.fromText(builder.toString())
 
+    /** The accumulated text. */
     override fun toString(): String = builder.toString()
 }

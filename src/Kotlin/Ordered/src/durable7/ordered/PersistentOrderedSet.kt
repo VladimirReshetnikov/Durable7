@@ -1,3 +1,10 @@
+/*
+ * Persistent insertion-ordered set with explicit repositioning and stable sorting.
+ *
+ * Pairs a hash index from element to order stamp with an ordered sequence of stamped entries, so
+ * membership stays constant time while iteration follows insertion order. Stamps are spaced apart,
+ * which lets a move usually pick a stamp between its neighbors instead of restamping everything.
+ */
 package durable7.ordered
 
 import java.util.Comparator

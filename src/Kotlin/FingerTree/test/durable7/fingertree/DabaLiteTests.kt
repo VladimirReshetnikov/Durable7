@@ -1,3 +1,7 @@
+/*
+ * Tests for the DABA Lite sliding-window aggregate, using a non-commutative monoid so operand order
+ * is observable, and asserting the worst-case callback ceiling per operation.
+ */
 package durable7.fingertree
 
 import java.lang.ref.Reference
@@ -637,6 +641,7 @@ private object FirstReferenceMonoid : Monoid<ReferenceAggregate> {
 
 private class CallbackException : RuntimeException()
 
+/** The DABA Lite test cases, each a name paired with its assertion body. */
 internal fun dabaLiteTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "dabaExhaustiveShortHistoriesMatchNoncommutativeModel" to ::dabaExhaustiveShortHistoriesMatchNoncommutativeModel,
     "dabaRandomizedHistoryMatchesNaiveModel" to ::dabaRandomizedHistoryMatchesNaiveModel,

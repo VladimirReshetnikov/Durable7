@@ -1,12 +1,22 @@
+/*
+ * Persistent map with one automatically maintained secondary index.
+ *
+ * A primary map plus a derived nonunique index keyed by a caller-supplied projection. Every
+ * mutation updates both and publishes only when both are complete, so the index cannot drift from
+ * the primary map the way a hand-maintained side table can.
+ */
 package durable7.hamt
 
+/** One primary key and its value. */
 public data class IndexedMapEntry<K, V>(public val key: K, public val value: V)
 
+/** The outcome of a strict insertion; the map is the receiver when nothing was added. */
 public data class IndexedMapAddResult<K, V, I>(
     public val map: PersistentIndexedMap<K, V, I>,
     public val added: Boolean,
 )
 
+/** Primary and index cardinalities returned by a successful structural audit. */
 public data class PersistentIndexedMapStatistics(
     public val count: Int,
     public val indexKeyCount: Int,

@@ -1,3 +1,7 @@
+/*
+ * Tests for the lazily range-updating sequence. The property under test is that a deferred tag is
+ * indistinguishable from an applied one across every read path.
+ */
 package durable7.fingertree
 
 import java.util.Collections
@@ -722,6 +726,7 @@ private inline fun <reified T : Throwable> rangeCheckThrows(message: String, act
     throw AssertionError("$message Expected ${T::class.simpleName}.")
 }
 
+/** The lazily range-updating sequence test cases. */
 internal fun rangeUpdateSequenceTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "rangeUpdateAlgebraLawsHold" to ::rangeUpdateAlgebraLawsHold,
     "rangeUpdateSurfacePreservesSnapshots" to ::rangeUpdateSurfacePreservesSnapshots,

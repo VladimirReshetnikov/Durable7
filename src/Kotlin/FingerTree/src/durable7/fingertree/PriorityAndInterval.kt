@@ -1,10 +1,19 @@
+/*
+ * Persistent priority queue and interval tree over the measured tree.
+ *
+ * The queue caches the minimum-priority entry as its measure, so peeking is a cached read and
+ * removal is a measure-directed descent. The interval tree caches each subtree's maximum high
+ * endpoint, so overlap and stabbing queries prune subtrees that cannot reach the probe.
+ */
 package durable7.fingertree
 
+/** One queued value together with the priority it is ordered by. */
 public data class PriorityEntry<T, P>(
     public val value: T,
     public val priority: P,
 )
 
+/** The entry removed by a dequeue, together with the queue that remains. */
 public data class PriorityDequeue<T, P>(
     public val entry: PriorityEntry<T, P>,
     public val queue: PriorityQueue<T, P>,
@@ -34,6 +43,10 @@ private class PriorityMeasurePolicy<T, P>(
     override fun hashCode(): Int = comparator.hashCode()
 }
 
+/**
+ * A persistent priority queue caching the minimum-priority entry as its measure, so peeking is a cached read and
+ * removal is a measure-directed descent. Equal priorities are served in enqueue order.
+ */
 public class PriorityQueue<T, P> private constructor(
     private val entries: PersistentMeasuredTree<PriorityEntry<T, P>, PrioritySummary<T, P>>,
     private val comparator: Comparator<in P>,
@@ -89,6 +102,10 @@ public class PriorityQueue<T, P> private constructor(
 
 }
 
+/**
+ * A closed interval. The low endpoint never exceeds the high one; construction rejects an inverted interval rather than
+ * letting it produce silently empty query results.
+ */
 public data class Interval<T : Comparable<T>>(
     public val low: T,
     public val high: T,
@@ -104,6 +121,7 @@ public data class Interval<T : Comparable<T>>(
         low <= point && point <= high
 }
 
+/** The tree remaining after a removal, together with the interval that was removed. */
 public data class IntervalRemoveResult<T : Comparable<T>>(
     public val tree: IntervalTree<T>,
     public val interval: Interval<T>,
@@ -134,6 +152,10 @@ private class IntervalMeasurePolicy<T : Comparable<T>> : MeasurePolicy<Interval<
     override fun hashCode(): Int = IntervalMeasurePolicy::class.hashCode()
 }
 
+/**
+ * A persistent bag of closed intervals. Each subtree's maximum high endpoint is cached, so a query visits only the
+ * subtrees that can still contain a match. Duplicates are permitted.
+ */
 public class IntervalTree<T : Comparable<T>> private constructor(
     private val intervals: PersistentMeasuredTree<Interval<T>, IntervalSummary<T>>,
 ) : Iterable<Interval<T>> {

@@ -1,3 +1,10 @@
+/*
+ * Persistent multiset with explicit per-class multiplicities.
+ *
+ * Each equivalence class is stored once with a positive count, so memory follows the number of
+ * distinct classes and adding many copies is constant work. Counting domains are checked rather
+ * than allowed to wrap.
+ */
 package durable7.hamt
 
 /**

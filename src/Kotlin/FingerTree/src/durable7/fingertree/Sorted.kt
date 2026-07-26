@@ -1,12 +1,23 @@
+/*
+ * Order-statistic sorted bag, set, and map over the measured tree.
+ *
+ * The measure caches both element counts and the largest key of each subtree, so one split answers
+ * ordered questions and positional questions alike - rank and select as well as lookup, which an
+ * ordinary balanced tree cannot do without extra bookkeeping.
+ */
 package durable7.fingertree
 
+/** Raised when duplicate-rejecting insertion sees an equivalent key. */
 public class SortedDuplicateKeyException(message: String = "An equivalent key is already present.") :
     IllegalArgumentException(message)
 
+/** One key-value pair as the sorted map stores and presents it. */
 public data class SortedMapEntry<K, V>(public val key: K, public val value: V)
 
+/** The outcome of a non-overwriting insertion; the value is the receiver when nothing was added. */
 public data class SortedAddResult<T>(public val value: T, public val added: Boolean)
 
+/** The map remaining after a removal, together with the value that was removed. */
 public data class SortedMapRemoveResult<K, V>(
     public val map: SortedMap<K, V>,
     public val value: V,
@@ -31,6 +42,10 @@ private fun <T> PersistentDeque<T>.lowerBound(value: T, comparator: Comparator<i
 private fun <T> PersistentDeque<T>.upperBound(value: T, comparator: Comparator<in T>): Int =
     prefixLength { compare(comparator, it, value) <= 0 }
 
+/**
+ * A persistent sorted multiset with rank and select. The cached element counts are what make those a descent rather
+ * than a scan.
+ */
 public class SortedBag<T> private constructor(
     private val items: PersistentDeque<T>,
     private val comparator: Comparator<in T>,
@@ -134,6 +149,7 @@ public class SortedBag<T> private constructor(
     override fun iterator(): Iterator<T> = items.iterator()
 }
 
+/** A persistent sorted set with rank and select, keeping the first representative of each equivalence class. */
 public class SortedSet<T> private constructor(
     private val items: PersistentDeque<T>,
     private val comparator: Comparator<in T>,
@@ -303,6 +319,10 @@ public class SortedSet<T> private constructor(
     override fun iterator(): Iterator<T> = items.iterator()
 }
 
+/**
+ * A persistent sorted map with rank and select over its keys, retaining the first key representative across value
+ * replacement.
+ */
 public class SortedMap<K, V> private constructor(
     private val entries: PersistentDeque<SortedMapEntry<K, V>>,
     private val comparator: Comparator<in K>,

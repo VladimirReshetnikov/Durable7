@@ -1,3 +1,6 @@
+/*
+ * Immutable cursor over a measured rope, able to seek by position or by cached measure.
+ */
 package durable7.fingertree
 
 /**

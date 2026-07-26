@@ -1,3 +1,9 @@
+/*
+ * Immutable cursors over the insertion-ordered collections.
+ *
+ * Lookups and insertions report their outcome through separate types, so generic code cannot
+ * confuse "an equivalent entry was already there" with "an entry was added".
+ */
 package durable7.ordered
 
 /** Present neighbor returned by an ordered-collection cursor, including a stored null value. */

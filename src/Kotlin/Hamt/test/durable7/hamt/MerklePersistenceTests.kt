@@ -1,3 +1,7 @@
+/*
+ * Tests for Merkle block storage, verification, and synchronization, exercising verification
+ * against corrupted and over-budget input to confirm it fails rather than trusting it.
+ */
 package durable7.hamt
 
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -664,6 +668,7 @@ private fun duplicateAndUnknownAddressesAreRejected(): Unit {
     }
 }
 
+/** Run the Merkle storage, verification, and synchronization cases. */
 internal fun runMerklePersistenceTests(): Unit {
     val tests = listOf(
         "exactGoldenBlockAndMsp2Queries" to ::exactGoldenBlockAndMsp2Queries,

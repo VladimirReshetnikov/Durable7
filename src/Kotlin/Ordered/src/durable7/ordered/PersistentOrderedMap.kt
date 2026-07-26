@@ -1,23 +1,39 @@
+/*
+ * Persistent insertion-ordered map with explicit repositioning.
+ *
+ * Separates identity, decided by hashing and equality, from position, which follows insertion order
+ * unless the caller moves an entry. Re-adding an existing key keeps its position and stored key
+ * representative while replacing the payload.
+ */
 package durable7.ordered
 
 import durable7.hamt.HashPolicy
 import durable7.hamt.PersistentHashMap
 import durable7.hamt.defaultHashPolicy
 
+/** One key-value pair as the insertion-ordered map presents it. */
 public data class OrderedMapEntry<K, V>(public val key: K, public val value: V)
+
+/** A presence-safe lookup result, so a stored null stays distinct from absence. */
 public data class OrderedMapLookup<K, V>(
     public val found: Boolean,
     public val key: K,
     public val value: V?,
 )
+
+/** The outcome of a strict insertion; the map is the receiver when nothing was added. */
 public data class OrderedMapAddResult<K, V>(
     public val map: PersistentOrderedMap<K, V>,
     public val added: Boolean,
 )
+
+/** The map remaining after a removal, together with the removed key representative and value. */
 public data class OrderedMapRemoveResult<K, V>(
     public val map: PersistentOrderedMap<K, V>,
     public val removed: Boolean,
 )
+
+/** Entry counts returned by a successful dual-index audit. */
 public data class PersistentOrderedMapStatistics(public val count: Int)
 
 /** Immutable comparer-keyed map with insertion and explicit-position order. */

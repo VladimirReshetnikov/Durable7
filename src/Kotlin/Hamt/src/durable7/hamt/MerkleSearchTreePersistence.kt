@@ -1,3 +1,9 @@
+/*
+ * Storage, synchronization, and pack handling for Merkle search trees.
+ *
+ * Synchronization transfers only the blocks a receiver lacks, pruning any subtree whose digest
+ * already agrees, so the cost follows the difference rather than the data.
+ */
 package durable7.hamt
 
 import java.util.ArrayDeque
@@ -204,6 +210,7 @@ private fun preflightStore(blocks: Iterable<MerkleBlock>, store: MerkleBlockStor
     }
 }
 
+/** A block decoded back into its level, entries, and child digests, ready to be verified against its own digest. */
 internal class DecodedMerkleBlock<K, V>(
     val block: MerkleBlock,
     val level: Int,
@@ -212,14 +219,19 @@ internal class DecodedMerkleBlock<K, V>(
     val childDigests: List<MerkleDigest>,
 )
 
+/** Accounting state charging a verification against its budget, so untrusted input cannot force unbounded work. */
 internal class MerkleVerificationContext(internal val budget: MerkleVerificationBudget) {
+    /** How many blocks have been charged so far. */
     internal var blockCount: Int = 0
         private set
+
+    /** How many bytes have been charged so far. */
     internal var totalBytes: Long = 0
         private set
     private var entryCount: Long = 0
     private val blocks: HashSet<MerkleDigest> = HashSet()
 
+    /** Fail when the depth exceeds the budget, bounding how deep a chain the input can force. */
     internal fun checkDepth(depth: Int, digest: MerkleDigest? = null): Unit {
         if (depth <= 0 || depth > budget.maxDepth) {
             throw verificationFailure(
@@ -230,6 +242,10 @@ internal class MerkleVerificationContext(internal val budget: MerkleVerification
         }
     }
 
+    /**
+     * Charge one block, reporting whether it had not already been counted. Blocks already seen are not charged twice,
+     * so a shared subtree costs once.
+     */
     internal fun account(block: MerkleBlock, depth: Int): Boolean {
         checkDepth(depth, block.digest)
         if (!blocks.add(block.digest)) return false
@@ -254,6 +270,7 @@ internal class MerkleVerificationContext(internal val budget: MerkleVerification
         return true
     }
 
+    /** Charge a proof query's bytes against both the per-query and total ceilings. */
     internal fun accountProofQuery(byteCount: Int, rootHash: MerkleDigest): Unit {
         if (byteCount > budget.maxProofQueryByteCount ||
             totalBytes > budget.maxTotalByteCount - byteCount.toLong()
@@ -267,6 +284,7 @@ internal class MerkleVerificationContext(internal val budget: MerkleVerification
         totalBytes += byteCount
     }
 
+    /** Charge decoded entries against the budget. */
     internal fun accountEntries(count: Int, digest: MerkleDigest): Unit {
         if (entryCount > budget.maxEntryCount - count.toLong()) {
             throw verificationFailure(
@@ -353,6 +371,10 @@ private fun <K, V> MerkleSearchTree<K, V>.loadMerkleNode(
     }
 }
 
+/**
+ * Check that a child block sits below its parent's level and stays strictly inside its key separators. Verified on
+ * decode so a crafted pack cannot present an out-of-order or level-inverted tree as valid.
+ */
 internal fun <K, V> MerkleSearchTree<K, V>.validateMerkleReference(
     parent: DecodedMerkleBlock<K, V>,
     childIndex: Int,
@@ -385,6 +407,10 @@ internal fun <K, V> MerkleSearchTree<K, V>.validateMerkleReference(
     }
 }
 
+/**
+ * Decode one block after charging it to the verification budget and confirming its bytes hash to the digest it was
+ * fetched by.
+ */
 internal fun <K, V> MerkleSearchTree<K, V>.decodeMerkleBlock(
     block: MerkleBlock,
     context: MerkleVerificationContext,
@@ -612,6 +638,10 @@ private fun <K, V> MerkleSearchTree<K, V>.encodeRawMerkleBlock(
     return result
 }
 
+/**
+ * A bounds-checked reader over block bytes; a read past the end is reported as malformed input rather than an internal
+ * error.
+ */
 internal class MerkleByteReader(
     private val bytes: ByteArray,
     private val digest: MerkleDigest? = null,
@@ -657,6 +687,7 @@ internal class MerkleByteReader(
     }
 }
 
+/** Append a signed 32-bit value in the canonical big-endian framing. */
 internal fun writeMerkleInt(destination: ByteArray, offset: Int, value: Int): Unit {
     destination[offset] = (value ushr 24).toByte()
     destination[offset + 1] = (value ushr 16).toByte()
@@ -664,6 +695,7 @@ internal fun writeMerkleInt(destination: ByteArray, offset: Int, value: Int): Un
     destination[offset + 3] = value.toByte()
 }
 
+/** Check a pack or proof envelope's algorithm and domain identifiers before trusting anything inside it. */
 internal fun <K, V> verifyMerkleEnvelope(
     algorithmId: String,
     domainDigest: MerkleDigest,

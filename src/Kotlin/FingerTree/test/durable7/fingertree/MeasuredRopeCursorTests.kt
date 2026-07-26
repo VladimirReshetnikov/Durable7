@@ -1,3 +1,7 @@
+/*
+ * Tests for the measured rope cursor, covering positional and measure-directed seeks and the
+ * persistence of retained cursors across edits.
+ */
 package durable7.fingertree
 
 private fun measuredCursorCheck(value: Boolean, message: String) {
@@ -606,6 +610,7 @@ private fun measuredRopePrefixMeasureSeparatesRangeFromNullAggregates() {
     measuredCursorCheckEquals(null, text.lineStartOffset(text.lineCount()), "line start past the last line")
 }
 
+/** The measured rope cursor test cases. */
 internal fun measuredRopeCursorTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "measuredRopePrefixMeasureSeparatesRangeFromNullAggregates" to
         ::measuredRopePrefixMeasureSeparatesRangeFromNullAggregates,

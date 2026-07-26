@@ -1,3 +1,11 @@
+/*
+ * Immutable ordered and query cursors shared by the sorted, canonical, interval, and priority
+ * structures.
+ *
+ * Each cursor pairs a retained snapshot with a gap position, so moving and editing return new
+ * cursors and never invalidate the ones already held. A seek reports whether it landed on a match,
+ * and on a miss still leaves a usable cursor at the insertion point.
+ */
 package durable7.fingertree
 
 /** Presence-discriminated ordered or query cursor search. */
@@ -48,15 +56,22 @@ public class SortedBagCursor<T> private constructor(
     public fun snapshot(): SortedBag<T> = value
 }
 
+/** A cursor at the given gap of the bag, or `null` when the position is out of range. */
 public fun <T> SortedBag<T>.cursorAt(position: Int): SortedBagCursor<T>? =
     if (position in 0..size) SortedBagCursor.create(this, position) else null
 
+/** A cursor before the first element not less than the probe. */
 public fun <T> SortedBag<T>.cursorAtLowerBound(item: T): SortedBagCursor<T> =
     checkNotNull(cursorAt(countLessThan(item)))
 
+/** A cursor after the last element not greater than the probe. */
 public fun <T> SortedBag<T>.cursorAtUpperBound(item: T): SortedBagCursor<T> =
     checkNotNull(cursorAt(countAtMost(item)))
 
+/**
+ * A cursor at the element together with whether it is actually present; on a miss the cursor sits at the insertion
+ * point.
+ */
 public fun <T> SortedBag<T>.findCursor(item: T): OrderedCursorSearch<SortedBagCursor<T>> =
     OrderedCursorSearch(countOf(item) != 0, cursorAtLowerBound(item))
 
@@ -106,15 +121,22 @@ public class SortedSetCursor<T> private constructor(
     public fun snapshot(): SortedSet<T> = value
 }
 
+/** A cursor at the given gap of the set, or `null` when the position is out of range. */
 public fun <T> SortedSet<T>.cursorAt(position: Int): SortedSetCursor<T>? =
     if (position in 0..size) SortedSetCursor.create(this, position) else null
 
+/** A cursor before the first element not less than the probe. */
 public fun <T> SortedSet<T>.cursorAtLowerBound(item: T): SortedSetCursor<T> =
     checkNotNull(cursorAt(cursorLowerBound(item)))
 
+/** A cursor after the last element not greater than the probe. */
 public fun <T> SortedSet<T>.cursorAtUpperBound(item: T): SortedSetCursor<T> =
     checkNotNull(cursorAt(cursorUpperBound(item)))
 
+/**
+ * A cursor at the element together with whether it is actually present; on a miss the cursor sits at the insertion
+ * point.
+ */
 public fun <T> SortedSet<T>.findCursor(item: T): OrderedCursorSearch<SortedSetCursor<T>> =
     OrderedCursorSearch(contains(item), cursorAtLowerBound(item))
 
@@ -186,15 +208,21 @@ public class SortedMapCursor<K, V> private constructor(
     public fun snapshot(): SortedMap<K, V> = value
 }
 
+/** A cursor at the given gap of the map, or `null` when the position is out of range. */
 public fun <K, V> SortedMap<K, V>.cursorAt(position: Int): SortedMapCursor<K, V>? =
     if (position in 0..size) SortedMapCursor.create(this, position) else null
 
+/** A cursor before the first key not less than the probe. */
 public fun <K, V> SortedMap<K, V>.cursorAtLowerBound(key: K): SortedMapCursor<K, V> =
     checkNotNull(cursorAt(cursorLowerBound(key)))
 
+/** A cursor after the last key not greater than the probe. */
 public fun <K, V> SortedMap<K, V>.cursorAtUpperBound(key: K): SortedMapCursor<K, V> =
     checkNotNull(cursorAt(cursorUpperBound(key)))
 
+/**
+ * A cursor at the key together with whether it is actually present; on a miss the cursor sits at the insertion point.
+ */
 public fun <K, V> SortedMap<K, V>.findCursor(key: K): OrderedCursorSearch<SortedMapCursor<K, V>> =
     OrderedCursorSearch(containsKey(key), cursorAtLowerBound(key))
 
@@ -244,15 +272,22 @@ public class CanonicalSortedSetCursor<T> private constructor(
     public fun snapshot(): CanonicalSortedSet<T> = value
 }
 
+/** A cursor at the given gap of the set, or `null` when the position is out of range. */
 public fun <T> CanonicalSortedSet<T>.cursorAt(position: Int): CanonicalSortedSetCursor<T>? =
     if (position in 0..size) CanonicalSortedSetCursor.create(this, position) else null
 
+/** A cursor before the first element not less than the probe. */
 public fun <T> CanonicalSortedSet<T>.cursorAtLowerBound(item: T): CanonicalSortedSetCursor<T> =
     checkNotNull(cursorAt(cursorBoundRank(item, upper = false)))
 
+/** A cursor after the last element not greater than the probe. */
 public fun <T> CanonicalSortedSet<T>.cursorAtUpperBound(item: T): CanonicalSortedSetCursor<T> =
     checkNotNull(cursorAt(cursorBoundRank(item, upper = true)))
 
+/**
+ * A cursor at the element together with whether it is actually present; on a miss the cursor sits at the insertion
+ * point.
+ */
 public fun <T> CanonicalSortedSet<T>.findCursor(item: T): OrderedCursorSearch<CanonicalSortedSetCursor<T>> {
     val cursor = cursorAtLowerBound(item)
     val next = cursor.peekNext()
@@ -331,15 +366,21 @@ public class PrioritySearchQueueCursor<K, P, V> private constructor(
     public fun snapshot(): PrioritySearchQueue<K, P, V> = value
 }
 
+/** A cursor at the given key-order gap of the queue, or `null` when the position is out of range. */
 public fun <K, P, V> PrioritySearchQueue<K, P, V>.cursorAt(position: Int): PrioritySearchQueueCursor<K, P, V>? =
     if (position in 0..size) PrioritySearchQueueCursor.create(this, position) else null
 
+/** A cursor before the first key not less than the probe. */
 public fun <K, P, V> PrioritySearchQueue<K, P, V>.cursorAtLowerBound(key: K): PrioritySearchQueueCursor<K, P, V> =
     checkNotNull(cursorAt(cursorBoundRank(key, upper = false)))
 
+/** A cursor after the last key not greater than the probe. */
 public fun <K, P, V> PrioritySearchQueue<K, P, V>.cursorAtUpperBound(key: K): PrioritySearchQueueCursor<K, P, V> =
     checkNotNull(cursorAt(cursorBoundRank(key, upper = true)))
 
+/**
+ * A cursor at the key together with whether it is actually present; on a miss the cursor sits at the insertion point.
+ */
 public fun <K, P, V> PrioritySearchQueue<K, P, V>.findCursor(
     key: K,
 ): OrderedCursorSearch<PrioritySearchQueueCursor<K, P, V>> {
@@ -348,6 +389,10 @@ public fun <K, P, V> PrioritySearchQueue<K, P, V>.findCursor(
     return OrderedCursorSearch(found, cursor)
 }
 
+/**
+ * A cursor before the minimum-priority entry, found through the cached priority rather than by scanning. An empty queue
+ * yields a cursor at the start.
+ */
 public fun <K, P, V> PrioritySearchQueue<K, P, V>.cursorAtMinimumPriority(): PrioritySearchQueueCursor<K, P, V> =
     minimumOrNull()?.let { cursorAtLowerBound(it.key) } ?: checkNotNull(cursorAt(0))
 
@@ -590,14 +635,20 @@ public class PersistentChunkedBitSetCursor private constructor(
     public fun snapshot(): PersistentChunkedBitSet = value
 }
 
+/** A cursor at the given gap in set-bit order, or `null` when the position is out of range. */
 public fun PersistentChunkedBitSet.cursorAt(position: Long): PersistentChunkedBitSetCursor? =
     if (position in 0..count) PersistentChunkedBitSetCursor.create(this, position) else null
 
+/** A cursor before the first set bit at or after the given index, located by rank rather than by scanning the gap. */
 public fun PersistentChunkedBitSet.cursorAtOrAfter(bitIndex: Int): PersistentChunkedBitSetCursor {
     val position = if (bitIndex <= 0) 0L else rank(bitIndex - 1)
     return checkNotNull(cursorAt(position))
 }
 
+/**
+ * A cursor at the bit index together with whether that bit is actually set; on a miss the cursor sits before the next
+ * set bit.
+ */
 public fun PersistentChunkedBitSet.findCursor(bitIndex: Int): OrderedCursorSearch<PersistentChunkedBitSetCursor> {
     val cursor = cursorAtOrAfter(bitIndex)
     return OrderedCursorSearch(bitIndex >= 0 && cursor.peekNext() == bitIndex, cursor)

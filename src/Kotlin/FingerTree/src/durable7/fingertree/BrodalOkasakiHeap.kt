@@ -1,3 +1,11 @@
+/*
+ * Persistent Brodal-Okasaki meldable priority queue.
+ *
+ * A bootstrapped skew-binomial forest: the minimum sits outside the forest, so peeking reads a
+ * field and melding is one root comparison plus a link. Ordering comes from a retained comparator,
+ * and melding heaps built with different comparators is rejected rather than silently reordering
+ * elements.
+ */
 package durable7.fingertree
 
 import java.util.IdentityHashMap

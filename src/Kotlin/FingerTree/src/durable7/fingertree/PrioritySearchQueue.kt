@@ -1,3 +1,10 @@
+/*
+ * Persistent priority search queue: a search tree and a priority queue over the same entries.
+ *
+ * Indexes each entry by a unique key and orders it by priority, so lookup, insertion, deletion, and
+ * re-prioritization by key all work alongside find-and-remove-the-minimum. A plain priority queue
+ * can do only the second; a plain sorted map only the first.
+ */
 package durable7.fingertree
 
 import java.util.IdentityHashMap

@@ -1,3 +1,11 @@
+/*
+ * Persistent big-endian Patricia tries over fixed-width integer keys.
+ *
+ * Branches on the bit positions where keys actually differ, skipping runs of shared prefix, so
+ * every operation is bounded by the key width rather than the entry count and needs no hashing or
+ * rebalancing. Big-endian branching makes traversal ascending and lets merges share whole untouched
+ * subtrees.
+ */
 package durable7.hamt
 
 private fun <T> patriciaValuesEqual(left: T, right: T): Boolean = left === right || left == right
@@ -426,6 +434,7 @@ public data class PatriciaMapEntry<K, V>(public val key: K, public val value: V)
 /** Exact-search result whose [cursor] remains usable on a miss. */
 public data class PatriciaCursorSearch<C>(public val cursor: C, public val found: Boolean)
 
+/** A persistent Patricia map over signed 32-bit keys, bounded by key width rather than entry count. */
 public class PersistentIntMap<V> private constructor(private val core: PatriciaCore<Int, V>) : Iterable<Pair<Int, V>> {
     public companion object {
         public fun <V> empty(): PersistentIntMap<V> = PersistentIntMap(PatriciaCore(null, 0) { (it xor Int.MIN_VALUE).toUInt().toULong() })
@@ -433,72 +442,163 @@ public class PersistentIntMap<V> private constructor(private val core: PatriciaC
             var result = empty<V>(); for ((key, value) in items) result = result.put(key, value); return result
         }
     }
+
+    /** Number of entries. */
     public val size: Int get() = core.size
+
+    /** Whether the map holds no entries. */
     public val isEmpty: Boolean get() = size == 0
+
+    /** The value stored for the key, or `null` when absent. */
     public operator fun get(key: Int): V? = core.get(key)
+
+    /** Whether the key is present. */
     public fun containsKey(key: Int): Boolean = core.containsKey(key)
+
+    /** A cursor before the first entry. */
     public fun cursor(): PersistentIntMapCursor<V> = PersistentIntMapCursor.create(this, 0)
+
+    /** A cursor at the given gap of the map. */
     public fun cursorAt(position: Int): PersistentIntMapCursor<V>? =
         if (position < 0 || position > size) null else PersistentIntMapCursor.create(this, position)
+
+    /** A cursor after the last entry. */
     public fun cursorAtEnd(): PersistentIntMapCursor<V> = PersistentIntMapCursor.create(this, size)
+
+    /** A cursor before the first key not less than the probe. */
     public fun lowerBoundCursor(key: Int): PersistentIntMapCursor<V> =
         PersistentIntMapCursor.create(this, core.lowerBoundRank(key).first)
+
+    /** A cursor after any key equal to the probe. */
     public fun upperBoundCursor(key: Int): PersistentIntMapCursor<V> {
         val (position, found) = core.lowerBoundRank(key)
         return PersistentIntMapCursor.create(this, position + if (found) 1 else 0)
     }
+
+    /** A cursor at the key together with an exact-match discriminator; on a miss it sits at the insertion point. */
     public fun cursorAtKey(key: Int): PatriciaCursorSearch<PersistentIntMapCursor<V>> {
         val (position, found) = core.lowerBoundRank(key)
         return PatriciaCursorSearch(PersistentIntMapCursor.create(this, position), found)
     }
+
+    /** A map with the key bound to the value, adding or replacing as needed. */
     public fun put(key: Int, value: V): PersistentIntMap<V> { val next = core.put(key, value); return if (next === core) this else PersistentIntMap(next) }
+
+    /** A map without that entry; returns the receiver when absent. */
     public fun remove(key: Int): PersistentIntMap<V> { val next = core.remove(key); return if (next === core) this else PersistentIntMap(next) }
+
+    /** An empty map retaining the same policies; returns the receiver when already empty. */
     public fun clear(): PersistentIntMap<V> = if (isEmpty) this else empty()
+
+    /** The entries of both maps. Subtrees the operands already share are adopted whole rather than re-entered. */
     public fun union(other: PersistentIntMap<V>): PersistentIntMap<V> { val next = core.union(other.core); return if (next === core) this else PersistentIntMap(next) }
+
+    /** The entries of both maps. Subtrees the operands already share are adopted whole rather than re-entered. */
     public fun union(other: PersistentIntMap<V>, combine: (Int, V, V) -> V): PersistentIntMap<V> { val next = core.union(other.core, combine); return if (next === core) this else PersistentIntMap(next) }
+
+    /** The entries present in both maps. */
     public fun intersect(other: PersistentIntMap<V>): PersistentIntMap<V> { val next = core.intersect(other.core); return if (next === core) this else PersistentIntMap(next) }
+
+    /** The entries present in both maps. */
     public fun intersect(other: PersistentIntMap<V>, combine: (Int, V, V) -> V): PersistentIntMap<V> { val next = core.intersect(other.core, combine); return if (next === core) this else PersistentIntMap(next) }
+
+    /** This map's entries that are absent from the other. */
     public fun except(other: PersistentIntMap<*>): PersistentIntMap<V> { val next = core.except(other.core); return if (next === core) this else PersistentIntMap(next) }
+
+    /** Iterate the entries. */
     override fun iterator(): Iterator<Pair<Int, V>> = core.iterator()
+
+    /** The entry at the given rank, used by the cursors to address positions. */
     internal fun entryAtForCursor(index: Int): PatriciaMapEntry<Int, V>? =
         core.entryAt(index)?.let { PatriciaMapEntry(it.first, it.second) }
+
+    /**
+     * The rank where the probe belongs together with whether it is actually present; branch prefixes let whole subtrees
+     * be skipped, so the descent is bounded by the key width.
+     */
     internal fun lowerBoundRankForCursor(key: Int): Pair<Int, Boolean> = core.lowerBoundRank(key)
 }
 
+/** A persistent Patricia map over signed 64-bit keys, bounded by key width rather than entry count. */
 public class PersistentLongMap<V> private constructor(private val core: PatriciaCore<Long, V>) : Iterable<Pair<Long, V>> {
     public companion object {
         public fun <V> empty(): PersistentLongMap<V> = PersistentLongMap(PatriciaCore(null, 0) { (it xor Long.MIN_VALUE).toULong() })
         public fun <V> from(items: Iterable<Pair<Long, V>>): PersistentLongMap<V> { var result = empty<V>(); for ((k, v) in items) result = result.put(k, v); return result }
     }
+
+    /** Number of entries. */
     public val size: Int get() = core.size
+
+    /** Whether the map holds no entries. */
     public val isEmpty: Boolean get() = size == 0
+
+    /** The value stored for the key, or `null` when absent. */
     public operator fun get(key: Long): V? = core.get(key)
+
+    /** Whether the key is present. */
     public fun containsKey(key: Long): Boolean = core.containsKey(key)
+
+    /** A cursor before the first entry. */
     public fun cursor(): PersistentLongMapCursor<V> = PersistentLongMapCursor.create(this, 0)
+
+    /** A cursor at the given gap of the map. */
     public fun cursorAt(position: Int): PersistentLongMapCursor<V>? =
         if (position < 0 || position > size) null else PersistentLongMapCursor.create(this, position)
+
+    /** A cursor after the last entry. */
     public fun cursorAtEnd(): PersistentLongMapCursor<V> = PersistentLongMapCursor.create(this, size)
+
+    /** A cursor before the first key not less than the probe. */
     public fun lowerBoundCursor(key: Long): PersistentLongMapCursor<V> =
         PersistentLongMapCursor.create(this, core.lowerBoundRank(key).first)
+
+    /** A cursor after any key equal to the probe. */
     public fun upperBoundCursor(key: Long): PersistentLongMapCursor<V> {
         val (position, found) = core.lowerBoundRank(key)
         return PersistentLongMapCursor.create(this, position + if (found) 1 else 0)
     }
+
+    /** A cursor at the key together with an exact-match discriminator; on a miss it sits at the insertion point. */
     public fun cursorAtKey(key: Long): PatriciaCursorSearch<PersistentLongMapCursor<V>> {
         val (position, found) = core.lowerBoundRank(key)
         return PatriciaCursorSearch(PersistentLongMapCursor.create(this, position), found)
     }
+
+    /** A map with the key bound to the value, adding or replacing as needed. */
     public fun put(key: Long, value: V): PersistentLongMap<V> { val next = core.put(key, value); return if (next === core) this else PersistentLongMap(next) }
+
+    /** A map without that entry; returns the receiver when absent. */
     public fun remove(key: Long): PersistentLongMap<V> { val next = core.remove(key); return if (next === core) this else PersistentLongMap(next) }
+
+    /** An empty map retaining the same policies; returns the receiver when already empty. */
     public fun clear(): PersistentLongMap<V> = if (isEmpty) this else empty()
+
+    /** The entries of both maps. Subtrees the operands already share are adopted whole rather than re-entered. */
     public fun union(other: PersistentLongMap<V>): PersistentLongMap<V> { val next = core.union(other.core); return if (next === core) this else PersistentLongMap(next) }
+
+    /** The entries of both maps. Subtrees the operands already share are adopted whole rather than re-entered. */
     public fun union(other: PersistentLongMap<V>, combine: (Long, V, V) -> V): PersistentLongMap<V> { val next = core.union(other.core, combine); return if (next === core) this else PersistentLongMap(next) }
+
+    /** The entries present in both maps. */
     public fun intersect(other: PersistentLongMap<V>): PersistentLongMap<V> { val next = core.intersect(other.core); return if (next === core) this else PersistentLongMap(next) }
+
+    /** The entries present in both maps. */
     public fun intersect(other: PersistentLongMap<V>, combine: (Long, V, V) -> V): PersistentLongMap<V> { val next = core.intersect(other.core, combine); return if (next === core) this else PersistentLongMap(next) }
+
+    /** This map's entries that are absent from the other. */
     public fun except(other: PersistentLongMap<*>): PersistentLongMap<V> { val next = core.except(other.core); return if (next === core) this else PersistentLongMap(next) }
+
+    /** Iterate the entries. */
     override fun iterator(): Iterator<Pair<Long, V>> = core.iterator()
+
+    /** The entry at the given rank, used by the cursors to address positions. */
     internal fun entryAtForCursor(index: Int): PatriciaMapEntry<Long, V>? =
         core.entryAt(index)?.let { PatriciaMapEntry(it.first, it.second) }
+
+    /**
+     * The rank where the probe belongs together with whether it is actually present; branch prefixes let whole subtrees
+     * be skipped, so the descent is bounded by the key width.
+     */
     internal fun lowerBoundRankForCursor(key: Long): Pair<Int, Boolean> = core.lowerBoundRank(key)
 }
 
@@ -630,60 +730,132 @@ public class PersistentLongMapCursor<V> private constructor(
     }
 }
 
+/** A persistent Patricia set over signed 32-bit keys. */
 public class PersistentIntSet private constructor(private val map: PersistentIntMap<Unit>) : Iterable<Int> {
     public companion object { public fun empty(): PersistentIntSet = PersistentIntSet(PersistentIntMap.empty()); public fun from(items: Iterable<Int>): PersistentIntSet { var r = empty(); for (v in items) r = r.add(v); return r } }
+
+    /** Number of elements. */
     public val size: Int get() = map.size
+
+    /** Whether the element is present. */
     public fun contains(value: Int): Boolean = map.containsKey(value)
+
+    /** A cursor before the first element. */
     public fun cursor(): PersistentIntSetCursor = PersistentIntSetCursor.create(this, 0)
+
+    /** A cursor at the given gap of the set. */
     public fun cursorAt(position: Int): PersistentIntSetCursor? =
         if (position < 0 || position > size) null else PersistentIntSetCursor.create(this, position)
+
+    /** A cursor after the last element. */
     public fun cursorAtEnd(): PersistentIntSetCursor = PersistentIntSetCursor.create(this, size)
+
+    /** A cursor before the first key not less than the probe. */
     public fun lowerBoundCursor(value: Int): PersistentIntSetCursor =
         PersistentIntSetCursor.create(this, map.lowerBoundRankForCursor(value).first)
+
+    /** A cursor after any key equal to the probe. */
     public fun upperBoundCursor(value: Int): PersistentIntSetCursor {
         val (position, found) = map.lowerBoundRankForCursor(value)
         return PersistentIntSetCursor.create(this, position + if (found) 1 else 0)
     }
+
+    /** A cursor at the element together with an exact-match discriminator. */
     public fun cursorAtItem(value: Int): PatriciaCursorSearch<PersistentIntSetCursor> {
         val (position, found) = map.lowerBoundRankForCursor(value)
         return PatriciaCursorSearch(PersistentIntSetCursor.create(this, position), found)
     }
+
+    /** A set containing the given element; returns the receiver when already present. */
     public fun add(value: Int): PersistentIntSet = withMap(map.put(value, Unit))
+
+    /** A set without that element; returns the receiver when absent. */
     public fun remove(value: Int): PersistentIntSet = withMap(map.remove(value))
+
+    /** The elements of both sets. Subtrees the operands already share are adopted whole rather than re-entered. */
     public fun union(other: PersistentIntSet): PersistentIntSet = withMap(map.union(other.map))
+
+    /** The elements present in both sets. */
     public fun intersect(other: PersistentIntSet): PersistentIntSet = withMap(map.intersect(other.map))
+
+    /** This set's elements that are absent from the other. */
     public fun except(other: PersistentIntSet): PersistentIntSet = withMap(map.except(other.map))
+
+    /** Iterate the elements. */
     override fun iterator(): Iterator<Int> = map.map { it.first }.iterator()
+
+    /** The element at the given rank, used by the cursors to address positions. */
     internal fun itemAtForCursor(index: Int): Int? = map.entryAtForCursor(index)?.key
+
+    /**
+     * The rank where the probe belongs together with whether it is actually present; branch prefixes let whole subtrees
+     * be skipped, so the descent is bounded by the key width.
+     */
     internal fun lowerBoundRankForCursor(value: Int): Pair<Int, Boolean> = map.lowerBoundRankForCursor(value)
     private fun withMap(next: PersistentIntMap<Unit>): PersistentIntSet = if (next === map) this else PersistentIntSet(next)
 }
 
+/** A persistent Patricia set over signed 64-bit keys. */
 public class PersistentLongSet private constructor(private val map: PersistentLongMap<Unit>) : Iterable<Long> {
     public companion object { public fun empty(): PersistentLongSet = PersistentLongSet(PersistentLongMap.empty()); public fun from(items: Iterable<Long>): PersistentLongSet { var r = empty(); for (v in items) r = r.add(v); return r } }
+
+    /** Number of elements. */
     public val size: Int get() = map.size
+
+    /** Whether the element is present. */
     public fun contains(value: Long): Boolean = map.containsKey(value)
+
+    /** A cursor before the first element. */
     public fun cursor(): PersistentLongSetCursor = PersistentLongSetCursor.create(this, 0)
+
+    /** A cursor at the given gap of the set. */
     public fun cursorAt(position: Int): PersistentLongSetCursor? =
         if (position < 0 || position > size) null else PersistentLongSetCursor.create(this, position)
+
+    /** A cursor after the last element. */
     public fun cursorAtEnd(): PersistentLongSetCursor = PersistentLongSetCursor.create(this, size)
+
+    /** A cursor before the first key not less than the probe. */
     public fun lowerBoundCursor(value: Long): PersistentLongSetCursor =
         PersistentLongSetCursor.create(this, map.lowerBoundRankForCursor(value).first)
+
+    /** A cursor after any key equal to the probe. */
     public fun upperBoundCursor(value: Long): PersistentLongSetCursor {
         val (position, found) = map.lowerBoundRankForCursor(value)
         return PersistentLongSetCursor.create(this, position + if (found) 1 else 0)
     }
+
+    /** A cursor at the element together with an exact-match discriminator. */
     public fun cursorAtItem(value: Long): PatriciaCursorSearch<PersistentLongSetCursor> {
         val (position, found) = map.lowerBoundRankForCursor(value)
         return PatriciaCursorSearch(PersistentLongSetCursor.create(this, position), found)
     }
+
+    /** A set containing the given element; returns the receiver when already present. */
     public fun add(value: Long): PersistentLongSet = withMap(map.put(value, Unit))
+
+    /** A set without that element; returns the receiver when absent. */
     public fun remove(value: Long): PersistentLongSet = withMap(map.remove(value))
+
+    /** The elements of both sets. Subtrees the operands already share are adopted whole rather than re-entered. */
     public fun union(other: PersistentLongSet): PersistentLongSet = withMap(map.union(other.map))
+
+    /** The elements present in both sets. */
     public fun intersect(other: PersistentLongSet): PersistentLongSet = withMap(map.intersect(other.map))
+
+    /** This set's elements that are absent from the other. */
     public fun except(other: PersistentLongSet): PersistentLongSet = withMap(map.except(other.map))
+
+    /** Iterate the elements. */
     override fun iterator(): Iterator<Long> = map.map { it.first }.iterator()
+
+    /** The element at the given rank, used by the cursors to address positions. */
     internal fun itemAtForCursor(index: Int): Long? = map.entryAtForCursor(index)?.key
+
+    /**
+     * The rank where the probe belongs together with whether it is actually present; branch prefixes let whole subtrees
+     * be skipped, so the descent is bounded by the key width.
+     */
     internal fun lowerBoundRankForCursor(value: Long): Pair<Int, Boolean> = map.lowerBoundRankForCursor(value)
     private fun withMap(next: PersistentLongMap<Unit>): PersistentLongSet = if (next === map) this else PersistentLongSet(next)
 }

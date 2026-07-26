@@ -1,3 +1,10 @@
+/*
+ * Persistent sparse bit set stored as measured fixed-width chunks.
+ *
+ * Only chunks containing a set bit are stored, and the cached population counts are what make point
+ * lookup, inclusive rank, and select logarithmic rather than linear in the highest index ever set.
+ * Indices are confined to the cross-language nonnegative signed 32-bit domain.
+ */
 package durable7.fingertree
 
 private data class BitSetChunk(val wordIndex: Int, val bits: Long)
@@ -15,6 +22,7 @@ private object BitSetMeasurePolicy : MeasurePolicy<BitSetChunk, BitSetMeasure> {
     )
 }
 
+/** Chunk and population measurements returned by a successful structural audit. */
 public data class PersistentChunkedBitSetStatistics(
     public val count: Long,
     public val chunkCount: Int,

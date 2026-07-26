@@ -1,3 +1,10 @@
+/*
+ * DABA Lite: a FIFO sliding-window aggregate with worst-case constant work per operation.
+ *
+ * Keeps the monoid combination of a FIFO window current under pushes and evictions without
+ * recomputing it, by performing one bounded step of an incremental reversal per call. Unlike the
+ * rest of this package it is deliberately mutable.
+ */
 package durable7.fingertree
 
 /**

@@ -1,3 +1,7 @@
+/*
+ * Tests for the history-independent canonical sorted set. The defining property under test is
+ * convergence: sets built by different edit histories must reach one identical shape.
+ */
 package durable7.fingertree
 
 import java.util.Collections
@@ -447,6 +451,7 @@ private fun canonicalValidatorDetectsCorruptedMetadata() {
     }
 }
 
+/** The canonical sorted set's test cases, each a name paired with its assertion body. */
 internal fun canonicalSortedSetTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "canonicalHistoriesConvergeOnOneTopology" to ::canonicalHistoriesConvergeOnOneTopology,
     "canonicalRandomizedHistoryRetainsSnapshots" to ::canonicalRandomizedHistoryRetainsSnapshots,

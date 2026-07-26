@@ -1,5 +1,14 @@
+/*
+ * The persistent sequence core: catenable deques and shared range validation.
+ *
+ * Every operation returns a new version and leaves the previous one valid, sharing unchanged
+ * structure, so an edit copies a path rather than the sequence.
+ */
 package durable7.fingertree
 
+/**
+ * Whether the index and count name a range that lies inside a sequence of the given size, checked without overflowing.
+ */
 internal fun isValidRange(start: Int, count: Int, size: Int): Boolean =
     start >= 0 && count >= 0 && start <= size && count <= size - start
 
@@ -23,26 +32,48 @@ public interface MeasurePolicy<T, M> : Monoid<M> {
     public fun measure(element: T): M
 }
 
+/** Counts elements, making a measured tree indexable by position. */
 public class SizeMeasure<T> : MeasurePolicy<T, Int> {
+    /** The identity: the measure of an empty tree. */
     override val empty: Int = 0
+
+    /** One element counts as one. */
     override fun measure(element: T): Int = 1
+
+    /** Add two counts. */
     override fun combine(left: Int, right: Int): Int = left + right
 
-    // Stateless: two instances are interchangeable, so concat's policy
-    // compatibility check must accept distinct instances.
+    /**
+     * Whether the other policy is also a SizeMeasure. The policy is stateless, so two instances are
+     * interchangeable, and concatenation's policy compatibility check must accept distinct instances.
+     */
     override fun equals(other: Any?): Boolean = other is SizeMeasure<*>
+
+    /** Hash consistent with `equals`; constant, since all instances are equal. */
     override fun hashCode(): Int = SizeMeasure::class.hashCode()
 }
 
+/** Sums elements, turning a measured tree into a cumulative-weight structure. */
 public object IntSumMeasure : MeasurePolicy<Int, Int> {
+    /** The identity: zero. */
     override val empty: Int = 0
+
+    /** An element measures as its own value. */
     override fun measure(element: Int): Int = element
+
+    /** Add two sums. */
     override fun combine(left: Int, right: Int): Int = left + right
 }
 
+/** Tracks the largest element, making a measured tree a max-priority structure with a constant-time peek. */
 public class MaxMeasure<T : Comparable<T>> : MeasurePolicy<T, T?> {
+    /** The identity: the least possible value, so combining with it is a no-op. */
     override val empty: T? = null
+
+    /** An element measures as itself. */
     override fun measure(element: T): T = element
+
+    /** The larger of the two. */
     override fun combine(left: T?, right: T?): T? =
         when {
             left == null -> right
@@ -51,13 +82,22 @@ public class MaxMeasure<T : Comparable<T>> : MeasurePolicy<T, T?> {
             else -> right
         }
 
+    /** Whether the other policy is also a MaxMeasure over the same comparator. */
     override fun equals(other: Any?): Boolean = other is MaxMeasure<*>
+
+    /** Hash consistent with `equals`. */
     override fun hashCode(): Int = MaxMeasure::class.hashCode()
 }
 
+/** Tracks the smallest element, the mirror image of MaxMeasure. */
 public class MinMeasure<T : Comparable<T>> : MeasurePolicy<T, T?> {
+    /** The identity: the greatest possible value, so combining with it is a no-op. */
     override val empty: T? = null
+
+    /** An element measures as itself. */
     override fun measure(element: T): T = element
+
+    /** The smaller of the two. */
     override fun combine(left: T?, right: T?): T? =
         when {
             left == null -> right
@@ -66,12 +106,20 @@ public class MinMeasure<T : Comparable<T>> : MeasurePolicy<T, T?> {
             else -> right
         }
 
+    /** Whether the other policy is also a MinMeasure over the same comparator. */
     override fun equals(other: Any?): Boolean = other is MinMeasure<*>
+
+    /** Hash consistent with `equals`. */
     override fun hashCode(): Int = MinMeasure::class.hashCode()
 }
 
+/** The measure computed by a ProductMeasure: two measures carried together. */
 public data class MeasurePair<A, B>(public val first: A, public val second: B)
 
+/**
+ * Runs two measure policies side by side over the same elements. The product of two monoids is a monoid, so one tree
+ * can be searched by either component - counting elements and summing weights at once, for instance.
+ */
 public class ProductMeasure<T, A, B>(
     private val first: MeasurePolicy<T, A>,
     private val second: MeasurePolicy<T, B>,
@@ -90,28 +138,36 @@ public class ProductMeasure<T, A, B>(
     override fun hashCode(): Int = 31 * first.hashCode() + second.hashCode()
 }
 
+/** The two deques produced by a positional split; both share structure with the original. */
 public data class DequeSplit<T>(
     public val left: PersistentDeque<T>,
     public val right: PersistentDeque<T>,
 )
 
+/** The pieces produced by splitting around one element: what precedes it, the element, and what follows it. */
 public data class DequeItemSplit<T>(
     public val left: PersistentDeque<T>,
     public val item: T,
     public val right: PersistentDeque<T>,
 )
 
+/** The three deques produced by splitting out a range: before it, the range itself, and after it. */
 public data class DequeRangeSplit<T>(
     public val before: PersistentDeque<T>,
     public val range: PersistentDeque<T>,
     public val after: PersistentDeque<T>,
 )
 
+/** An endpoint element together with the deque that remains after removing it. */
 public data class DequePop<T>(
     public val value: T,
     public val rest: PersistentDeque<T>,
 )
 
+/**
+ * A persistent catenable deque. Every operation returns a new version and leaves the receiver valid, sharing unchanged
+ * structure, so an edit copies a path rather than the sequence.
+ */
 public class PersistentDeque<T> private constructor(
     private val items: PersistentMeasuredTree<T, Int>,
 ) : Iterable<T> {
@@ -604,6 +660,10 @@ private fun <T> rebalanceReversibleDequeNodes(
     return makeReversibleDequeConcatNode(left, right)
 }
 
+/**
+ * A persistent deque whose order can be reversed in constant time, by flipping an orientation flag and sharing the
+ * underlying tree rather than rebuilding.
+ */
 public class ReversibleDeque<T> private constructor(
     private val root: ReversibleDequeNode<T>,
 ) : Iterable<T> {
@@ -684,11 +744,13 @@ public class ReversibleDeque<T> private constructor(
     override fun iterator(): Iterator<T> = root.iterator()
 }
 
+/** The two trees produced by a split; both carry their own recomputed measure. */
 public data class MeasuredSplit<T, M>(
     public val left: FingerTree<T, M>,
     public val right: FingerTree<T, M>,
 )
 
+/** The pieces produced by splitting around one element, with the element itself. */
 public data class MeasuredItemSplit<T, M>(
     public val left: FingerTree<T, M>,
     public val item: T,
@@ -709,6 +771,11 @@ public data class LocateResult<T, M>(
     public val found: Boolean,
 )
 
+/**
+ * A persistent sequence caching a monoidal measure at every node. Because each node's measure is available without
+ * descending into it, one generic split answers any monotone question the measure can express without visiting the
+ * elements it skips.
+ */
 public class FingerTree<T, M> private constructor(
     private val items: PersistentMeasuredTree<T, M>,
     public val policy: MeasurePolicy<T, M>,

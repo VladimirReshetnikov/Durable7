@@ -1,11 +1,22 @@
+/*
+ * Persistent map keyed by complete intervals.
+ *
+ * Attaches one payload to each whole interval key, so two entries collide only when their endpoints
+ * are equal and a partial overlap is a distinct key. The cached maximum high endpoint lets stabbing
+ * and overlap queries skip subtrees that cannot contain a match.
+ */
 package durable7.fingertree
 
+/** One interval key and its payload. */
 public data class IntervalMapEntry<T : Comparable<T>, V>(
     public val interval: Interval<T>,
     public val value: V,
 )
 
+/** Entry measurements returned by a successful structural audit. */
 public data class PersistentIntervalMapStatistics(public val count: Int)
+
+/** The outcome of a strict insertion; the map is the receiver when nothing was added. */
 public data class IntervalMapAddResult<T : Comparable<T>, V>(
     public val map: PersistentIntervalMap<T, V>,
     public val added: Boolean,

@@ -1,3 +1,7 @@
+/*
+ * Cross-structure tests asserting that the ordered and query cursors share one vocabulary: where a
+ * seek lands on a miss, what a peek reports, and that each retained cursor keeps its own version.
+ */
 package durable7.fingertree
 
 private fun orderedCursorCheck(value: Boolean, message: String) {
@@ -200,6 +204,7 @@ private fun intervalMapOverlapSurfacesAgreeOnDeclaredOrder() {
     orderedCursorCheck(!wide.findOverlapCursor(Interval(21, 30)).found, "no overlap cursor")
 }
 
+/** The ordered and query cursor test cases. */
 internal fun orderedSearchCursorTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "intervalMapOverlapSurfacesAgreeOnDeclaredOrder" to ::intervalMapOverlapSurfacesAgreeOnDeclaredOrder,
     "sortedCursorsPreserveGapsNullsAndSelectedOccurrences" to

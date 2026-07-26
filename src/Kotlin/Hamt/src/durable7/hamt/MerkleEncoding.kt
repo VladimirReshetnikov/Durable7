@@ -1,3 +1,11 @@
+/*
+ * Canonical byte encodings and digests underpinning the Merkle search tree.
+ *
+ * A content-addressed structure is only well defined if every value has exactly one byte
+ * representation, so a codec must be injective and canonical, and decoding rejects noncanonical
+ * input rather than accepting it leniently. Each codec carries a versioned identifier that is mixed
+ * into the digest domain.
+ */
 package durable7.hamt
 
 import java.nio.ByteBuffer
@@ -26,8 +34,13 @@ public class MerkleCodecException(message: String, cause: Throwable? = null) :
 
 /** Canonical signed 32-bit big-endian codec (`i32-be-v1`). */
 public object Int32MerkleCodec : MerkleCodec<Int> {
+    /**
+     * Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so changing an encoding
+     * changes every digest derived from it.
+     */
     override val encodingId: String = "i32-be-v1"
 
+    /** The one canonical byte representation of the value; must be injective. */
     override fun encode(value: Int): ByteArray = byteArrayOf(
         (value ushr 24).toByte(),
         (value ushr 16).toByte(),
@@ -35,6 +48,10 @@ public object Int32MerkleCodec : MerkleCodec<Int> {
         value.toByte(),
     )
 
+    /**
+     * The value encoded by these bytes, consuming the whole slice and rejecting noncanonical input rather than
+     * accepting it leniently.
+     */
     override fun decode(encoding: ByteArray): Int {
         if (encoding.size != Int.SIZE_BYTES) {
             throw MerkleCodecException("Invalid $encodingId encoding: expected exactly four bytes.")
@@ -48,12 +65,21 @@ public object Int32MerkleCodec : MerkleCodec<Int> {
 
 /** Canonical signed 64-bit big-endian codec (`i64-be-v1`). */
 public object Int64MerkleCodec : MerkleCodec<Long> {
+    /**
+     * Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so changing an encoding
+     * changes every digest derived from it.
+     */
     override val encodingId: String = "i64-be-v1"
 
+    /** The one canonical byte representation of the value; must be injective. */
     override fun encode(value: Long): ByteArray = ByteArray(Long.SIZE_BYTES) { index ->
         (value ushr (56 - index * 8)).toByte()
     }
 
+    /**
+     * The value encoded by these bytes, consuming the whole slice and rejecting noncanonical input rather than
+     * accepting it leniently.
+     */
     override fun decode(encoding: ByteArray): Long {
         if (encoding.size != Long.SIZE_BYTES) {
             throw MerkleCodecException("Invalid $encodingId encoding: expected exactly eight bytes.")
@@ -66,8 +92,13 @@ public object Int64MerkleCodec : MerkleCodec<Long> {
 
 /** Canonical nullable strict UTF-8 codec (`nullable-utf8-v1`). */
 public object NullableUtf8MerkleCodec : MerkleCodec<String?> {
+    /**
+     * Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so changing an encoding
+     * changes every digest derived from it.
+     */
     override val encodingId: String = "nullable-utf8-v1"
 
+    /** The one canonical byte representation of the value; must be injective. */
     override fun encode(value: String?): ByteArray {
         if (value == null) return byteArrayOf(0)
         val payload = try {
@@ -85,6 +116,10 @@ public object NullableUtf8MerkleCodec : MerkleCodec<String?> {
         }
     }
 
+    /**
+     * The value encoded by these bytes, consuming the whole slice and rejecting noncanonical input rather than
+     * accepting it leniently.
+     */
     override fun decode(encoding: ByteArray): String? {
         if (encoding.isEmpty()) {
             throw MerkleCodecException("Invalid $encodingId encoding: nullable tag is missing.")
@@ -113,8 +148,13 @@ public object NullableUtf8MerkleCodec : MerkleCodec<String?> {
 
 /** Canonical nullable byte-array codec (`nullable-bytes-v1`). */
 public object NullableBytesMerkleCodec : MerkleCodec<ByteArray?> {
+    /**
+     * Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so changing an encoding
+     * changes every digest derived from it.
+     */
     override val encodingId: String = "nullable-bytes-v1"
 
+    /** The one canonical byte representation of the value; must be injective. */
     override fun encode(value: ByteArray?): ByteArray {
         if (value == null) return byteArrayOf(0)
         return ByteArray(Math.addExact(value.size, 1)).also { result ->
@@ -123,6 +163,10 @@ public object NullableBytesMerkleCodec : MerkleCodec<ByteArray?> {
         }
     }
 
+    /**
+     * The value encoded by these bytes, consuming the whole slice and rejecting noncanonical input rather than
+     * accepting it leniently.
+     */
     override fun decode(encoding: ByteArray): ByteArray? {
         if (encoding.isEmpty()) {
             throw MerkleCodecException("Invalid $encodingId encoding: nullable tag is missing.")
@@ -144,13 +188,22 @@ public object NullableBytesMerkleCodec : MerkleCodec<ByteArray?> {
 
 /** Canonical RFC-4122/network-byte-order UUID codec (`guid-rfc4122-v1`). */
 public object Rfc4122UuidMerkleCodec : MerkleCodec<UUID> {
+    /**
+     * Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so changing an encoding
+     * changes every digest derived from it.
+     */
     override val encodingId: String = "guid-rfc4122-v1"
 
+    /** The one canonical byte representation of the value; must be injective. */
     override fun encode(value: UUID): ByteArray = ByteArray(16).also { result ->
         writeLongBigEndian(result, 0, value.mostSignificantBits)
         writeLongBigEndian(result, 8, value.leastSignificantBits)
     }
 
+    /**
+     * The value encoded by these bytes, consuming the whole slice and rejecting noncanonical input rather than
+     * accepting it leniently.
+     */
     override fun decode(encoding: ByteArray): UUID {
         if (encoding.size != 16) {
             throw MerkleCodecException("Invalid $encodingId encoding: expected exactly sixteen bytes.")
@@ -229,12 +282,15 @@ public class MerkleDigest private constructor(private val bytes: ByteArray) : Co
         return true
     }
 
+    /** Copy the digest bytes into the destination, failing before writing when it is too short. */
     internal fun copyInto(destination: ByteArray, offset: Int): Unit {
         bytes.copyInto(destination, offset)
     }
 
+    /** The digest byte at the given index. */
     internal fun byteAt(index: Int): Int = bytes[index].toInt() and 0xff
 
+    /** Order two digests lexicographically by their bytes. */
     override fun compareTo(other: MerkleDigest): Int {
         for (index in bytes.indices) {
             val comparison = byteAt(index).compareTo(other.byteAt(index))
@@ -243,10 +299,13 @@ public class MerkleDigest private constructor(private val bytes: ByteArray) : Co
         return 0
     }
 
+    /** Whether both digests have identical bytes. */
     override fun equals(other: Any?): Boolean = other is MerkleDigest && bytes.contentEquals(other.bytes)
 
+    /** Hash consistent with `equals`, derived from the digest bytes. */
     override fun hashCode(): Int = bytes.contentHashCode()
 
+    /** The digest as lowercase hexadecimal. */
     override fun toString(): String = buildString(HEX_LENGTH) {
         for (byte in bytes) append("%02x".format(byte.toInt() and 0xff))
     }
@@ -259,6 +318,7 @@ public class MerkleSearchTreePolicy<K, V> private constructor(
     public val keyCodec: MerkleCodec<K>,
     public val valueCodec: MerkleCodec<V>,
     public val domainDigest: MerkleDigest,
+
     /** Canonical empty-manifest content address for this policy domain. */
     public val emptyDigest: MerkleDigest,
 ) {

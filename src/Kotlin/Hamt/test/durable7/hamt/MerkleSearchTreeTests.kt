@@ -1,3 +1,7 @@
+/*
+ * Wire-format conformance tests for the Merkle search tree. These are the tests that keep this port
+ * byte-identical to its siblings.
+ */
 package durable7.hamt
 
 import java.util.TreeMap
@@ -448,6 +452,7 @@ private fun <K, V> assertCanonicalEquivalent(
     mstEquals(expected.blocksPreorder(), actual.blocksPreorder(), "$message exact blocks")
 }
 
+/** Run the Merkle search tree wire-format conformance cases. */
 internal fun runMerkleSearchTreeTests(): Unit {
     val tests = listOf(
         "cursorNavigatesRanksAndPublishesCanonicalEdits" to ::cursorNavigatesRanksAndPublishesCanonicalEdits,

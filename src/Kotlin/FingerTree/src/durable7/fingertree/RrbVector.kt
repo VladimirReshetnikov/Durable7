@@ -1,3 +1,10 @@
+/*
+ * Persistent relaxed radix-balanced vector.
+ *
+ * A strict radix vector indexes in effectively constant time but cannot split or concatenate
+ * cheaply. The relaxed variant allows irregular nodes carrying a size table, which makes those
+ * operations logarithmic while regular nodes keep pure radix arithmetic and store no table at all.
+ */
 package durable7.fingertree
 
 import java.util.ConcurrentModificationException
@@ -362,6 +369,10 @@ public class RrbVector<T> private constructor(
     }
 }
 
+/**
+ * Shape measurements returned by a successful structural audit. The regular and relaxed branch counts show how much of
+ * the tree still uses pure radix addressing.
+ */
 internal data class RrbVectorStatistics(
     val count: Int,
     val height: Int,

@@ -1,3 +1,6 @@
+/*
+ * Immutable ordered cursor over one Merkle search tree version.
+ */
 package durable7.hamt
 
 /** Presence-safe exact-key search whose [cursor] remains usable on a miss. */

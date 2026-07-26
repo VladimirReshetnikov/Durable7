@@ -1,3 +1,9 @@
+/*
+ * Immutable positional gap cursors over the sequence structures.
+ *
+ * A cursor denotes a gap rather than an element, so insertion and deletion have unambiguous
+ * positions, and every movement or edit yields a new cursor over its own retained version.
+ */
 package durable7.fingertree
 
 /** Present neighbor returned by a sequence cursor, including a stored null value. */

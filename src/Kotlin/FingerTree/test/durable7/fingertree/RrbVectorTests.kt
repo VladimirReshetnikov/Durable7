@@ -1,3 +1,7 @@
+/*
+ * Tests for the relaxed radix-balanced vector, covering sequences that straddle the regular and
+ * relaxed layout boundaries and agreement with a list reference model.
+ */
 package durable7.fingertree
 
 import java.util.Collections
@@ -331,6 +335,7 @@ private fun minimumRrbHeight(count: Int): Int {
     return height
 }
 
+/** The relaxed radix-balanced vector test cases. */
 internal fun rrbVectorTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "rrbSameReferenceReplacementBypassesEquality" to ::rrbSameReferenceReplacementBypassesEquality,
     "rrbConstructionCrossesRadixBoundaries" to ::rrbConstructionCrossesRadixBoundaries,

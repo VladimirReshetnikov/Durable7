@@ -1,3 +1,7 @@
+/*
+ * Tests for the priority queue, priority search queue, and interval tree, including tie-breaking
+ * among equal priorities and overlap pruning.
+ */
 package durable7.fingertree
 
 import java.util.Collections
@@ -6,6 +10,7 @@ import java.util.TreeMap
 import kotlin.concurrent.thread
 import kotlin.random.asKotlinRandom
 
+/** The priority queue, priority search queue, and interval tree test cases. */
 internal fun priorityCoreTestCases(): List<Pair<String, () -> Unit>> = listOf(
     "brodalAdversarialShapesDrainInOrder" to ::brodalAdversarialShapesDrainInOrder,
     "brodalRandomizedPersistentHistoryMatchesRetainedModels" to

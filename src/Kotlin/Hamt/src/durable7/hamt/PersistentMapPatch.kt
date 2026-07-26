@@ -1,5 +1,13 @@
+/*
+ * Strict, invertible, composable patches over persistent hash maps.
+ *
+ * Each entry records a key with its expected prior state and its intended result. Recording both
+ * endpoints is what makes application strict - it preflights every entry and applies all or none -
+ * and what lets a patch be inverted or composed.
+ */
 package durable7.hamt
 
+/** A caller-supplied equality policy deciding whether two values count as equal. */
 public fun interface EqualityPolicy<T> {
     public fun equivalent(left: T, right: T): Boolean
 }
@@ -9,6 +17,7 @@ private object DefaultEqualityPolicy : EqualityPolicy<Any?> {
 }
 
 @Suppress("UNCHECKED_CAST")
+/** The shared policy using the platform's own equality. */
 public fun <T> defaultEqualityPolicy(): EqualityPolicy<T> = DefaultEqualityPolicy as EqualityPolicy<T>
 
 /** Presence-safe patch value; [value] may itself be null while [isPresent] remains true. */
@@ -22,12 +31,17 @@ public class MapPatchValue<V> private constructor(
     }
 }
 
+/**
+ * One recorded change: a key with its expected prior state and its intended result. Recording both endpoints is what
+ * lets a patch be inverted and lets application preflight against a target that may have drifted.
+ */
 public data class MapPatchEntry<K, V>(
     public val key: K,
     public val before: MapPatchValue<V>,
     public val after: MapPatchValue<V>,
 )
 
+/** The outcome of adding a change to a patch; the patch is the receiver when the entry was rejected. */
 public data class MapPatchAddResult<K, V>(
     public val patch: PersistentMapPatch<K, V>,
     public val added: Boolean,

@@ -1,3 +1,10 @@
+/*
+ * Block storage and verification vocabulary for Merkle search trees.
+ *
+ * A tree decomposes into content-addressed blocks; loading one re-derives every block's digest from
+ * its bytes, so a corrupted or substituted block is rejected rather than trusted. Verification runs
+ * against an explicit budget so untrusted input cannot force unbounded work.
+ */
 package durable7.hamt
 
 import java.io.IOException
@@ -87,14 +94,19 @@ public interface MerkleBlockStore {
 public class InMemoryMerkleBlockStore : MerkleBlockStore {
     private val blocks: ConcurrentHashMap<MerkleDigest, MerkleBlock> = ConcurrentHashMap()
 
+    /** Number of stored blocks. */
     override val size: Int get() = blocks.size
 
+    /** Every stored digest. */
     override val digests: List<MerkleDigest> get() = blocks.keys.toList().sorted()
 
+    /** Whether the element is present. */
     override fun contains(digest: MerkleDigest): Boolean = blocks.containsKey(digest)
 
+    /** The value stored for the key, or `null` when absent. */
     override fun get(digest: MerkleDigest): MerkleBlock? = blocks[digest]
 
+    /** A collection with the key bound to the value, adding or replacing as needed. */
     override fun put(block: MerkleBlock): Boolean {
         val existing = blocks.putIfAbsent(block.digest, block) ?: return true
         if (existing == block) return false
@@ -105,8 +117,10 @@ public class InMemoryMerkleBlockStore : MerkleBlockStore {
         )
     }
 
+    /** A collection without that element; returns the receiver when absent. */
     override fun remove(digest: MerkleDigest): Boolean = blocks.remove(digest) != null
 
+    /** An empty collection retaining the same policies; returns the receiver when already empty. */
     override fun clear(): Unit = blocks.clear()
 }
 
@@ -389,7 +403,12 @@ public class MerkleVerificationBudget(
 
 /** Presence or absence of a merge side; `Present(null)` differs from [Absent]. */
 public sealed interface MerkleMergeValue<out V> {
+    /** The state meaning the key is not present on this side. */
     public data object Absent : MerkleMergeValue<Nothing>
+
+    /**
+     * The state meaning the key holds a value here; the explicit case keeps a stored null distinguishable from absence.
+     */
     public data class Present<V>(public val value: V) : MerkleMergeValue<V>
 }
 
@@ -403,11 +422,22 @@ public data class MerkleThreeWayMergeConflict<K, V>(
 
 /** Typed conflict resolution. */
 public sealed interface MerkleMergeResolution<out V> {
+    /** Decline to settle the conflict, which fails the whole merge rather than producing a partly merged tree. */
     public data object Unresolved : MerkleMergeResolution<Nothing>
+
+    /** Keep the common ancestor's state for this key. */
     public data object UseBase : MerkleMergeResolution<Nothing>
+
+    /** Keep the left side's state for this key. */
     public data object UseLeft : MerkleMergeResolution<Nothing>
+
+    /** Keep the right side's state for this key. */
     public data object UseRight : MerkleMergeResolution<Nothing>
+
+    /** Leave this key out of the merged tree entirely. */
     public data object Delete : MerkleMergeResolution<Nothing>
+
+    /** Store a value for this key that need not come from any of the three sides. */
     public data class SetValue<V>(public val value: V) : MerkleMergeResolution<V>
 }
 
@@ -433,6 +463,7 @@ public class MerkleThreeWayMergeResult<K, V> private constructor(
     }
 }
 
+/** Build a typed verification failure carrying its cause. */
 internal fun verificationFailure(
     kind: MerkleVerificationFailureKind,
     message: String,

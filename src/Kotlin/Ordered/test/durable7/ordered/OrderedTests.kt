@@ -1,3 +1,7 @@
+/*
+ * Tests for the insertion-ordered set, map, multimap, and their cursors: representative retention,
+ * explicit movement against resulting positions, order-stamp relabeling, and stable sorting.
+ */
 package durable7.ordered
 
 import java.util.Collections
@@ -798,6 +802,7 @@ private fun orderedMultimapCursorToleratesNonReflexiveValues() {
     assertEquals(0L, deleted.position, "reflexive delete decrements the gap")
 }
 
+/** Entry point running this workspace's test suite and reporting each case. */
 public fun main() {
     val tests = listOf(
         "constructionRetainsPoliciesAndFirstRepresentatives" to ::constructionRetainsPoliciesAndFirstRepresentatives,

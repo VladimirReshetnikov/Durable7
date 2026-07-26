@@ -1,3 +1,7 @@
+/*
+ * Cross-structure tests for the positional sequence cursors, asserting one shared gap vocabulary
+ * and that retained cursors keep their own versions.
+ */
 package durable7.fingertree
 
 private fun cursorCheck(value: Boolean, message: String) {
@@ -152,6 +156,7 @@ private fun sequenceCursorSeekToCurrentPositionRetainsIdentity() {
     )
 }
 
+/** The positional sequence cursor test cases. */
 internal fun sequenceCursorTestCases(): List<Pair<String, () -> Unit>> =
     listOf(
         "dequeCursorRetainsVersionsAndDistinguishesStoredNull" to

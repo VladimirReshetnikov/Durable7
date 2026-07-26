@@ -1,3 +1,7 @@
+/*
+ * Tests for the CHAMP map and set: policy-bound equivalence, first-representative retention, no-op
+ * root sharing, structural set algebra, and the derived collections built on them.
+ */
 package durable7.hamt
 
 import java.util.Collections
@@ -2112,6 +2116,7 @@ private fun persistentIndexedMapMovesSecondaryMembership() {
     removed.validateStructure()
 }
 
+/** Entry point running this workspace's test suite and reporting each case. */
 public fun main() {
     val tests = listOf(
         "mapUpdatesPreserveOldVersions" to ::mapUpdatesPreserveOldVersions,

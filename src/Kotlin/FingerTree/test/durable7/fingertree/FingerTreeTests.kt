@@ -1,3 +1,7 @@
+/*
+ * Tests for the measured tree and deque core: measured splitting and locating, positional edits,
+ * and structure sharing between versions.
+ */
 package durable7.fingertree
 
 import java.util.Collections
@@ -955,6 +959,7 @@ private fun persistentChunkedBitSetSupportsRankSelectAndSparseAlgebra() {
     edited.validateStructure()
 }
 
+/** Entry point running this workspace's test suite and reporting each case. */
 public fun main() {
     val tests = listOf(
         "dequePreservesSnapshots" to ::dequePreservesSnapshots,

@@ -1,3 +1,11 @@
+/*
+ * Canonical persistent sorted set built on a zip-zip tree.
+ *
+ * History independent: two sets holding the same elements under the same policy have the same
+ * shape, whatever sequence of edits produced them. Shape follows per-element ranks derived by keyed
+ * hashing rather than insertion order, which is what makes the set structurally comparable across
+ * versions and across ports.
+ */
 package durable7.fingertree
 
 import java.nio.ByteBuffer
@@ -135,6 +143,11 @@ public class ZipTreeRankPolicy<T> private constructor(
     }
 }
 
+/**
+ * One element's derived rank, deciding where it sits in the canonical shape. The geometric rank is the primary
+ * priority; the secondary ranks break ties deterministically, so equal geometric ranks still produce one well-defined
+ * tree.
+ */
 internal data class ZipTreeRank(
     val geometric: Int,
     val secondary: Long,
@@ -865,6 +878,7 @@ public class CanonicalSortedSet<T> private constructor(
     private data class DigestBox(val value: Long)
 }
 
+/** A node's rendered shape, used by the tests to show that different edit histories converge on one tree. */
 internal data class CanonicalNodeShape<T>(
     val item: T,
     val leftCount: Int,

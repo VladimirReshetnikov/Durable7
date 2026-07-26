@@ -1,7 +1,16 @@
+/*
+ * Persistent directed graph with explicit vertices and both adjacency directions.
+ *
+ * Keeping the vertex set explicit makes an isolated vertex representable, and removing a vertex
+ * removes its incident edges rather than leaving the edge relation naming a vertex that no longer
+ * exists.
+ */
 package durable7.hamt
 
+/** One directed edge, from a source vertex to a target vertex. */
 public data class DirectedEdge<V>(public val source: V, public val target: V)
 
+/** Vertex and edge counts returned by a successful structural audit. */
 public data class PersistentDirectedGraphStatistics(
     public val vertexCount: Int,
     public val edgeCount: Long,

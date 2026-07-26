@@ -1,3 +1,7 @@
+/*
+ * Tests for the strict bidirectional map: rejection on either domain with the key checked first,
+ * representative retention, and constant-time inversion.
+ */
 package durable7.hamt
 
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -19,6 +23,7 @@ private class BiThrowingPolicy : HashPolicy<Int> {
     override fun equivalent(left: Int, right: Int): Boolean = left == right
 }
 
+/** Run the strict bidirectional map cases. */
 internal fun runPersistentBiMapTests() {
     val source = PersistentBiMap.empty<Int, String>().add(1, "one")
     val keyConflict = source.tryAdd(1, "uno")

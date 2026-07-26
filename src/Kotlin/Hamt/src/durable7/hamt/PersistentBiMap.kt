@@ -1,21 +1,39 @@
+/*
+ * Strict persistent bidirectional map.
+ *
+ * Maintains a one-to-one correspondence by composing a forward map with an inverse one, each under
+ * its own hash policy. Strict: an insertion whose key or value is already represented is rejected
+ * rather than silently displacing the existing pair.
+ */
 package durable7.hamt
 
+/**
+ * Which side of the bijection blocked an insertion. The key domain is reported in preference to the value domain when
+ * both conflict.
+ */
 public enum class BiMapConflict { KEY, VALUE }
 
+/** Raised when a strict bimap insertion would break the one-to-one correspondence. */
 public class BiMapConflictException(public val conflict: BiMapConflict) :
     IllegalArgumentException("An equivalent ${conflict.name.lowercase()} is already present.")
 
+/** A presence-safe lookup result, so a stored null stays distinct from absence. */
 public sealed interface BiMapLookup<out T> {
+    /** The lookup matched, carrying the stored counterpart. */
     public data class Found<T>(public val value: T) : BiMapLookup<T>
+
+    /** The lookup did not match. */
     public data object Missing : BiMapLookup<Nothing>
 }
 
+/** The outcome of a non-throwing strict insertion, naming the blocking domain when rejected. */
 public data class BiMapAddResult<K, V>(
     public val map: PersistentBiMap<K, V>,
     public val added: Boolean,
     public val conflict: BiMapConflict?,
 )
 
+/** The bimap remaining after a removal, together with the opposite-domain representative removed. */
 public data class BiMapRemoveResult<K, V, T>(
     public val map: PersistentBiMap<K, V>,
     public val removed: Boolean,

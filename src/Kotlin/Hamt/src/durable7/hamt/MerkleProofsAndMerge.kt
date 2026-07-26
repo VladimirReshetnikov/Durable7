@@ -1,3 +1,10 @@
+/*
+ * Merkle proofs and three-way merge.
+ *
+ * A proof lets a verifier holding only a trusted root digest confirm membership, absence, or the
+ * exact contents of a key range without holding the tree. The merge classifies each key's change
+ * and reports genuine disagreements for the caller to settle.
+ */
 package durable7.hamt
 
 import java.nio.charset.StandardCharsets

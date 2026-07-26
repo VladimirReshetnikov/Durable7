@@ -1,3 +1,9 @@
+/*
+ * Snapshotting concurrent hash trie over immutable CHAMP roots.
+ *
+ * Updates publish an immutable root and snapshots capture the current one in constant time, so a
+ * snapshot is unaffected by every later mutation and readers need no locking.
+ */
 package durable7.hamt
 
 import java.util.concurrent.atomic.AtomicInteger

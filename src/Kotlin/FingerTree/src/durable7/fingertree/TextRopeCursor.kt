@@ -1,3 +1,6 @@
+/*
+ * Immutable cursor over a text rope, tracking line and column alongside the character offset.
+ */
 package durable7.fingertree
 
 /** The result of [TextRope.cursorByMeasure] or [TextRopeCursor.seekByMeasure]. */

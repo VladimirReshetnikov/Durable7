@@ -1,10 +1,19 @@
+/*
+ * Persistent insertion-ordered multimap: ordered keys, each with an ordered value group.
+ *
+ * Order is retained at both levels - keys in the order they first acquired a value, values in the
+ * order they were first added to their key. Value groups are sets, so re-adding a pair disturbs
+ * neither ordering.
+ */
 package durable7.ordered
 
 import durable7.hamt.HashPolicy
 import durable7.hamt.defaultHashPolicy
 
+/** One key-value pair as the insertion-ordered multimap presents it. */
 public data class OrderedMultimapEntry<K, V>(public val key: K, public val value: V)
 
+/** Key and pair counts returned by a successful structural audit. */
 public data class PersistentOrderedMultimapStatistics(
     public val keyCount: Int,
     public val pairCount: Long,

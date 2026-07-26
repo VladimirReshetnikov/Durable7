@@ -1,3 +1,10 @@
+/*
+ * The measured tree that most of this package is built on.
+ *
+ * Caches a monoidal measure at every node, so choosing a different measure specializes the same
+ * tree into a different structure: counting gives positional access, summing gives cumulative-
+ * weight search, tracking a maximum gives a priority queue.
+ */
 package durable7.fingertree
 
 import java.util.Collections

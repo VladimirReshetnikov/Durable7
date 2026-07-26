@@ -1,3 +1,11 @@
+/*
+ * Canonical, wire-compatible Merkle search tree - algorithm `mst-sha256-b16-v2`.
+ *
+ * A deterministic ordered map that is also a content-addressed block tree, so two parties can
+ * compare whole maps by exchanging root digests. Shape is history independent: an entry's level
+ * comes from its keyed digest, not from insertion order, which is what makes the root digest a
+ * meaningful identity and lets every language port agree byte for byte.
+ */
 package durable7.hamt
 
 import java.nio.charset.StandardCharsets
@@ -5,8 +13,13 @@ import java.util.ArrayDeque
 import java.util.IdentityHashMap
 import kotlin.math.max
 
+/** The four-byte magic prefix identifying an MST2 block. */
 internal val MerkleBlockMagic: ByteArray = "MST2".toByteArray(StandardCharsets.US_ASCII)
+
+/** The tag byte marking a node block. */
 internal const val MerkleNodeBlockTag: Int = 1
+
+/** Fixed header size preceding a block's payload. */
 internal const val MerkleBlockHeaderLength: Int = 4 + 1 + MerkleDigest.BYTE_LENGTH + 1 + 4 + 4
 
 /** One retained key/value representative and its immutable canonical encodings. */
@@ -30,6 +43,7 @@ public class MerkleEntry<K, V> internal constructor(
         MerkleEntry(key, newValue, encodedKey, newValueBytes, level)
 }
 
+/** One block of the canonical wide tree: its separators, children, cached aggregates, encoded bytes, and digest. */
 internal class MerkleNode<K, V>(
     internal val level: Int,
     internal val entries: List<MerkleEntry<K, V>>,
@@ -84,8 +98,13 @@ public data class MerkleSearchTreeStatistics(
 
 /** One semantic key-level difference. Variants preserve nullable values without ambiguity. */
 public sealed interface MerkleMapDifference<K, V> {
+    /** The key is present only in the target tree. */
     public data class Added<K, V>(public val key: K, public val value: V) : MerkleMapDifference<K, V>
+
+    /** The key is present only in the source tree. */
     public data class Removed<K, V>(public val key: K, public val value: V) : MerkleMapDifference<K, V>
+
+    /** The key is present in both trees with different values. */
     public data class Changed<K, V>(
         public val key: K,
         public val before: V,
@@ -742,6 +761,7 @@ public class MerkleSearchTree<K, V> private constructor(
     }
 }
 
+/** Where a key search landed within a block: the interval to descend into, and whether the key matched a separator. */
 internal data class SearchPosition(val index: Int, val found: Boolean)
 private data class PendingEntry<K, V>(val key: K, val value: V, val sequence: Int)
 private data class NodeSplit<K, V>(val left: MerkleNode<K, V>?, val right: MerkleNode<K, V>?)
@@ -921,6 +941,7 @@ private class ValidationAccumulator {
     )
 }
 
+/** Walk the tree's blocks in preorder. */
 internal fun <K, V> enumerateNodesPreorder(root: MerkleNode<K, V>?): List<MerkleNode<K, V>> {
     if (root == null) return emptyList()
     val result = ArrayList<MerkleNode<K, V>>()

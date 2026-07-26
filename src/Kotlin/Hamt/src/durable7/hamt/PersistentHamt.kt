@@ -1,7 +1,22 @@
+/*
+ * Persistent CHAMP hash map and hash set, with bulk builders and one-way editing sessions.
+ *
+ * Branching is 32-way and bitmap-indexed, with immutable collision buckets, so lookup, insertion,
+ * and removal are constant time in expectation while versions share every unchanged node. Key
+ * equivalence comes from a retained hash policy, and a no-op returns a collection sharing the
+ * receiver's root.
+ */
 package durable7.hamt
 
+/**
+ * Hashing and equivalence policy for the persistent hash collections. A collection retains its policy, so equivalence
+ * classes are defined by the policy rather than by the platform's own comparison.
+ */
 public interface HashPolicy<K> {
+    /** A hash for the key. Keys the policy treats as equivalent must hash identically. */
     public fun hash(key: K): Int
+
+    /** Whether the two keys belong to the same equivalence class. */
     public fun equivalent(left: K, right: K): Boolean
 }
 
@@ -11,27 +26,43 @@ private object DefaultHashPolicy : HashPolicy<Any?> {
 }
 
 @Suppress("UNCHECKED_CAST")
+/** The shared policy using the platform's own hashing and equality. */
 public fun <K> defaultHashPolicy(): HashPolicy<K> = DefaultHashPolicy as HashPolicy<K>
 
 private fun <T> hamtValuesEqual(left: T, right: T): Boolean = left === right || left == right
 
+/** Raised when a strict insertion sees an equivalent key. */
 public class DuplicateKeyException(message: String = "An equivalent key is already present.") :
     IllegalArgumentException(message)
 
+/** One stored key representative and its value. */
 public data class HamtEntry<K, V>(public val key: K, public val value: V)
+
+/** The outcome of a non-overwriting insertion; the collection is the receiver when nothing was added. */
 public data class AddResult<T>(public val value: T, public val added: Boolean)
+
+/** The map produced by a factory update together with the value actually stored. */
 public data class MapValueResult<K, V>(
     public val map: PersistentHashMap<K, V>,
     public val value: V,
 )
+
+/** The map remaining after a removal, together with the removed value. */
 public data class MapRemoveResult<K, V>(public val map: PersistentHashMap<K, V>, public val value: V)
+
+/** The map remaining after a removal, together with the removed key representative and value. */
 public data class MapRemoveEntryResult<K, V>(
     public val map: PersistentHashMap<K, V>,
     public val entry: HamtEntry<K, V>,
 )
+
+/** The set remaining after a removal, together with the removed representative. */
 public data class SetRemoveResult<T>(public val set: PersistentHashSet<T>, public val value: T)
 
+/** Which side of a diff an entry falls on. */
 public enum class MapDifferenceKind { ADDED, REMOVED, CHANGED }
+
+/** One entry-level difference between two maps. */
 public data class MapDifference<K, V>(
     public val kind: MapDifferenceKind,
     public val key: K,
@@ -39,6 +70,7 @@ public data class MapDifference<K, V>(
     public val after: V?,
 )
 
+/** Node and entry measurements returned by a successful structural audit. */
 internal data class ChampStatistics(
     val inlinePayloads: Int,
     val bitmapNodes: Int,
@@ -107,6 +139,10 @@ private class VersionBoundIterator<T>(
     }
 }
 
+/**
+ * A persistent hash map backed by a CHAMP trie. Branching is 32-way and bitmap-indexed with immutable collision
+ * buckets, so operations are constant time in expectation while versions share every unchanged node.
+ */
 public class PersistentHashMap<K, V> private constructor(
     private val root: Node<K, V>?,
     public val size: Int,
@@ -393,6 +429,9 @@ public class PersistentHashMap<K, V> private constructor(
     }
 }
 
+/**
+ * A persistent hash set backed by the same CHAMP trie, retaining the first representative of each equivalence class.
+ */
 public class PersistentHashSet<T> private constructor(private val map: PersistentHashMap<T, Unit>) : Iterable<T> {
     public companion object {
         public fun <T> empty(policy: HashPolicy<T> = defaultHashPolicy()): PersistentHashSet<T> =
@@ -407,8 +446,13 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
             empty<T>(policy).union(values)
     }
 
+    /** Number of elements. */
     public val size: Int get() = map.size
+
+    /** Whether the set holds no elements. */
     public val isEmpty: Boolean get() = map.isEmpty
+
+    /** The retained policy defining equivalence. */
     public val policy: HashPolicy<T> get() = map.policy
 
     /**
@@ -417,84 +461,183 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
      */
     public fun toTransient(): Transient<T> = Transient(this)
 
+    /**
+     * Whether both sets reference the same trie root. A representation test used to confirm a no-op avoided copying,
+     * not an equality test.
+     */
     public fun sharesRootWith(other: PersistentHashSet<T>): Boolean = map.sharesRootWith(other.map)
+
+    /** Whether the element is present. */
     public fun contains(value: T): Boolean = map.containsKey(value)
+
+    /**
+     * The stored representative equivalent to the probe, or `null` when absent. Distinct from `contains` because the
+     * set keeps the first representative of each equivalence class, which need not be the value passed in.
+     */
     public fun get(value: T): T? = map.getEntry(value)?.key
+
+    /** A set containing the given element; returns the receiver when already present. */
     public fun add(value: T): PersistentHashSet<T> = withMap(map.add(value, Unit))
+
+    /** Add the element, reporting whether it was added rather than throwing on a duplicate. */
     public fun tryAdd(value: T): AddResult<PersistentHashSet<T>> {
         val result = map.tryAdd(value, Unit)
         return AddResult(withMap(result.value), result.added)
     }
+
+    /**
+     * A set holding the given value as the representative of its equivalence class, replacing any representative
+     * already there.
+     */
     public fun put(value: T): PersistentHashSet<T> = withMap(map.put(value, Unit))
+
+    /** A set without that element; returns the receiver when absent. */
     public fun remove(value: T): PersistentHashSet<T> = withMap(map.remove(value))
+
+    /** Remove the element and report the stored representative, or nothing when absent. */
     public fun tryRemove(value: T): SetRemoveResult<T>? {
         val removed = map.tryRemoveEntry(value) ?: return null
         return SetRemoveResult(withMap(removed.map), removed.entry.key)
     }
+
+    /** An empty set retaining the same policies; returns the receiver when already empty. */
     public fun clear(): PersistentHashSet<T> = withMap(map.clear())
+
+    /**
+     * The elements of both sets. Subtrees the operands already share are adopted whole rather than re-entered. The
+     * operand is any iterable, whose elements are read through this collection's own policy rather than their own.
+     */
     public fun union(values: Iterable<T>): PersistentHashSet<T> {
         var result = this
         for (value in values) result = result.put(value)
         return result
     }
+
+    /** The elements of both sets. Subtrees the operands already share are adopted whole rather than re-entered. */
     public fun union(other: PersistentHashSet<T>): PersistentHashSet<T> = withMap(map.union(other.map))
+
+    /**
+     * The elements present in both sets. The operand is any iterable, whose elements are read through this collection's
+     * own policy rather than their own.
+     */
     public fun intersect(values: Iterable<T>): PersistentHashSet<T> {
         val probe = empty<T>(policy).union(values)
         var result = empty<T>(policy)
         for (value in this) if (probe.contains(value)) result = result.put(value)
         return result
     }
+
+    /** The elements present in both sets. */
     public fun intersect(other: PersistentHashSet<T>): PersistentHashSet<T> = withMap(map.intersect(other.map))
+
+    /**
+     * This set's elements that are absent from the other. The operand is any iterable, whose elements are read through
+     * this collection's own policy rather than their own.
+     */
     public fun except(values: Iterable<T>): PersistentHashSet<T> {
         var result = this
         for (value in values) result = result.remove(value)
         return result
     }
+
+    /** This set's elements that are absent from the other. */
     public fun except(other: PersistentHashSet<T>): PersistentHashSet<T> = withMap(map.except(other.map))
+
+    /**
+     * The elements present in exactly one of the two sets. The operand is any iterable, whose elements are read through
+     * this collection's own policy rather than their own.
+     */
     public fun symmetricExcept(values: Iterable<T>): PersistentHashSet<T> {
         val distinct = empty<T>(policy).union(values)
         var result = this
         for (value in distinct) result = if (result.contains(value)) result.remove(value) else result.put(value)
         return result
     }
+
+    /** The elements present in exactly one of the two sets. */
     public fun symmetricExcept(other: PersistentHashSet<T>): PersistentHashSet<T> =
         withMap(map.symmetricExcept(other.map))
 
+    /** Whether every element of this set also occurs in the other. */
     public fun isSubsetOf(other: PersistentHashSet<T>): Boolean {
         if (policy !== other.policy) return isSubsetOf(other as Iterable<T>)
         return size <= other.size && map.intersect(other.map).sharesRootWith(map)
     }
+
+    /** Whether this set is a subset of the other and the other holds an element it lacks. */
     public fun isProperSubsetOf(other: PersistentHashSet<T>): Boolean =
         if (policy === other.policy) size < other.size && isSubsetOf(other) else isProperSubsetOf(other as Iterable<T>)
+
+    /** Whether every element of the other occurs in this set. */
     public fun isSupersetOf(other: PersistentHashSet<T>): Boolean =
         if (policy === other.policy) other.isSubsetOf(this) else isSupersetOf(other as Iterable<T>)
+
+    /** Whether this set is a superset of the other and holds an element the other lacks. */
     public fun isProperSupersetOf(other: PersistentHashSet<T>): Boolean =
         if (policy === other.policy) size > other.size && other.isSubsetOf(this) else isProperSupersetOf(other as Iterable<T>)
+
+    /** Whether the two sets share at least one element. */
     public fun overlaps(other: PersistentHashSet<T>): Boolean {
         if (policy !== other.policy) return overlaps(other as Iterable<T>)
         return map.intersect(other.map).size != 0
     }
+
+    /** Whether both sets hold the same elements. */
     public fun setEquals(other: PersistentHashSet<T>): Boolean =
         if (policy === other.policy) map.mapEquals(other.map) else setEquals(other as Iterable<T>)
+
+    /**
+     * Whether every element of this set also occurs in the other. The operand is any iterable, whose elements are read
+     * through this collection's own policy rather than their own.
+     */
     public fun isSubsetOf(values: Iterable<T>): Boolean {
         val probe = empty<T>(policy).union(values)
         return all { probe.contains(it) }
     }
+
+    /**
+     * Whether every element of the other occurs in this set. The operand is any iterable, whose elements are read
+     * through this collection's own policy rather than their own.
+     */
     public fun isSupersetOf(values: Iterable<T>): Boolean = values.all { contains(it) }
+
+    /**
+     * Whether this set is a subset of the other and the other holds an element it lacks. The operand is any iterable,
+     * whose elements are read through this collection's own policy rather than their own.
+     */
     public fun isProperSubsetOf(values: Iterable<T>): Boolean {
         val probe = empty<T>(policy).union(values)
         return size < probe.size && all { probe.contains(it) }
     }
+
+    /**
+     * Whether this set is a superset of the other and holds an element the other lacks. The operand is any iterable,
+     * whose elements are read through this collection's own policy rather than their own.
+     */
     public fun isProperSupersetOf(values: Iterable<T>): Boolean {
         val probe = empty<T>(policy).union(values)
         return size > probe.size && probe.all { contains(it) }
     }
+
+    /**
+     * Whether the two sets share at least one element. The operand is any iterable, whose elements are read through
+     * this collection's own policy rather than their own.
+     */
     public fun overlaps(values: Iterable<T>): Boolean = values.any { contains(it) }
+
+    /**
+     * Whether both sets hold the same elements. The operand is any iterable, whose elements are read through this
+     * collection's own policy rather than their own.
+     */
     public fun setEquals(values: Iterable<T>): Boolean {
         val other = empty<T>(policy).union(values)
         return size == other.size && all { other.contains(it) }
     }
+
+    /** Iterate the elements lazily, in canonical trie order. */
     public fun asSequence(): Sequence<T> = map.keys()
+
+    /** Iterate the elements. */
     override fun iterator(): Iterator<T> = asSequence().iterator()
 
     /** Mutable-set facade over persistent CHAMP successors with one-way O(1) publication. */
@@ -503,10 +646,16 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
         private var version: Int = 0
         private var mutationInProgress: Boolean = false
 
+        /** Number of elements. */
         public val size: Int get() = active().size
+
+        /** Whether the collection holds no elements. */
         public val isEmpty: Boolean get() = active().isEmpty
+
+        /** The retained policy defining equivalence. */
         public val policy: HashPolicy<T> get() = active().policy
 
+        /** Whether the element is present. */
         public fun contains(value: T): Boolean = active().contains(value)
 
         /**
@@ -552,6 +701,7 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
         /** Uses this session's retained policy to compare distinct equivalence classes. */
         public fun setEquals(values: Iterable<T>): Boolean = active().setEquals(values)
 
+        /** Iterate the session's current elements lazily. */
         public fun asSequence(): Sequence<T> {
             val snapshot = active()
             val expectedVersion = version
@@ -560,6 +710,7 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
             }
         }
 
+        /** Iterate the elements. */
         override fun iterator(): Iterator<T> {
             val snapshot = active()
             val expectedVersion = version
@@ -1194,6 +1345,7 @@ private fun <K, V> champStatistics(
 private fun cardinalityDifference(expected: Int, actual: Int): Int =
     if (expected >= actual) expected - actual else actual - expected
 
+/** Construct deliberately malformed trie states, so the tests can check that validation rejects them. */
 internal fun champMalformedDiagnosticsForTesting(): Pair<Int, Int> {
     val leaf = Leaf(0, 0, Unit)
     val overDepth = BitmapNode(1, 0, listOf(leaf), emptyList())
