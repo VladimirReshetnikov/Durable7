@@ -1,3 +1,8 @@
+/// Tests for the canonical sorted set.
+///
+/// The central property is history independence: sets reaching the same contents by different
+/// sequences of edits must be structurally identical.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/command_model.hpp"

@@ -1,3 +1,8 @@
+/// A cell computing its value at most once, on first force.
+///
+/// The deque's amortized bounds depend on deferred work actually staying deferred, so a forced cell
+/// caches its result and a never-read cell is never computed.
+
 #pragma once
 
 #include <atomic>
@@ -9,17 +14,20 @@
 
 namespace durable7::finger_tree::detail {
 
+/// A cell computing its value at most once, on first force.
 template <class Value>
 class lazy_cell final {
 public:
     using value_type = Value;
     using pointer = std::shared_ptr<const value_type>;
 
+    /// The cached value, if the cell has been forced.
     static lazy_cell computed(value_type value)
     {
         return from_shared(std::make_shared<const value_type>(std::move(value)));
     }
 
+    /// Wraps an already-shared representation.
     static lazy_cell from_shared(pointer value)
     {
         if (value == nullptr) {
@@ -29,6 +37,7 @@ public:
         return lazy_cell{std::make_shared<control_block>(std::make_shared<computed_state>(std::move(value)))};
     }
 
+    /// Records the work without doing it, so a later read pays for it only if it happens.
     template <class Factory>
     static lazy_cell defer(Factory factory)
     {
@@ -37,6 +46,7 @@ public:
                 std::make_shared<pending_state<std::decay_t<Factory>>>(std::forward<Factory>(factory)))};
     }
 
+    /// Reads the value stored for the key.
     [[nodiscard]] pointer get() const
     {
         for (;;) {
@@ -61,6 +71,7 @@ public:
         }
     }
 
+    /// Whether the cell has already been computed.
     [[nodiscard]] bool is_forced() const
     {
         return control_->state.load()->try_get() != nullptr;
@@ -68,22 +79,28 @@ public:
 
 private:
     struct state_base {
+        /// Constructs the state base.
         virtual ~state_base() = default;
+        /// Reads the value stored for the key, or nothing when absent.
         [[nodiscard]] virtual pointer try_get() const noexcept = 0;
+        /// Computes the value the cell stands for.
         [[nodiscard]] virtual pointer compute() const = 0;
     };
 
     struct computed_state final : state_base {
+        /// Constructs the computed state from the given parts.
         explicit computed_state(pointer value)
             : value_(std::move(value))
         {
         }
 
+        /// Reads the value stored for the key, or nothing when absent.
         [[nodiscard]] pointer try_get() const noexcept override
         {
             return value_;
         }
 
+        /// Computes the value the cell stands for.
         [[nodiscard]] pointer compute() const override
         {
             return value_;
@@ -95,16 +112,19 @@ private:
 
     template <class Factory>
     struct pending_state final : state_base {
+        /// Constructs the pending state from the given parts.
         explicit pending_state(Factory factory)
             : factory_(std::move(factory))
         {
         }
 
+        /// Reads the value stored for the key, or nothing when absent.
         [[nodiscard]] pointer try_get() const noexcept override
         {
             return nullptr;
         }
 
+        /// Computes the value the cell stands for.
         [[nodiscard]] pointer compute() const override
         {
             using result_type = std::invoke_result_t<const Factory&>;
@@ -121,6 +141,7 @@ private:
     };
 
     struct control_block final {
+        /// Constructs the control block from the given parts.
         explicit control_block(std::shared_ptr<const state_base> initial)
             : state(std::move(initial))
         {

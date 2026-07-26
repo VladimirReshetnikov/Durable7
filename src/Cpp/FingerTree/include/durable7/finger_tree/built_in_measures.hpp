@@ -1,3 +1,5 @@
+/// The measures the library ships: counting, sum, minimum, maximum, keys, and rank statistics.
+
 #pragma once
 
 #include <durable7/finger_tree/comparisons.hpp>
@@ -13,36 +15,45 @@
 
 namespace durable7::finger_tree {
 
+/// Wraps a measure so it has an identity: `none` is the identity and `some` carries a value. Lets a
+/// semigroup with no natural identity be used as a monoid.
 template <class T>
 class optional_measure final {
 public:
+    /// Constructs the optional measure.
     constexpr optional_measure() noexcept = default;
 
+    /// The identity state, carrying no value.
     [[nodiscard]] static constexpr optional_measure none() noexcept
     {
         return optional_measure{};
     }
 
+    /// The state carrying a value.
     [[nodiscard]] static constexpr optional_measure some(T value)
     {
         return optional_measure{std::move(value)};
     }
 
+    /// Whether a value is present.
     [[nodiscard]] constexpr bool has_value() const noexcept
     {
         return value_.has_value();
     }
 
+    /// The stored value.
     [[nodiscard]] constexpr const T& value() const&
     {
         return *value_;
     }
 
+    /// The stored value.
     [[nodiscard]] constexpr T&& value() &&
     {
         return std::move(*value_);
     }
 
+    /// This value as an optional, empty when absent.
     [[nodiscard]] constexpr const std::optional<T>& as_optional() const noexcept
     {
         return value_;
@@ -59,22 +70,27 @@ private:
     std::optional<T> value_;
 };
 
+/// Tracks the largest element, making a measured tree a max-priority structure with a constant-time
+/// peek.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 struct max_measure {
     using element_type = T;
     using measure_type = optional_measure<T>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return measure_type::none();
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(T element)
     {
         return measure_type::some(std::move(element));
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         if (!left.has_value()) {
@@ -89,22 +105,26 @@ struct max_measure {
     }
 };
 
+/// Tracks the smallest element, the mirror image of max_measure.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 struct min_measure {
     using element_type = T;
     using measure_type = optional_measure<T>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return measure_type::none();
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(T element)
     {
         return measure_type::some(std::move(element));
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         if (!left.has_value()) {
@@ -119,27 +139,32 @@ struct min_measure {
     }
 };
 
+/// Tracks the largest key, which is what lets a keyed search descend by measure.
 template <class T>
 struct key_measure {
     using element_type = T;
     using measure_type = optional_measure<T>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return measure_type::none();
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(T element)
     {
         return measure_type::some(std::move(element));
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         return right.has_value() ? right : left;
     }
 };
 
+/// A key paired with the rank the canonical policy derived for it.
 template <class T>
 struct ranked_key final {
     std::size_t count = 0;
@@ -148,21 +173,25 @@ struct ranked_key final {
     [[nodiscard]] constexpr bool operator==(const ranked_key&) const = default;
 };
 
+/// Counts elements and tracks the largest, so one tree answers both rank and bound queries.
 template <class T>
 struct order_statistic_measure {
     using element_type = T;
     using measure_type = ranked_key<T>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return {};
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(T element)
     {
         return measure_type{1, optional_measure<T>::some(std::move(element))};
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         return measure_type{
@@ -193,16 +222,19 @@ struct priority_measure {
     using element_type = priority_entry<Element, Priority>;
     using measure_type = priority_aggregate<Priority>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return {};
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(const element_type& element)
     {
         return measure_type{1, optional_measure<Priority>::some(element.priority)};
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         return measure_type{
@@ -280,11 +312,13 @@ struct interval_measure {
     using element_type = interval<T>;
     using measure_type = interval_annotation<T>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return {};
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(const element_type& element)
     {
         return measure_type{
@@ -293,6 +327,7 @@ struct interval_measure {
             optional_measure<T>::some(element.high)};
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         return measure_type{

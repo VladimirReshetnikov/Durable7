@@ -1,3 +1,5 @@
+/// Entry point for the showcase sample.
+
 #include "sample_runs.hpp"
 
 #include <iostream>

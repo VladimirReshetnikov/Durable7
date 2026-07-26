@@ -1,3 +1,9 @@
+/// A persistent map keyed by closed intervals.
+///
+/// Same cached-maximum-endpoint trick as the interval tree, with a payload per interval. Every
+/// operation returns a new version and leaves its inputs valid, sharing unchanged structure, so an
+/// edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/built_in_measures.hpp>
@@ -16,6 +22,7 @@
 
 namespace durable7::finger_tree {
 
+/// One interval key and its payload.
 template <class Endpoint, class Value>
 struct interval_map_entry final {
     interval<Endpoint> key;
@@ -24,6 +31,7 @@ struct interval_map_entry final {
     [[nodiscard]] bool operator==(const interval_map_entry&) const = default;
 };
 
+/// The cached aggregate over a subtree of interval entries.
 template <class Endpoint>
 struct interval_map_annotation final {
     std::size_t count = 0;
@@ -36,16 +44,20 @@ template <
     class Endpoint,
     class Value,
     class Comparison = default_comparison<Endpoint>>
+    /// Measures an interval map's entries by their key interval and the maximum high endpoint
+    /// below, so a query can skip subtrees that cannot match.
     requires static_comparison_policy<Comparison, Endpoint>
 struct interval_map_measure final {
     using element_type = interval_map_entry<Endpoint, Value>;
     using measure_type = interval_map_annotation<Endpoint>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static measure_type empty()
     {
         return {};
     }
 
+    /// The measure of one element.
     [[nodiscard]] static measure_type measure(const element_type& element)
     {
         return {
@@ -54,6 +66,7 @@ struct interval_map_measure final {
             optional_measure<Endpoint>::some(element.key.high)};
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static measure_type combine(
         const measure_type& left,
         const measure_type& right)
@@ -102,18 +115,22 @@ public:
     using size_type = std::size_t;
     using const_iterator = typename tree_type::const_iterator;
 
+    /// An empty map.
     persistent_interval_map() = default;
 
+    /// The shared empty map.
     [[nodiscard]] static persistent_interval_map empty_map()
     {
         return {};
     }
 
+    /// An empty map using the supplied policies, which it retains.
     [[nodiscard]] static persistent_interval_map create(ValueEqual value_equal = {})
     {
         return persistent_interval_map{tree_type{}, std::move(value_equal)};
     }
 
+    /// A map holding a range's entries, built in bulk rather than by repeated insertion.
     template <std::ranges::input_range Range>
     [[nodiscard]] static persistent_interval_map create_range(
         Range&& entries,
@@ -126,21 +143,25 @@ public:
         return result;
     }
 
+    /// Whether the map holds no entries.
     [[nodiscard]] bool empty() const noexcept
     {
         return tree_.empty();
     }
 
+    /// Number of entries in the map.
     [[nodiscard]] size_type size() const
     {
         return tree_.measure().count;
     }
 
+    /// The retained value equivalence policy.
     [[nodiscard]] const ValueEqual& value_eq() const noexcept
     {
         return value_equal_;
     }
 
+    /// Reads the entry stored for the key, or nothing when absent.
     [[nodiscard]] const value_type* try_get_entry(const interval_type& key) const
     {
         validate_interval(key);
@@ -153,12 +174,14 @@ public:
             : nullptr;
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const Value* try_get(const interval_type& key) const
     {
         const auto* entry = try_get_entry(key);
         return entry == nullptr ? nullptr : std::addressof(entry->value);
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const interval_type& key) const
     {
         return try_get_entry(key) != nullptr;
@@ -200,6 +223,7 @@ public:
         return located.has_value() ? located.item : nullptr;
     }
 
+    /// The value stored for the key. Raises when the key is absent.
     [[nodiscard]] const Value& at(const interval_type& key) const
     {
         const auto* value = try_get(key);
@@ -209,6 +233,7 @@ public:
         return *value;
     }
 
+    /// A map containing the given entry; returns the receiver when already present.
     [[nodiscard]] persistent_interval_map add(interval_type key, Value value) const
     {
         validate_interval(key);
@@ -222,6 +247,7 @@ public:
             value_equal_};
     }
 
+    /// Adds the entry unless an equivalent one is present, reporting which happened.
     [[nodiscard]] std::pair<persistent_interval_map, bool> try_add(
         interval_type key,
         Value value) const
@@ -260,6 +286,7 @@ public:
             value_equal_};
     }
 
+    /// A map without that entry; returns the receiver when absent.
     [[nodiscard]] persistent_interval_map remove(const interval_type& key) const
     {
         validate_interval(key);
@@ -271,11 +298,13 @@ public:
         return *this;
     }
 
+    /// An empty map retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] persistent_interval_map clear() const
     {
         return empty() ? *this : create(value_equal_);
     }
 
+    /// An interval overlapping the probe, or nothing when none does.
     [[nodiscard]] std::optional<value_type> try_find_overlap(const interval_type& query) const
     {
         validate_interval(query);
@@ -290,11 +319,14 @@ public:
         return located.item == nullptr ? std::nullopt : std::optional<value_type>{*located.item};
     }
 
+    /// An interval containing the point, or nothing when none does.
     [[nodiscard]] std::optional<value_type> try_find_containing(const Endpoint& point) const
     {
         return try_find_overlap(interval_type{point, point});
     }
 
+    /// Every interval overlapping the probe. Subtrees whose cached maximum endpoint falls short of
+    /// the probe are skipped whole.
     [[nodiscard]] std::vector<value_type> find_overlaps(const interval_type& query) const
     {
         validate_interval(query);
@@ -317,16 +349,19 @@ public:
         return result;
     }
 
+    /// How many stored intervals overlap the probe.
     [[nodiscard]] size_type count_overlaps(const interval_type& query) const
     {
         return find_overlaps(query).size();
     }
 
+    /// Copies the entries out into a vector, in the map's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         return tree_.to_vector();
     }
 
+    /// Copies the keys out into a vector, in the map's own order.
     [[nodiscard]] std::vector<interval_type> keys_to_vector() const
     {
         auto keys = std::vector<interval_type>{};
@@ -337,6 +372,7 @@ public:
         return keys;
     }
 
+    /// Copies the values out into a vector.
     [[nodiscard]] std::vector<Value> values_to_vector() const
     {
         auto values = std::vector<Value>{};
@@ -347,26 +383,31 @@ public:
         return values;
     }
 
+    /// An iterator over the entries, in the map's own order.
     [[nodiscard]] const_iterator begin() const
     {
         return tree_.begin();
     }
 
+    /// The iterator one past the last element.
     [[nodiscard]] const_iterator end() const noexcept
     {
         return tree_.end();
     }
 
+    /// A const iterator over the entries.
     [[nodiscard]] const_iterator cbegin() const
     {
         return begin();
     }
 
+    /// The const iterator one past the last element.
     [[nodiscard]] const_iterator cend() const noexcept
     {
         return end();
     }
 
+    /// Checks the map's structural invariants. For tests and diagnostics.
     void validate_invariants() const
     {
         auto previous = std::optional<interval_type>{};
@@ -396,6 +437,7 @@ public:
         }
     }
 
+    /// Checks the map's structural invariants. For tests and diagnostics.
     [[nodiscard]] bool debug_validate() const noexcept
     {
         try {

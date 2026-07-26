@@ -1,3 +1,8 @@
+/// A persistent multimap that remembers insertion order, both across keys and within a key.
+///
+/// Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+/// so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/ordered/persistent_ordered_map.hpp>
@@ -28,6 +33,7 @@ template <
         && std::copyable<KeyEqual>
         && std::copyable<ValueHash>
         && std::copyable<ValueEqual>
+/// A persistent multimap that remembers insertion order, both across keys and within a key.
 class persistent_ordered_multimap final {
 public:
     using key_type = Key;
@@ -48,13 +54,16 @@ private:
         Key, value_set, KeyHash, KeyEqual, group_identity_equal>;
 
 public:
+    /// An empty multimap.
     persistent_ordered_multimap() = default;
 
+    /// Whether the multimap holds no pairs.
     [[nodiscard]] static persistent_ordered_multimap empty()
     {
         return {};
     }
 
+    /// An empty multimap using the supplied policies, which it retains.
     [[nodiscard]] static persistent_ordered_multimap create(
         KeyHash key_hash = {},
         KeyEqual key_equal = {},
@@ -69,6 +78,7 @@ public:
             0};
     }
 
+    /// A multimap holding a range's pairs, built in bulk rather than by repeated insertion.
     template <class Range>
     [[nodiscard]] static persistent_ordered_multimap create_range(
         const Range& pairs,
@@ -86,49 +96,63 @@ public:
         return result;
     }
 
+    /// Whether the multimap holds no pairs.
+    /// How many pairs are present in total.
+    /// How many distinct keys are present.
     [[nodiscard]] size_type key_count() const noexcept { return groups_.size(); }
     [[nodiscard]] std::int64_t pair_count() const noexcept { return pair_count_; }
     [[nodiscard]] bool is_empty() const noexcept { return pair_count_ == 0; }
 
+    /// The retained key hashing policy.
     [[nodiscard]] const KeyHash& key_hash_function() const noexcept
     {
         return groups_.hash_function();
     }
 
+    /// The retained value equivalence policy.
+    /// The retained value hashing policy.
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const noexcept { return groups_.key_eq(); }
     [[nodiscard]] const ValueHash& value_hash_function() const noexcept { return value_hash_; }
     [[nodiscard]] const ValueEqual& value_eq() const noexcept { return value_equal_; }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const Key& key) const { return groups_.contains_key(key); }
 
+    /// Whether the pair is present.
     [[nodiscard]] bool contains(const Key& key, const Value& value) const
     {
         const auto* values = groups_.try_get(key);
         return values != nullptr && values->contains(value);
     }
 
+    /// How many values the key is bound to.
     [[nodiscard]] size_type count_values(const Key& key) const
     {
         const auto* values = groups_.try_get(key);
         return values == nullptr ? size_type{0} : values->size();
     }
 
+    /// Reads the stored key representative, or nothing when absent.
     [[nodiscard]] const Key* try_get_key(const Key& equal_key) const
     {
         return groups_.try_get_key(equal_key);
     }
 
+    /// Reads the values bound to the key, or nothing when the key is absent.
     [[nodiscard]] const value_set* try_get_values(const Key& key) const
     {
         return groups_.try_get(key);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const Value* try_get_value(const Key& key, const Value& equal_value) const
     {
         const auto* values = groups_.try_get(key);
         return values == nullptr ? nullptr : values->try_get_value(equal_value);
     }
 
+    /// The values bound to the key, empty when the key is absent.
     [[nodiscard]] value_set values_or_empty(const Key& key) const
     {
         if (const auto* values = try_get_values(key)) {
@@ -137,6 +161,7 @@ public:
         return value_set::create(value_hash_, value_equal_);
     }
 
+    /// A multimap containing the given pair; returns the receiver when already present.
     [[nodiscard]] persistent_ordered_multimap add(const Key& key, const Value& value) const
     {
         if (const auto* stored_values = groups_.try_get(key)) {
@@ -160,6 +185,7 @@ public:
             groups_.add(key, values), value_hash_, value_equal_, pair_count_ + 1};
     }
 
+    /// Adds the pair unless an equivalent one is present, reporting which happened.
     [[nodiscard]] std::pair<persistent_ordered_multimap, bool> try_add(
         const Key& key,
         const Value& value) const
@@ -169,6 +195,7 @@ public:
         return {std::move(result), changed};
     }
 
+    /// A multimap without that pair; returns the receiver when absent.
     [[nodiscard]] persistent_ordered_multimap remove(
         const Key& key,
         const Value& value) const
@@ -189,6 +216,7 @@ public:
             std::move(groups), value_hash_, value_equal_, pair_count_ - 1};
     }
 
+    /// A multimap without that key.
     [[nodiscard]] persistent_ordered_multimap remove_key(const Key& key) const
     {
         const auto* values = groups_.try_get(key);
@@ -200,6 +228,7 @@ public:
             pair_count_ - static_cast<std::int64_t>(values->size())};
     }
 
+    /// An empty multimap retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] persistent_ordered_multimap clear() const
     {
         return is_empty()

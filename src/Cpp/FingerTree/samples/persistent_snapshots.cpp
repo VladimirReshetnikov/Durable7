@@ -1,3 +1,5 @@
+/// A sample showing that older versions stay valid and readable after later edits.
+
 #include "sample_runs.hpp"
 
 #include <durable7/finger_tree/finger_tree.hpp>

@@ -1,3 +1,5 @@
+/// Gap cursors over the insertion-ordered collections.
+
 #pragma once
 
 #include <durable7/ordered/persistent_ordered_map.hpp>
@@ -31,6 +33,7 @@ struct ordered_cursor_insert_result final {
 
 namespace persistent_ordered_cursor_detail {
 
+/// The next value, trapping on overflow rather than wrapping.
 template <class Integer>
 [[nodiscard]] Integer checked_successor(const Integer position)
 {
@@ -40,6 +43,7 @@ template <class Integer>
     return position + Integer{1};
 }
 
+/// The entry at the given rank.
 template <class Multimap>
 [[nodiscard]] std::optional<typename Multimap::value_type> entry_at(
     const Multimap& map,
@@ -62,6 +66,7 @@ template <class Multimap>
     return result;
 }
 
+/// The position of the given key-value pair.
 template <class Multimap>
 [[nodiscard]] std::int64_t pair_position(
     const Multimap& map,
@@ -83,6 +88,7 @@ template <class Multimap>
     return result;
 }
 
+/// The position where the key's group of values begins.
 template <class Multimap>
 [[nodiscard]] std::int64_t group_position(
     const Multimap& map,
@@ -136,12 +142,14 @@ template <
     class T,
     class Hash = std::hash<T>,
     class KeyEqual = std::equal_to<T>>
+/// A gap cursor over one insertion-ordered set version.
 class persistent_ordered_set_cursor final {
 public:
     using collection_type = persistent_ordered_set<T, Hash, KeyEqual>;
     using value_type = T;
     using size_type = typename collection_type::size_type;
 
+    /// A cursor over the given set version at the given position.
     persistent_ordered_set_cursor(collection_type snapshot, const size_type position)
         : snapshot_(std::move(snapshot)), position_(position)
     {
@@ -150,23 +158,33 @@ public:
         }
     }
 
+    /// Whether the gap follows the last element.
+    /// Whether the gap precedes the first element.
+    /// The cursor's gap position.
+    /// Number of elements in the set version the cursor is positioned in.
     [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == size(); }
 
+    /// Reads the element immediately before the gap, or nothing at the start.
     [[nodiscard]] const value_type* try_peek_previous() const &
     {
         return is_at_start() ? nullptr : std::addressof(snapshot_.at(position_ - 1));
     }
+    /// Reads the element immediately before the gap, or nothing at the start.
     const value_type* try_peek_previous() const && = delete;
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     [[nodiscard]] const value_type* try_peek_next() const &
     {
         return is_at_end() ? nullptr : std::addressof(snapshot_.at(position_));
     }
+    /// Reads the element immediately after the gap, or nothing at the end.
     const value_type* try_peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] persistent_ordered_set_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -175,6 +193,7 @@ public:
         return {snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] persistent_ordered_set_cursor move_next() const
     {
         if (is_at_end()) {
@@ -183,6 +202,7 @@ public:
         return {snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same set version.
     [[nodiscard]] persistent_ordered_set_cursor seek(const size_type position) const
     {
         return position == position_ ? *this : persistent_ordered_set_cursor{snapshot_, position};
@@ -199,6 +219,7 @@ public:
             persistent_ordered_cursor_detail::checked_successor(position_)};
     }
 
+    /// Inserts the element unless an equivalent one is present, reporting which happened.
     [[nodiscard]] ordered_cursor_insert_result<persistent_ordered_set_cursor> try_insert(
         const value_type& item) const
     {
@@ -208,6 +229,8 @@ public:
         return {insert(item), true};
     }
 
+    /// Removes the element before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] persistent_ordered_set_cursor delete_previous() const
     {
         if (is_at_start()) {
@@ -216,6 +239,8 @@ public:
         return {snapshot_.remove_at(position_ - 1), position_ - 1};
     }
 
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] persistent_ordered_set_cursor delete_next() const
     {
         if (is_at_end()) {
@@ -224,6 +249,7 @@ public:
         return {snapshot_.remove_at(position_), position_};
     }
 
+    /// The set version this cursor is positioned in.
     [[nodiscard]] collection_type snapshot() const { return snapshot_; }
 
 private:
@@ -231,6 +257,7 @@ private:
     size_type position_;
 };
 
+/// A cursor at the given gap of the collection.
 template <class T, class Hash, class KeyEqual>
 [[nodiscard]] auto get_cursor(
     const persistent_ordered_set<T, Hash, KeyEqual>& set,
@@ -239,6 +266,8 @@ template <class T, class Hash, class KeyEqual>
     return {set, position};
 }
 
+/// A cursor at the element together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class T, class Hash, class KeyEqual>
 [[nodiscard]] auto get_cursor_at_item(
     const persistent_ordered_set<T, Hash, KeyEqual>& set,
@@ -259,6 +288,7 @@ template <
     class Hash = std::hash<Key>,
     class KeyEqual = std::equal_to<Key>,
     class ValueEqual = std::equal_to<Value>>
+/// A gap cursor over one insertion-ordered map version.
 class persistent_ordered_map_cursor final {
 public:
     using collection_type = persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>;
@@ -267,6 +297,7 @@ public:
     using entry_type = typename collection_type::value_type;
     using size_type = typename collection_type::size_type;
 
+    /// A cursor over the given map version at the given position.
     persistent_ordered_map_cursor(collection_type snapshot, const size_type position)
         : snapshot_(std::move(snapshot)), position_(position)
     {
@@ -275,23 +306,33 @@ public:
         }
     }
 
+    /// Whether the gap follows the last entry.
+    /// Whether the gap precedes the first entry.
+    /// The cursor's gap position.
+    /// Number of entries in the map version the cursor is positioned in.
     [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == size(); }
 
+    /// Reads the entry immediately before the gap, or nothing at the start.
     [[nodiscard]] const entry_type* try_peek_previous() const &
     {
         return is_at_start() ? nullptr : std::addressof(snapshot_.entry_at(position_ - 1));
     }
+    /// Reads the entry immediately before the gap, or nothing at the start.
     const entry_type* try_peek_previous() const && = delete;
 
+    /// Reads the entry immediately after the gap, or nothing at the end.
     [[nodiscard]] const entry_type* try_peek_next() const &
     {
         return is_at_end() ? nullptr : std::addressof(snapshot_.entry_at(position_));
     }
+    /// Reads the entry immediately after the gap, or nothing at the end.
     const entry_type* try_peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] persistent_ordered_map_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -300,6 +341,7 @@ public:
         return {snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] persistent_ordered_map_cursor move_next() const
     {
         if (is_at_end()) {
@@ -308,11 +350,13 @@ public:
         return {snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same map version.
     [[nodiscard]] persistent_ordered_map_cursor seek(const size_type position) const
     {
         return position == position_ ? *this : persistent_ordered_map_cursor{snapshot_, position};
     }
 
+    /// A map with the entry inserted.
     [[nodiscard]] persistent_ordered_map_cursor insert(
         const key_type& key,
         const mapped_type& value) const
@@ -336,6 +380,8 @@ public:
         return {insert(key, value), true};
     }
 
+    /// Replaces the value of the entry after the gap, producing a new version the returned cursor
+    /// is positioned in.
     [[nodiscard]] persistent_ordered_map_cursor set_next_value(
         const mapped_type& value) const
     {
@@ -346,6 +392,8 @@ public:
         return {snapshot_.set_item(entry->key, value), position_};
     }
 
+    /// Removes the entry before the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] persistent_ordered_map_cursor delete_previous() const
     {
         if (is_at_start()) {
@@ -354,6 +402,8 @@ public:
         return {snapshot_.remove_at(position_ - 1), position_ - 1};
     }
 
+    /// Removes the entry after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] persistent_ordered_map_cursor delete_next() const
     {
         if (is_at_end()) {
@@ -362,6 +412,7 @@ public:
         return {snapshot_.remove_at(position_), position_};
     }
 
+    /// The map version this cursor is positioned in.
     [[nodiscard]] collection_type snapshot() const { return snapshot_; }
 
 private:
@@ -369,6 +420,7 @@ private:
     size_type position_;
 };
 
+/// A cursor at the given gap of the collection.
 template <class Key, class Value, class Hash, class KeyEqual, class ValueEqual>
 [[nodiscard]] auto get_cursor(
     const persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>& map,
@@ -378,6 +430,8 @@ template <class Key, class Value, class Hash, class KeyEqual, class ValueEqual>
     return {map, position};
 }
 
+/// A cursor at the key together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class Key, class Value, class Hash, class KeyEqual, class ValueEqual>
 [[nodiscard]] auto get_cursor_at_key(
     const persistent_ordered_map<Key, Value, Hash, KeyEqual, ValueEqual>& map,
@@ -401,6 +455,7 @@ template <
     class KeyEqual = std::equal_to<Key>,
     class ValueHash = std::hash<Value>,
     class ValueEqual = std::equal_to<Value>>
+/// A gap cursor over one insertion-ordered multimap version.
 class persistent_ordered_multimap_cursor final {
 public:
     using collection_type =
@@ -410,6 +465,7 @@ public:
     using value_type = typename collection_type::value_type;
     using size_type = std::int64_t;
 
+    /// A cursor over the given multimap version at the given position.
     persistent_ordered_multimap_cursor(collection_type snapshot, const size_type position)
         : snapshot_(std::move(snapshot)), position_(position)
     {
@@ -418,21 +474,29 @@ public:
         }
     }
 
+    /// Whether the gap follows the last pair.
+    /// Whether the gap precedes the first pair.
+    /// The cursor's gap position.
+    /// Number of pairs in the multimap version the cursor is positioned in.
     [[nodiscard]] size_type size() const noexcept { return snapshot_.pair_count(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == size(); }
 
+    /// Reads the pair immediately before the gap, or nothing at the start.
     [[nodiscard]] std::optional<value_type> try_peek_previous() const
     {
         return persistent_ordered_cursor_detail::entry_at(snapshot_, position_ - 1);
     }
 
+    /// Reads the pair immediately after the gap, or nothing at the end.
     [[nodiscard]] std::optional<value_type> try_peek_next() const
     {
         return persistent_ordered_cursor_detail::entry_at(snapshot_, position_);
     }
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] persistent_ordered_multimap_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -441,6 +505,7 @@ public:
         return {snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] persistent_ordered_multimap_cursor move_next() const
     {
         if (is_at_end()) {
@@ -449,6 +514,7 @@ public:
         return {snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same multimap version.
     [[nodiscard]] persistent_ordered_multimap_cursor seek(const size_type position) const
     {
         return position == position_
@@ -475,6 +541,7 @@ public:
         return {std::move(next), following_gap};
     }
 
+    /// Adds the pair unless an equivalent one is present, reporting which happened.
     [[nodiscard]] ordered_cursor_insert_result<persistent_ordered_multimap_cursor> try_add(
         const key_type& key,
         const mapped_type& value) const
@@ -485,6 +552,8 @@ public:
         return {add(key, value), true};
     }
 
+    /// Removes the pair before the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] persistent_ordered_multimap_cursor delete_previous() const
     {
         const auto pair = try_peek_previous();
@@ -494,6 +563,8 @@ public:
         return {deleted_pair(pair->first, pair->second), position_ - 1};
     }
 
+    /// Removes the pair after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] persistent_ordered_multimap_cursor delete_next() const
     {
         const auto pair = try_peek_next();
@@ -503,6 +574,7 @@ public:
         return {deleted_pair(pair->first, pair->second), position_};
     }
 
+    /// The multimap version this cursor is positioned in.
     [[nodiscard]] collection_type snapshot() const { return snapshot_; }
 
 private:
@@ -530,6 +602,7 @@ private:
     size_type position_;
 };
 
+/// A cursor at the given gap of the collection.
 template <class Key, class Value, class KeyHash, class KeyEqual, class ValueHash, class ValueEqual>
 [[nodiscard]] auto get_cursor(
     const persistent_ordered_multimap<Key, Value, KeyHash, KeyEqual, ValueHash, ValueEqual>& map,
@@ -540,6 +613,7 @@ template <class Key, class Value, class KeyHash, class KeyEqual, class ValueHash
     return {map, position};
 }
 
+/// A cursor at the given key-value pair.
 template <class Key, class Value, class KeyHash, class KeyEqual, class ValueHash, class ValueEqual>
 [[nodiscard]] auto get_cursor_at_pair(
     const persistent_ordered_multimap<Key, Value, KeyHash, KeyEqual, ValueHash, ValueEqual>& map,
@@ -558,6 +632,7 @@ template <class Key, class Value, class KeyHash, class KeyEqual, class ValueHash
         position >= 0};
 }
 
+/// A cursor at the start of the key's group of values.
 template <class Key, class Value, class KeyHash, class KeyEqual, class ValueHash, class ValueEqual>
 [[nodiscard]] auto get_cursor_at_group(
     const persistent_ordered_multimap<Key, Value, KeyHash, KeyEqual, ValueHash, ValueEqual>& map,

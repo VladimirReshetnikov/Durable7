@@ -1,3 +1,5 @@
+/// Implementation of the benchmarks' allocation accounting.
+
 #include "benchmark_allocation.hpp"
 
 #include <atomic>

@@ -1,3 +1,9 @@
+/// A persistent map that remembers insertion order.
+///
+/// Replacing an entry's value leaves its position alone, which is what distinguishes this from a
+/// map rebuilt in iteration order. Every operation returns a new version and leaves its inputs
+/// valid, sharing unchanged structure, so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/hamt/persistent_hash_map.hpp>
@@ -20,6 +26,7 @@
 
 namespace durable7::ordered {
 
+/// One key-value pair as the insertion-ordered map presents it.
 template <class Key, class Value>
 struct ordered_map_entry final {
     Key key;
@@ -45,6 +52,8 @@ template <
         && std::copyable<Hash>
         && std::copyable<KeyEqual>
         && std::copyable<ValueEqual>
+/// A persistent map that remembers insertion order. Replacing an entry's value leaves its position
+/// alone.
 class persistent_ordered_map final {
 private:
     static constexpr std::int64_t stamp_stride = std::int64_t{1} << 20;
@@ -84,6 +93,8 @@ public:
     using key_equal = KeyEqual;
     using value_equal = ValueEqual;
 
+    /// A forward const iterator over one map version's entries. It keeps that version alive, so it
+    /// stays valid across later edits.
     class const_iterator final {
     public:
         using iterator_concept = std::forward_iterator_tag;
@@ -93,6 +104,7 @@ public:
         using pointer = const public_entry*;
         using reference = const public_entry&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] reference operator*() const
@@ -134,13 +146,16 @@ public:
         typename entry_deque::const_iterator inner_;
     };
 
+    /// An empty map.
     persistent_ordered_map() = default;
 
+    /// The shared empty map.
     [[nodiscard]] static persistent_ordered_map empty_map()
     {
         return {};
     }
 
+    /// An empty map using the supplied policies, which it retains.
     [[nodiscard]] static persistent_ordered_map create(
         Hash hash = {},
         KeyEqual key_equal = {},
@@ -170,36 +185,46 @@ public:
         return result;
     }
 
+    /// Whether the map holds no entries.
+    /// Whether the map holds no entries.
+    /// Number of entries in the map.
+    /// Number of entries in the map.
     [[nodiscard]] size_type size() const noexcept { return order_.size(); }
     [[nodiscard]] size_type count() const noexcept { return size(); }
     [[nodiscard]] bool empty() const noexcept { return order_.empty(); }
     [[nodiscard]] bool is_empty() const noexcept { return empty(); }
 
+    /// The retained hashing policy. Keys the policy treats as equivalent must hash identically.
     [[nodiscard]] const Hash& hash_function() const noexcept
     {
         return stamps_.hash_function();
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const noexcept
     {
         return stamps_.key_eq();
     }
 
+    /// The retained value equivalence policy.
     [[nodiscard]] const ValueEqual& value_eq() const noexcept
     {
         return value_equal_;
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const Key& key) const
     {
         return stamps_.contains_key(key);
     }
 
+    /// Reads the stored key representative, or nothing when absent.
     [[nodiscard]] const Key* try_get_key(const Key& equal_key) const
     {
         return stamps_.try_get_key(equal_key);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const Value* try_get(const Key& key) const
     {
         const auto* stamp = stamps_.try_get(key);
@@ -209,6 +234,7 @@ public:
         return std::addressof(item_of(order_[index_of_stamp(*stamp)]).value);
     }
 
+    /// The value stored for the key. Raises when the key is absent.
     [[nodiscard]] const Value& at(const Key& key) const
     {
         const auto* value = try_get(key);
@@ -218,24 +244,28 @@ public:
         return *value;
     }
 
+    /// The entry at the given rank.
     [[nodiscard]] const value_type& entry_at(const size_type index) const
     {
         check_element_index(index);
         return item_of(order_[index]);
     }
 
+    /// The first entry.
     [[nodiscard]] const value_type& front() const
     {
         throw_if_empty();
         return item_of(order_.front());
     }
 
+    /// The last entry.
     [[nodiscard]] const value_type& back() const
     {
         throw_if_empty();
         return item_of(order_.back());
     }
 
+    /// The rank of the given key.
     [[nodiscard]] difference_type index_of_key(const Key& key) const
     {
         const auto* stamp = stamps_.try_get(key);
@@ -244,6 +274,7 @@ public:
             : checked_difference(index_of_stamp(*stamp));
     }
 
+    /// A map containing the given entry; returns the receiver when already present.
     [[nodiscard]] persistent_ordered_map add(const Key& key, const Value& value) const
     {
         auto [result, added] = try_insert(size(), key, value);
@@ -253,6 +284,7 @@ public:
         return result;
     }
 
+    /// Adds the entry unless an equivalent one is present, reporting which happened.
     [[nodiscard]] std::pair<persistent_ordered_map, bool> try_add(
         const Key& key,
         const Value& value) const
@@ -260,6 +292,7 @@ public:
         return try_insert(size(), key, value);
     }
 
+    /// A map with the entry placed first.
     [[nodiscard]] persistent_ordered_map add_first(
         const Key& key,
         const Value& value) const
@@ -271,6 +304,7 @@ public:
         return result;
     }
 
+    /// A map with the entry inserted.
     [[nodiscard]] persistent_ordered_map insert(
         const size_type index,
         const Key& key,
@@ -306,11 +340,13 @@ public:
             value_equal_};
     }
 
+    /// A cursor before the first entry.
     [[nodiscard]] persistent_ordered_map move_to_first(const Key& key) const
     {
         return move_existing(0, key);
     }
 
+    /// A cursor after the last entry.
     [[nodiscard]] persistent_ordered_map move_to_last(const Key& key) const
     {
         if (empty()) {
@@ -319,6 +355,7 @@ public:
         return move_existing(size() - 1, key);
     }
 
+    /// A cursor at the given position within the same version.
     [[nodiscard]] persistent_ordered_map move_to(
         const size_type final_index,
         const Key& key) const
@@ -327,11 +364,13 @@ public:
         return move_existing(final_index, key);
     }
 
+    /// A map without that entry; returns the receiver when absent.
     [[nodiscard]] persistent_ordered_map remove(const Key& key) const
     {
         return try_remove(key).first;
     }
 
+    /// Removes the entry, reporting whether it was present.
     [[nodiscard]] std::pair<persistent_ordered_map, bool> try_remove(
         const Key& key) const
     {

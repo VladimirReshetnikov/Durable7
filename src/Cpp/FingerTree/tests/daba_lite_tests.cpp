@@ -1,3 +1,5 @@
+/// Tests for the DABA Lite sliding-window aggregate.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/test_runner.hpp"

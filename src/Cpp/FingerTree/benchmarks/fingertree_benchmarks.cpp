@@ -1,3 +1,5 @@
+/// Benchmarks for the finger tree and the collections built on it.
+
 #include "benchmark_allocation.hpp"
 
 #include <durable7/finger_tree/finger_tree.hpp>

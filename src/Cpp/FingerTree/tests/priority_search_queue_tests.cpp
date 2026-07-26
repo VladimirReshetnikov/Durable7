@@ -1,3 +1,5 @@
+/// Tests for the priority search queue, covering both of its orders.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"

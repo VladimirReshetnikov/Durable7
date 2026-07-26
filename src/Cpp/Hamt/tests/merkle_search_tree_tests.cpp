@@ -1,3 +1,8 @@
+/// Conformance tests for the Merkle search tree's wire format and verification rules.
+///
+/// Digests, block bytes, and proof encodings are checked against fixed expected values, since the
+/// point of the format is that independent implementations agree on them exactly.
+
 #include <durable7/hamt/merkle_proofs.hpp>
 #include <durable7/test_support/headless_test_process.h>
 

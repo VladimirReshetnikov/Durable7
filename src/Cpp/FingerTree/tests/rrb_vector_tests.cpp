@@ -1,3 +1,5 @@
+/// Tests for the relaxed radix-balanced vector.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/command_model.hpp"

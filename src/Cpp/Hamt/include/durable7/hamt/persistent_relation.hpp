@@ -1,3 +1,9 @@
+/// A persistent many-to-many relation, indexed from both sides.
+///
+/// Both directions are maintained as exact inverses, so inverting the relation reuses both existing
+/// indexes rather than rebuilding. Every operation returns a new version and leaves its inputs
+/// valid, sharing unchanged structure, so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include "persistent_hash_multimap.hpp"
@@ -27,6 +33,8 @@ template <
         && std::copyable<LeftEqual>
         && std::copyable<RightHash>
         && std::copyable<RightEqual>
+/// A persistent many-to-many relation indexed from both sides, so inverting it reuses both existing
+/// indexes rather than rebuilding.
 class persistent_relation final {
 private:
     using forward_type = persistent_hash_multimap<
@@ -46,13 +54,16 @@ public:
     using inverse_type = persistent_relation<
         Right, Left, RightHash, RightEqual, LeftHash, LeftEqual>;
 
+    /// An empty relation.
     persistent_relation() = default;
 
+    /// Whether the relation holds no pairs.
     [[nodiscard]] static persistent_relation empty()
     {
         return {};
     }
 
+    /// An empty relation using the supplied policies, which it retains.
     [[nodiscard]] static persistent_relation create(
         LeftHash left_hash = {},
         LeftEqual left_equal = {},
@@ -64,6 +75,7 @@ public:
             reverse_type::create(right_hash, right_equal, left_hash, left_equal)};
     }
 
+    /// A relation holding a range's pairs, built in bulk rather than by repeated insertion.
     template <class Range>
     [[nodiscard]] static persistent_relation create_range(
         const Range& pairs,
@@ -83,51 +95,62 @@ public:
         return result;
     }
 
+    /// How many pairs are present in total.
     [[nodiscard]] std::int64_t pair_count() const noexcept
     {
         return forward_.pair_count();
     }
 
+    /// How many distinct left values are present.
     [[nodiscard]] size_type left_count() const noexcept
     {
         return forward_.key_count();
     }
 
+    /// How many distinct right values are present.
     [[nodiscard]] size_type right_count() const noexcept
     {
         return reverse_.key_count();
     }
 
+    /// Whether the relation holds no pairs.
     [[nodiscard]] bool is_empty() const noexcept
     {
         return forward_.is_empty();
     }
 
+    /// Whether the pair is present.
     [[nodiscard]] bool contains(const Left& left, const Right& right) const
     {
         return forward_.contains(left, right);
     }
 
+    /// Whether the left value is present.
     [[nodiscard]] bool contains_left(const Left& left) const
     {
         return forward_.contains_key(left);
     }
 
+    /// Whether the right value is present.
     [[nodiscard]] bool contains_right(const Right& right) const
     {
         return reverse_.contains_key(right);
     }
 
+    /// The right values related to the given left value, empty when it is absent.
     [[nodiscard]] typename forward_type::value_set rights_or_empty(const Left& left) const
     {
         return forward_.values_or_empty(left);
     }
 
+    /// The left values related to the given right value, empty when it is absent. Both directions
+    /// are indexed, so neither is a scan.
     [[nodiscard]] typename reverse_type::value_set lefts_or_empty(const Right& right) const
     {
         return reverse_.values_or_empty(right);
     }
 
+    /// A relation containing the given pair; returns the receiver when already present.
     [[nodiscard]] persistent_relation add(const Left& left, const Right& right) const
     {
         const auto* known_left = forward_.try_get_key(left);
@@ -142,6 +165,7 @@ public:
             reverse_.add(stored_right, stored_left)};
     }
 
+    /// A relation without that pair; returns the receiver when absent.
     [[nodiscard]] persistent_relation remove(const Left& left, const Right& right) const
     {
         const auto* stored_left = forward_.try_get_key(left);
@@ -155,6 +179,7 @@ public:
             reverse_.remove(*stored_right, *stored_left)};
     }
 
+    /// A relation without any pair holding that left value.
     [[nodiscard]] persistent_relation remove_left(const Left& left) const
     {
         const auto* stored_left = forward_.try_get_key(left);
@@ -169,6 +194,7 @@ public:
         return persistent_relation{forward_.remove_key(*stored_left), std::move(reverse)};
     }
 
+    /// A relation without any pair holding that right value.
     [[nodiscard]] persistent_relation remove_right(const Right& right) const
     {
         const auto* stored_right = reverse_.try_get_key(right);
@@ -183,6 +209,7 @@ public:
         return persistent_relation{std::move(forward), reverse_.remove_key(*stored_right)};
     }
 
+    /// An empty relation retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] persistent_relation clear() const
     {
         return is_empty()
@@ -196,6 +223,7 @@ public:
         return inverse_type{reverse_, forward_};
     }
 
+    /// Calls the function once per key-value pair.
     template <class Function>
         requires std::invocable<Function&, const Left&, const Right&>
     void for_each_pair(Function&& function) const
@@ -203,17 +231,20 @@ public:
         forward_.for_each_pair(std::forward<Function>(function));
     }
 
+    /// Copies the pairs out into a vector, in the relation's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         return forward_.to_vector();
     }
 
+    /// Whether both handles reference the same roots.
     [[nodiscard]] bool shares_roots_with(const persistent_relation& other) const noexcept
     {
         return forward_.shares_root_with(other.forward_)
             && reverse_.shares_root_with(other.reverse_);
     }
 
+    /// Checks the relation's structural invariants. For tests and diagnostics.
     void validate_invariants() const
     {
         forward_.validate_invariants();
@@ -242,6 +273,7 @@ public:
         });
     }
 
+    /// Checks the relation's structural invariants. For tests and diagnostics.
     [[nodiscard]] bool debug_validate() const noexcept
     {
         try {

@@ -1,3 +1,8 @@
+/// DABA Lite: a sliding-window aggregate with worst-case constant time per operation.
+///
+/// Maintains the combined measure of a FIFO window under insertion and eviction without ever
+/// recomputing it from scratch, so no single operation pays for the whole window.
+
 #pragma once
 
 #include <durable7/finger_tree/measures.hpp>
@@ -92,19 +97,26 @@ private:
 
     class chunked_queue final {
     public:
+        /// Takes a second handle on the same queue version; the nodes are shared, not copied.
         chunked_queue() : first_(std::make_unique<block>()) {}
 
+        /// Takes over the source's handle, leaving it empty.
         chunked_queue(const chunked_queue&) = delete;
         chunked_queue& operator=(const chunked_queue&) = delete;
+        /// Takes over the source's handle, leaving it empty.
         chunked_queue(chunked_queue&&) = delete;
         chunked_queue& operator=(chunked_queue&&) = delete;
 
+        /// An empty queue using the supplied policy, which it retains.
         ~chunked_queue() { destroy_chain(std::move(first_)); }
 
+        /// An iterator over the entries, in the queue's own order.
         [[nodiscard]] cursor begin() const noexcept { return cursor{first_.get(), 0}; }
 
+        /// The first block.
         [[nodiscard]] block* first_block() const noexcept { return first_.get(); }
 
+        /// Reads a value from the input.
         [[nodiscard]] const T& read(const cursor position) const
         {
             const auto& slot = position.owner->items[position.index];
@@ -114,6 +126,7 @@ private:
             return *slot;
         }
 
+        /// Constructs the value in place.
         void construct(const cursor position, T value)
         {
             auto& slot = position.owner->items[position.index];
@@ -123,6 +136,7 @@ private:
             slot.emplace(std::move(value));
         }
 
+        /// Writes the value into the destination.
         void write(const cursor position, T value) noexcept
         {
             auto& slot = position.owner->items[position.index];
@@ -130,8 +144,10 @@ private:
             slot.emplace(std::move(value));
         }
 
+        /// Clears the slot at the given index.
         void clear_slot(const cursor position) noexcept { position.owner->items[position.index].reset(); }
 
+        /// Advances to the next position.
         [[nodiscard]] cursor advance(const cursor position) const
         {
             if (position.index + 1 < block::capacity) {
@@ -143,6 +159,7 @@ private:
             return cursor{position.owner->next.get(), 0};
         }
 
+        /// Advances the end position.
         [[nodiscard]] end_advance advance_end(const cursor position)
         {
             if (position.index + 1 < block::capacity) {
@@ -159,6 +176,7 @@ private:
             return end_advance{cursor{position.owner->next.get(), 0}, created};
         }
 
+        /// Steps back one position.
         [[nodiscard]] cursor retreat(const cursor position) const
         {
             if (position.index != 0) {
@@ -170,6 +188,7 @@ private:
             return cursor{position.owner->previous, block::capacity - 1};
         }
 
+        /// Removes an edge, also dropping the target vertex if this edge is what created it.
         void remove_created_successor(block* const predecessor) noexcept
         {
             auto discarded = std::move(predecessor->next);
@@ -179,6 +198,7 @@ private:
             }
         }
 
+        /// A queue without the entries before the position.
         void trim_before(const cursor front) noexcept
         {
             while (first_.get() != front.owner) {
@@ -190,6 +210,7 @@ private:
             first_->previous = nullptr;
         }
 
+        /// Exchanges the two handles' contents.
         void swap(chunked_queue& other) noexcept { first_.swap(other.first_); }
 
     private:
@@ -231,8 +252,10 @@ public:
     {
     }
 
+    /// Takes over the source's handle, leaving it empty.
     daba_lite(const daba_lite&) = delete;
     daba_lite& operator=(const daba_lite&) = delete;
+    /// Takes over the source's handle, leaving it empty.
     daba_lite(daba_lite&&) = delete;
     daba_lite& operator=(daba_lite&&) = delete;
 

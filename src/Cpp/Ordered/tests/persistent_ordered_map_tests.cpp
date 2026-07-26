@@ -1,3 +1,6 @@
+/// Tests for the insertion-ordered persistent map, including that a value replacement keeps the
+/// entry's position.
+
 #include <durable7/ordered/ordered.hpp>
 
 #include "../../FingerTree/tests/test_support/test_runner.hpp"

@@ -1,3 +1,11 @@
+/// A persistent hash set backed by a CHAMP trie.
+///
+/// Branching is 32-way and bitmap-indexed with immutable collision buckets, so operations are
+/// constant time in expectation while versions share every unchanged node. The set retains its
+/// hashing and equivalence policy and keeps the first representative of each equivalence class.
+/// Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+/// so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include "persistent_hash_map.hpp"
@@ -17,6 +25,8 @@ template <
     class T,
     class Hash = std::hash<T>,
     class KeyEqual = std::equal_to<T>>
+/// A persistent hash set backed by the same CHAMP trie, retaining the first representative of each
+/// equivalence class.
 class persistent_hash_set {
 private:
     struct unit {
@@ -39,22 +49,29 @@ public:
 
     class transient;
 
+    /// An empty set.
     persistent_hash_set() = default;
 
+    /// Whether the set holds no elements.
     static persistent_hash_set empty() {
         return {};
     }
 
+    /// An empty set using the supplied policies, which it retains.
     static persistent_hash_set create(Hash hash = {}, KeyEqual equal = {}) {
         return persistent_hash_set(map_type::create(std::move(hash), std::move(equal), unit_equal{}));
     }
 
+    /// Opens a mutable session seeded from this set.
     [[nodiscard]] static transient create_transient(Hash hash = {}, KeyEqual equal = {});
 
+    /// Opens a mutable session seeded from this set. The set itself is unaffected.
     [[nodiscard]] transient to_transient() const &;
 
+    /// Opens a mutable session seeded from this set. The set itself is unaffected.
     [[nodiscard]] transient to_transient() &&;
 
+    /// A set holding a range's elements, built in bulk rather than by repeated insertion.
     static persistent_hash_set create_range(
         std::initializer_list<T> items,
         Hash hash = {},
@@ -67,6 +84,7 @@ public:
         return persistent_hash_set(builder.to_immutable());
     }
 
+    /// A set holding a range's elements, built in bulk rather than by repeated insertion.
     template <class Range>
     static persistent_hash_set create_range(
         const Range& items,
@@ -80,34 +98,42 @@ public:
         return persistent_hash_set(builder.to_immutable());
     }
 
+    /// Number of elements in the set.
     [[nodiscard]] size_type count() const noexcept {
         return map_.count();
     }
 
+    /// Whether the set holds no elements.
     [[nodiscard]] bool is_empty() const noexcept {
         return map_.is_empty();
     }
 
+    /// The retained hashing policy. Keys the policy treats as equivalent must hash identically.
     [[nodiscard]] const Hash& hash_function() const noexcept {
         return map_.hash_function();
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const noexcept {
         return map_.key_eq();
     }
 
+    /// Whether the element is present.
     [[nodiscard]] bool contains(const T& item) const {
         return map_.contains_key(item);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const T* try_get_value(const T& equal_value) const {
         return map_.try_get_key(equal_value);
     }
 
+    /// A set containing the given element; returns the receiver when already present.
     [[nodiscard]] persistent_hash_set add(const T& item) const {
         return with_map(map_.set_item(item, unit{}));
     }
 
+    /// Adds the element unless an equivalent one is present, reporting which happened.
     [[nodiscard]] std::pair<persistent_hash_set, bool> try_add(const T& item) const {
         auto [map, added] = map_.try_add(item, unit{});
         if (!added) {
@@ -117,10 +143,12 @@ public:
         return {with_map(std::move(map)), true};
     }
 
+    /// A set without that element; returns the receiver when absent.
     [[nodiscard]] persistent_hash_set remove(const T& item) const {
         return with_map(map_.remove(item));
     }
 
+    /// Removes the element, reporting whether it was present.
     [[nodiscard]] std::pair<persistent_hash_set, bool> try_remove(const T& item) const {
         auto [map, removed, value] = map_.try_remove(item);
         (void)value;
@@ -131,14 +159,19 @@ public:
         return {with_map(std::move(map)), true};
     }
 
+    /// An empty set retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] persistent_hash_set clear() const {
         return with_map(map_.clear());
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     [[nodiscard]] persistent_hash_set union_with(const persistent_hash_set& other) const {
         return with_map(map_.union_with(other.map_));
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     [[nodiscard]] persistent_hash_set union_with(std::initializer_list<T> items) const {
         auto result = *this;
         for (const auto& item : items) {
@@ -148,6 +181,8 @@ public:
         return result;
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     template <class Range>
     [[nodiscard]] persistent_hash_set union_with(const Range& items) const {
         auto result = *this;
@@ -158,19 +193,23 @@ public:
         return result;
     }
 
+    /// The elements present in both sets.
     [[nodiscard]] persistent_hash_set intersect_with(std::initializer_list<T> items) const {
         return intersect_with_range(items);
     }
 
+    /// The elements present in both sets.
     [[nodiscard]] persistent_hash_set intersect_with(const persistent_hash_set& other) const {
         return with_map(map_.intersect_with(other.map_));
     }
 
+    /// The elements present in both sets.
     template <class Range>
     [[nodiscard]] persistent_hash_set intersect_with(const Range& items) const {
         return intersect_with_range(items);
     }
 
+    /// This set's elements that are absent from the other.
     [[nodiscard]] persistent_hash_set except_with(std::initializer_list<T> items) const {
         auto result = *this;
         for (const auto& item : items) {
@@ -180,10 +219,12 @@ public:
         return result;
     }
 
+    /// This set's elements that are absent from the other.
     [[nodiscard]] persistent_hash_set except_with(const persistent_hash_set& other) const {
         return with_map(map_.except_with(other.map_));
     }
 
+    /// This set's elements that are absent from the other.
     template <class Range>
     [[nodiscard]] persistent_hash_set except_with(const Range& items) const {
         auto result = *this;
@@ -194,24 +235,29 @@ public:
         return result;
     }
 
+    /// The elements present in exactly one of the two sets.
     [[nodiscard]] persistent_hash_set symmetric_except_with(std::initializer_list<T> items) const {
         return symmetric_except_with_range(items);
     }
 
+    /// The elements present in exactly one of the two sets.
     [[nodiscard]] persistent_hash_set symmetric_except_with(
         const persistent_hash_set& other) const {
         return with_map(map_.symmetric_except_with(other.map_));
     }
 
+    /// The elements present in exactly one of the two sets.
     template <class Range>
     [[nodiscard]] persistent_hash_set symmetric_except_with(const Range& items) const {
         return symmetric_except_with_range(items);
     }
 
+    /// Whether every element of this set also occurs in the other.
     [[nodiscard]] bool is_subset_of(std::initializer_list<T> items) const {
         return is_subset_of_range(items);
     }
 
+    /// Whether every element of this set also occurs in the other.
     [[nodiscard]] bool is_subset_of(const persistent_hash_set& other) const {
         if (!map_.shares_policy_with(other.map_)) {
             return is_subset_of_range(other);
@@ -303,6 +349,7 @@ public:
         using reference = const value_type&;
         using pointer = const value_type*;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         reference operator*() const {
@@ -537,127 +584,162 @@ public:
     using hasher = Hash;
     using key_equal = KeyEqual;
 
+    /// Opens a mutable session seeded from this set. The set itself is unaffected; the session's
+    /// edits are visible only through it.
     transient(const transient&) = delete;
     transient& operator=(const transient&) = delete;
+    /// Opens a mutable session seeded from this set. The set itself is unaffected; the session's
+    /// edits are visible only through it.
     transient(transient&&) noexcept(std::is_nothrow_move_constructible_v<map_transient_type>) = default;
     transient& operator=(transient&&) noexcept(
         std::is_nothrow_move_assignable_v<map_transient_type>) = default;
+    /// Opens a mutable session seeded from this set. The set itself is unaffected; the session's
+    /// edits are visible only through it.
     ~transient() = default;
 
+    /// Number of elements in the set.
     [[nodiscard]] size_type count() const {
         return map_.count();
     }
 
+    /// Whether the set holds no elements.
     [[nodiscard]] bool is_empty() const {
         return map_.is_empty();
     }
 
+    /// The retained hashing policy. Keys the policy treats as equivalent must hash identically.
     [[nodiscard]] const Hash& hash_function() const {
         return map_.hash_function();
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const {
         return map_.key_eq();
     }
 
+    /// Whether the element is present.
     [[nodiscard]] bool contains(const T& item) const {
         return map_.contains_key(item);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const T* try_get_value(const T& equal_value) const {
         return map_.try_get_key(equal_value);
     }
 
+    /// A set containing the given element; returns the receiver when already present.
     [[nodiscard]] bool add(const T& item) {
         return map_.try_add(item, unit{});
     }
 
+    /// A set without that element; returns the receiver when absent.
     [[nodiscard]] bool remove(const T& item) {
         return map_.remove(item);
     }
 
+    /// An empty set retaining the same policies; returns the receiver when already empty.
     void clear() {
         map_.clear();
     }
 
+    /// Whether every element of this set also occurs in the other.
     [[nodiscard]] bool is_subset_of(std::initializer_list<T> items) const {
         return is_subset_of_range(items);
     }
 
+    /// Whether every element of this set also occurs in the other.
     [[nodiscard]] bool is_subset_of(const set_type& other) const {
         return is_subset_of_range(other);
     }
 
+    /// Whether every element of this set also occurs in the other.
     template <class Range>
     [[nodiscard]] bool is_subset_of(const Range& items) const {
         return is_subset_of_range(items);
     }
 
+    /// Whether this set is a subset of the other and the other holds an element it lacks.
     [[nodiscard]] bool is_proper_subset_of(std::initializer_list<T> items) const {
         return is_proper_subset_of_range(items);
     }
 
+    /// Whether this set is a subset of the other and the other holds an element it lacks.
     [[nodiscard]] bool is_proper_subset_of(const set_type& other) const {
         return is_proper_subset_of_range(other);
     }
 
+    /// Whether this set is a subset of the other and the other holds an element it lacks.
     template <class Range>
     [[nodiscard]] bool is_proper_subset_of(const Range& items) const {
         return is_proper_subset_of_range(items);
     }
 
+    /// Whether every element of the other occurs in this set.
     [[nodiscard]] bool is_superset_of(std::initializer_list<T> items) const {
         return is_superset_of_range(items);
     }
 
+    /// Whether every element of the other occurs in this set.
     [[nodiscard]] bool is_superset_of(const set_type& other) const {
         return is_superset_of_range(other);
     }
 
+    /// Whether every element of the other occurs in this set.
     template <class Range>
     [[nodiscard]] bool is_superset_of(const Range& items) const {
         return is_superset_of_range(items);
     }
 
+    /// Whether this set is a superset of the other and holds an element the other lacks.
     [[nodiscard]] bool is_proper_superset_of(std::initializer_list<T> items) const {
         return is_proper_superset_of_range(items);
     }
 
+    /// Whether this set is a superset of the other and holds an element the other lacks.
     [[nodiscard]] bool is_proper_superset_of(const set_type& other) const {
         return is_proper_superset_of_range(other);
     }
 
+    /// Whether this set is a superset of the other and holds an element the other lacks.
     template <class Range>
     [[nodiscard]] bool is_proper_superset_of(const Range& items) const {
         return is_proper_superset_of_range(items);
     }
 
+    /// Whether the two sets share at least one element.
     [[nodiscard]] bool overlaps(std::initializer_list<T> items) const {
         return overlaps_range(items);
     }
 
+    /// Whether the two sets share at least one element.
     [[nodiscard]] bool overlaps(const set_type& other) const {
         return overlaps_range(other);
     }
 
+    /// Whether the two sets share at least one element.
     template <class Range>
     [[nodiscard]] bool overlaps(const Range& items) const {
         return overlaps_range(items);
     }
 
+    /// Whether both sets hold the same elements.
     [[nodiscard]] bool set_equals(std::initializer_list<T> items) const {
         return set_equals_range(items);
     }
 
+    /// Whether both sets hold the same elements.
     [[nodiscard]] bool set_equals(const set_type& other) const {
         return set_equals_range(other);
     }
 
+    /// Whether both sets hold the same elements.
     template <class Range>
     [[nodiscard]] bool set_equals(const Range& items) const {
         return set_equals_range(items);
     }
 
+    /// A forward const iterator over one set version's elements. It keeps that version alive, so it
+    /// stays valid across later edits.
     class const_iterator {
     public:
         using iterator_concept = std::input_iterator_tag;
@@ -667,6 +749,7 @@ public:
         using reference = const value_type&;
         using pointer = const value_type*;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         reference operator*() const {
@@ -714,22 +797,27 @@ public:
         typename map_transient_type::const_iterator inner_;
     };
 
+    /// An iterator over the elements, in the set's own order.
     [[nodiscard]] const_iterator begin() const {
         return const_iterator(map_.begin());
     }
 
+    /// The iterator one past the last element.
     [[nodiscard]] std::default_sentinel_t end() const {
         return map_.end();
     }
 
+    /// A const iterator over the elements.
     [[nodiscard]] const_iterator cbegin() const {
         return begin();
     }
 
+    /// The const iterator one past the last element.
     [[nodiscard]] std::default_sentinel_t cend() const {
         return end();
     }
 
+    /// Copies the elements out into a vector, in the set's own order.
     [[nodiscard]] std::vector<T> to_vector() const {
         std::vector<T> items;
         items.reserve(count());
@@ -739,14 +827,18 @@ public:
         return items;
     }
 
+    /// Checks that the structure is in its canonical shape, which must depend only on contents and
+    /// not on edit history.
     [[nodiscard]] bool debug_validate_canonical() const {
         return map_.debug_validate_canonical();
     }
 
+    /// Closes the session and produces the set holding its accumulated edits.
     [[nodiscard]] set_type persist() && {
         return set_type(std::move(map_).persist());
     }
 
+    /// Closes the session and produces the set holding its accumulated edits.
     set_type persist() & = delete;
 
 private:

@@ -1,3 +1,10 @@
+/// A persistent priority search queue: ordered by key, searchable by minimum priority.
+///
+/// A pennant tournament tree carries both orders at once, so a key lookup and a minimum-priority
+/// lookup are each a descent rather than a scan of the other order. Every operation returns a new
+/// version and leaves its inputs valid, sharing unchanged structure, so an edit copies a path
+/// rather than the whole collection.
+
 #pragma once
 
 #include <algorithm>
@@ -29,6 +36,8 @@ struct priority_search_remove_result;
 template <class Key, class Priority, class Value, class KeyLess, class PriorityLess>
 struct priority_search_minimum_view;
 
+/// An entry type whose keys, priorities and values can all be compared for equality, which the
+/// priority search queue's own equality needs.
 template <class T>
 concept priority_search_equality_testable = requires(const T& left, const T& right) {
     { left == right } -> std::convertible_to<bool>;
@@ -49,6 +58,7 @@ public:
         requires std::constructible_from<Key, KeyArgument&&>
             && std::constructible_from<Priority, PriorityArgument&&>
             && std::constructible_from<Value, ValueArgument&&>
+    /// Constructs the priority search entry from the given parts.
     explicit priority_search_entry(
         KeyArgument&& key,
         PriorityArgument&& priority,
@@ -59,14 +69,21 @@ public:
     {
     }
 
+    /// The stored value.
+    /// The entry's priority.
+    /// The stored key.
     [[nodiscard]] const key_type& key() const noexcept { return *key_; }
     [[nodiscard]] const priority_type& priority() const noexcept { return *priority_; }
     [[nodiscard]] const value_type& value() const noexcept { return *value_; }
 
+    /// A handle on the stored value.
+    /// A handle on the entry's priority.
+    /// A handle on the stored key.
     [[nodiscard]] key_handle_type key_handle() const noexcept { return key_; }
     [[nodiscard]] priority_handle_type priority_handle() const noexcept { return priority_; }
     [[nodiscard]] value_handle_type value_handle() const noexcept { return value_; }
 
+    /// Whether both values denote the same stored entry.
     [[nodiscard]] bool is_same_entry(const priority_search_entry& other) const noexcept
     {
         return key_ == other.key_ && priority_ == other.priority_ && value_ == other.value_;
@@ -107,6 +124,7 @@ private:
     value_handle_type value_;
 };
 
+/// Shape measurements from a structural audit.
 struct priority_search_queue_statistics final {
     std::size_t count = 0;
     std::size_t height = 0;
@@ -127,6 +145,7 @@ template <
     class Value,
     class KeyLess = std::less<Key>,
     class PriorityLess = std::less<Priority>>
+/// A persistent priority search queue: ordered by key, searchable by minimum priority.
 class priority_search_queue final {
 private:
     struct node;
@@ -166,6 +185,8 @@ public:
         key_comparer_type,
         priority_comparer_type>;
 
+    /// A forward const iterator over one queue version's entries. It keeps that version alive, so
+    /// it stays valid across later edits.
     class const_iterator final {
     public:
         using iterator_category = std::forward_iterator_tag;
@@ -175,6 +196,7 @@ public:
         using pointer = const entry_type*;
         using reference = const entry_type&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] reference operator*() const { return pending_.back()->entry; }
@@ -224,6 +246,7 @@ public:
         std::vector<const node*> pending_;
     };
 
+    /// An empty queue using the supplied policy, which it retains.
     priority_search_queue()
         requires std::default_initializable<key_comparer_type>
             && std::default_initializable<priority_comparer_type>
@@ -232,6 +255,7 @@ public:
     {
     }
 
+    /// An empty queue using the supplied policies, which it retains.
     priority_search_queue(
         key_comparer_type key_comparer,
         priority_comparer_type priority_comparer)
@@ -241,6 +265,7 @@ public:
     {
     }
 
+    /// An empty queue using the supplied policies, which it retains.
     priority_search_queue(
         key_comparer_handle key_comparer,
         priority_comparer_handle priority_comparer)
@@ -258,6 +283,7 @@ public:
             && priority_search_equality_testable<value_type>
             && std::default_initializable<key_comparer_type>
             && std::default_initializable<priority_comparer_type>
+    /// A queue holding a range's entries, built in bulk rather than by repeated insertion.
     [[nodiscard]] static priority_search_queue from_range(Range&& entries)
     {
         return priority_search_queue{}.insert_range(std::forward<Range>(entries));
@@ -267,6 +293,7 @@ public:
         requires std::same_as<std::remove_cvref_t<std::ranges::range_value_t<Range>>, entry_type>
             && priority_search_equality_testable<priority_type>
             && priority_search_equality_testable<value_type>
+    /// A queue holding a range's entries, built in bulk rather than by repeated insertion.
     [[nodiscard]] static priority_search_queue from_range(
         Range&& entries,
         key_comparer_type key_comparer,
@@ -281,6 +308,7 @@ public:
         requires std::same_as<std::remove_cvref_t<std::ranges::range_value_t<Range>>, entry_type>
             && priority_search_equality_testable<priority_type>
             && priority_search_equality_testable<value_type>
+    /// A queue with a range's entries inserted at the position.
     [[nodiscard]] priority_search_queue insert_range(Range&& entries) const
     {
         auto result = *this;
@@ -290,6 +318,11 @@ public:
         return result;
     }
 
+    /// The retained priority ordering policy.
+    /// The retained key ordering policy.
+    /// The structure's height.
+    /// Number of entries in the queue.
+    /// Whether the queue holds no entries.
     [[nodiscard]] bool empty() const noexcept { return root_ == nullptr; }
     [[nodiscard]] size_type size() const noexcept { return count_of(root_); }
     [[nodiscard]] size_type height() const noexcept { return height_of(root_); }
@@ -298,16 +331,20 @@ public:
     {
         return *priority_comparer_;
     }
+    /// The retained key ordering policy.
     [[nodiscard]] const key_comparer_handle& key_comparer_policy() const noexcept
     {
         return key_comparer_;
     }
+    /// The retained priority ordering policy.
     [[nodiscard]] const priority_comparer_handle& priority_comparer_policy() const noexcept
     {
         return priority_comparer_;
     }
+    /// The root node's address, for tests that a no-op shared rather than copied.
     [[nodiscard]] const void* root_identity() const noexcept { return root_.get(); }
 
+    /// Whether both handles denote the same version.
     [[nodiscard]] bool is_same_version(const priority_search_queue& other) const noexcept
     {
         return root_ == other.root_
@@ -315,6 +352,7 @@ public:
             && priority_comparer_ == other.priority_comparer_;
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const key_type& key) const
     {
         return find_node(key) != nullptr;
@@ -355,12 +393,14 @@ public:
         return nullptr;
     }
 
+    /// Reads the entry stored for the key, or nothing when absent.
     [[nodiscard]] const entry_type* try_get_entry(const key_type& key) const
     {
         const auto* found = find_node(key);
         return found == nullptr ? nullptr : &found->entry;
     }
 
+    /// Borrows the stored entry, or nothing when absent.
     [[nodiscard]] std::optional<entry_type> try_get_entry_handle(const key_type& key) const
     {
         const auto* found = find_node(key);
@@ -375,6 +415,7 @@ public:
             && std::constructible_from<value_type, ValueArgument&&>
             && priority_search_equality_testable<priority_type>
             && priority_search_equality_testable<value_type>
+    /// A queue with the key bound to the value, adding or replacing as needed.
     [[nodiscard]] priority_search_queue set_item(
         KeyArgument&& key,
         PriorityArgument&& priority,
@@ -386,6 +427,7 @@ public:
             std::forward<ValueArgument>(value)});
     }
 
+    /// A version with the entry replaced.
     [[nodiscard]] priority_search_queue set_entry(entry_type entry) const
         requires priority_search_equality_testable<priority_type>
             && priority_search_equality_testable<value_type>
@@ -400,11 +442,13 @@ public:
         requires std::constructible_from<Key, KeyArgument&&>
             && std::constructible_from<Priority, PriorityArgument&&>
             && std::constructible_from<Value, ValueArgument&&>
+    /// Adds the entry unless an equivalent one is present, reporting which happened.
     [[nodiscard]] add_result try_add(
         KeyArgument&& key,
         PriorityArgument&& priority,
         ValueArgument&& value) const;
 
+    /// A queue without that entry; returns the receiver when absent.
     [[nodiscard]] priority_search_queue remove(const key_type& key) const
     {
         const auto result = remove_node(root_, key);
@@ -413,8 +457,10 @@ public:
             : *this;
     }
 
+    /// Removes the entry, reporting whether it was present.
     [[nodiscard]] remove_result try_remove(const key_type& key) const;
 
+    /// The minimum-priority entry.
     [[nodiscard]] const entry_type& minimum() const
     {
         if (root_ == nullptr) {
@@ -423,6 +469,8 @@ public:
         return root_->winner;
     }
 
+    /// The minimum-priority entry, or nothing when empty. Found through the cached priority rather
+    /// than by scanning.
     [[nodiscard]] std::optional<entry_type> try_minimum() const
     {
         return root_ == nullptr
@@ -430,8 +478,10 @@ public:
             : std::optional<entry_type>{root_->winner};
     }
 
+    /// A queue without its minimum-priority entry.
     [[nodiscard]] minimum_view delete_minimum() const;
 
+    /// Enumerates at most the given number of elements.
     [[nodiscard]] std::vector<entry_type> enumerate_at_most(
         const key_type& minimum_key,
         const key_type& maximum_key,
@@ -500,6 +550,7 @@ public:
         return result;
     }
 
+    /// An empty queue retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] priority_search_queue clear() const
     {
         return root_ == nullptr
@@ -507,6 +558,7 @@ public:
             : priority_search_queue{nullptr, key_comparer_, priority_comparer_};
     }
 
+    /// The node addresses, for sharing assertions.
     [[nodiscard]] std::vector<const void*> node_identities() const
     {
         auto result = std::vector<const void*>{};
@@ -528,6 +580,7 @@ public:
         return result;
     }
 
+    /// How many nodes the two versions have in common.
     [[nodiscard]] size_type shared_node_count_with(const priority_search_queue& other) const
     {
         const auto identities = node_identities();
@@ -539,11 +592,13 @@ public:
         return shared;
     }
 
+    /// The address of the node holding the key, for sharing assertions.
     [[nodiscard]] const void* node_identity_for_key(const key_type& key) const
     {
         return find_node(key);
     }
 
+    /// Whether both versions hold the key in the same node.
     [[nodiscard]] bool shares_node_for_key(
         const priority_search_queue& other,
         const key_type& key) const
@@ -551,6 +606,7 @@ public:
         return find_node(key) == other.find_node(key);
     }
 
+    /// Checks the queue's structural invariants. For tests and diagnostics.
     [[nodiscard]] priority_search_queue_statistics validate_structure() const
     {
         if (root_ == nullptr) {
@@ -632,6 +688,7 @@ public:
 
 private:
     struct node final {
+        /// An empty node.
         node(
             entry_type node_entry,
             node_pointer node_left,
@@ -1002,6 +1059,7 @@ struct priority_search_remove_result final {
     std::optional<priority_search_entry<Key, Priority, Value>> entry;
     priority_search_queue<Key, Priority, Value, KeyLess, PriorityLess> queue;
 
+    /// The value that was removed.
     [[nodiscard]] bool removed() const noexcept { return entry.has_value(); }
 };
 

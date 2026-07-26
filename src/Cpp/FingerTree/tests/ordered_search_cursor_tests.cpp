@@ -1,3 +1,5 @@
+/// Tests for the ordered and bound-search cursors.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/test_runner.hpp"

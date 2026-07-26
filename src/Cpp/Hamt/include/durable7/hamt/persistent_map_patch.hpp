@@ -1,3 +1,9 @@
+/// A persistent, invertible record of changes between two map versions.
+///
+/// Each change records both the state it expects and the state it produces. That is what lets a
+/// patch be inverted, composed with another, and applied against a target that may have drifted,
+/// rather than only replayed forward onto its original source.
+
 #pragma once
 
 #include "persistent_hash_map.hpp"
@@ -32,6 +38,9 @@ template <
         && std::copyable<Hash>
         && std::copyable<KeyEqual>
         && std::copyable<ValueEqual>
+/// A persistent, invertible record of changes between two map versions. Each change records both
+/// the state it expects and the state it produces, which is what lets a patch be inverted,
+/// composed, and applied against a target that may have drifted.
 class persistent_map_patch final {
 private:
     struct change final {

@@ -1,3 +1,8 @@
+/// The deque's underlying tree: empty, single, or deep with a prefix, a lazy middle, and a suffix.
+///
+/// Keeping one to four elements at each end is what makes push and pop amortized constant time; the
+/// lazy middle is what keeps that bound under persistent reuse.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -43,49 +48,60 @@ struct deque_remove_result;
 template <class T>
 struct deque_enumeration_child;
 
+/// Builds a deque tree from a full digit.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_from_digit(const deque_digit<T>& digit);
 
+/// Builds a deque tree from a digit that may be empty.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_from_partial_digit(const deque_digit<T>& digit);
 
+/// Rebuilds a deep node whose prefix may have been emptied, pulling from the middle when it has.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_deep_left(
     const deque_digit<T>& prefix,
     deque_tree<T> middle,
     const deque_digit<T>& suffix);
 
+/// Rebuilds a deep node whose suffix may have been emptied, pulling from the middle when it has.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_deep_right(
     const deque_digit<T>& prefix,
     deque_tree<T> middle,
     const deque_digit<T>& suffix);
 
+/// Pulls a node up from the middle to refill an emptied prefix.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_pull_left(deque_tree<T> middle, const deque_digit<T>& suffix);
 
+/// Pulls a node up from the middle to refill an emptied suffix.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_pull_right(const deque_digit<T>& prefix, deque_tree<T> middle);
 
+/// Concatenates two deque trees, rebalancing only the seam between them.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_concat(deque_tree<T> left, deque_tree<T> right);
 
+/// Concatenates two deque trees with elements carried between them.
 template <class T>
 [[nodiscard]] deque_tree<T> deque_concat_with_carry(
     deque_tree<T> left,
     const std::vector<deque_element<T>>& carry,
     deque_tree<T> right);
 
+/// One element of a deque tree, either a leaf or a node.
 template <class T>
 class deque_element final {
 public:
     using node_pointer = std::shared_ptr<const deque_node<T>>;
 
+    /// The leaf element this value holds.
     [[nodiscard]] static deque_element leaf(T value)
     {
         return deque_element{leaf_storage{std::move(value)}};
     }
 
+    /// The underlying node.
     [[nodiscard]] static deque_element node(node_pointer value)
     {
         if (value == nullptr) {
@@ -95,50 +111,65 @@ public:
         return deque_element{std::move(value)};
     }
 
+    /// A two-child node.
     [[nodiscard]] static deque_element node2(deque_element first, deque_element second);
 
+    /// A three-child node.
     [[nodiscard]] static deque_element node3(deque_element first, deque_element second, deque_element third);
 
+    /// Whether this node is a leaf.
     [[nodiscard]] bool is_leaf() const noexcept
     {
         return std::holds_alternative<leaf_storage>(storage_);
     }
 
+    /// Whether this value holds a node rather than an element.
     [[nodiscard]] bool is_node() const noexcept
     {
         return std::holds_alternative<node_pointer>(storage_);
     }
 
+    /// Number of elements in the deque.
     [[nodiscard]] std::size_t size() const;
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const;
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const;
 
+    /// The leaf element this value holds.
     [[nodiscard]] const T& leaf_value() const
     {
         return std::get<leaf_storage>(storage_).value;
     }
 
+    /// The node this value holds.
     [[nodiscard]] const deque_node<T>& node_value() const
     {
         return *std::get<node_pointer>(storage_);
     }
 
+    /// The node pointer.
     [[nodiscard]] node_pointer node_ptr() const
     {
         return std::get<node_pointer>(storage_);
     }
 
+    /// The leaf element at the given index.
     [[nodiscard]] const T& get_leaf(std::size_t index) const;
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] deque_element set_leaf(std::size_t index, const T& value) const;
 
+    /// The index the probe's bound search lands on.
     template <class Predicate>
     [[nodiscard]] std::size_t bound_index(Predicate& predicate) const;
 
+    /// Copies the leaf elements into the destination.
     void copy_leaves_to(std::vector<T>& destination) const;
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const;
 
 private:
@@ -156,17 +187,22 @@ private:
     storage_type storage_;
 };
 
+/// A prefix or suffix of one to four elements. Keeping the ends short and cheap to modify is what
+/// makes push and pop amortized constant time.
 template <class T>
 class deque_digit final {
 public:
+    /// An empty digit.
     deque_digit() = default;
 
+    /// Constructs the deque digit from the given parts.
     explicit deque_digit(deque_element<T> first)
         : length_(1)
         , first_(std::move(first))
     {
     }
 
+    /// Constructs the deque digit from the given parts.
     deque_digit(deque_element<T> first, deque_element<T> second)
         : length_(2)
         , first_(std::move(first))
@@ -174,6 +210,7 @@ public:
     {
     }
 
+    /// Constructs the deque digit from the given parts.
     deque_digit(deque_element<T> first, deque_element<T> second, deque_element<T> third)
         : length_(3)
         , first_(std::move(first))
@@ -182,21 +219,25 @@ public:
     {
     }
 
+    /// Whether the digit holds no elements.
     [[nodiscard]] static deque_digit empty()
     {
         return deque_digit{};
     }
 
+    /// Number of elements.
     [[nodiscard]] std::size_t length() const noexcept
     {
         return length_;
     }
 
+    /// The empty digit.
     [[nodiscard]] bool empty_digit() const noexcept
     {
         return length_ == 0;
     }
 
+    /// Number of elements in the digit.
     [[nodiscard]] std::size_t size() const
     {
         switch (length_) {
@@ -211,21 +252,25 @@ public:
         }
     }
 
+    /// The digit's first element.
     [[nodiscard]] const deque_element<T>& a() const
     {
         return *first_;
     }
 
+    /// The digit's second element.
     [[nodiscard]] const deque_element<T>& b() const
     {
         return *second_;
     }
 
+    /// The digit's third element.
     [[nodiscard]] const deque_element<T>& c() const
     {
         return *third_;
     }
 
+    /// The last element.
     [[nodiscard]] const deque_element<T>& last() const
     {
         switch (length_) {
@@ -240,6 +285,7 @@ public:
         }
     }
 
+    /// The child at the given index.
     [[nodiscard]] const deque_element<T>& child_at(std::size_t index) const
     {
         switch (index) {
@@ -254,6 +300,7 @@ public:
         }
     }
 
+    /// A digit with the element added at the front.
     [[nodiscard]] deque_digit cons(deque_element<T> child) const
     {
         if (length_ == 1) {
@@ -267,6 +314,7 @@ public:
         throw std::logic_error("deque digit cons requires room for one child");
     }
 
+    /// A digit with the element added at the back.
     [[nodiscard]] deque_digit snoc(deque_element<T> child) const
     {
         if (length_ == 1) {
@@ -280,6 +328,7 @@ public:
         throw std::logic_error("deque digit snoc requires room for one child");
     }
 
+    /// A digit without its first element.
     [[nodiscard]] deque_digit remove_first() const
     {
         switch (length_) {
@@ -294,6 +343,7 @@ public:
         }
     }
 
+    /// A digit without its last element.
     [[nodiscard]] deque_digit remove_last() const
     {
         switch (length_) {
@@ -308,6 +358,7 @@ public:
         }
     }
 
+    /// A digit with its first element replaced.
     [[nodiscard]] deque_digit replace_first(deque_element<T> child) const
     {
         switch (length_) {
@@ -322,6 +373,7 @@ public:
         }
     }
 
+    /// A digit with its last element replaced.
     [[nodiscard]] deque_digit replace_last(deque_element<T> child) const
     {
         switch (length_) {
@@ -336,6 +388,7 @@ public:
         }
     }
 
+    /// A copy with the child at the given index replaced.
     [[nodiscard]] deque_digit with_child_at(std::size_t index, deque_element<T> child) const
     {
         switch (index) {
@@ -364,6 +417,7 @@ public:
         throw std::out_of_range("deque digit replacement index is outside the digit length");
     }
 
+    /// The elements before the position.
     [[nodiscard]] deque_digit take_before(std::size_t index) const
     {
         switch (index) {
@@ -378,6 +432,7 @@ public:
         }
     }
 
+    /// The elements after the position.
     [[nodiscard]] deque_digit take_after(std::size_t index) const
     {
         if (index >= length_) {
@@ -395,6 +450,7 @@ public:
         }
     }
 
+    /// The pieces a split produced.
     struct split_result final {
         deque_digit before;
         deque_element<T> hit;
@@ -402,6 +458,7 @@ public:
         deque_digit after;
     };
 
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     [[nodiscard]] split_result split(std::size_t leaf_index) const
     {
         if (leaf_index >= size()) {
@@ -428,14 +485,17 @@ private:
     std::optional<deque_element<T>> third_;
 };
 
+/// One interior node of a deque tree.
 template <class T>
 class deque_node final {
 public:
+    /// Builds a two-child node.
     [[nodiscard]] static std::shared_ptr<const deque_node> make2(deque_element<T> first, deque_element<T> second)
     {
         return std::make_shared<const deque_node>(std::move(first), std::move(second));
     }
 
+    /// Builds a three-child node.
     [[nodiscard]] static std::shared_ptr<const deque_node> make3(
         deque_element<T> first,
         deque_element<T> second,
@@ -444,6 +504,7 @@ public:
         return std::make_shared<const deque_node>(std::move(first), std::move(second), std::move(third));
     }
 
+    /// Constructs the deque node from the given parts.
     deque_node(deque_element<T> first, deque_element<T> second)
         : child_count_(2)
         , first_(std::move(first))
@@ -453,6 +514,7 @@ public:
     {
     }
 
+    /// Constructs the deque node from the given parts.
     deque_node(deque_element<T> first, deque_element<T> second, deque_element<T> third)
         : child_count_(3)
         , first_(std::move(first))
@@ -463,31 +525,38 @@ public:
     {
     }
 
+    /// Takes over the source's handle, leaving it empty.
     deque_node(const deque_node&) = delete;
     deque_node& operator=(const deque_node&) = delete;
+    /// Takes over the source's handle, leaving it empty.
     deque_node(deque_node&&) = delete;
     deque_node& operator=(deque_node&&) = delete;
 
+    /// How many children this node has.
     [[nodiscard]] std::size_t child_count() const noexcept
     {
         return child_count_;
     }
 
+    /// The first child.
     [[nodiscard]] const deque_element<T>& first_child() const
     {
         return first_;
     }
 
+    /// The second child.
     [[nodiscard]] const deque_element<T>& second_child() const
     {
         return second_;
     }
 
+    /// The third child.
     [[nodiscard]] const deque_element<T>& third_child() const
     {
         return *third_;
     }
 
+    /// The child at the given index.
     [[nodiscard]] const deque_element<T>& child_at(std::size_t index) const
     {
         switch (index) {
@@ -508,21 +577,25 @@ public:
         throw std::out_of_range("deque node child index is outside the node arity");
     }
 
+    /// Number of elements in the node.
     [[nodiscard]] std::size_t size() const noexcept
     {
         return size_;
     }
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const
     {
         return first_.first_leaf();
     }
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const noexcept
     {
         return *last_leaf_;
     }
 
+    /// The leaf element at the given index.
     [[nodiscard]] const T& get_leaf(std::size_t index) const
     {
         if (index >= size_) {
@@ -541,6 +614,7 @@ public:
         return third_child().get_leaf(index - second_.size());
     }
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] std::shared_ptr<const deque_node> set_leaf(std::size_t index, const T& value) const
     {
         if (index >= size_) {
@@ -563,6 +637,7 @@ public:
         return make3(first_, second_, third_child().set_leaf(index - second_.size(), value));
     }
 
+    /// The index the probe's bound search lands on.
     template <class Predicate>
     [[nodiscard]] std::size_t bound_index(Predicate& predicate) const
     {
@@ -581,6 +656,7 @@ public:
         return size_;
     }
 
+    /// Copies the leaf elements into the destination.
     void copy_leaves_to(std::vector<T>& destination) const
     {
         first_.copy_leaves_to(destination);
@@ -590,6 +666,7 @@ public:
         }
     }
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const
     {
         auto computed = checked_add(first_.validate_and_count(), second_.validate_and_count());
@@ -608,11 +685,13 @@ public:
         return computed;
     }
 
+    /// This value as a digit.
     [[nodiscard]] deque_digit<T> to_digit() const
     {
         return child_count_ == 2 ? deque_digit<T>{first_, second_} : deque_digit<T>{first_, second_, third_child()};
     }
 
+    /// The pieces a split produced.
     struct split_result final {
         deque_digit<T> before;
         deque_element<T> hit;
@@ -620,6 +699,7 @@ public:
         deque_digit<T> after;
     };
 
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     [[nodiscard]] split_result split(std::size_t leaf_index) const
     {
         if (leaf_index >= size_) {
@@ -736,12 +816,14 @@ std::size_t deque_element<T>::validate_and_count() const
     return is_leaf() ? std::size_t{1} : node_value().validate_and_count();
 }
 
+/// Which of the deque tree's three cases a node is.
 enum class deque_tree_kind {
     empty,
     single,
     deep,
 };
 
+/// The pieces splitting one child produced.
 template <class T>
 struct deque_split_child_result final {
     deque_tree<T> left;
@@ -750,33 +832,43 @@ struct deque_split_child_result final {
     deque_tree<T> right;
 };
 
+/// The deque remaining after a removal, together with what was removed.
 template <class T>
 struct deque_remove_result final {
     deque_element<T> removed;
     deque_tree<T> rest;
 };
 
+/// The deque's underlying tree: empty, single, or deep with a prefix, a lazy middle, and a suffix.
 template <class T>
 class deque_tree final {
 public:
+    /// An empty tree.
     deque_tree();
+    /// An empty tree.
     ~deque_tree();
 
+    /// An empty tree.
     deque_tree(const deque_tree&) noexcept = default;
+    /// An empty tree.
     deque_tree(deque_tree&&) noexcept = default;
     deque_tree& operator=(const deque_tree&) noexcept = default;
     deque_tree& operator=(deque_tree&&) noexcept = default;
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] static deque_tree empty();
 
+    /// A tree holding exactly one element.
     [[nodiscard]] static deque_tree single(deque_element<T> element);
 
+    /// A tree with a prefix, a middle, and a suffix.
     [[nodiscard]] static deque_tree deep(
         deque_digit<T> prefix,
         lazy_cell<deque_tree> middle,
         deque_digit<T> suffix,
         std::size_t size);
 
+    /// A deep node's cached value, if it has been forced.
     [[nodiscard]] static deque_tree deep_computed(
         deque_digit<T> prefix,
         deque_tree middle,
@@ -786,65 +878,92 @@ public:
         return deep(std::move(prefix), lazy_cell<deque_tree>::computed(std::move(middle)), std::move(suffix), size);
     }
 
+    /// Which case this value is.
     [[nodiscard]] deque_tree_kind kind() const noexcept;
 
+    /// The shared empty tree.
     [[nodiscard]] bool empty_tree() const noexcept
     {
         return size() == 0;
     }
 
+    /// Number of elements in the tree.
     [[nodiscard]] std::size_t size() const noexcept;
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const;
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const;
 
+    /// The first element.
     [[nodiscard]] const deque_element<T>& first_element() const;
 
+    /// The last element.
     [[nodiscard]] const deque_element<T>& last_element() const;
 
+    /// A tree with the element added at the front.
     [[nodiscard]] deque_tree cons(deque_element<T> child) const;
 
+    /// A tree with the element added at the back.
     [[nodiscard]] deque_tree snoc(deque_element<T> child) const;
 
+    /// A tree without its first element.
     [[nodiscard]] deque_remove_result<T> remove_first() const;
 
+    /// A tree without its last element.
     [[nodiscard]] deque_remove_result<T> remove_last() const;
 
+    /// A tree with its first element replaced.
     [[nodiscard]] deque_tree replace_first(deque_element<T> child) const;
 
+    /// A tree with its last element replaced.
     [[nodiscard]] deque_tree replace_last(deque_element<T> child) const;
 
+    /// The leaf element at the given index.
     [[nodiscard]] const T& get_leaf(std::size_t index) const;
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] deque_tree set_leaf(std::size_t index, const T& value) const;
 
+    /// Splits this node at the given child index.
     [[nodiscard]] deque_split_child_result<T> split_child(std::size_t index) const;
 
+    /// The index the probe's bound search lands on.
     template <class Predicate>
     [[nodiscard]] std::size_t bound_index(Predicate& predicate) const;
 
+    /// Copies the leaf elements into the destination.
     void copy_leaves_to(std::vector<T>& destination) const;
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const;
 
+    /// The structure's height.
     [[nodiscard]] std::size_t depth() const;
 
+    /// How many children enumeration must visit.
     [[nodiscard]] std::size_t enumeration_child_count() const;
 
+    /// The child at the given index in enumeration order.
     [[nodiscard]] deque_enumeration_child<T> enumeration_child(std::size_t index) const;
 
+    /// The address this value occupies, for sharing assertions.
     [[nodiscard]] const void* identity() const noexcept
     {
         return rep_.get();
     }
 
+    /// The one element a single-element tree holds.
     [[nodiscard]] const deque_element<T>& single_element() const;
 
+    /// A deep node's prefix digit.
     [[nodiscard]] const deque_digit<T>& deep_prefix() const;
 
+    /// A deep node's suffix digit.
     [[nodiscard]] const deque_digit<T>& deep_suffix() const;
 
+    /// Forces a deep node's middle.
     [[nodiscard]] deque_tree deep_force_middle() const;
 
 private:
@@ -856,8 +975,10 @@ private:
     std::shared_ptr<const deque_tree_rep<T>> rep_;
 };
 
+/// One child as enumeration presents it.
 template <class T>
 struct deque_enumeration_child final {
+    /// Which kind of child a slot holds.
     enum class child_kind {
         leaf,
         tree,
@@ -870,136 +991,181 @@ struct deque_enumeration_child final {
     typename deque_element<T>::node_pointer node;
 };
 
+/// The base of a deque tree's three cases.
 template <class T>
 struct deque_tree_rep {
+    /// An empty tree.
     virtual ~deque_tree_rep() = default;
 
+    /// Which case this value is.
     [[nodiscard]] virtual deque_tree_kind kind() const noexcept = 0;
+    /// Number of elements in the tree.
     [[nodiscard]] virtual std::size_t size() const noexcept = 0;
+    /// The first leaf element.
     [[nodiscard]] virtual const T& first_leaf() const = 0;
+    /// The last leaf element.
     [[nodiscard]] virtual const T& last_leaf() const = 0;
+    /// The first element.
     [[nodiscard]] virtual const deque_element<T>& first_element() const = 0;
+    /// The last element.
     [[nodiscard]] virtual const deque_element<T>& last_element() const = 0;
+    /// A tree with the element added at the front.
     [[nodiscard]] virtual deque_tree<T> cons(deque_element<T> child) const = 0;
+    /// A tree with the element added at the back.
     [[nodiscard]] virtual deque_tree<T> snoc(deque_element<T> child) const = 0;
+    /// A tree without its first element.
     [[nodiscard]] virtual deque_remove_result<T> remove_first() const = 0;
+    /// A tree without its last element.
     [[nodiscard]] virtual deque_remove_result<T> remove_last() const = 0;
+    /// A tree with its first element replaced.
     [[nodiscard]] virtual deque_tree<T> replace_first(deque_element<T> child) const = 0;
+    /// A tree with its last element replaced.
     [[nodiscard]] virtual deque_tree<T> replace_last(deque_element<T> child) const = 0;
+    /// The leaf element at the given index.
     [[nodiscard]] virtual const T& get_leaf(std::size_t index) const = 0;
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] virtual deque_tree<T> set_leaf(std::size_t index, const T& value) const = 0;
+    /// Splits this node at the given child index.
     [[nodiscard]] virtual deque_split_child_result<T> split_child(std::size_t index) const = 0;
+    /// Copies the leaf elements into the destination.
     virtual void copy_leaves_to(std::vector<T>& destination) const = 0;
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] virtual std::size_t validate_and_count() const = 0;
+    /// The structure's height.
     [[nodiscard]] virtual std::size_t depth() const = 0;
+    /// How many children enumeration must visit.
     [[nodiscard]] virtual std::size_t enumeration_child_count() const = 0;
+    /// The child at the given index in enumeration order.
     [[nodiscard]] virtual deque_enumeration_child<T> enumeration_child(std::size_t index) const = 0;
 };
 
+/// The empty deque tree.
 template <class T>
 struct empty_deque_tree_rep final : deque_tree_rep<T> {
+    /// Which case this value is.
     [[nodiscard]] deque_tree_kind kind() const noexcept override
     {
         return deque_tree_kind::empty;
     }
 
+    /// Number of elements in the deque.
     [[nodiscard]] std::size_t size() const noexcept override
     {
         return 0;
     }
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const override
     {
         throw std::logic_error("element access on an empty deque tree");
     }
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const override
     {
         throw std::logic_error("element access on an empty deque tree");
     }
 
+    /// The first element.
     [[nodiscard]] const deque_element<T>& first_element() const override
     {
         throw std::logic_error("element access on an empty deque tree");
     }
 
+    /// The last element.
     [[nodiscard]] const deque_element<T>& last_element() const override
     {
         throw std::logic_error("element access on an empty deque tree");
     }
 
+    /// A deque with the element added at the front.
     [[nodiscard]] deque_tree<T> cons(deque_element<T> child) const override
     {
         return deque_tree<T>::single(std::move(child));
     }
 
+    /// A deque with the element added at the back.
     [[nodiscard]] deque_tree<T> snoc(deque_element<T> child) const override
     {
         return deque_tree<T>::single(std::move(child));
     }
 
+    /// A deque without its first element.
     [[nodiscard]] deque_remove_result<T> remove_first() const override
     {
         throw std::logic_error("remove_first on an empty deque tree");
     }
 
+    /// A deque without its last element.
     [[nodiscard]] deque_remove_result<T> remove_last() const override
     {
         throw std::logic_error("remove_last on an empty deque tree");
     }
 
+    /// A deque with its first element replaced.
     [[nodiscard]] deque_tree<T> replace_first(deque_element<T>) const override
     {
         throw std::logic_error("replace_first on an empty deque tree");
     }
 
+    /// A deque with its last element replaced.
     [[nodiscard]] deque_tree<T> replace_last(deque_element<T>) const override
     {
         throw std::logic_error("replace_last on an empty deque tree");
     }
 
+    /// The leaf element at the given index.
     [[nodiscard]] const T& get_leaf(std::size_t) const override
     {
         throw std::logic_error("get_leaf on an empty deque tree");
     }
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] deque_tree<T> set_leaf(std::size_t, const T&) const override
     {
         throw std::logic_error("set_leaf on an empty deque tree");
     }
 
+    /// Splits this node at the given child index.
     [[nodiscard]] deque_split_child_result<T> split_child(std::size_t) const override
     {
         throw std::logic_error("split_child on an empty deque tree");
     }
 
+    /// Copies the leaf elements into the destination.
     void copy_leaves_to(std::vector<T>&) const override
     {
     }
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const override
     {
         return 0;
     }
 
+    /// The structure's height.
     [[nodiscard]] std::size_t depth() const override
     {
         return 0;
     }
 
+    /// How many children enumeration must visit.
     [[nodiscard]] std::size_t enumeration_child_count() const override
     {
         return 0;
     }
 
+    /// The child at the given index in enumeration order.
     [[nodiscard]] deque_enumeration_child<T> enumeration_child(std::size_t) const override
     {
         throw std::logic_error("enumeration child access on an empty deque tree");
     }
 };
 
+/// A deque tree holding exactly one element.
 template <class T>
 struct single_deque_tree_rep final : deque_tree_rep<T> {
+    /// An empty deque using the supplied policy, which it retains.
     explicit single_deque_tree_rep(deque_element<T> element)
         : element(std::move(element))
     {
@@ -1007,36 +1173,43 @@ struct single_deque_tree_rep final : deque_tree_rep<T> {
 
     deque_element<T> element;
 
+    /// Which case this value is.
     [[nodiscard]] deque_tree_kind kind() const noexcept override
     {
         return deque_tree_kind::single;
     }
 
+    /// Number of elements in the deque.
     [[nodiscard]] std::size_t size() const noexcept override
     {
         return element.size();
     }
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const override
     {
         return element.first_leaf();
     }
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const override
     {
         return element.last_leaf();
     }
 
+    /// The first element.
     [[nodiscard]] const deque_element<T>& first_element() const override
     {
         return element;
     }
 
+    /// The last element.
     [[nodiscard]] const deque_element<T>& last_element() const override
     {
         return element;
     }
 
+    /// A deque with the element added at the front.
     [[nodiscard]] deque_tree<T> cons(deque_element<T> child) const override
     {
         const auto child_size = child.size();
@@ -1047,6 +1220,7 @@ struct single_deque_tree_rep final : deque_tree_rep<T> {
             checked_add(child_size, element.size()));
     }
 
+    /// A deque with the element added at the back.
     [[nodiscard]] deque_tree<T> snoc(deque_element<T> child) const override
     {
         const auto child_size = child.size();
@@ -1057,61 +1231,73 @@ struct single_deque_tree_rep final : deque_tree_rep<T> {
             checked_add(element.size(), child_size));
     }
 
+    /// A deque without its first element.
     [[nodiscard]] deque_remove_result<T> remove_first() const override
     {
         return deque_remove_result<T>{element, deque_tree<T>::empty()};
     }
 
+    /// A deque without its last element.
     [[nodiscard]] deque_remove_result<T> remove_last() const override
     {
         return deque_remove_result<T>{element, deque_tree<T>::empty()};
     }
 
+    /// A deque with its first element replaced.
     [[nodiscard]] deque_tree<T> replace_first(deque_element<T> child) const override
     {
         return deque_tree<T>::single(std::move(child));
     }
 
+    /// A deque with its last element replaced.
     [[nodiscard]] deque_tree<T> replace_last(deque_element<T> child) const override
     {
         return deque_tree<T>::single(std::move(child));
     }
 
+    /// The leaf element at the given index.
     [[nodiscard]] const T& get_leaf(std::size_t index) const override
     {
         return element.get_leaf(index);
     }
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] deque_tree<T> set_leaf(std::size_t index, const T& value) const override
     {
         return deque_tree<T>::single(element.set_leaf(index, value));
     }
 
+    /// Splits this node at the given child index.
     [[nodiscard]] deque_split_child_result<T> split_child(std::size_t index) const override
     {
         return deque_split_child_result<T>{deque_tree<T>::empty(), element, index, deque_tree<T>::empty()};
     }
 
+    /// Copies the leaf elements into the destination.
     void copy_leaves_to(std::vector<T>& destination) const override
     {
         element.copy_leaves_to(destination);
     }
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const override
     {
         return element.validate_and_count();
     }
 
+    /// The structure's height.
     [[nodiscard]] std::size_t depth() const override
     {
         return 0;
     }
 
+    /// How many children enumeration must visit.
     [[nodiscard]] std::size_t enumeration_child_count() const override
     {
         return 1;
     }
 
+    /// The child at the given index in enumeration order.
     [[nodiscard]] deque_enumeration_child<T> enumeration_child(std::size_t index) const override
     {
         if (index != 0) {
@@ -1134,8 +1320,10 @@ struct single_deque_tree_rep final : deque_tree_rep<T> {
     }
 };
 
+/// A deque tree with a prefix, a lazy middle, and a suffix.
 template <class T>
 struct deep_deque_tree_rep final : deque_tree_rep<T> {
+    /// An empty deque.
     deep_deque_tree_rep(
         deque_digit<T> prefix,
         lazy_cell<deque_tree<T>> middle,
@@ -1160,46 +1348,55 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
     deque_digit<T> suffix;
     std::size_t cached_size;
 
+    /// Which case this value is.
     [[nodiscard]] deque_tree_kind kind() const noexcept override
     {
         return deque_tree_kind::deep;
     }
 
+    /// Number of elements in the deque.
     [[nodiscard]] std::size_t size() const noexcept override
     {
         return cached_size;
     }
 
+    /// How many elements the middle holds.
     [[nodiscard]] std::size_t middle_size() const
     {
         return cached_size - prefix.size() - suffix.size();
     }
 
+    /// Forces the middle, computing the repaired subtree only now that something needs it.
     [[nodiscard]] deque_tree<T> force_middle() const
     {
         return *middle.get();
     }
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const override
     {
         return prefix.a().first_leaf();
     }
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const override
     {
         return suffix.last().last_leaf();
     }
 
+    /// The first element.
     [[nodiscard]] const deque_element<T>& first_element() const override
     {
         return prefix.a();
     }
 
+    /// The last element.
     [[nodiscard]] const deque_element<T>& last_element() const override
     {
         return suffix.last();
     }
 
+    /// A deque with the element added at the front.
     [[nodiscard]] deque_tree<T> cons(deque_element<T> child) const override
     {
         const auto child_size = child.size();
@@ -1220,6 +1417,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
             checked_add(cached_size, child_size));
     }
 
+    /// A deque with the element added at the back.
     [[nodiscard]] deque_tree<T> snoc(deque_element<T> child) const override
     {
         const auto child_size = child.size();
@@ -1240,6 +1438,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
             checked_add(cached_size, child_size));
     }
 
+    /// A deque without its first element.
     [[nodiscard]] deque_remove_result<T> remove_first() const override
     {
         auto removed = prefix.a();
@@ -1256,6 +1455,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
         return deque_remove_result<T>{removed, deque_pull_left(force_middle(), suffix)};
     }
 
+    /// A deque without its last element.
     [[nodiscard]] deque_remove_result<T> remove_last() const override
     {
         auto removed = suffix.last();
@@ -1272,6 +1472,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
         return deque_remove_result<T>{removed, deque_pull_right(prefix, force_middle())};
     }
 
+    /// A deque with its first element replaced.
     [[nodiscard]] deque_tree<T> replace_first(deque_element<T> child) const override
     {
         const auto child_size = child.size();
@@ -1282,6 +1483,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
             checked_add(cached_size - prefix.a().size(), child_size));
     }
 
+    /// A deque with its last element replaced.
     [[nodiscard]] deque_tree<T> replace_last(deque_element<T> child) const override
     {
         const auto child_size = child.size();
@@ -1292,6 +1494,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
             checked_add(cached_size - suffix.last().size(), child_size));
     }
 
+    /// The leaf element at the given index.
     [[nodiscard]] const T& get_leaf(std::size_t index) const override
     {
         if (index >= cached_size) {
@@ -1312,6 +1515,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
         return get_leaf_from_digit(suffix, index - middle_leaf_size);
     }
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] deque_tree<T> set_leaf(std::size_t index, const T& value) const override
     {
         if (index >= cached_size) {
@@ -1332,6 +1536,7 @@ struct deep_deque_tree_rep final : deque_tree_rep<T> {
         return set_leaf_in_digit(suffix, index - middle_leaf_size, value, false);
     }
 
+    /// Splits this node at the given child index.
     [[nodiscard]] deque_split_child_result<T> split_child(std::size_t index) const override
     {
         if (index >= cached_size) {

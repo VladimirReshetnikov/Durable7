@@ -1,3 +1,5 @@
+/// Implementation of the allocation counter.
+
 #include "test_support/allocation_counter.hpp"
 
 #include <cstddef>

@@ -1,3 +1,5 @@
+/// Tests for the measured lazy cell, including that a measure read leaves the subtree unforced.
+
 #include <durable7/finger_tree/detail/measured_lazy_cell.hpp>
 
 #include "test_support/allocation_counter.hpp"

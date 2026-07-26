@@ -1,3 +1,9 @@
+/// Canonical codecs and type policies for Merkle keys and values.
+///
+/// An encoding must be injective: a second encoding of the same value would produce a second digest
+/// and defeat comparison by digest entirely. Decoding rejects noncanonical input rather than
+/// accepting it leniently, for the same reason.
+
 #pragma once
 
 #include <durable7/hamt/detail/sha256.hpp>
@@ -24,6 +30,7 @@
 
 namespace durable7::hamt {
 
+/// The byte string type block contents and encoded values use.
 using merkle_bytes = std::vector<std::byte>;
 
 /// A malformed, noncanonical, or otherwise rejected codec value.
@@ -36,6 +43,7 @@ public:
 template <class T>
 class merkle_codec {
 public:
+    /// Constructs the merkle codec.
     virtual ~merkle_codec() = default;
 
     /// Returns the stable identifier ending in `-v` followed by decimal digits.
@@ -50,21 +58,25 @@ public:
 
 namespace merkle_detail {
 
+/// The value as one byte.
 [[nodiscard]] constexpr std::byte as_byte(const std::uint8_t value) noexcept
 {
     return static_cast<std::byte>(value);
 }
 
+/// The value as an unsigned 8-bit integer.
 [[nodiscard]] constexpr std::uint8_t as_u8(const std::byte value) noexcept
 {
     return std::to_integer<std::uint8_t>(value);
 }
 
+/// The value's bytes.
 [[nodiscard]] inline std::span<const std::byte> bytes_of(const std::string_view value) noexcept
 {
     return std::as_bytes(std::span{value.data(), value.size()});
 }
 
+/// Whether the byte is a UTF-8 continuation byte.
 [[nodiscard]] inline bool is_continuation(const std::uint8_t value) noexcept
 {
     return value >= 0x80 && value <= 0xbf;
@@ -168,6 +180,7 @@ namespace merkle_detail {
         || code_point == 0x3000;
 }
 
+/// Whether every character is Unicode whitespace.
 [[nodiscard]] inline bool is_all_unicode_whitespace(
     const std::span<const std::byte> bytes) noexcept
 {
@@ -180,6 +193,7 @@ namespace merkle_detail {
     return true;
 }
 
+/// Whether the text begins or ends with Unicode whitespace.
 [[nodiscard]] inline bool has_unicode_whitespace_edge(
     const std::span<const std::byte> bytes) noexcept
 {
@@ -192,6 +206,7 @@ namespace merkle_detail {
     return is_unicode_whitespace(first) || is_unicode_whitespace(last);
 }
 
+/// Fails when the input is not exactly the expected length.
 inline void require_exact_length(
     const std::span<const std::byte> encoding,
     const std::size_t expected,
@@ -204,6 +219,7 @@ inline void require_exact_length(
     }
 }
 
+/// Appends a signed 32-bit value in the canonical big-endian framing.
 inline void append_i32_be(merkle_bytes& destination, const std::int32_t value)
 {
     const auto bits = std::bit_cast<std::uint32_t>(value);
@@ -213,6 +229,7 @@ inline void append_i32_be(merkle_bytes& destination, const std::int32_t value)
     destination.push_back(as_byte(static_cast<std::uint8_t>(bits)));
 }
 
+/// Reads a signed 32-bit value in the canonical big-endian framing.
 [[nodiscard]] inline std::int32_t read_i32_be(const std::span<const std::byte> source)
 {
     require_exact_length(source, sizeof(std::int32_t), "i32-be-v1");
@@ -223,6 +240,7 @@ inline void append_i32_be(merkle_bytes& destination, const std::int32_t value)
     return std::bit_cast<std::int32_t>(bits);
 }
 
+/// Appends a signed 64-bit value in the canonical big-endian framing.
 inline void append_i64_be(merkle_bytes& destination, const std::int64_t value)
 {
     const auto bits = std::bit_cast<std::uint64_t>(value);
@@ -231,6 +249,7 @@ inline void append_i64_be(merkle_bytes& destination, const std::int64_t value)
     }
 }
 
+/// Reads a signed 64-bit value in the canonical big-endian framing.
 [[nodiscard]] inline std::int64_t read_i64_be(const std::span<const std::byte> source)
 {
     require_exact_length(source, sizeof(std::int64_t), "i64-be-v1");
@@ -241,6 +260,7 @@ inline void append_i64_be(merkle_bytes& destination, const std::int64_t value)
     return std::bit_cast<std::int64_t>(bits);
 }
 
+/// Fails when a framed length does not match the bytes that follow it.
 inline void require_framed_length(const std::size_t size)
 {
     if (size > static_cast<std::size_t>((std::numeric_limits<std::int32_t>::max)())) {
@@ -253,8 +273,11 @@ inline void require_framed_length(const std::size_t size)
 /// Canonical signed 32-bit big-endian codec (`i32-be-v1`).
 class int32_merkle_codec final : public merkle_codec<std::int32_t> {
 public:
+    /// Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so
+    /// changing an encoding changes every digest derived from it.
     [[nodiscard]] std::string_view encoding_id() const override { return "i32-be-v1"; }
 
+    /// The one canonical byte representation of the value.
     [[nodiscard]] merkle_bytes encode(const std::int32_t& value) const override
     {
         auto result = merkle_bytes{};
@@ -263,6 +286,8 @@ public:
         return result;
     }
 
+    /// The value these bytes encode, consuming the whole slice and rejecting noncanonical input
+    /// rather than accepting it leniently.
     [[nodiscard]] std::int32_t decode(const std::span<const std::byte> encoding) const override
     {
         return merkle_detail::read_i32_be(encoding);
@@ -272,8 +297,11 @@ public:
 /// Canonical signed 64-bit big-endian codec (`i64-be-v1`).
 class int64_merkle_codec final : public merkle_codec<std::int64_t> {
 public:
+    /// Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so
+    /// changing an encoding changes every digest derived from it.
     [[nodiscard]] std::string_view encoding_id() const override { return "i64-be-v1"; }
 
+    /// The one canonical byte representation of the value.
     [[nodiscard]] merkle_bytes encode(const std::int64_t& value) const override
     {
         auto result = merkle_bytes{};
@@ -282,6 +310,8 @@ public:
         return result;
     }
 
+    /// The value these bytes encode, consuming the whole slice and rejecting noncanonical input
+    /// rather than accepting it leniently.
     [[nodiscard]] std::int64_t decode(const std::span<const std::byte> encoding) const override
     {
         return merkle_detail::read_i64_be(encoding);
@@ -291,8 +321,11 @@ public:
 /// Canonical nullable UTF-8 codec (`nullable-utf8-v1`).
 class nullable_utf8_merkle_codec final : public merkle_codec<std::optional<std::string>> {
 public:
+    /// Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so
+    /// changing an encoding changes every digest derived from it.
     [[nodiscard]] std::string_view encoding_id() const override { return "nullable-utf8-v1"; }
 
+    /// The one canonical byte representation of the value.
     [[nodiscard]] merkle_bytes encode(const std::optional<std::string>& value) const override
     {
         if (!value.has_value()) {
@@ -309,6 +342,8 @@ public:
         return result;
     }
 
+    /// The value these bytes encode, consuming the whole slice and rejecting noncanonical input
+    /// rather than accepting it leniently.
     [[nodiscard]] std::optional<std::string> decode(
         const std::span<const std::byte> encoding) const override
     {
@@ -338,8 +373,11 @@ public:
 /// Canonical nullable byte-vector codec (`nullable-bytes-v1`).
 class nullable_bytes_merkle_codec final : public merkle_codec<std::optional<merkle_bytes>> {
 public:
+    /// Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so
+    /// changing an encoding changes every digest derived from it.
     [[nodiscard]] std::string_view encoding_id() const override { return "nullable-bytes-v1"; }
 
+    /// The one canonical byte representation of the value.
     [[nodiscard]] merkle_bytes encode(const std::optional<merkle_bytes>& value) const override
     {
         if (!value.has_value()) {
@@ -352,6 +390,8 @@ public:
         return result;
     }
 
+    /// The value these bytes encode, consuming the whole slice and rejecting noncanonical input
+    /// rather than accepting it leniently.
     [[nodiscard]] std::optional<merkle_bytes> decode(
         const std::span<const std::byte> encoding) const override
     {
@@ -377,12 +417,15 @@ class rfc4122_guid final {
 public:
     static constexpr std::size_t byte_length = 16;
 
+    /// Constructs the rfc4122 guid.
     constexpr rfc4122_guid() = default;
+    /// Constructs the rfc4122 guid from the given parts.
     explicit constexpr rfc4122_guid(const std::array<std::byte, byte_length> bytes) noexcept
         : bytes_(bytes)
     {
     }
 
+    /// The UUID's sixteen bytes, in RFC 4122 order.
     [[nodiscard]] constexpr const std::array<std::byte, byte_length>& bytes() const noexcept
     {
         return bytes_;
@@ -398,13 +441,18 @@ private:
 /// Canonical RFC-4122/network-order GUID codec (`guid-rfc4122-v1`).
 class rfc4122_guid_merkle_codec final : public merkle_codec<rfc4122_guid> {
 public:
+    /// Stable identifier ending in `-v` followed by decimal digits, mixed into the digest domain so
+    /// changing an encoding changes every digest derived from it.
     [[nodiscard]] std::string_view encoding_id() const override { return "guid-rfc4122-v1"; }
 
+    /// The one canonical byte representation of the value.
     [[nodiscard]] merkle_bytes encode(const rfc4122_guid& value) const override
     {
         return {value.bytes().begin(), value.bytes().end()};
     }
 
+    /// The value these bytes encode, consuming the whole slice and rejecting noncanonical input
+    /// rather than accepting it leniently.
     [[nodiscard]] rfc4122_guid decode(const std::span<const std::byte> encoding) const override
     {
         merkle_detail::require_exact_length(encoding, rfc4122_guid::byte_length, encoding_id());
@@ -421,8 +469,10 @@ public:
     static constexpr std::size_t hex_length = byte_length * 2;
     using storage_type = std::array<std::byte, byte_length>;
 
+    /// Constructs the merkle digest.
     constexpr merkle_digest() = default;
 
+    /// Parses the value from its canonical byte form.
     [[nodiscard]] static merkle_digest from_bytes(const std::span<const std::byte> bytes)
     {
         if (bytes.size() != byte_length) {
@@ -433,6 +483,7 @@ public:
         return merkle_digest{result};
     }
 
+    /// Parses the value from its canonical byte form, or nothing when malformed.
     [[nodiscard]] static std::optional<merkle_digest> try_from_bytes(
         const std::span<const std::byte> bytes) noexcept
     {
@@ -444,6 +495,7 @@ public:
         return merkle_digest{result};
     }
 
+    /// Parses the value from lowercase hexadecimal.
     [[nodiscard]] static merkle_digest from_hex(const std::string_view hex)
     {
         const auto result = try_from_hex(hex);
@@ -454,6 +506,7 @@ public:
         return *result;
     }
 
+    /// Parses the value from lowercase hexadecimal, or nothing when malformed.
     [[nodiscard]] static std::optional<merkle_digest> try_from_hex(
         const std::string_view hex) noexcept
     {
@@ -473,11 +526,14 @@ public:
         return merkle_digest{bytes};
     }
 
+    /// The hash of the value.
     [[nodiscard]] static merkle_digest hash(const std::span<const std::byte> bytes)
     {
         return merkle_digest{detail::sha256(bytes)};
     }
 
+    /// A view over the bytes, without copying.
+    /// The bytes.
     [[nodiscard]] constexpr const storage_type& bytes() const noexcept { return bytes_; }
     [[nodiscard]] constexpr std::span<const std::byte> as_span() const noexcept { return bytes_; }
 
@@ -490,6 +546,7 @@ public:
         std::ranges::copy(bytes_, destination.begin());
     }
 
+    /// Writes the canonical bytes into the destination, reporting whether they fit.
     [[nodiscard]] bool try_write_bytes(const std::span<std::byte> destination) const noexcept
     {
         if (destination.size() < byte_length) {
@@ -499,6 +556,7 @@ public:
         return true;
     }
 
+    /// The value as lowercase hexadecimal.
     [[nodiscard]] std::string to_hex() const
     {
         constexpr auto digits = std::string_view{"0123456789abcdef"};
@@ -546,7 +604,9 @@ inline std::ostream& operator<<(std::ostream& output, const merkle_digest& diges
 template <class K>
 class merkle_key_comparer {
 public:
+    /// Constructs the merkle key comparer.
     virtual ~merkle_key_comparer() = default;
+    /// Orders two elements.
     [[nodiscard]] virtual int compare(const K& left, const K& right) const = 0;
 };
 
@@ -554,11 +614,13 @@ public:
 template <class K, class Less = std::less<K>>
 class natural_merkle_key_comparer final : public merkle_key_comparer<K> {
 public:
+    /// Constructs the natural merkle key comparer from the given parts.
     explicit natural_merkle_key_comparer(Less less = {})
         : less_(std::move(less))
     {
     }
 
+    /// Orders two elements.
     [[nodiscard]] int compare(const K& left, const K& right) const override
     {
         if (std::invoke(less_, left, right)) {
@@ -646,6 +708,15 @@ public:
             std::move(value_codec));
     }
 
+    /// The digest of the empty tree under this policy.
+    /// The digest of the policy's domain: its algorithm and its key and value encodings together.
+    /// Two trees whose domain digests differ describe incomparable data.
+    /// The value codec's encoding identifier, which is mixed into the digest domain.
+    /// The key codec's encoding identifier, which is mixed into the digest domain.
+    /// The retained value encoding codec.
+    /// The retained key encoding codec.
+    /// The retained ordering policy.
+    /// The policy's identity value, which decides whether two collections may be combined.
     [[nodiscard]] const std::string& policy_id_value() const noexcept { return state_->policy_id; }
     [[nodiscard]] const merkle_key_comparer<K>& comparer() const noexcept { return *state_->comparer; }
     [[nodiscard]] const merkle_codec<K>& key_codec() const noexcept { return *state_->key_codec; }
@@ -655,33 +726,39 @@ public:
     [[nodiscard]] merkle_digest domain_digest() const noexcept { return state_->domain_digest; }
     [[nodiscard]] merkle_digest empty_digest() const noexcept { return state_->empty_digest; }
 
+    /// Orders two entries.
     [[nodiscard]] int compare(const K& left, const K& right) const
     {
         return state_->comparer->compare(left, right);
     }
 
+    /// Whether both handles denote the same identity.
     [[nodiscard]] bool shares_identity_with(const merkle_search_tree_policy& other) const noexcept
     {
         return state_ == other.state_;
     }
 
+    /// Whether the two operands' policies allow them to be combined.
     [[nodiscard]] bool is_compatible_with(const merkle_search_tree_policy& other) const noexcept
     {
         return domain_digest() == other.domain_digest();
     }
 
+    /// The hash of the key's encoded bytes.
     [[nodiscard]] merkle_digest hash_key_bytes(
         const std::span<const std::byte> key_bytes) const
     {
         return hash_framed(0x4b, {domain_digest().as_span(), key_bytes});
     }
 
+    /// The hash of the key.
     [[nodiscard]] merkle_digest hash_key(const K& key) const
     {
         const auto bytes = key_codec().encode(key);
         return hash_key_bytes(bytes);
     }
 
+    /// The hash of the bytes.
     [[nodiscard]] merkle_digest hash_bytes(const std::span<const std::byte> bytes) const
     {
         return merkle_digest::hash(bytes);

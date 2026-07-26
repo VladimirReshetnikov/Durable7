@@ -1,3 +1,5 @@
+/// Tests for the sorted set, bag, and map.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"

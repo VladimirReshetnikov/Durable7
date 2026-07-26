@@ -1,3 +1,5 @@
+/// Tests for the reversible deque, including that reversal shares rather than rebuilds.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"

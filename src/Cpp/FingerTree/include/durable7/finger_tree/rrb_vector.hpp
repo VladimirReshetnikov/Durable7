@@ -1,3 +1,10 @@
+/// A persistent relaxed radix-balanced vector: indexed access with cheap concatenation.
+///
+/// Radix addressing gives effectively constant-time indexing; allowing nodes to be slightly
+/// underfull ('relaxed') is what makes concatenation and splitting logarithmic instead of linear.
+/// Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+/// so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -19,6 +26,8 @@
 
 namespace durable7::finger_tree {
 
+/// Shape measurements from a structural audit. The regular and relaxed branch counts show how much
+/// of the tree still uses pure radix addressing.
 struct rrb_vector_statistics final {
     std::size_t count = 0;
     std::size_t height = 0;
@@ -40,12 +49,14 @@ class rrb_vector;
 template <std::copy_constructible T>
 class rrb_vector_cursor;
 
+/// The two vectors a split produced.
 template <std::copy_constructible T>
 struct rrb_vector_split final {
     rrb_vector<T> left;
     rrb_vector<T> right;
 };
 
+/// An endpoint element together with the vector remaining.
 template <std::copy_constructible T>
 struct rrb_vector_pop final {
     T value;
@@ -81,6 +92,7 @@ private:
     using node_pointer = std::shared_ptr<const node>;
 
     struct node {
+        /// Takes a second handle on the same node version; the nodes are shared, not copied.
         node(node_kind kind_value, const std::size_t count_value, const std::size_t height_value) noexcept
             : kind(kind_value)
             , count(count_value)
@@ -88,6 +100,7 @@ private:
         {
         }
 
+        /// An empty node.
         virtual ~node() = default;
 
         node_kind kind;
@@ -96,6 +109,7 @@ private:
     };
 
     struct leaf_node final : node {
+        /// Constructs the leaf node from the given parts.
         explicit leaf_node(std::vector<T> values)
             : node(node_kind::leaf, values.size(), 0)
             , items(std::move(values))
@@ -109,6 +123,7 @@ private:
     };
 
     struct branch_node final : node {
+        /// Constructs the branch node from the given parts.
         explicit branch_node(std::vector<node_pointer> values)
             : node(node_kind::branch, count_children(values), child_height(values) + 1)
             , children(std::move(values))
@@ -121,6 +136,8 @@ private:
             }
         }
 
+        /// Whether the subtree still follows pure radix addressing, so indexing can descend without
+        /// consulting a size table.
         [[nodiscard]] static bool has_regular_layout(
             const std::vector<node_pointer>& values,
             const std::size_t height) noexcept
@@ -145,6 +162,7 @@ private:
             return values.back()->count <= child_capacity;
         }
 
+        /// Finds the child covering the probe.
         [[nodiscard]] std::pair<std::size_t, std::size_t> find_child(const std::size_t index) const
         {
             if (index >= this->count) {
@@ -170,6 +188,7 @@ private:
             throw std::logic_error("RRB relaxed lookup did not find a child");
         }
 
+        /// A regular node, whose subtree sizes follow the radix.
         [[nodiscard]] bool regular() const noexcept
         {
             return !cumulative_sizes.has_value();
@@ -230,6 +249,7 @@ private:
         std::size_t minimum_branching_factor = (std::numeric_limits<std::size_t>::max)();
         std::size_t maximum_branching_factor = 0;
 
+        /// Adds a leaf element.
         void add_leaf(const std::size_t length) noexcept
         {
             ++leaf_count;
@@ -237,6 +257,7 @@ private:
             maximum_leaf_length = (std::max)(maximum_leaf_length, length);
         }
 
+        /// Adds a branch child.
         void add_branch(const std::size_t factor, const bool regular) noexcept
         {
             ++branch_count;
@@ -262,13 +283,16 @@ public:
 
     class const_iterator;
 
+    /// An empty vector.
     rrb_vector() = default;
 
+    /// A vector holding the listed elements.
     rrb_vector(std::initializer_list<value_type> items)
         : root_(build_tree(items.begin(), items.end()))
     {
     }
 
+    /// A vector holding the elements an iterator pair yields.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
         requires std::constructible_from<value_type, std::iter_reference_t<Iterator>>
     rrb_vector(Iterator first, Sentinel last)
@@ -276,16 +300,19 @@ public:
     {
     }
 
+    /// The shared empty vector.
     [[nodiscard]] static rrb_vector empty_vector() noexcept
     {
         return {};
     }
 
+    /// An empty vector using the supplied policies, which it retains.
     [[nodiscard]] static rrb_vector create(std::span<const value_type> items)
     {
         return rrb_vector{items.begin(), items.end()};
     }
 
+    /// A vector holding a range's elements, built in bulk rather than by repeated insertion.
     template <std::ranges::input_range Range>
         requires std::constructible_from<value_type, std::ranges::range_reference_t<Range>>
     [[nodiscard]] static rrb_vector from_range(Range&& items)
@@ -293,20 +320,25 @@ public:
         return rrb_vector{std::ranges::begin(items), std::ranges::end(items)};
     }
 
+    /// A builder for constructing an element incrementally.
     [[nodiscard]] static builder create_builder();
 
+    /// A builder seeded from these contents.
     [[nodiscard]] builder to_builder() const;
 
+    /// Whether the vector holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return !root_;
     }
 
+    /// Number of elements in the vector.
     [[nodiscard]] size_type size() const noexcept
     {
         return root_ ? root_->count : 0;
     }
 
+    /// The structure's height.
     [[nodiscard]] size_type height() const noexcept
     {
         return root_ ? root_->height : 0;
@@ -326,11 +358,13 @@ public:
         return at(index);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const value_type* try_get(const size_type index) const
     {
         return index < size() ? &get(root_, index) : nullptr;
     }
 
+    /// The first element.
     [[nodiscard]] const_reference front() const
     {
         throw_if_empty();
@@ -341,6 +375,7 @@ public:
         return as_leaf(current).items.front();
     }
 
+    /// The last element.
     [[nodiscard]] const_reference back() const
     {
         throw_if_empty();
@@ -351,6 +386,7 @@ public:
         return as_leaf(current).items.back();
     }
 
+    /// A vector with the key bound to the value, adding or replacing as needed.
     [[nodiscard]] rrb_vector set_item(const size_type index, value_type value) const
     {
         throw_if_index_out_of_range(index, size());
@@ -358,6 +394,7 @@ public:
         return root == root_ ? *this : rrb_vector{std::move(root)};
     }
 
+    /// A vector with the element placed last.
     [[nodiscard]] rrb_vector add_last(value_type value) const
     {
         auto items = std::vector<value_type>{};
@@ -366,6 +403,7 @@ public:
         return concat(rrb_vector{make_leaf(std::move(items))});
     }
 
+    /// A vector with the element placed first.
     [[nodiscard]] rrb_vector add_first(value_type value) const
     {
         auto items = std::vector<value_type>{};
@@ -374,16 +412,19 @@ public:
         return rrb_vector{make_leaf(std::move(items))}.concat(*this);
     }
 
+    /// A vector with the element added at the back.
     [[nodiscard]] rrb_vector push_back(value_type value) const
     {
         return add_last(std::move(value));
     }
 
+    /// A vector with the element added at the front.
     [[nodiscard]] rrb_vector push_front(value_type value) const
     {
         return add_first(std::move(value));
     }
 
+    /// The concatenation of two vectors, sharing both operands' unchanged structure.
     [[nodiscard]] rrb_vector concat(const rrb_vector& other) const
     {
         if (empty()) {
@@ -398,11 +439,13 @@ public:
         return from_root(roots.size() == 1 ? roots.front() : make_branch(std::move(roots)));
     }
 
+    /// Splits into the elements before the position and those from it onward.
     [[nodiscard]] rrb_vector_split<T> split_at(size_type index) const;
 
     template <std::ranges::input_range Range>
         requires(!std::same_as<std::remove_cvref_t<Range>, rrb_vector>)
             && std::constructible_from<value_type, std::ranges::range_reference_t<Range>>
+    /// A vector with a range's elements inserted at the position.
     [[nodiscard]] rrb_vector insert_range(const size_type index, Range&& items) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -531,9 +574,12 @@ public:
         using pointer = const T*;
         using reference = const T&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
+        /// An unpositioned cursor, holding no version.
         const_iterator(const const_iterator&) = default;
         const_iterator& operator=(const const_iterator&) = default;
+        /// An unpositioned cursor, holding no version.
         const_iterator(const_iterator&&) noexcept = default;
         const_iterator& operator=(const_iterator&&) noexcept = default;
 
@@ -974,10 +1020,13 @@ public:
     using value_type = T;
     using size_type = std::size_t;
 
+    /// An unpositioned cursor, holding no version.
     rrb_vector_cursor() = delete;
+    /// An unpositioned cursor, holding no version.
     rrb_vector_cursor(const rrb_vector_cursor&) = default;
     rrb_vector_cursor& operator=(const rrb_vector_cursor&) = default;
 
+    /// Takes over the source's handle, leaving it empty.
     rrb_vector_cursor(rrb_vector_cursor&& other) noexcept(
         std::is_nothrow_copy_constructible_v<rrb_vector<value_type>>)
         : snapshot_(other.snapshot_)
@@ -995,26 +1044,37 @@ public:
         return *this;
     }
 
+    /// Whether the gap follows the last element.
+    /// Whether the gap precedes the first element.
+    /// The cursor's gap position.
+    /// Whether the vector version the cursor is positioned in holds no elements.
+    /// Number of elements in the vector version the cursor is positioned in.
     [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
     [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == snapshot_.size(); }
 
+    /// Reads the element immediately before the gap, or nothing at the start.
     [[nodiscard]] const value_type* try_peek_previous() const &
     {
         return position_ == 0 ? nullptr : snapshot_.try_get(position_ - 1);
     }
 
+    /// Reads the element immediately before the gap, or nothing at the start.
     const value_type* try_peek_previous() const && = delete;
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     [[nodiscard]] const value_type* try_peek_next() const &
     {
         return snapshot_.try_get(position_);
     }
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     const value_type* try_peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] rrb_vector_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -1023,6 +1083,7 @@ public:
         return rrb_vector_cursor{snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] rrb_vector_cursor move_next() const
     {
         if (is_at_end()) {
@@ -1031,6 +1092,7 @@ public:
         return rrb_vector_cursor{snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same vector version.
     [[nodiscard]] rrb_vector_cursor seek(const size_type position) const
     {
         if (position > snapshot_.size()) {
@@ -1051,6 +1113,7 @@ public:
     template <std::ranges::input_range Range>
         requires(!std::same_as<std::remove_cvref_t<Range>, rrb_vector<value_type>>)
             && std::constructible_from<value_type, std::ranges::range_reference_t<Range>>
+    /// A vector with a range's elements inserted at the position.
     [[nodiscard]] rrb_vector_cursor insert_range(Range&& values) const
     {
         auto middle = rrb_vector<value_type>::from_range(std::forward<Range>(values));
@@ -1068,6 +1131,8 @@ public:
             checked_add(position_, values.size())};
     }
 
+    /// Removes the element before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] rrb_vector_cursor delete_previous() const
     {
         if (is_at_start()) {
@@ -1076,6 +1141,8 @@ public:
         return rrb_vector_cursor{snapshot_.remove_range(position_ - 1, 1), position_ - 1};
     }
 
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] rrb_vector_cursor delete_next() const
     {
         if (is_at_end()) {
@@ -1084,6 +1151,8 @@ public:
         return rrb_vector_cursor{snapshot_.remove_range(position_, 1), position_};
     }
 
+    /// Replaces the element after the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] rrb_vector_cursor replace_next(value_type value) const
     {
         if (is_at_end()) {
@@ -1092,6 +1161,7 @@ public:
         return rrb_vector_cursor{snapshot_.set_item(position_, std::move(value)), position_};
     }
 
+    /// The vector version this cursor is positioned in.
     [[nodiscard]] rrb_vector<value_type> snapshot() const { return snapshot_; }
 
 private:
@@ -1117,33 +1187,40 @@ rrb_vector<T>::get_cursor(const size_type position) const
     return rrb_vector_cursor<value_type>{*this, position};
 }
 
+/// A mutable accumulator for building a vector in bulk. Deliberately not a snapshot: it builds
+/// nodes directly rather than producing a version per element.
 template <std::copy_constructible T>
 class rrb_vector_builder final {
 public:
     using value_type = T;
     using size_type = std::size_t;
 
+    /// Takes a second handle on the same vector version; the nodes are shared, not copied.
     rrb_vector_builder()
         : rrb_vector_builder(rrb_vector<T>{})
     {
     }
 
+    /// An empty vector using the supplied policy, which it retains.
     explicit rrb_vector_builder(rrb_vector<T> prefix)
         : prefix_(std::move(prefix))
     {
         tail_.reserve(rrb_vector<T>::branch_factor);
     }
 
+    /// Number of elements in the vector.
     [[nodiscard]] size_type size() const noexcept
     {
         return prefix_.size() + staged_count_;
     }
 
+    /// Whether the vector holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return size() == 0;
     }
 
+    /// A vector containing the given element; returns the receiver when already present.
     void add(value_type value)
     {
         ensure_can_add(1);
@@ -1161,6 +1238,7 @@ public:
         ++staged_count_;
     }
 
+    /// A vector containing a range's elements as well.
     template <std::ranges::input_range Range>
         requires std::constructible_from<value_type, std::ranges::range_reference_t<Range>>
     void add_range(Range&& items)
@@ -1172,6 +1250,7 @@ public:
         swap(candidate);
     }
 
+    /// An empty vector retaining the same policies; returns the receiver when already empty.
     void clear() noexcept
     {
         prefix_ = rrb_vector<T>{};
@@ -1180,6 +1259,7 @@ public:
         staged_count_ = 0;
     }
 
+    /// The immutable vector holding the current contents.
     [[nodiscard]] rrb_vector<T> to_immutable()
     {
         if (staged_count_ == 0) {
@@ -1200,6 +1280,7 @@ public:
         return result;
     }
 
+    /// Exchanges the two handles' contents.
     void swap(rrb_vector_builder& other) noexcept
     {
         using std::swap;

@@ -1,3 +1,8 @@
+/// A lazy cell that can also report its measure without forcing.
+///
+/// A push cell caches the measure its subtree would have, so a measure read usually leaves the
+/// subtree unbuilt. Only an operation that needs the elements themselves forces it.
+
 #pragma once
 
 #include <atomic>
@@ -10,6 +15,7 @@
 
 namespace durable7::finger_tree::detail {
 
+/// A lazy cell that can also report its measure without forcing.
 template <class Tree>
 class measured_lazy_cell final {
 public:
@@ -17,6 +23,7 @@ public:
     using pointer = std::shared_ptr<const tree_type>;
     using measure_type = typename tree_type::measure_type;
 
+    /// The cached value, if the cell has been forced.
     static measured_lazy_cell computed(pointer tree)
     {
         if (tree == nullptr) {
@@ -26,6 +33,7 @@ public:
         return measured_lazy_cell{std::make_shared<control_block>(std::move(tree), nullptr)};
     }
 
+    /// Records the work without doing it, so a later read pays for it only if it happens.
     template <class Factory, class MeasureProbe>
     static measured_lazy_cell defer(Factory factory, MeasureProbe measure_probe)
     {
@@ -37,6 +45,7 @@ public:
                     std::forward<MeasureProbe>(measure_probe)))};
     }
 
+    /// Records work that only a force needs, leaving the measure readable without it.
     template <class Factory>
     static measured_lazy_cell defer_force_only(Factory factory)
     {
@@ -45,6 +54,7 @@ public:
         });
     }
 
+    /// Forces the cell, computing its value once and caching it.
     [[nodiscard]] pointer force() const
     {
         for (;;) {
@@ -72,6 +82,7 @@ public:
         }
     }
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] measure_type measure() const
     {
         if (auto tree = control_->tree.load()) {
@@ -88,6 +99,7 @@ public:
         return force()->measure();
     }
 
+    /// Whether the cell has already been computed.
     [[nodiscard]] bool is_forced() const
     {
         return control_->tree.load() != nullptr;
@@ -95,19 +107,25 @@ public:
 
 private:
     struct state_base {
+        /// Constructs the state base.
         virtual ~state_base() = default;
+        /// Computes the subtree the cell stands for.
         [[nodiscard]] virtual pointer compute_tree() const = 0;
+        /// Reads the cached measure if it is available without forcing. A push cell caches its
+        /// resulting measure, so this usually succeeds and the subtree stays unbuilt.
         [[nodiscard]] virtual std::optional<measure_type> try_measure_without_forcing() const = 0;
     };
 
     template <class Factory, class MeasureProbe>
     struct pending_state final : state_base {
+        /// Constructs the pending state from the given parts.
         pending_state(Factory factory, MeasureProbe measure_probe)
             : factory_(std::move(factory))
             , measure_probe_(std::move(measure_probe))
         {
         }
 
+        /// Computes the subtree the cell stands for.
         [[nodiscard]] pointer compute_tree() const override
         {
             using result_type = std::invoke_result_t<const Factory&>;
@@ -119,6 +137,8 @@ private:
             }
         }
 
+        /// Reads the cached measure if it is available without forcing. A push cell caches its
+        /// resulting measure, so this usually succeeds and the subtree stays unbuilt.
         [[nodiscard]] std::optional<measure_type> try_measure_without_forcing() const override
         {
             return std::invoke(measure_probe_);
@@ -130,6 +150,7 @@ private:
     };
 
     struct control_block final {
+        /// Constructs the control block from the given parts.
         control_block(pointer initial_tree, std::shared_ptr<const state_base> initial_state)
             : tree(std::move(initial_tree))
             , state(std::move(initial_state))

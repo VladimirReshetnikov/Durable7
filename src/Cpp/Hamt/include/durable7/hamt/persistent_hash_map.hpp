@@ -29,6 +29,7 @@
 
 namespace durable7::hamt {
 
+/// Which kind of CHAMP node this is.
 enum class persistent_hamt_node_kind {
     empty,
     leaf,
@@ -36,12 +37,14 @@ enum class persistent_hamt_node_kind {
     bitmap_indexed,
 };
 
+/// Which side of a diff an entry falls on.
 enum class map_difference_kind {
     added,
     removed,
     changed,
 };
 
+/// One entry-level difference between two maps.
 template<class Key, class T>
 struct map_difference {
     map_difference_kind kind;
@@ -56,6 +59,9 @@ template <
     class Hash = std::hash<Key>,
     class KeyEqual = std::equal_to<Key>,
     class ValueEqual = std::equal_to<T>>
+/// A persistent hash map backed by a CHAMP trie. Branching is 32-way and bitmap-indexed with
+/// immutable collision buckets, so operations are constant time in expectation while versions share
+/// every unchanged node.
 class persistent_hash_map {
 private:
     static constexpr int bits_per_level = 5;
@@ -116,8 +122,10 @@ private:
 
 public:
 
+    /// An empty map.
     persistent_hash_map() = default;
 
+    /// An empty map.
     persistent_hash_map(const persistent_hash_map&) = default;
     persistent_hash_map& operator=(const persistent_hash_map&) = default;
 
@@ -152,12 +160,15 @@ public:
         return *this;
     }
 
+    /// An empty map.
     ~persistent_hash_map() = default;
 
+    /// Whether the map holds no entries.
     static persistent_hash_map empty() {
         return {};
     }
 
+    /// An empty map using the supplied policies, which it retains.
     static persistent_hash_map create(
         Hash hash = {},
         KeyEqual equal = {},
@@ -175,6 +186,7 @@ public:
     // wins). Builders are move-only scratch state, not persistent values.
     class bulk_builder {
     public:
+        /// Constructs the bulk builder from the given parts.
         explicit bulk_builder(Hash hash = {}, KeyEqual equal = {}, ValueEqual values_equal = {})
             : hash_(std::move(hash)),
               key_equal_(std::move(equal)),
@@ -182,10 +194,12 @@ public:
               policy_identity_(std::make_shared<const policy_identity>()) {
         }
 
+        /// Number of elements in the collection.
         [[nodiscard]] size_type count() const noexcept {
             return count_;
         }
 
+        /// A collection with the key bound to the value, adding or replacing as needed.
         void set_item(const Key& key, const T& value) {
             const auto hash = static_cast<std::uint32_t>(std::invoke(hash_, key));
             if (!root_) {
@@ -223,6 +237,7 @@ public:
                 && std::convertible_to<
                     std::invoke_result_t<UpdateFactory&, const T&, const T&>,
                     T>
+        /// A collection with the key bound to the value, adding or replacing as needed.
         T add_or_update(
             const Key& key,
             const T& add_value,
@@ -264,6 +279,7 @@ public:
             return std::move(*selected);
         }
 
+        /// The immutable collection holding the current contents.
         [[nodiscard]] persistent_hash_map to_immutable() const {
             if (!root_) {
                 return persistent_hash_map(
@@ -283,6 +299,7 @@ public:
         std::shared_ptr<const policy_identity> policy_identity_;
     };
 
+    /// A builder for constructing in bulk, which is cheaper than repeated insertion.
     static bulk_builder create_bulk_builder(
         Hash hash = {},
         KeyEqual equal = {},
@@ -290,15 +307,19 @@ public:
         return bulk_builder(std::move(hash), std::move(equal), std::move(values_equal));
     }
 
+    /// Opens a mutable session seeded from this map.
     [[nodiscard]] static transient create_transient(
         Hash hash = {},
         KeyEqual equal = {},
         ValueEqual values_equal = {});
 
+    /// Opens a mutable session seeded from this map. The map itself is unaffected.
     [[nodiscard]] transient to_transient() const &;
 
+    /// Opens a mutable session seeded from this map. The map itself is unaffected.
     [[nodiscard]] transient to_transient() &&;
 
+    /// A map holding a range's entries, built in bulk rather than by repeated insertion.
     static persistent_hash_map create_range(
         std::initializer_list<value_type> items,
         Hash hash = {},
@@ -312,6 +333,7 @@ public:
         return builder.to_immutable();
     }
 
+    /// A map holding a range's entries, built in bulk rather than by repeated insertion.
     template <class Range>
     static persistent_hash_map create_range(
         const Range& items,
@@ -326,26 +348,32 @@ public:
         return builder.to_immutable();
     }
 
+    /// Number of entries in the map.
     [[nodiscard]] size_type count() const noexcept {
         return count_;
     }
 
+    /// Whether the map holds no entries.
     [[nodiscard]] bool is_empty() const noexcept {
         return count_ == 0;
     }
 
+    /// The retained hashing policy. Keys the policy treats as equivalent must hash identically.
     [[nodiscard]] const Hash& hash_function() const noexcept {
         return hash_;
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const noexcept {
         return key_equal_;
     }
 
+    /// The retained value equivalence policy.
     [[nodiscard]] const ValueEqual& value_eq() const noexcept {
         return value_equal_;
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const Key& key) const {
         return try_get(key) != nullptr;
     }
@@ -367,6 +395,7 @@ public:
         return try_get_entry(equal_key, actual_key, value) ? actual_key : nullptr;
     }
 
+    /// The value stored for the key. Raises when the key is absent.
     [[nodiscard]] const T& at(const Key& key) const {
         if (const auto* value = try_get(key)) {
             return *value;
@@ -375,6 +404,7 @@ public:
         throw std::out_of_range("The key was not present in the persistent_hash_map.");
     }
 
+    /// A map with the key bound to the value, adding or replacing as needed.
     [[nodiscard]] persistent_hash_map set_item(const Key& key, const T& value) const {
         const auto hash = get_hash(key);
         if (!root_) {
@@ -402,6 +432,7 @@ public:
             policy_identity_);
     }
 
+    /// A map containing the given entry; returns the receiver when already present.
     [[nodiscard]] persistent_hash_map add(const Key& key, const T& value) const {
         auto [result, added] = try_add(key, value);
         if (!added) {
@@ -411,6 +442,7 @@ public:
         return result;
     }
 
+    /// Adds the entry unless an equivalent one is present, reporting which happened.
     [[nodiscard]] std::pair<persistent_hash_map, bool> try_add(const Key& key, const T& value) const {
         const auto hash = get_hash(key);
         if (!root_) {
@@ -566,6 +598,7 @@ public:
         using reference = const value_type&;
         using pointer = const value_type*;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         reference operator*() const {
@@ -1309,11 +1342,15 @@ private:
     }
 
     struct node : std::enable_shared_from_this<node> {
+        /// An empty node.
         virtual ~node() = default;
 
+        /// Which case this value is.
         [[nodiscard]] virtual persistent_hamt_node_kind kind() const noexcept = 0;
+        /// Number of entries.
         [[nodiscard]] virtual size_type entry_count() const noexcept = 0;
 
+        /// A node with the key bound to the value, adding or replacing as needed.
         [[nodiscard]] virtual node_ptr set(
             const Key& key,
             const T& value,
@@ -1324,6 +1361,7 @@ private:
             bool overwrite,
             bool& added) const = 0;
 
+        /// A node without that element; returns the receiver when absent.
         [[nodiscard]] virtual node_ptr remove(
             const Key& key,
             std::uint32_t hash,
@@ -1334,10 +1372,12 @@ private:
     };
 
     struct hash_node : node {
+        /// Constructs the hash node from the given parts.
         explicit hash_node(std::uint32_t hash)
             : hash_(hash) {
         }
 
+        /// A shared handle on this object, for use where ownership must be kept alive.
         [[nodiscard]] hash_node_ptr shared_hash_from_this() const {
             return std::static_pointer_cast<const hash_node>(this->shared_from_this());
         }
@@ -1346,19 +1386,23 @@ private:
     };
 
     struct leaf_node final : hash_node {
+        /// Constructs the leaf node from the given parts.
         leaf_node(std::uint32_t hash, Key key, T value)
             : hash_node(hash),
               entry_(std::move(key), std::move(value)) {
         }
 
+        /// Which case this value is.
         [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
             return persistent_hamt_node_kind::leaf;
         }
 
+        /// Number of entries.
         [[nodiscard]] size_type entry_count() const noexcept override {
             return 1;
         }
 
+        /// A node with the key bound to the value, adding or replacing as needed.
         [[nodiscard]] node_ptr set(
             const Key& key,
             const T& value,
@@ -1384,6 +1428,7 @@ private:
                 shift);
         }
 
+        /// A node without that element; returns the receiver when absent.
         [[nodiscard]] node_ptr remove(
             const Key& key,
             std::uint32_t hash,
@@ -1405,15 +1450,18 @@ private:
     };
 
     struct collision_node final : hash_node {
+        /// Constructs the collision node from the given parts.
         collision_node(std::uint32_t hash, std::vector<value_type> entries)
             : hash_node(hash),
               entries_(std::move(entries)) {
         }
 
+        /// Which case this value is.
         [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
             return persistent_hamt_node_kind::collision;
         }
 
+        /// Number of entries.
         [[nodiscard]] size_type entry_count() const noexcept override {
             return entries_.size();
         }
@@ -1434,6 +1482,7 @@ private:
             return std::make_shared<collision_node>(left->hash_, std::move(entries));
         }
 
+        /// A node with the key bound to the value, adding or replacing as needed.
         [[nodiscard]] node_ptr set(
             const Key& key,
             const T& value,
@@ -1472,6 +1521,7 @@ private:
             return std::make_shared<collision_node>(this->hash_, std::move(entries));
         }
 
+        /// A node without that element; returns the receiver when absent.
         [[nodiscard]] node_ptr remove(
             const Key& key,
             std::uint32_t hash,
@@ -1512,6 +1562,7 @@ private:
     };
 
     struct bitmap_indexed_node final : node {
+        /// An empty node.
         bitmap_indexed_node(
             std::uint32_t data_map,
             std::uint32_t node_map,
@@ -1527,14 +1578,17 @@ private:
             }
         }
 
+        /// Which case this value is.
         [[nodiscard]] persistent_hamt_node_kind kind() const noexcept override {
             return persistent_hamt_node_kind::bitmap_indexed;
         }
 
+        /// Number of entries.
         [[nodiscard]] size_type entry_count() const noexcept override {
             return count_;
         }
 
+        /// A node with the key bound to the value, adding or replacing as needed.
         [[nodiscard]] node_ptr set(
             const Key& key,
             const T& value,
@@ -1607,6 +1661,7 @@ private:
             return std::make_shared<bitmap_indexed_node>(data_map_, node_map_, data_, std::move(replaced));
         }
 
+        /// A node without that element; returns the receiver when absent.
         [[nodiscard]] node_ptr remove(
             const Key& key,
             std::uint32_t hash,
@@ -1674,6 +1729,7 @@ private:
             return rebuild(data_map_, node_map_, data_, std::move(replaced));
         }
 
+        /// Rebuilds the structure from its current contents.
         static node_ptr rebuild(
             std::uint32_t data_map,
             std::uint32_t node_map,
@@ -1996,10 +2052,12 @@ private:
         const value_type* single;
         const std::vector<value_type>* entries;
 
+        /// Number of elements in the collection.
         [[nodiscard]] size_type count() const noexcept {
             return single != nullptr ? 1 : entries->size();
         }
 
+        /// The element at the given position.
         [[nodiscard]] const value_type& at(size_type index_value) const noexcept {
             assert(index_value < count());
             return single != nullptr ? *single : (*entries)[index_value];
@@ -2451,6 +2509,7 @@ private:
     // builder, are mutated in place, and never escape: `freeze` copies a
     // subtree into detached persistent nodes.
     struct mutable_node {
+        /// An empty node.
         virtual ~mutable_node() = default;
 
         // A null result means this node was updated in place; a non-null
@@ -2468,10 +2527,12 @@ private:
             std::optional<T>* selected,
             bool& added) = 0;
 
+        /// Closes the session and produces the node holding its accumulated edits.
         [[nodiscard]] virtual node_ptr freeze() const = 0;
     };
 
     struct mutable_hash_node : mutable_node {
+        /// Constructs the mutable hash node from the given parts.
         explicit mutable_hash_node(std::uint32_t hash)
             : hash_(hash) {
         }
@@ -2480,11 +2541,13 @@ private:
     };
 
     struct mutable_leaf_node final : mutable_hash_node {
+        /// Constructs the mutable leaf node from the given parts.
         mutable_leaf_node(std::uint32_t hash, Key key, T value)
             : mutable_hash_node(hash),
               entry_(std::move(key), std::move(value)) {
         }
 
+        /// A node with the key bound to the value, adding or replacing as needed.
         [[nodiscard]] mutable_node_ptr set(
             const Key& key,
             const T& value,
@@ -2518,6 +2581,7 @@ private:
                 shift);
         }
 
+        /// Closes the session and produces the node holding its accumulated edits.
         [[nodiscard]] node_ptr freeze() const override {
             return make_leaf(this->hash_, entry_.first, entry_.second);
         }
@@ -2526,6 +2590,7 @@ private:
     };
 
     struct mutable_collision_node final : mutable_hash_node {
+        /// Constructs the mutable collision node from the given parts.
         mutable_collision_node(std::uint32_t hash, std::vector<value_type> entries)
             : mutable_hash_node(hash),
               entries_(std::move(entries)) {
@@ -2547,6 +2612,7 @@ private:
             return std::make_unique<mutable_collision_node>(leaf->hash_, std::move(entries));
         }
 
+        /// A node with the key bound to the value, adding or replacing as needed.
         [[nodiscard]] mutable_node_ptr set(
             const Key& key,
             const T& value,
@@ -2590,6 +2656,7 @@ private:
             return nullptr;
         }
 
+        /// Closes the session and produces the node holding its accumulated edits.
         [[nodiscard]] node_ptr freeze() const override {
             return std::make_shared<collision_node>(this->hash_, entries_);
         }
@@ -2598,6 +2665,7 @@ private:
     };
 
     struct mutable_bitmap_indexed_node final : mutable_node {
+        /// An empty node.
         mutable_bitmap_indexed_node(
             std::uint32_t data_map,
             std::uint32_t node_map,
@@ -2609,6 +2677,7 @@ private:
               children_(std::move(children)) {
         }
 
+        /// A node with the key bound to the value, adding or replacing as needed.
         [[nodiscard]] mutable_node_ptr set(
             const Key& key,
             const T& value,
@@ -2677,6 +2746,7 @@ private:
             return nullptr;
         }
 
+        /// Closes the session and produces the node holding its accumulated edits.
         [[nodiscard]] node_ptr freeze() const override {
             std::vector<node_ptr> children;
             children.reserve(children_.size());
@@ -2781,9 +2851,13 @@ public:
     using key_equal = KeyEqual;
     using value_equal = ValueEqual;
 
+    /// Opens a mutable session seeded from this map. The map itself is unaffected; the session's
+    /// edits are visible only through it.
     transient(const transient&) = delete;
     transient& operator=(const transient&) = delete;
 
+    /// Opens a mutable session seeded from this map. The map itself is unaffected; the session's
+    /// edits are visible only through it.
     transient(transient&& other) noexcept(std::is_nothrow_move_constructible_v<map_type>) try
         : map_(std::move(other.map_)),
           control_(std::move(other.control_)),
@@ -2816,30 +2890,38 @@ public:
         return *this;
     }
 
+    /// Opens a mutable session seeded from this map. The map itself is unaffected; the session's
+    /// edits are visible only through it.
     ~transient() {
         mark_destroyed();
     }
 
+    /// Number of entries in the map.
     [[nodiscard]] size_type count() const {
         return active_map().count();
     }
 
+    /// Whether the map holds no entries.
     [[nodiscard]] bool is_empty() const {
         return active_map().is_empty();
     }
 
+    /// The retained hashing policy. Keys the policy treats as equivalent must hash identically.
     [[nodiscard]] const Hash& hash_function() const {
         return active_map().hash_function();
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const {
         return active_map().key_eq();
     }
 
+    /// The retained value equivalence policy.
     [[nodiscard]] const ValueEqual& value_eq() const {
         return active_map().value_eq();
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const Key& key) const {
         return active_map().contains_key(key);
     }
@@ -2851,22 +2933,27 @@ public:
         return active_map().try_get(key);
     }
 
+    /// Reads the stored key representative, or nothing when absent.
     [[nodiscard]] const Key* try_get_key(const Key& equal_key) const {
         return active_map().try_get_key(equal_key);
     }
 
+    /// The value stored for the key. Raises when the key is absent.
     [[nodiscard]] const T& at(const Key& key) const {
         return active_map().at(key);
     }
 
+    /// A map with the key bound to the value, adding or replacing as needed.
     void set_item(const Key& key, const T& value) {
         commit(active_map().set_item(key, value));
     }
 
+    /// A map containing the given entry; returns the receiver when already present.
     void add(const Key& key, const T& value) {
         commit(active_map().add(key, value));
     }
 
+    /// Adds the entry unless an equivalent one is present, reporting which happened.
     [[nodiscard]] bool try_add(const Key& key, const T& value) {
         auto [candidate, added] = active_map().try_add(key, value);
         if (added) {
@@ -2875,6 +2962,7 @@ public:
         return added;
     }
 
+    /// A map without that entry; returns the receiver when absent.
     [[nodiscard]] bool remove(const Key& key) {
         auto& current = active_map();
         auto candidate = current.remove(key);
@@ -2886,10 +2974,13 @@ public:
         return true;
     }
 
+    /// An empty map retaining the same policies; returns the receiver when already empty.
     void clear() {
         commit(active_map().clear());
     }
 
+    /// A forward const iterator over one map version's entries. It keeps that version alive, so it
+    /// stays valid across later edits.
     class const_iterator {
     public:
         using iterator_concept = std::input_iterator_tag;
@@ -2899,6 +2990,7 @@ public:
         using reference = const value_type&;
         using pointer = const value_type*;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         reference operator*() const {
@@ -2980,24 +3072,29 @@ public:
         typename map_type::const_iterator inner_;
     };
 
+    /// An iterator over the entries, in the map's own order.
     [[nodiscard]] const_iterator begin() const {
         const auto& map = active_map();
         return const_iterator(control_, control_->version, map.begin());
     }
 
+    /// The iterator one past the last element.
     [[nodiscard]] std::default_sentinel_t end() const {
         ensure_active();
         return {};
     }
 
+    /// A const iterator over the entries.
     [[nodiscard]] const_iterator cbegin() const {
         return begin();
     }
 
+    /// The const iterator one past the last element.
     [[nodiscard]] std::default_sentinel_t cend() const {
         return end();
     }
 
+    /// Copies the entries out into a vector, in the map's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const {
         ensure_active();
         std::vector<value_type> items;
@@ -3008,6 +3105,7 @@ public:
         return items;
     }
 
+    /// The keys, in the collection's own order.
     [[nodiscard]] std::vector<Key> keys() const {
         ensure_active();
         std::vector<Key> result;
@@ -3019,6 +3117,7 @@ public:
         return result;
     }
 
+    /// The values.
     [[nodiscard]] std::vector<T> values() const {
         ensure_active();
         std::vector<T> result;
@@ -3030,6 +3129,8 @@ public:
         return result;
     }
 
+    /// Checks that the structure is in its canonical shape, which must depend only on contents and
+    /// not on edit history.
     [[nodiscard]] bool debug_validate_canonical() const {
         return active_map().debug_validate_canonical();
     }
@@ -3045,6 +3146,7 @@ public:
         return result;
     }
 
+    /// Closes the session and produces the map holding its accumulated edits.
     map_type persist() & = delete;
 
 private:

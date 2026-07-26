@@ -1,3 +1,5 @@
+/// A consumer built against the installed package, checking that the install is usable as shipped.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include <array>

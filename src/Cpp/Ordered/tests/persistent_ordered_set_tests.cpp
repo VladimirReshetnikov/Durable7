@@ -1,3 +1,5 @@
+/// Tests for the insertion-ordered persistent set.
+
 #include <durable7/ordered/ordered.hpp>
 #include <durable7/test_support/headless_test_process.h>
 

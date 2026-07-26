@@ -1,3 +1,5 @@
+/// Tests for the measured rope.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"

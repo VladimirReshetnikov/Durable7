@@ -1,3 +1,5 @@
+/// The measured tree's node representation and its cached measures.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/atomic_box.hpp>
@@ -44,36 +46,43 @@ struct measured_locate_result;
 template <class Element, class MeasurePolicy>
 struct measured_enumeration_child;
 
+/// The buffer a measured rope stores one chunk's elements in.
 template <class Element, class MeasurePolicy>
 using measured_buffer = std::vector<measured_element<Element, MeasurePolicy>>;
 
+/// Builds a measured tree from a buffer of elements, in bulk.
 template <class Element, class MeasurePolicy>
 [[nodiscard]] measured_tree<Element, MeasurePolicy> measured_from_buffer(
     const measured_buffer<Element, MeasurePolicy>& values);
 
+/// Rebuilds a deep measured node whose prefix may have been emptied.
 template <class Element, class MeasurePolicy>
 [[nodiscard]] measured_tree<Element, MeasurePolicy> measured_deep_left(
     measured_buffer<Element, MeasurePolicy> prefix,
     measured_tree<Element, MeasurePolicy> middle,
     const measured_buffer<Element, MeasurePolicy>& suffix);
 
+/// Rebuilds a deep measured node whose suffix may have been emptied.
 template <class Element, class MeasurePolicy>
 [[nodiscard]] measured_tree<Element, MeasurePolicy> measured_deep_right(
     const measured_buffer<Element, MeasurePolicy>& prefix,
     measured_tree<Element, MeasurePolicy> middle,
     measured_buffer<Element, MeasurePolicy> suffix);
 
+/// Concatenates two measured trees, rebalancing only the seam between them.
 template <class Element, class MeasurePolicy>
 [[nodiscard]] measured_tree<Element, MeasurePolicy> measured_concat(
     measured_tree<Element, MeasurePolicy> left,
     measured_tree<Element, MeasurePolicy> right);
 
+/// Concatenates two measured trees with elements carried between them.
 template <class Element, class MeasurePolicy>
 [[nodiscard]] measured_tree<Element, MeasurePolicy> measured_concat_with_mid(
     measured_tree<Element, MeasurePolicy> left,
     const measured_buffer<Element, MeasurePolicy>& middle,
     measured_tree<Element, MeasurePolicy> right);
 
+/// One element of a measured tree, either a leaf or a node.
 template <class Element, class MeasurePolicy>
 class measured_element final {
 public:
@@ -82,6 +91,7 @@ public:
     using measure_type = typename measure_policy::measure_type;
     using node_pointer = std::shared_ptr<const measured_node<element_type, measure_policy>>;
 
+    /// The leaf element this value holds.
     [[nodiscard]] static measured_element leaf(element_type value)
         requires ::durable7::finger_tree::measure_policy<MeasurePolicy, Element>
     {
@@ -89,6 +99,7 @@ public:
         return measured_element{leaf_storage{std::move(value), std::move(measure)}};
     }
 
+    /// The underlying node.
     [[nodiscard]] static measured_element node(node_pointer value)
     {
         if (value == nullptr) {
@@ -98,42 +109,52 @@ public:
         return measured_element{std::move(value)};
     }
 
+    /// A two-child node.
     [[nodiscard]] static measured_element node2(measured_element first, measured_element second);
 
+    /// A three-child node.
     [[nodiscard]] static measured_element node3(
         measured_element first,
         measured_element second,
         measured_element third);
 
+    /// Whether this node is a leaf.
     [[nodiscard]] bool is_leaf() const noexcept
     {
         return std::holds_alternative<leaf_storage>(storage_);
     }
 
+    /// Whether this value holds a node rather than an element.
     [[nodiscard]] bool is_node() const noexcept
     {
         return std::holds_alternative<node_pointer>(storage_);
     }
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] const measure_type& measure() const;
 
+    /// The stored value.
     [[nodiscard]] const element_type& value() const
     {
         return std::get<leaf_storage>(storage_).value;
     }
 
+    /// The node this value holds.
     [[nodiscard]] const measured_node<element_type, measure_policy>& node_value() const
     {
         return *std::get<node_pointer>(storage_);
     }
 
+    /// The node pointer.
     [[nodiscard]] node_pointer node_ptr() const
     {
         return std::get<node_pointer>(storage_);
     }
 
+    /// Produces the elements as a flat sequence.
     void flatten(std::vector<element_type>& sink) const;
 
+    /// Calls the function once per element, in the collection's own order.
     template <class Function>
     void for_each(Function& function) const;
 
@@ -153,6 +174,7 @@ private:
     storage_type storage_;
 };
 
+/// One interior node of a measured tree, caching its children's combined measure.
 template <class Element, class MeasurePolicy>
 class measured_node final {
 public:
@@ -162,6 +184,7 @@ public:
     using child_type = measured_element<element_type, measure_policy>;
     using buffer_type = measured_buffer<element_type, measure_policy>;
 
+    /// Builds a node from the given children.
     [[nodiscard]] static std::shared_ptr<const measured_node> make(buffer_type children)
     {
         if (children.size() < 2 || children.size() > 3) {
@@ -171,6 +194,7 @@ public:
         return std::make_shared<const measured_node>(std::move(children));
     }
 
+    /// Constructs the measured node from the given parts.
     explicit measured_node(buffer_type children)
         : children_(std::move(children))
         , measure_(combine_all(children_))
@@ -180,16 +204,19 @@ public:
         }
     }
 
+    /// This node's children.
     [[nodiscard]] const buffer_type& children() const noexcept
     {
         return children_;
     }
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] const measure_type& measure() const noexcept
     {
         return measure_;
     }
 
+    /// Produces the elements as a flat sequence.
     void flatten(std::vector<element_type>& sink) const
     {
         for (const auto& child : children_) {
@@ -197,6 +224,7 @@ public:
         }
     }
 
+    /// Calls the function once per element, in the node's own order.
     template <class Function>
     void for_each(Function& function) const
     {
@@ -276,6 +304,7 @@ void measured_element<Element, MeasurePolicy>::for_each(Function& function) cons
     node_value().for_each(function);
 }
 
+/// The combined measure of a buffer's elements.
 template <class Element, class MeasurePolicy>
 [[nodiscard]] typename MeasurePolicy::measure_type measured_buffer_measure(
     const measured_buffer<Element, MeasurePolicy>& values)
@@ -292,6 +321,7 @@ template <class Element, class MeasurePolicy>
     return result;
 }
 
+/// The elements in the given range.
 template <class Buffer>
 [[nodiscard]] Buffer measured_slice(const Buffer& values, const std::size_t first, const std::size_t last)
 {
@@ -304,6 +334,7 @@ template <class Buffer>
         values.begin() + static_cast<typename Buffer::difference_type>(last)};
 }
 
+/// The two buffers a split produced.
 template <class Element, class MeasurePolicy>
 struct measured_buffer_split final {
     measured_buffer<Element, MeasurePolicy> before;
@@ -311,12 +342,14 @@ struct measured_buffer_split final {
     measured_buffer<Element, MeasurePolicy> after;
 };
 
+/// Which of the measured tree's cases a node is.
 enum class measured_tree_kind {
     empty,
     single,
     deep,
 };
 
+/// The two trees a split produced.
 template <class Element, class MeasurePolicy>
 struct measured_split_result final {
     // The hit is retained separately so callers can choose whether it belongs
@@ -326,18 +359,21 @@ struct measured_split_result final {
     measured_tree<Element, MeasurePolicy> right;
 };
 
+/// An endpoint element together with the tree remaining.
 template <class Element, class MeasurePolicy>
 struct measured_view_result final {
     measured_element<Element, MeasurePolicy> value;
     measured_tree<Element, MeasurePolicy> rest;
 };
 
+/// Where a measured search landed, with the element it found.
 template <class Element, class MeasurePolicy>
 struct measured_locate_result final {
     typename MeasurePolicy::measure_type measure_before;
     measured_element<Element, MeasurePolicy> hit;
 };
 
+/// Where a measured search landed, borrowing the element in place.
 template <class Element, class MeasurePolicy>
 struct measured_locate_reference_result final {
     // `hit` points into immutable storage owned by the searched tree.
@@ -345,6 +381,7 @@ struct measured_locate_reference_result final {
     const measured_element<Element, MeasurePolicy>* hit;
 };
 
+/// Splits a buffer at the first point where the accumulated measure satisfies the predicate.
 template <class Element, class MeasurePolicy, class Predicate>
 [[nodiscard]] measured_buffer_split<Element, MeasurePolicy> measured_split_buffer(
     Predicate& predicate,
@@ -430,23 +467,31 @@ public:
     using child_type = measured_element<element_type, measure_policy>;
     using buffer_type = measured_buffer<element_type, measure_policy>;
 
+    /// An empty tree.
     measured_tree();
+    /// An empty tree.
     ~measured_tree();
 
+    /// An empty tree.
     measured_tree(const measured_tree&) noexcept = default;
+    /// An empty tree.
     measured_tree(measured_tree&&) noexcept = default;
     measured_tree& operator=(const measured_tree&) noexcept = default;
     measured_tree& operator=(measured_tree&&) noexcept = default;
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] static measured_tree empty();
 
+    /// A tree holding exactly one element.
     [[nodiscard]] static measured_tree single(child_type element);
 
+    /// A tree with a prefix, a middle, and a suffix.
     [[nodiscard]] static measured_tree deep(
         buffer_type prefix,
         measured_lazy_cell<measured_tree> middle,
         buffer_type suffix);
 
+    /// A deep node's cached value, if it has been forced.
     [[nodiscard]] static measured_tree deep_computed(
         buffer_type prefix,
         measured_tree middle,
@@ -458,26 +503,37 @@ public:
             std::move(suffix));
     }
 
+    /// Which case this value is.
     [[nodiscard]] measured_tree_kind kind() const noexcept;
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] bool is_empty() const noexcept;
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] measure_type measure() const;
 
+    /// The first element.
     [[nodiscard]] const child_type& first_element() const;
 
+    /// The last element.
     [[nodiscard]] const child_type& last_element() const;
 
+    /// A tree with the element added at the front.
     [[nodiscard]] measured_tree cons(child_type value) const;
 
+    /// A tree with the element added at the back.
     [[nodiscard]] measured_tree snoc(child_type value) const;
 
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_left() const;
 
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_right() const;
 
+    /// Produces the elements as a flat sequence.
     void flatten(std::vector<Element>& sink) const;
 
+    /// Calls the function once per element, in the tree's own order.
     template <class Function>
     void for_each(Function& function) const;
 
@@ -489,39 +545,49 @@ public:
     [[nodiscard]] measured_enumeration_child<Element, MeasurePolicy> enumeration_child(
         std::size_t index) const;
 
+    /// How deep enumeration must descend.
     [[nodiscard]] std::size_t enumeration_depth() const;
 
+    /// The address this value occupies, for sharing assertions.
     [[nodiscard]] const void* identity() const noexcept
     {
         return rep_.get();
     }
 
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     template <class Predicate>
     [[nodiscard]] measured_split_result<Element, MeasurePolicy> split_tree(
         Predicate& predicate,
         measure_type accumulator) const;
 
+    /// Finds the subtree the probe falls in.
     template <class Predicate>
     [[nodiscard]] measured_locate_result<Element, MeasurePolicy> locate_tree(
         Predicate& predicate,
         measure_type accumulator) const;
 
+    /// Borrows the subtree the probe falls in, without taking a reference on it.
     template <class Predicate>
     [[nodiscard]] measured_locate_reference_result<Element, MeasurePolicy> locate_tree_reference(
         Predicate& predicate,
         measure_type accumulator) const;
 
+    /// The concatenation of two trees, sharing both operands' unchanged structure.
     [[nodiscard]] measured_tree concat(measured_tree right) const
     {
         return measured_concat(*this, std::move(right));
     }
 
+    /// The one element a single-element tree holds.
     [[nodiscard]] const child_type& single_element() const;
 
+    /// A deep node's prefix digit.
     [[nodiscard]] const buffer_type& deep_prefix() const;
 
+    /// A deep node's suffix digit.
     [[nodiscard]] const buffer_type& deep_suffix() const;
 
+    /// Forces the middle, computing the repaired subtree only now that something needs it.
     [[nodiscard]] measured_tree force_middle() const;
 
 private:
@@ -535,6 +601,7 @@ private:
 
 template <class Element, class MeasurePolicy>
 struct measured_enumeration_child final {
+    /// Which kind of child a slot holds.
     enum class child_kind {
         leaf,
         tree,
@@ -554,17 +621,28 @@ struct measured_tree_rep {
     using measure_type = typename MeasurePolicy::measure_type;
     using buffer_type = measured_buffer<Element, MeasurePolicy>;
 
+    /// An empty tree.
     virtual ~measured_tree_rep() = default;
 
+    /// Which case this value is.
     [[nodiscard]] virtual measured_tree_kind kind() const noexcept = 0;
+    /// Whether the tree holds no elements.
     [[nodiscard]] virtual bool is_empty() const noexcept = 0;
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] virtual measure_type measure() const = 0;
+    /// The first element.
     [[nodiscard]] virtual const child_type& first_element() const = 0;
+    /// The last element.
     [[nodiscard]] virtual const child_type& last_element() const = 0;
+    /// A tree with the element added at the front.
     [[nodiscard]] virtual tree_type cons(child_type value) const = 0;
+    /// A tree with the element added at the back.
     [[nodiscard]] virtual tree_type snoc(child_type value) const = 0;
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] virtual std::optional<measured_view_result<Element, MeasurePolicy>> try_view_left() const = 0;
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] virtual std::optional<measured_view_result<Element, MeasurePolicy>> try_view_right() const = 0;
+    /// Produces the elements as a flat sequence.
     virtual void flatten(std::vector<Element>& sink) const = 0;
 };
 
@@ -574,51 +652,61 @@ struct empty_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy>
     using child_type = measured_element<Element, MeasurePolicy>;
     using measure_type = typename MeasurePolicy::measure_type;
 
+    /// Which case this value is.
     [[nodiscard]] measured_tree_kind kind() const noexcept override
     {
         return measured_tree_kind::empty;
     }
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] bool is_empty() const noexcept override
     {
         return true;
     }
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] measure_type measure() const override
     {
         return MeasurePolicy::empty();
     }
 
+    /// The first element.
     [[nodiscard]] const child_type& first_element() const override
     {
         throw std::logic_error("element access on an empty measured tree");
     }
 
+    /// The last element.
     [[nodiscard]] const child_type& last_element() const override
     {
         throw std::logic_error("element access on an empty measured tree");
     }
 
+    /// A tree with the element added at the front.
     [[nodiscard]] tree_type cons(child_type value) const override
     {
         return tree_type::single(std::move(value));
     }
 
+    /// A tree with the element added at the back.
     [[nodiscard]] tree_type snoc(child_type value) const override
     {
         return tree_type::single(std::move(value));
     }
 
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_left() const override
     {
         return std::nullopt;
     }
 
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_right() const override
     {
         return std::nullopt;
     }
 
+    /// Produces the elements as a flat sequence.
     void flatten(std::vector<Element>&) const override
     {
     }
@@ -630,6 +718,7 @@ struct single_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy
     using child_type = measured_element<Element, MeasurePolicy>;
     using measure_type = typename MeasurePolicy::measure_type;
 
+    /// An empty tree using the supplied policy, which it retains.
     explicit single_measured_tree_rep(child_type element)
         : element(std::move(element))
     {
@@ -637,31 +726,37 @@ struct single_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy
 
     child_type element;
 
+    /// Which case this value is.
     [[nodiscard]] measured_tree_kind kind() const noexcept override
     {
         return measured_tree_kind::single;
     }
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] bool is_empty() const noexcept override
     {
         return false;
     }
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] measure_type measure() const override
     {
         return element.measure();
     }
 
+    /// The first element.
     [[nodiscard]] const child_type& first_element() const override
     {
         return element;
     }
 
+    /// The last element.
     [[nodiscard]] const child_type& last_element() const override
     {
         return element;
     }
 
+    /// A tree with the element added at the front.
     [[nodiscard]] tree_type cons(child_type value) const override
     {
         auto prefix = measured_buffer<Element, MeasurePolicy>{};
@@ -671,6 +766,7 @@ struct single_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy
         return tree_type::deep_computed(std::move(prefix), tree_type::empty(), std::move(suffix));
     }
 
+    /// A tree with the element added at the back.
     [[nodiscard]] tree_type snoc(child_type value) const override
     {
         auto prefix = measured_buffer<Element, MeasurePolicy>{};
@@ -680,16 +776,19 @@ struct single_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy
         return tree_type::deep_computed(std::move(prefix), tree_type::empty(), std::move(suffix));
     }
 
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_left() const override
     {
         return measured_view_result<Element, MeasurePolicy>{element, tree_type::empty()};
     }
 
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_right() const override
     {
         return measured_view_result<Element, MeasurePolicy>{element, tree_type::empty()};
     }
 
+    /// Produces the elements as a flat sequence.
     void flatten(std::vector<Element>& sink) const override
     {
         element.flatten(sink);
@@ -703,6 +802,7 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
     using measure_type = typename MeasurePolicy::measure_type;
     using buffer_type = measured_buffer<Element, MeasurePolicy>;
 
+    /// An empty tree using the supplied policies, which it retains.
     deep_measured_tree_rep(
         buffer_type prefix,
         measured_lazy_cell<tree_type> middle,
@@ -725,16 +825,19 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
     buffer_type suffix;
     atomic_box<measure_type> measure_box;
 
+    /// Which case this value is.
     [[nodiscard]] measured_tree_kind kind() const noexcept override
     {
         return measured_tree_kind::deep;
     }
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] bool is_empty() const noexcept override
     {
         return false;
     }
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] measure_type measure() const override
     {
         return *measure_box.get_or_compute([this] {
@@ -744,21 +847,25 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
         });
     }
 
+    /// The first element.
     [[nodiscard]] const child_type& first_element() const override
     {
         return prefix.front();
     }
 
+    /// The last element.
     [[nodiscard]] const child_type& last_element() const override
     {
         return suffix.back();
     }
 
+    /// Forces the middle, computing the repaired subtree only now that something needs it.
     [[nodiscard]] tree_type force_middle() const
     {
         return *middle.force();
     }
 
+    /// A tree with the element added at the front.
     [[nodiscard]] tree_type cons(child_type value) const override
     {
         if (prefix.size() < 4) {
@@ -790,6 +897,7 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
         return tree_type::deep(std::move(next_prefix), std::move(suspended), suffix);
     }
 
+    /// A tree with the element added at the back.
     [[nodiscard]] tree_type snoc(child_type value) const override
     {
         if (suffix.size() < 4) {
@@ -818,6 +926,7 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
         return tree_type::deep(prefix, std::move(suspended), std::move(next_suffix));
     }
 
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_left() const override
     {
         auto head = prefix.front();
@@ -843,6 +952,7 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
             tree_type::deep(node.node_value().children(), std::move(suspended), suffix)};
     }
 
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<measured_view_result<Element, MeasurePolicy>> try_view_right() const override
     {
         auto tail = suffix.back();
@@ -868,6 +978,7 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
             tree_type::deep(prefix, std::move(suspended), node.node_value().children())};
     }
 
+    /// Produces the elements as a flat sequence.
     void flatten(std::vector<Element>& sink) const override
     {
         for (const auto& child : prefix) {
@@ -881,6 +992,7 @@ struct deep_measured_tree_rep final : measured_tree_rep<Element, MeasurePolicy> 
         }
     }
 
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     template <class Predicate>
     [[nodiscard]] measured_split_result<Element, MeasurePolicy> split_tree(
         Predicate& predicate,

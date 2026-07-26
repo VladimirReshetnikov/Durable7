@@ -1,3 +1,8 @@
+/// A box holding a value that may be replaced atomically.
+///
+/// Independently held handles may be read and updated concurrently, which is what lets the lazy
+/// cells force themselves without external locking.
+
 #pragma once
 
 #include <atomic>
@@ -9,26 +14,33 @@
 
 namespace durable7::finger_tree::detail {
 
+/// A box holding a value that may be replaced atomically, so independently held handles can be read
+/// and updated concurrently.
 template <class Value>
 class atomic_box final {
 public:
     using value_type = Value;
     using pointer = std::shared_ptr<const value_type>;
 
+    /// Constructs the atomic box.
     atomic_box() noexcept = default;
+    /// Takes a second handle on the same collection version; the nodes are shared, not copied.
     atomic_box(const atomic_box&) = delete;
     atomic_box& operator=(const atomic_box&) = delete;
 
+    /// Reads the value stored for the key.
     [[nodiscard]] pointer get() const noexcept
     {
         return value_.load();
     }
 
+    /// Whether a value is present.
     [[nodiscard]] bool has_value() const noexcept
     {
         return get() != nullptr;
     }
 
+    /// The value stored for the key, computing and storing one when absent.
     template <class Factory>
     [[nodiscard]] pointer get_or_compute(Factory&& factory) const
     {

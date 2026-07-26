@@ -1,3 +1,5 @@
+/// Tests that concurrently held handles never observe a torn or partly built version.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/test_runner.hpp"

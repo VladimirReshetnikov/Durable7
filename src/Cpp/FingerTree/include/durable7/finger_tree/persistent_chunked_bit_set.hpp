@@ -1,3 +1,11 @@
+/// A persistent bit set over the nonnegative int32 domain, stored as chunked words.
+///
+/// Ascending nonzero 64-bit words are held in a measured tree whose measure caches population
+/// counts, which turns rank and select into a descent rather than a scan. Runs of zeros cost
+/// nothing because absent words are not represented. Every operation returns a new version and
+/// leaves its inputs valid, sharing unchanged structure, so an edit copies a path rather than the
+/// whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/measured_finger_tree.hpp>
@@ -17,6 +25,8 @@
 
 namespace durable7::finger_tree {
 
+/// One 64-bit word of the bit set together with the index it covers. Absent words are not
+/// represented, so runs of zeros cost nothing.
 struct chunked_bit_set_chunk final {
     std::int32_t word_index = 0;
     std::uint64_t bits = 0;
@@ -24,23 +34,28 @@ struct chunked_bit_set_chunk final {
     [[nodiscard]] bool operator==(const chunked_bit_set_chunk&) const = default;
 };
 
+/// The cached aggregate over a subtree of bit set chunks.
 struct chunked_bit_set_annotation final {
     std::size_t chunk_count = 0;
     std::uint64_t pop_count = 0;
     std::optional<std::int32_t> last_word;
 };
 
+/// Measures a bit set chunk by its population count, which turns rank and select into a descent.
 struct chunked_bit_set_measure final {
     using element_type = chunked_bit_set_chunk;
     using measure_type = chunked_bit_set_annotation;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static measure_type empty() { return {}; }
 
+    /// The measure of one element.
     [[nodiscard]] static measure_type measure(const element_type& element)
     {
         return {1, static_cast<std::uint64_t>(std::popcount(element.bits)), element.word_index};
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static measure_type combine(
         const measure_type& left,
         const measure_type& right)

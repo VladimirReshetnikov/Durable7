@@ -1,3 +1,5 @@
+/// Tests for the chunked bit set, including rank, select, and set algebra.
+
 #include <durable7/finger_tree/persistent_chunked_bit_set.hpp>
 
 #include "test_support/test_runner.hpp"

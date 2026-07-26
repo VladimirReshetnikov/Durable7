@@ -1,3 +1,10 @@
+/// A persistent Brodal-Okasaki heap: worst-case constant-time meld and minimum.
+///
+/// Melding links two forests rather than merging their contents, which is what keeps it constant
+/// time in the worst case rather than only amortized. Every operation returns a new version and
+/// leaves its inputs valid, sharing unchanged structure, so an edit copies a path rather than the
+/// whole collection.
+
 #pragma once
 
 #include <algorithm>
@@ -17,6 +24,7 @@
 
 namespace durable7::finger_tree {
 
+/// Shape measurements from a structural audit.
 struct brodal_okasaki_heap_statistics final {
     std::size_t count = 0;
     std::size_t root_forest_length = 0;
@@ -34,10 +42,12 @@ struct brodal_okasaki_heap_statistics final {
 template <class T, class Less = std::less<T>>
     requires std::copy_constructible<Less>
         && std::predicate<const Less&, const T&, const T&>
+/// A persistent Brodal-Okasaki heap: worst-case constant-time meld and minimum.
 class brodal_okasaki_heap final {
 private:
     struct reclaimable {
         reclaimable* deferred_next = nullptr;
+        /// Constructs the reclaimable.
         virtual ~reclaimable() = default;
     };
 
@@ -54,6 +64,8 @@ public:
     using delete_minimum_result =
         std::pair<std::shared_ptr<const value_type>, brodal_okasaki_heap>;
 
+    /// A forward const iterator over one heap version's elements. It keeps that version alive, so
+    /// it stays valid across later edits.
     class const_iterator final {
     public:
         using iterator_category = std::forward_iterator_tag;
@@ -63,6 +75,7 @@ public:
         using pointer = const T*;
         using reference = const T&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] reference operator*() const { return *pending_.back()->value; }
@@ -108,16 +121,19 @@ public:
         std::vector<const tree*> pending_;
     };
 
+    /// An empty heap using the supplied policy, which it retains.
     brodal_okasaki_heap()
         : comparer_(default_comparer())
     {
     }
 
+    /// An empty heap using the supplied policy, which it retains.
     explicit brodal_okasaki_heap(comparer_type comparer)
         : comparer_(std::make_shared<comparer_type>(std::move(comparer)))
     {
     }
 
+    /// An empty heap using the supplied policy, which it retains.
     explicit brodal_okasaki_heap(comparer_handle comparer)
         : comparer_(std::move(comparer))
     {
@@ -130,6 +146,7 @@ public:
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
             || (!std::is_lvalue_reference_v<Range&&>
                 && std::constructible_from<T, std::ranges::range_rvalue_reference_t<Range>>)
+    /// A heap holding a range's elements, built in bulk rather than by repeated insertion.
     [[nodiscard]] static brodal_okasaki_heap from_range(Range&& values)
     {
         auto result = brodal_okasaki_heap{};
@@ -140,6 +157,7 @@ public:
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
             || (!std::is_lvalue_reference_v<Range&&>
                 && std::constructible_from<T, std::ranges::range_rvalue_reference_t<Range>>)
+    /// A heap with a range's elements inserted at the position.
     [[nodiscard]] brodal_okasaki_heap insert_range(Range&& values) const
     {
         auto result = *this;
@@ -154,17 +172,24 @@ public:
         return result;
     }
 
+    /// The root node's address, for tests that a no-op shared rather than copied.
+    /// The retained ordering policy.
+    /// The retained ordering policy.
+    /// Number of elements in the heap.
+    /// Whether the heap holds no elements.
     [[nodiscard]] bool empty() const noexcept { return root_ == nullptr; }
     [[nodiscard]] size_type size() const noexcept { return count_; }
     [[nodiscard]] const comparer_type& comparer() const noexcept { return *comparer_; }
     [[nodiscard]] const comparer_handle& comparer_policy() const noexcept { return comparer_; }
     [[nodiscard]] const void* root_identity() const noexcept { return root_.get(); }
 
+    /// Whether both handles denote the same version.
     [[nodiscard]] bool is_same_version(const brodal_okasaki_heap& other) const noexcept
     {
         return comparer_ == other.comparer_ && root_ == other.root_ && count_ == other.count_;
     }
 
+    /// The minimum-priority entry.
     [[nodiscard]] const T& minimum() const
     {
         if (root_ == nullptr) {
@@ -173,11 +198,14 @@ public:
         return *root_->value;
     }
 
+    /// The minimum-priority entry, or nothing when empty. Found through the cached priority rather
+    /// than by scanning.
     [[nodiscard]] const T* try_minimum() const noexcept
     {
         return root_ == nullptr ? nullptr : root_->value.get();
     }
 
+    /// A handle on the minimum-priority entry.
     [[nodiscard]] std::shared_ptr<const T> minimum_handle() const
     {
         if (root_ == nullptr) {
@@ -186,18 +214,22 @@ public:
         return root_->value;
     }
 
+    /// A heap with the element inserted.
     [[nodiscard]] brodal_okasaki_heap insert(const T& value) const
         requires std::copy_constructible<T>
     {
         return insert_handle(std::make_shared<T>(value));
     }
 
+    /// A heap with the element inserted.
     [[nodiscard]] brodal_okasaki_heap insert(T&& value) const
         requires std::move_constructible<T>
     {
         return insert_handle(std::make_shared<T>(std::move(value)));
     }
 
+    /// The heap holding both operands' elements. Constant time: melding links two forests rather
+    /// than merging their contents.
     [[nodiscard]] brodal_okasaki_heap meld(const brodal_okasaki_heap& other) const
     {
         ensure_compatible(other);
@@ -341,6 +373,7 @@ public:
 
 private:
     struct tree final : reclaimable {
+        /// Takes a second handle on the same tree version; the nodes are shared, not copied.
         tree(size_type tree_rank, std::shared_ptr<const T> tree_value, forest_pointer tree_children)
             : rank(tree_rank)
             , value(std::move(tree_value))
@@ -354,6 +387,7 @@ private:
     };
 
     struct forest final : reclaimable {
+        /// Takes a second handle on the same collection version; the nodes are shared, not copied.
         forest(tree_pointer forest_head, forest_pointer forest_tail)
             : head(std::move(forest_head))
             , tail(std::move(forest_tail))

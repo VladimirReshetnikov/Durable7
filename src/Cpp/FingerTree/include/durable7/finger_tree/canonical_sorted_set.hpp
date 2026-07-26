@@ -1,3 +1,11 @@
+/// A persistent sorted set whose shape depends only on its contents, not on its edit history.
+///
+/// Each element's rank is derived from the element itself under the policy's seed, so two sets
+/// holding the same elements are the same tree however they were built. That makes shapes
+/// comparable across independent parties, which a history-dependent balance scheme cannot offer.
+/// Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+/// so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <algorithm>
@@ -56,6 +64,7 @@ inline constexpr auto rank_key_bytes = std::size_t{32};
 
 #if defined(_WIN32)
 
+/// Raises the error a failed CNG call reported.
 [[noreturn]] inline void throw_bcrypt_failure(const char* operation, const NTSTATUS status)
 {
     throw std::runtime_error(
@@ -63,6 +72,7 @@ inline constexpr auto rank_key_bytes = std::size_t{32};
         + std::to_string(static_cast<std::int32_t>(status)));
 }
 
+/// Fails when a CNG call reports an error.
 inline void require_bcrypt_success(const char* operation, const NTSTATUS status)
 {
     if (status < 0) {
@@ -70,8 +80,10 @@ inline void require_bcrypt_success(const char* operation, const NTSTATUS status)
     }
 }
 
+/// A SHA-256 provider backed by the Windows CNG (bcrypt) API.
 class bcrypt_provider final {
 public:
+    /// Constructs the bcrypt provider from the given parts.
     bcrypt_provider(const wchar_t* algorithm, const ULONG flags)
     {
         require_bcrypt_success(
@@ -112,9 +124,11 @@ public:
         }
     }
 
+    /// Takes a second handle on the same collection version; the nodes are shared, not copied.
     bcrypt_provider(const bcrypt_provider&) = delete;
     bcrypt_provider& operator=(const bcrypt_provider&) = delete;
 
+    /// Constructs the bcrypt provider from the given parts.
     ~bcrypt_provider()
     {
         if (handle_ != nullptr) {
@@ -122,6 +136,8 @@ public:
         }
     }
 
+    /// How many bytes the value occupies.
+    /// A handle on the stored value.
     [[nodiscard]] BCRYPT_ALG_HANDLE handle() const noexcept { return handle_; }
     [[nodiscard]] ULONG object_length() const noexcept { return object_length_; }
 
@@ -130,18 +146,21 @@ private:
     ULONG object_length_ = 0;
 };
 
+/// The shared SHA-256 provider, created once and reused.
 [[nodiscard]] inline const bcrypt_provider& sha256_provider()
 {
     static const bcrypt_provider provider{BCRYPT_SHA256_ALGORITHM, 0};
     return provider;
 }
 
+/// The shared HMAC-SHA-256 provider, created once and reused.
 [[nodiscard]] inline const bcrypt_provider& hmac_sha256_provider()
 {
     static const bcrypt_provider provider{BCRYPT_SHA256_ALGORITHM, BCRYPT_ALG_HANDLE_HMAC_FLAG};
     return provider;
 }
 
+/// Computes a digest through the Windows CNG (bcrypt) API.
 [[nodiscard]] inline std::array<std::byte, rank_key_bytes> bcrypt_digest(
     const bcrypt_provider& provider,
     const std::span<const std::byte> key,
@@ -189,12 +208,14 @@ private:
     }
 }
 
+/// The SHA-256 digest of the input.
 [[nodiscard]] inline std::array<std::byte, rank_key_bytes> sha256(
     const std::span<const std::byte> message)
 {
     return bcrypt_digest(sha256_provider(), {}, message);
 }
 
+/// The HMAC-SHA-256 of the input under the key.
 [[nodiscard]] inline std::array<std::byte, rank_key_bytes> hmac_sha256(
     const std::span<const std::byte> key,
     const std::span<const std::byte> message)
@@ -202,6 +223,7 @@ private:
     return bcrypt_digest(hmac_sha256_provider(), key, message);
 }
 
+/// Fills the buffer with pseudorandom bytes.
 inline void fill_random(const std::span<std::byte> destination)
 {
     if (destination.size() > (std::numeric_limits<ULONG>::max)()) {
@@ -218,6 +240,7 @@ inline void fill_random(const std::span<std::byte> destination)
 
 #else
 
+/// The SHA-256 digest of the input.
 [[nodiscard]] inline std::array<std::byte, rank_key_bytes> sha256(
     const std::span<const std::byte> message)
 {
@@ -237,6 +260,7 @@ inline void fill_random(const std::span<std::byte> destination)
     return result;
 }
 
+/// The HMAC-SHA-256 of the input under the key.
 [[nodiscard]] inline std::array<std::byte, rank_key_bytes> hmac_sha256(
     const std::span<const std::byte> key,
     const std::span<const std::byte> message)
@@ -261,6 +285,7 @@ inline void fill_random(const std::span<std::byte> destination)
     return result;
 }
 
+/// Fills the buffer with pseudorandom bytes.
 inline void fill_random(const std::span<std::byte> destination)
 {
     if (destination.size() > static_cast<std::size_t>((std::numeric_limits<int>::max)())) {
@@ -276,6 +301,7 @@ inline void fill_random(const std::span<std::byte> destination)
 
 #endif
 
+/// Reads an unsigned 64-bit value in big-endian order.
 [[nodiscard]] inline std::uint64_t read_big_endian_u64(const std::byte* source) noexcept
 {
     auto result = std::uint64_t{0};
@@ -285,6 +311,7 @@ inline void fill_random(const std::span<std::byte> destination)
     return result;
 }
 
+/// Writes an unsigned 64-bit value in big-endian order.
 inline void write_big_endian_u64(const std::uint64_t value, std::byte* destination) noexcept
 {
     for (auto index = std::size_t{0}; index != sizeof(value); ++index) {
@@ -292,6 +319,7 @@ inline void write_big_endian_u64(const std::uint64_t value, std::byte* destinati
     }
 }
 
+/// The 64-bit FNV-1a hash of the input.
 [[nodiscard]] inline std::uint64_t fnv1a_64(const std::span<const std::byte> bytes) noexcept
 {
     auto result = std::uint64_t{0xcbf29ce484222325ULL};
@@ -302,6 +330,7 @@ inline void write_big_endian_u64(const std::uint64_t value, std::byte* destinati
     return result;
 }
 
+/// Mixes a 64-bit value, spreading its bits so close inputs land far apart.
 [[nodiscard]] inline std::uint64_t mix64(std::uint64_t value) noexcept
 {
     value ^= value >> 30;
@@ -333,6 +362,8 @@ struct stable_zip_tree_rank_hash final {
     }
 };
 
+/// Derives an element's rank from the element itself under the policy's seed. Because the rank does
+/// not depend on insertion order, the resulting shape depends only on contents.
 template <>
 struct stable_zip_tree_rank_hash<std::string> final {
     [[nodiscard]] std::uint64_t operator()(const std::string& value) const noexcept
@@ -341,6 +372,8 @@ struct stable_zip_tree_rank_hash<std::string> final {
     }
 };
 
+/// Derives an element's rank from the element itself under the policy's seed. Because the rank does
+/// not depend on insertion order, the resulting shape depends only on contents.
 template <>
 struct stable_zip_tree_rank_hash<std::string_view> final {
     [[nodiscard]] std::uint64_t operator()(const std::string_view value) const noexcept
@@ -349,6 +382,8 @@ struct stable_zip_tree_rank_hash<std::string_view> final {
     }
 };
 
+/// A value type the canonical set can derive a stable rank hash from. Stability across runs is what
+/// makes the resulting shape reproducible.
 template <class T>
 concept stable_zip_tree_hashable = requires(const T& value) {
     { stable_zip_tree_rank_hash<T>{}(value) } -> std::convertible_to<std::uint64_t>;
@@ -392,6 +427,8 @@ public:
             && std::predicate<std::decay_t<Less>&, const T&, const T&>
             && std::invocable<std::decay_t<RankHash>&, const T&>
             && std::convertible_to<std::invoke_result_t<std::decay_t<RankHash>&, const T&>, std::uint64_t>
+    /// A policy with a randomly drawn seed, so ranks are unpredictable to an adversary choosing
+    /// insertions.
     [[nodiscard]] static zip_tree_rank_policy random(Less less, RankHash rank_hash)
     {
         auto key = std::vector<std::byte>(canonical_sorted_set_detail::rank_key_bytes);
@@ -405,6 +442,8 @@ public:
             && std::predicate<std::decay_t<Less>&, const T&, const T&>
             && std::invocable<std::decay_t<RankHash>&, const T&>
             && std::convertible_to<std::invoke_result_t<std::decay_t<RankHash>&, const T&>, std::uint64_t>
+    /// A policy with a caller-chosen private seed, making shapes reproducible without publishing
+    /// it.
     [[nodiscard]] static zip_tree_rank_policy seeded(
         const std::uint64_t seed,
         Less less,
@@ -427,6 +466,8 @@ public:
             && std::predicate<std::decay_t<Less>&, const T&, const T&>
             && std::invocable<std::decay_t<RankHash>&, const T&>
             && std::convertible_to<std::invoke_result_t<std::decay_t<RankHash>&, const T&>, std::uint64_t>
+    /// A policy with a published seed, so independent parties derive identical shapes for identical
+    /// contents.
     [[nodiscard]] static zip_tree_rank_policy keyed(
         const std::span<const std::byte> rank_key,
         Less less,
@@ -451,11 +492,13 @@ public:
         return value;
     }
 
+    /// The published seed. Publishing it is what lets independent parties derive identical shapes.
     [[nodiscard]] std::optional<std::uint64_t> public_seed() const noexcept
     {
         return state_->public_seed;
     }
 
+    /// Whether both values carry the same policy.
     [[nodiscard]] bool is_same_policy(const zip_tree_rank_policy& other) const noexcept
     {
         return state_ == other.state_;
@@ -520,6 +563,7 @@ private:
     std::shared_ptr<const state> state_;
 };
 
+/// Shape measurements from a structural audit.
 struct canonical_sorted_set_statistics final {
     std::size_t count = 0;
     std::size_t height = 0;
@@ -529,6 +573,8 @@ struct canonical_sorted_set_statistics final {
     friend bool operator==(const canonical_sorted_set_statistics&, const canonical_sorted_set_statistics&) = default;
 };
 
+/// One node's rendered shape, used by the tests to show that different edit histories converge on
+/// one tree.
 template <class T>
 struct canonical_sorted_set_shape_entry final {
     T item;
@@ -550,6 +596,8 @@ public:
     using size_type = std::size_t;
     using policy_type = zip_tree_rank_policy<T>;
 
+    /// A forward const iterator over one set version's elements. It keeps that version alive, so it
+    /// stays valid across later edits.
     class const_iterator final {
     public:
         using iterator_category = std::forward_iterator_tag;
@@ -559,6 +607,7 @@ public:
         using pointer = const T*;
         using reference = const T&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] reference operator*() const { return *path_.back()->item; }
@@ -611,6 +660,7 @@ public:
         std::vector<const node*> path_;
     };
 
+    /// An empty set using the supplied policies, which it retains.
     canonical_sorted_set()
         requires stable_zip_tree_hashable<T>
             && std::predicate<std::less<T>&, const T&, const T&>
@@ -618,6 +668,7 @@ public:
     {
     }
 
+    /// An empty set using the supplied policy, which it retains.
     explicit canonical_sorted_set(policy_type policy)
         : policy_(std::move(policy))
     {
@@ -627,6 +678,7 @@ public:
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
             || (!std::is_lvalue_reference_v<Range&&>
                 && std::constructible_from<T, std::ranges::range_rvalue_reference_t<Range>>)
+    /// A set holding a range's elements, built in bulk rather than by repeated insertion.
     [[nodiscard]] static canonical_sorted_set from_range(Range&& values, policy_type policy)
     {
         auto pending = std::vector<std::shared_ptr<const T>>{};
@@ -650,28 +702,38 @@ public:
             && (std::constructible_from<T, std::ranges::range_reference_t<Range>>
                 || (!std::is_lvalue_reference_v<Range&&>
                     && std::constructible_from<T, std::ranges::range_rvalue_reference_t<Range>>))
+    /// A set holding a range's elements, built in bulk rather than by repeated insertion.
     [[nodiscard]] static canonical_sorted_set from_range(Range&& values)
     {
         return from_range(std::forward<Range>(values), policy_type::default_policy());
     }
 
+    /// The policy the set retains.
+    /// The structure's height.
+    /// Number of elements in the set.
+    /// Whether the set holds no elements.
     [[nodiscard]] bool empty() const noexcept { return root_ == nullptr; }
     [[nodiscard]] size_type size() const noexcept { return root_ == nullptr ? 0 : root_->count; }
     [[nodiscard]] size_type height() const noexcept { return root_ == nullptr ? 0 : root_->height; }
     [[nodiscard]] const policy_type& policy() const noexcept { return policy_; }
 
+    /// The root node's address, for tests that a no-op shared rather than copied.
     [[nodiscard]] const void* root_identity() const noexcept { return root_.get(); }
 
+    /// Whether both handles reference the same root node. A representation check used to confirm a
+    /// no-op avoided copying, not an equality test.
     [[nodiscard]] bool shares_root_with(const canonical_sorted_set& other) const noexcept
     {
         return root_ == other.root_;
     }
 
+    /// Whether both handles denote the same version.
     [[nodiscard]] bool is_same_version(const canonical_sorted_set& other) const noexcept
     {
         return policy_.is_same_policy(other.policy_) && root_ == other.root_;
     }
 
+    /// The node addresses, for sharing assertions.
     [[nodiscard]] std::vector<const void*> node_identities() const
     {
         auto result = std::vector<const void*>{};
@@ -694,6 +756,7 @@ public:
         return result;
     }
 
+    /// How many nodes the two versions have in common.
     [[nodiscard]] size_type shared_node_count_with(const canonical_sorted_set& other) const
     {
         auto identities = node_identities();
@@ -705,6 +768,8 @@ public:
         return count;
     }
 
+    /// A value summarizing the shape, so tests can assert on structure without depending on
+    /// addresses.
     [[nodiscard]] std::vector<canonical_sorted_set_shape_entry<T>> topology_signature() const
         requires std::copy_constructible<T>
     {
@@ -731,6 +796,7 @@ public:
         return result;
     }
 
+    /// Whether the element is present.
     [[nodiscard]] bool contains(const T& value) const { return find_node(value) != nullptr; }
 
     /// Returns the number of stored items ordered strictly before `value`, which is also the
@@ -768,12 +834,14 @@ public:
         return nullptr;
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const T* try_get(const T& equivalent_value) const
     {
         const auto* found = find_node(equivalent_value);
         return found == nullptr ? nullptr : found->item.get();
     }
 
+    /// A set containing the given element; returns the receiver when already present.
     [[nodiscard]] canonical_sorted_set add(const T& value) const
         requires std::copy_constructible<T>
     {
@@ -785,6 +853,7 @@ public:
         return add_representative(std::make_shared<T>(value));
     }
 
+    /// A set containing the given element; returns the receiver when already present.
     [[nodiscard]] canonical_sorted_set add(T&& value) const
         requires std::move_constructible<T>
     {
@@ -796,6 +865,7 @@ public:
         return add_representative(std::make_shared<T>(std::move(value)));
     }
 
+    /// A set without that element; returns the receiver when absent.
     [[nodiscard]] canonical_sorted_set remove(const T& value) const
     {
         auto removed = false;
@@ -803,11 +873,14 @@ public:
         return removed ? canonical_sorted_set{std::move(root), policy_} : *this;
     }
 
+    /// An empty set retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] canonical_sorted_set clear() const
     {
         return empty() ? *this : canonical_sorted_set{policy_};
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     [[nodiscard]] canonical_sorted_set union_with(const canonical_sorted_set& other) const
     {
         ensure_compatible(other);
@@ -822,6 +895,7 @@ public:
         return result;
     }
 
+    /// The elements present in both sets.
     [[nodiscard]] canonical_sorted_set intersect(const canonical_sorted_set& other) const
     {
         ensure_compatible(other);
@@ -837,6 +911,7 @@ public:
         return result;
     }
 
+    /// This set's elements that are absent from the other.
     [[nodiscard]] canonical_sorted_set except(const canonical_sorted_set& other) const
     {
         ensure_compatible(other);
@@ -1015,6 +1090,7 @@ private:
         mutable std::atomic<std::uint64_t> digest_value{0};
         mutable std::atomic<bool> digest_ready{false};
 
+        /// An empty node.
         node(
             std::shared_ptr<const T> item_value,
             const zip_tree_rank rank_value,
@@ -1029,6 +1105,7 @@ private:
         {
         }
 
+        /// Constructs the node from the given parts.
         ~node() noexcept
         {
             if (left == nullptr && right == nullptr) {
@@ -1076,6 +1153,7 @@ private:
             }
         }
 
+        /// The digest, which is also the key this value is stored and fetched under.
         [[nodiscard]] std::uint64_t digest() const
         {
             if (digest_ready.load(std::memory_order_acquire)) {
@@ -1528,6 +1606,7 @@ private:
     policy_type policy_;
 };
 
+/// An empty set using the supplied policy, which it retains.
 template <class T>
 canonical_sorted_set(zip_tree_rank_policy<T>) -> canonical_sorted_set<T>;
 

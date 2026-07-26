@@ -1,3 +1,8 @@
+/// Tests for the lazily range-updating sequence.
+///
+/// Checks the tag algebra's laws as well as the operations, since a tag that does not compose
+/// associatively or distribute over the measure produces wrong answers only after a push-down.
+
 #include <durable7/finger_tree/range_update_sequence.hpp>
 
 #include "test_support/allocation_counter.hpp"

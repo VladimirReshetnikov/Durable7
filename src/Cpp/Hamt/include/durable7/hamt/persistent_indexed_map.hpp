@@ -1,3 +1,9 @@
+/// A persistent map carrying a secondary index derived from its entries.
+///
+/// The index is maintained as entries change, so looking up by the derived key is a lookup rather
+/// than a scan. Every operation returns a new version and leaves its inputs valid, sharing
+/// unchanged structure, so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include "persistent_hash_map.hpp"
@@ -34,6 +40,8 @@ template <
         && std::copyable<ValueEqual>
         && std::copyable<IndexHash>
         && std::copyable<IndexEqual>
+/// A persistent map carrying a secondary index derived from its entries, so looking up by the
+/// derived key is a lookup rather than a scan.
 class persistent_indexed_map final {
 private:
     struct entry final {
@@ -65,8 +73,10 @@ public:
     using key_set = typename index_map::value_set;
     using size_type = std::size_t;
 
+    /// An empty map.
     persistent_indexed_map() = delete;
 
+    /// An empty map using the supplied policies, which it retains.
     [[nodiscard]] static persistent_indexed_map create(
         Selector selector,
         KeyHash key_hash = {},
@@ -91,6 +101,7 @@ public:
             std::move(value_equal)};
     }
 
+    /// A map holding a range's entries, built in bulk rather than by repeated insertion.
     template <class Range>
     [[nodiscard]] static persistent_indexed_map create_range(
         const Range& items,
@@ -110,6 +121,13 @@ public:
         return result;
     }
 
+    /// The retained index-key hashing policy.
+    /// The retained value equivalence policy.
+    /// The retained key equivalence policy.
+    /// The retained key hashing policy.
+    /// How many distinct secondary index keys are present.
+    /// Whether the map holds no entries.
+    /// Number of entries in the map.
     [[nodiscard]] size_type count() const noexcept { return primary_.count(); }
     [[nodiscard]] bool is_empty() const noexcept { return primary_.is_empty(); }
     [[nodiscard]] size_type index_key_count() const noexcept { return index_.key_count(); }
@@ -120,15 +138,20 @@ public:
     {
         return index_.key_hash_function();
     }
+    /// The retained function deriving the index key from an entry.
+    /// The retained index-key equivalence policy.
     [[nodiscard]] const IndexEqual& index_eq() const noexcept { return index_.key_eq(); }
     [[nodiscard]] const Selector& selector() const noexcept { return selector_; }
 
+    /// Reads the value stored for the key, or nothing when absent.
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const Key& key) const { return primary_.contains_key(key); }
     [[nodiscard]] const Value* try_get(const Key& key) const
     {
         const auto* stored = primary_.try_get(key);
         return stored == nullptr ? nullptr : std::addressof(stored->value);
     }
+    /// The value stored for the key. Raises when the key is absent.
     [[nodiscard]] const Value& at(const Key& key) const
     {
         const auto* value = try_get(key);
@@ -137,33 +160,41 @@ public:
         }
         return *value;
     }
+    /// Reads the stored key representative, or nothing when absent.
     [[nodiscard]] const Key* try_get_key(const Key& equal_key) const
     {
         return primary_.try_get_key(equal_key);
     }
+    /// Reads the secondary index key derived for a primary key, or nothing when the primary key is
+    /// absent.
     [[nodiscard]] const IndexKey* try_get_index_key(const Key& key) const
     {
         const auto* stored = primary_.try_get(key);
         return stored == nullptr ? nullptr : std::addressof(stored->index_key);
     }
+    /// Whether the secondary index key is present.
     [[nodiscard]] bool contains_index_key(const IndexKey& index_key) const
     {
         return index_.contains_key(index_key);
     }
+    /// How many entries carry the given secondary index key.
     [[nodiscard]] size_type count_by_index(const IndexKey& index_key) const
     {
         const auto* keys = index_.try_get_values(index_key);
         return keys == nullptr ? size_type{0} : keys->count();
     }
+    /// Reads the primary keys carrying the given secondary index key, or nothing when none do.
     [[nodiscard]] const key_set* try_get_keys_by_index(const IndexKey& index_key) const
     {
         return index_.try_get_values(index_key);
     }
+    /// The primary keys carrying the given secondary index key, empty when none do.
     [[nodiscard]] key_set keys_by_index_or_empty(const IndexKey& index_key) const
     {
         return index_.values_or_empty(index_key);
     }
 
+    /// A map containing the given entry; returns the receiver when already present.
     [[nodiscard]] persistent_indexed_map add(const Key& key, const Value& value) const
     {
         if (primary_.contains_key(key)) {
@@ -180,6 +211,7 @@ public:
             std::move(index), selector_, value_equal_};
     }
 
+    /// Adds the entry unless an equivalent one is present, reporting which happened.
     [[nodiscard]] std::pair<persistent_indexed_map, bool> try_add(
         const Key& key,
         const Value& value) const
@@ -190,6 +222,7 @@ public:
         return {add(key, value), true};
     }
 
+    /// A map with the key bound to the value, adding or replacing as needed.
     [[nodiscard]] persistent_indexed_map set_item(const Key& key, const Value& value) const
     {
         const auto* current = primary_.try_get(key);
@@ -217,6 +250,7 @@ public:
             std::move(index), selector_, value_equal_};
     }
 
+    /// A map without that entry; returns the receiver when absent.
     [[nodiscard]] persistent_indexed_map remove(const Key& key) const
     {
         const auto* current = primary_.try_get(key);
@@ -230,6 +264,7 @@ public:
             selector_, value_equal_};
     }
 
+    /// An empty map retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] persistent_indexed_map clear() const
     {
         return is_empty()
@@ -238,6 +273,7 @@ public:
                 primary_.clear(), index_.clear(), selector_, value_equal_};
     }
 
+    /// Copies the entries out into a vector, in the map's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         auto result = std::vector<value_type>{};
@@ -248,12 +284,14 @@ public:
         return result;
     }
 
+    /// Whether both handles reference the same roots.
     [[nodiscard]] bool shares_roots_with(const persistent_indexed_map& other) const noexcept
     {
         return primary_.shares_root_with(other.primary_)
             && index_.shares_root_with(other.index_);
     }
 
+    /// Checks the map's structural invariants. For tests and diagnostics.
     void validate_invariants() const
     {
         if (!primary_.debug_validate_canonical()) {
@@ -277,6 +315,7 @@ public:
         });
     }
 
+    /// Checks the map's structural invariants. For tests and diagnostics.
     [[nodiscard]] bool debug_validate() const noexcept
     {
         try {

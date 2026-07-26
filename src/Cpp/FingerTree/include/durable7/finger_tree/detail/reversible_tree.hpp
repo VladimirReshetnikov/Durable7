@@ -1,3 +1,8 @@
+/// The reversible deque's underlying tree, carrying the orientation flag reversal flips.
+///
+/// Every read consults the flag rather than the stored order, so reversing shares the whole tree
+/// instead of rebuilding it.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -28,21 +33,25 @@ class rev_tree;
 template <class T>
 struct rev_tree_rep;
 
+/// A reversible tree's prefix or suffix digit.
 template <class T>
 using rev_digit = std::vector<rev_element<T>>;
 
+/// Which of the reversible tree's three cases a node is.
 enum class rev_tree_kind {
     empty,
     single,
     deep
 };
 
+/// An endpoint element together with the tree remaining.
 template <class T>
 struct rev_view_result final {
     rev_element<T> value;
     rev_tree<T> rest;
 };
 
+/// The two reversible trees a split produced.
 template <class T>
 struct rev_split_result final {
     rev_tree<T> left;
@@ -51,46 +60,58 @@ struct rev_split_result final {
     rev_tree<T> right;
 };
 
+/// Sums a range of subtree sizes.
 template <class T>
 [[nodiscard]] std::size_t rev_sum_sizes(const rev_digit<T>& elements);
 
+/// Mirrors a subtree so a reversed handle reads it in the right order.
 template <class T>
 [[nodiscard]] rev_digit<T> rev_mirror_reversed(const rev_digit<T>& elements);
 
+/// Builds a deep reversible node from its prefix, middle, and suffix.
 template <class T>
 [[nodiscard]] rev_tree<T> rev_make_deep(rev_digit<T> prefix, rev_tree<T> middle, rev_digit<T> suffix);
 
+/// Builds a reversible tree from a digit.
 template <class T>
 [[nodiscard]] rev_tree<T> rev_from_digit(const rev_digit<T>& elements);
 
+/// Rebuilds a deep reversible node whose prefix may have been emptied.
 template <class T>
 [[nodiscard]] rev_tree<T> rev_deep_left(rev_digit<T> prefix, rev_tree<T> middle, rev_digit<T> suffix);
 
+/// Rebuilds a deep reversible node whose suffix may have been emptied.
 template <class T>
 [[nodiscard]] rev_tree<T> rev_deep_right(rev_digit<T> prefix, rev_tree<T> middle, rev_digit<T> suffix);
 
+/// Groups elements into nodes, as concatenation's seam rebuild requires.
 template <class T>
 [[nodiscard]] rev_digit<T> rev_nodes(const rev_digit<T>& elements);
 
+/// Concatenates two reversible trees.
 template <class T>
 [[nodiscard]] rev_tree<T> rev_concat(rev_tree<T> left, rev_tree<T> right);
 
+/// Concatenates two reversible trees with elements carried between them.
 template <class T>
 [[nodiscard]] rev_tree<T> rev_concat_with_middle(
     rev_tree<T> left,
     const rev_digit<T>& middle,
     rev_tree<T> right);
 
+/// One element of a reversible tree.
 template <class T>
 class rev_element final {
 public:
     using node_pointer = std::shared_ptr<const rev_node<T>>;
 
+    /// The leaf element this value holds.
     [[nodiscard]] static rev_element leaf(T value)
     {
         return rev_element{leaf_storage{std::move(value)}};
     }
 
+    /// The underlying node.
     [[nodiscard]] static rev_element node(node_pointer value)
     {
         if (value == nullptr) {
@@ -100,44 +121,58 @@ public:
         return rev_element{std::move(value)};
     }
 
+    /// A two-child node.
     [[nodiscard]] static rev_element node2(rev_element first, rev_element second);
 
+    /// A three-child node.
     [[nodiscard]] static rev_element node3(rev_element first, rev_element second, rev_element third);
 
+    /// Whether this node is a leaf.
     [[nodiscard]] bool is_leaf() const noexcept
     {
         return std::holds_alternative<leaf_storage>(storage_);
     }
 
+    /// Whether this value holds a node rather than an element.
     [[nodiscard]] bool is_node() const noexcept
     {
         return std::holds_alternative<node_pointer>(storage_);
     }
 
+    /// Number of elements in the collection.
     [[nodiscard]] std::size_t size() const;
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const;
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const;
 
+    /// The leaf element this value holds.
     [[nodiscard]] const T& leaf_value() const
     {
         return std::get<leaf_storage>(storage_).value;
     }
 
+    /// The node this value holds.
     [[nodiscard]] const rev_node<T>& node_value() const
     {
         return *std::get<node_pointer>(storage_);
     }
 
+    /// The collection in the opposite order.
     [[nodiscard]] rev_element mirror() const;
 
+    /// The leaf element at the given index.
     [[nodiscard]] T get_leaf(std::size_t index) const;
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] rev_element set_leaf(std::size_t index, T value) const;
 
+    /// Copies the leaf elements out.
     void copy_leaves(std::vector<T>& sink) const;
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const;
 
 private:
@@ -157,17 +192,20 @@ private:
     storage_type storage_;
 };
 
+/// One interior node of a reversible tree.
 template <class T>
 class rev_node final {
 public:
     using element_type = rev_element<T>;
     using digit_type = rev_digit<T>;
 
+    /// Builds a node from the given children.
     [[nodiscard]] static std::shared_ptr<const rev_node> make(digit_type children)
     {
         return std::make_shared<const rev_node>(std::move(children));
     }
 
+    /// Constructs the rev node from the given parts.
     explicit rev_node(digit_type children)
         : children_(std::move(children))
         , size_(validated_size(children_))
@@ -176,36 +214,43 @@ public:
     {
     }
 
+    /// How many children this node has.
     [[nodiscard]] std::size_t child_count() const noexcept
     {
         return children_.size();
     }
 
+    /// Number of elements in the node.
     [[nodiscard]] std::size_t size() const noexcept
     {
         return size_;
     }
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const noexcept
     {
         return reversed_ ? last_forward_ : first_forward_;
     }
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const noexcept
     {
         return reversed_ ? first_forward_ : last_forward_;
     }
 
+    /// The node in the opposite order.
     [[nodiscard]] rev_node mirror() const
     {
         return rev_node{children_, size_, first_forward_, last_forward_, !reversed_};
     }
 
+    /// The child at the given index in the orientation the handle presents.
     [[nodiscard]] element_type logical_child(const std::size_t index) const
     {
         return reversed_ ? children_[children_.size() - 1 - index].mirror() : children_[index];
     }
 
+    /// The children in the orientation the handle presents.
     [[nodiscard]] digit_type logical_children() const
     {
         auto result = digit_type{};
@@ -217,6 +262,7 @@ public:
         return result;
     }
 
+    /// The leaf element at the given index.
     [[nodiscard]] T get_leaf(std::size_t index) const
     {
         for (std::size_t child_index = 0; child_index < child_count(); ++child_index) {
@@ -231,6 +277,7 @@ public:
         throw std::logic_error("reversible node leaf index is out of range");
     }
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] element_type set_leaf(std::size_t index, T value) const
     {
         auto children = logical_children();
@@ -246,6 +293,7 @@ public:
         throw std::logic_error("reversible node set index is out of range");
     }
 
+    /// Copies the leaf elements out.
     void copy_leaves(std::vector<T>& sink) const
     {
         for (std::size_t index = 0; index < children_.size(); ++index) {
@@ -253,6 +301,7 @@ public:
         }
     }
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const
     {
         if (children_.size() < 2 || children_.size() > 3) {
@@ -377,55 +426,79 @@ std::size_t rev_element<T>::validate_and_count() const
     return is_leaf() ? 1 : node_value().validate_and_count();
 }
 
+/// The reversible deque's underlying tree, carrying the orientation flag that makes reversal
+/// constant time.
 template <class T>
 class rev_tree final {
 public:
     using element_type = rev_element<T>;
     using digit_type = rev_digit<T>;
 
+    /// Takes a second handle on the same tree version; the nodes are shared, not copied.
     rev_tree();
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] static rev_tree empty();
 
+    /// A tree holding exactly one element.
     [[nodiscard]] static rev_tree single(element_type element);
 
+    /// A tree with a prefix, a middle, and a suffix.
     [[nodiscard]] static rev_tree deep(digit_type prefix, rev_tree middle, digit_type suffix);
 
+    /// Takes a second handle on the same tree version; the nodes are shared, not copied.
     explicit rev_tree(std::shared_ptr<const rev_tree_rep<T>> rep)
         : rep_(std::move(rep))
     {
     }
 
+    /// The shared empty tree. One instance is reused, since an empty tree has nothing to
+    /// distinguish.
     [[nodiscard]] bool empty_state() const noexcept;
 
+    /// Number of elements in the tree.
     [[nodiscard]] std::size_t size() const noexcept;
 
+    /// The first leaf element.
     [[nodiscard]] const T& first_leaf() const;
 
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const;
 
+    /// The tree in the opposite order.
     [[nodiscard]] rev_tree mirror() const;
 
+    /// A tree with the element added at the front.
     [[nodiscard]] rev_tree cons(element_type value) const;
 
+    /// A tree with the element added at the back.
     [[nodiscard]] rev_tree snoc(element_type value) const;
 
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<rev_view_result<T>> try_view_left() const;
 
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<rev_view_result<T>> try_view_right() const;
 
+    /// The leaf element at the given index.
     [[nodiscard]] T get_leaf(std::size_t index) const;
 
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] rev_tree set_leaf(std::size_t index, T value) const;
 
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     [[nodiscard]] rev_split_result<T> split_tree(std::size_t index) const;
 
+    /// Copies the leaf elements out.
     void copy_leaves(std::vector<T>& sink) const;
 
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const;
 
+    /// The structure's height.
     [[nodiscard]] std::size_t depth() const noexcept;
 
+    /// The address this value occupies, for sharing assertions.
     [[nodiscard]] const void* identity() const noexcept
     {
         return rep_.get();
@@ -439,37 +512,72 @@ private:
     std::shared_ptr<const rev_tree_rep<T>> rep_;
 };
 
+/// The base of a reversible tree's three cases.
 template <class T>
 struct rev_tree_rep {
     using tree_type = rev_tree<T>;
     using element_type = rev_element<T>;
     using digit_type = rev_digit<T>;
 
+    /// An empty tree.
     virtual ~rev_tree_rep() = default;
 
+    /// Which case this value is.
     [[nodiscard]] virtual rev_tree_kind kind() const noexcept = 0;
+    /// The shared empty tree. One instance is reused, since an empty tree has nothing to
+    /// distinguish.
     [[nodiscard]] virtual bool empty_state() const noexcept = 0;
+    /// Number of elements in the tree.
     [[nodiscard]] virtual std::size_t size() const noexcept = 0;
+    /// The first leaf element.
     [[nodiscard]] virtual const T& first_leaf() const = 0;
+    /// The last leaf element.
     [[nodiscard]] virtual const T& last_leaf() const = 0;
+    /// The tree in the opposite order.
     [[nodiscard]] virtual tree_type mirror() const = 0;
+    /// A tree with the element added at the front.
     [[nodiscard]] virtual tree_type cons(element_type value) const = 0;
+    /// A tree with the element added at the back.
     [[nodiscard]] virtual tree_type snoc(element_type value) const = 0;
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] virtual std::optional<rev_view_result<T>> try_view_left() const = 0;
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] virtual std::optional<rev_view_result<T>> try_view_right() const = 0;
+    /// The leaf element at the given index.
     [[nodiscard]] virtual T get_leaf(std::size_t index) const = 0;
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] virtual tree_type set_leaf(std::size_t index, T value) const = 0;
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     [[nodiscard]] virtual rev_split_result<T> split_tree(std::size_t index) const = 0;
+    /// Copies the leaf elements out.
     virtual void copy_leaves(std::vector<T>& sink) const = 0;
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] virtual std::size_t validate_and_count() const = 0;
+    /// The structure's height.
     [[nodiscard]] virtual std::size_t depth() const noexcept = 0;
 };
 
+/// The empty reversible tree.
 template <class T>
 struct empty_rev_tree_rep final : rev_tree_rep<T> {
     using tree_type = rev_tree<T>;
     using element_type = rev_element<T>;
 
+    /// Copies the leaf elements out.
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
+    /// A copy with the leaf element at the given index replaced.
+    /// The leaf element at the given index.
+    /// Views the rightmost element together with the rest, or nothing when empty.
+    /// Views the leftmost element together with the rest, or nothing when empty.
+    /// A tree with the element added at the back.
+    /// A tree with the element added at the front.
+    /// The tree in the opposite order.
+    /// The last leaf element.
+    /// The first leaf element.
+    /// Number of elements in the tree.
+    /// The shared empty tree. One instance is reused, since an empty tree has nothing to
+    /// distinguish.
+    /// Which case this value is.
     [[nodiscard]] rev_tree_kind kind() const noexcept override { return rev_tree_kind::empty; }
     [[nodiscard]] bool empty_state() const noexcept override { return true; }
     [[nodiscard]] std::size_t size() const noexcept override { return 0; }
@@ -484,6 +592,8 @@ struct empty_rev_tree_rep final : rev_tree_rep<T> {
     [[nodiscard]] tree_type set_leaf(std::size_t, T) const override { throw empty_error(); }
     [[nodiscard]] rev_split_result<T> split_tree(std::size_t) const override { throw empty_error(); }
     void copy_leaves(std::vector<T>&) const override {}
+    /// The structure's height.
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const override { return 0; }
     [[nodiscard]] std::size_t depth() const noexcept override { return 0; }
 
@@ -494,16 +604,26 @@ private:
     }
 };
 
+/// A reversible tree holding exactly one element.
 template <class T>
 struct single_rev_tree_rep final : rev_tree_rep<T> {
     using tree_type = rev_tree<T>;
     using element_type = rev_element<T>;
 
+    /// An empty tree using the supplied policy, which it retains.
     explicit single_rev_tree_rep(element_type element)
         : element(std::move(element))
     {
     }
 
+    /// A tree with the element added at the front.
+    /// The tree in the opposite order.
+    /// The last leaf element.
+    /// The first leaf element.
+    /// Number of elements in the tree.
+    /// The shared empty tree. One instance is reused, since an empty tree has nothing to
+    /// distinguish.
+    /// Which case this value is.
     [[nodiscard]] rev_tree_kind kind() const noexcept override { return rev_tree_kind::single; }
     [[nodiscard]] bool empty_state() const noexcept override { return false; }
     [[nodiscard]] std::size_t size() const noexcept override { return element.size(); }
@@ -514,40 +634,51 @@ struct single_rev_tree_rep final : rev_tree_rep<T> {
     {
         return rev_make_deep(rev_digit<T>{std::move(value)}, tree_type::empty(), rev_digit<T>{element});
     }
+    /// A tree with the element added at the back.
     [[nodiscard]] tree_type snoc(element_type value) const override
     {
         return rev_make_deep(rev_digit<T>{element}, tree_type::empty(), rev_digit<T>{std::move(value)});
     }
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<rev_view_result<T>> try_view_left() const override
     {
         return rev_view_result<T>{element, tree_type::empty()};
     }
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<rev_view_result<T>> try_view_right() const override
     {
         return rev_view_result<T>{element, tree_type::empty()};
     }
+    /// A copy with the leaf element at the given index replaced.
+    /// The leaf element at the given index.
     [[nodiscard]] T get_leaf(const std::size_t index) const override { return element.get_leaf(index); }
     [[nodiscard]] tree_type set_leaf(const std::size_t index, T value) const override
     {
         return tree_type::single(element.set_leaf(index, std::move(value)));
     }
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     [[nodiscard]] rev_split_result<T> split_tree(const std::size_t index) const override
     {
         return rev_split_result<T>{tree_type::empty(), element, index, tree_type::empty()};
     }
+    /// Copies the leaf elements out.
     void copy_leaves(std::vector<T>& sink) const override { element.copy_leaves(sink); }
+    /// The structure's height.
+    /// Checks the structural invariants and returns the element count it derived while doing so.
     [[nodiscard]] std::size_t validate_and_count() const override { return element.validate_and_count(); }
     [[nodiscard]] std::size_t depth() const noexcept override { return 0; }
 
     element_type element;
 };
 
+/// A reversible tree with a prefix, a middle, and a suffix.
 template <class T>
 struct deep_rev_tree_rep final : rev_tree_rep<T> {
     using tree_type = rev_tree<T>;
     using element_type = rev_element<T>;
     using digit_type = rev_digit<T>;
 
+    /// An empty tree using the supplied policies, which it retains.
     deep_rev_tree_rep(digit_type prefix, tree_type middle, digit_type suffix)
         : prefix(std::move(prefix))
         , middle(std::move(middle))
@@ -558,6 +689,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
         validate_digit_lengths();
     }
 
+    /// An empty tree using the supplied policies, which it retains.
     deep_rev_tree_rep(digit_type prefix, tree_type middle, digit_type suffix, std::size_t total_size, bool reversed)
         : prefix(std::move(prefix))
         , middle(std::move(middle))
@@ -568,6 +700,11 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
         validate_digit_lengths();
     }
 
+    /// The first leaf element.
+    /// Number of elements in the tree.
+    /// The shared empty tree. One instance is reused, since an empty tree has nothing to
+    /// distinguish.
+    /// Which case this value is.
     [[nodiscard]] rev_tree_kind kind() const noexcept override { return rev_tree_kind::deep; }
     [[nodiscard]] bool empty_state() const noexcept override { return false; }
     [[nodiscard]] std::size_t size() const noexcept override { return total_size; }
@@ -575,22 +712,28 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
     {
         return reversed ? suffix.back().last_leaf() : prefix.front().first_leaf();
     }
+    /// The last leaf element.
     [[nodiscard]] const T& last_leaf() const override
     {
         return reversed ? prefix.front().first_leaf() : suffix.back().last_leaf();
     }
+    /// The prefix in the orientation the handle presents, which a reversed handle swaps with the
+    /// suffix.
     [[nodiscard]] digit_type logical_prefix() const
     {
         return reversed ? rev_mirror_reversed(suffix) : prefix;
     }
+    /// The suffix in the orientation the handle presents.
     [[nodiscard]] digit_type logical_suffix() const
     {
         return reversed ? rev_mirror_reversed(prefix) : suffix;
     }
+    /// The middle in the orientation the handle presents.
     [[nodiscard]] tree_type logical_middle() const
     {
         return reversed ? middle.mirror() : middle;
     }
+    /// The tree in the opposite order.
     [[nodiscard]] tree_type mirror() const override
     {
         return tree_type{std::make_shared<const deep_rev_tree_rep>(
@@ -600,6 +743,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
             total_size,
             !reversed)};
     }
+    /// A tree with the element added at the front.
     [[nodiscard]] tree_type cons(element_type value) const override
     {
         auto logical = logical_prefix();
@@ -615,6 +759,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
         next_prefix.push_back(logical[0]);
         return rev_make_deep(std::move(next_prefix), logical_middle().cons(std::move(pushed)), logical_suffix());
     }
+    /// A tree with the element added at the back.
     [[nodiscard]] tree_type snoc(element_type value) const override
     {
         auto logical = logical_suffix();
@@ -630,6 +775,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
         next_suffix.push_back(std::move(value));
         return rev_make_deep(logical_prefix(), logical_middle().snoc(std::move(pushed)), std::move(next_suffix));
     }
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<rev_view_result<T>> try_view_left() const override
     {
         auto logical = logical_prefix();
@@ -640,6 +786,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
             : rev_make_deep(std::move(logical), logical_middle(), logical_suffix());
         return rev_view_result<T>{std::move(head), std::move(rest)};
     }
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<rev_view_result<T>> try_view_right() const override
     {
         auto logical = logical_suffix();
@@ -650,6 +797,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
             : rev_make_deep(logical_prefix(), logical_middle(), std::move(logical));
         return rev_view_result<T>{std::move(last), std::move(rest)};
     }
+    /// The leaf element at the given index.
     [[nodiscard]] T get_leaf(std::size_t index) const override
     {
         auto current_prefix = logical_prefix();
@@ -667,6 +815,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
         index -= current_middle.size();
         return get_in_digit(logical_suffix(), index);
     }
+    /// A copy with the leaf element at the given index replaced.
     [[nodiscard]] tree_type set_leaf(std::size_t index, T value) const override
     {
         auto current_prefix = logical_prefix();
@@ -684,6 +833,7 @@ struct deep_rev_tree_rep final : rev_tree_rep<T> {
         index -= current_middle.size();
         return rev_make_deep(current_prefix, current_middle, set_in_digit(logical_suffix(), index, std::move(value)));
     }
+    /// Splits at the first point where the accumulated measure satisfies the predicate.
     [[nodiscard]] rev_split_result<T> split_tree(std::size_t index) const override
     {
         auto current_prefix = logical_prefix();
@@ -959,8 +1109,10 @@ std::size_t rev_tree<T>::depth() const noexcept
 template <class T>
 class rev_tree_cursor final {
 public:
+    /// An unpositioned cursor, holding no version.
     rev_tree_cursor() = default;
 
+    /// A cursor over the given tree version at the given position.
     explicit rev_tree_cursor(rev_tree<T> root)
         : root_(std::move(root))
     {
@@ -969,16 +1121,19 @@ public:
         advance();
     }
 
+    /// Whether the traversal has finished.
     [[nodiscard]] bool at_end() const noexcept
     {
         return current_ == nullptr;
     }
 
+    /// The value at the current position.
     [[nodiscard]] const T& current() const noexcept
     {
         return *current_;
     }
 
+    /// Advances to the next position.
     void advance()
     {
         current_ = nullptr;
@@ -1009,6 +1164,7 @@ private:
     };
 
     struct task final {
+        /// The underlying tree.
         [[nodiscard]] static task tree(const rev_tree<T>* value, const bool reversed)
         {
             auto result = task{};
@@ -1018,6 +1174,7 @@ private:
             return result;
         }
 
+        /// The digit this value holds.
         [[nodiscard]] static task digit(const rev_digit<T>* value, const bool reversed)
         {
             auto result = task{};
@@ -1027,6 +1184,7 @@ private:
             return result;
         }
 
+        /// The stored element.
         [[nodiscard]] static task element(const rev_element<T>* value, const bool reversed)
         {
             auto result = task{};

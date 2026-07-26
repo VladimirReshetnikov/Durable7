@@ -1,3 +1,8 @@
+/// A persistent sorted set with rank and select.
+///
+/// Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+/// so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/built_in_measures.hpp>
@@ -18,6 +23,8 @@
 
 namespace durable7::finger_tree {
 
+/// A persistent sorted set with rank and select. The cached element counts are what make those a
+/// descent rather than a scan.
 template <class T, class Less = std::less<>>
     requires strict_weak_less_for<Less, T, T>
 class sorted_set final {
@@ -28,24 +35,29 @@ public:
     using size_type = std::size_t;
     using const_iterator = typename tree_type::const_iterator;
 
+    /// An empty set.
     sorted_set() = default;
 
+    /// An empty set using the supplied policy, which it retains.
     explicit sorted_set(Less less)
         : less_(std::move(less))
     {
     }
 
+    /// A set holding the listed elements.
     sorted_set(std::initializer_list<value_type> values, Less less = Less{})
         : sorted_set(from_range(values, std::move(less)))
     {
     }
 
+    /// A set holding the elements an iterator pair yields.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
     sorted_set(Iterator first, Sentinel last, Less less = Less{})
         : sorted_set(from_range(std::ranges::subrange(first, last), std::move(less)))
     {
     }
 
+    /// A set holding a range's elements, built in bulk rather than by repeated insertion.
     template <std::ranges::input_range Range>
     [[nodiscard]] static sorted_set from_range(Range&& values, Less less = Less{})
     {
@@ -67,33 +79,39 @@ public:
         return from_sorted_unique_values(unique, std::move(less));
     }
 
+    /// Whether the set holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return tree_.empty();
     }
 
+    /// Number of elements in the set.
     [[nodiscard]] size_type size() const
     {
         return tree_.measure().count;
     }
 
+    /// The retained ordering policy.
     [[nodiscard]] const Less& comparison() const noexcept
     {
         return less_;
     }
 
+    /// The smallest element.
     [[nodiscard]] const value_type& min() const
     {
         throw_if_empty();
         return tree_.front();
     }
 
+    /// The largest element.
     [[nodiscard]] const value_type& max() const
     {
         throw_if_empty();
         return tree_.back();
     }
 
+    /// The element at the given position.
     [[nodiscard]] const value_type& at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
@@ -105,6 +123,7 @@ public:
         return at(index);
     }
 
+    /// The position of the given element.
     [[nodiscard]] std::optional<size_type> index_of(const value_type& item) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<value_type, Less>{item, less_});
@@ -115,6 +134,7 @@ public:
         return std::nullopt;
     }
 
+    /// A set containing the given element; returns the receiver when already present.
     [[nodiscard]] sorted_set add(value_type item) const
     {
         auto split = tree_.split(key_at_least_predicate<value_type, Less>{item, less_});
@@ -127,6 +147,7 @@ public:
         return wrap(split.left.append(std::move(item)).concat(split.right));
     }
 
+    /// A set containing a range's elements as well.
     template <std::ranges::input_range Range>
     [[nodiscard]] sorted_set add_range(Range&& values) const
     {
@@ -138,6 +159,7 @@ public:
         return result;
     }
 
+    /// Whether the element is present.
     [[nodiscard]] bool contains(const value_type& item) const
     {
         return index_of(item).has_value();
@@ -157,6 +179,7 @@ public:
         return count_before(key_above_predicate<value_type, Less>{item, less_});
     }
 
+    /// Removes the element, reporting whether it was present.
     [[nodiscard]] std::optional<sorted_set> try_remove(const value_type& item) const
     {
         auto split = tree_.split(key_at_least_predicate<value_type, Less>{item, less_});
@@ -168,12 +191,14 @@ public:
         return std::nullopt;
     }
 
+    /// A set without that element; returns the receiver when absent.
     [[nodiscard]] sorted_set remove(const value_type& item) const
     {
         auto removed = try_remove(item);
         return removed.has_value() ? *removed : *this;
     }
 
+    /// The largest element not greater than the probe, or nothing when none is.
     [[nodiscard]] std::optional<value_type> try_floor(const value_type& item) const
     {
         const auto at_most = count_before(key_above_predicate<value_type, Less>{item, less_});
@@ -184,12 +209,14 @@ public:
         return element_at(at_most - 1);
     }
 
+    /// The smallest element not less than the probe, or nothing when none is.
     [[nodiscard]] std::optional<value_type> try_ceiling(const value_type& item) const
     {
         auto located = tree_.try_locate(key_at_least_predicate<value_type, Less>{item, less_});
         return located.item;
     }
 
+    /// The largest element strictly less than the probe, or nothing when none is.
     [[nodiscard]] std::optional<value_type> try_lower(const value_type& item) const
     {
         const auto less = count_before(key_at_least_predicate<value_type, Less>{item, less_});
@@ -200,12 +227,14 @@ public:
         return element_at(less - 1);
     }
 
+    /// The smallest element strictly greater than the probe, or nothing when none is.
     [[nodiscard]] std::optional<value_type> try_higher(const value_type& item) const
     {
         auto located = tree_.try_locate(key_above_predicate<value_type, Less>{item, less_});
         return located.item;
     }
 
+    /// The elements in the range.
     [[nodiscard]] sorted_set get_range(const value_type& low, const value_type& high) const
     {
         auto split = tree_.split(key_at_least_predicate<value_type, Less>{low, less_});
@@ -213,70 +242,87 @@ public:
         return wrap(range_split.left);
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     [[nodiscard]] sorted_set union_with(const sorted_set& other) const
     {
         return merge(other, true, true, true);
     }
 
+    /// The elements present in both sets.
     [[nodiscard]] sorted_set intersect(const sorted_set& other) const
     {
         return merge(other, false, true, false);
     }
 
+    /// This set's elements that are absent from the other.
     [[nodiscard]] sorted_set except(const sorted_set& other) const
     {
         return merge(other, true, false, false);
     }
 
+    /// The elements present in exactly one of the two sets.
     [[nodiscard]] sorted_set symmetric_except(const sorted_set& other) const
     {
         return merge(other, true, false, true);
     }
 
+    /// Whether every element of this set also occurs in the other.
     [[nodiscard]] bool is_subset_of(const sorted_set& other) const
     {
         return merge_counts(other).only_this == 0;
     }
 
+    /// Whether every element of the other occurs in this set.
     [[nodiscard]] bool is_superset_of(const sorted_set& other) const
     {
         return merge_counts(other).only_other == 0;
     }
 
+    /// Whether this set is a subset of the other and the other holds an element it lacks.
     [[nodiscard]] bool is_proper_subset_of(const sorted_set& other) const
     {
         const auto counts = merge_counts(other);
         return counts.only_this == 0 && counts.only_other > 0;
     }
 
+    /// Whether this set is a superset of the other and holds an element the other lacks.
     [[nodiscard]] bool is_proper_superset_of(const sorted_set& other) const
     {
         const auto counts = merge_counts(other);
         return counts.only_other == 0 && counts.only_this > 0;
     }
 
+    /// Whether the two sets share at least one element.
     [[nodiscard]] bool overlaps(const sorted_set& other) const
     {
         return merge_counts(other).both > 0;
     }
 
+    /// Whether both sets hold the same elements.
     [[nodiscard]] bool set_equals(const sorted_set& other) const
     {
         const auto counts = merge_counts(other);
         return counts.only_this == 0 && counts.only_other == 0;
     }
 
+    /// Copies the elements out into a vector, in the set's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         return tree_.to_vector();
     }
 
+    /// Copies the elements into the destination.
     template <std::output_iterator<const value_type&> OutputIterator>
     void copy_to(OutputIterator output) const
     {
         tree_.copy_to(std::move(output));
     }
 
+    /// The const iterator one past the last element.
+    /// A const iterator over the elements.
+    /// The iterator one past the last element.
+    /// An iterator over the elements, in the set's own order.
     [[nodiscard]] const_iterator begin() const { return tree_.begin(); }
     [[nodiscard]] const_iterator end() const noexcept { return tree_.end(); }
     [[nodiscard]] const_iterator cbegin() const { return begin(); }

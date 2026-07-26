@@ -1,3 +1,9 @@
+/// The Monoid and MeasurePolicy concepts every measured structure is parameterized on.
+///
+/// A measure must be a monoid -- associative with a two-sided identity -- because the tree combines
+/// cached measures in whatever grouping its shape happens to have, and a non-associative combine
+/// would make the answer depend on that shape.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -31,21 +37,25 @@ concept measure_policy =
            { Policy::measure(element) } -> std::same_as<typename Policy::measure_type>;
        };
 
+/// Counts elements, making a measured tree indexable by position.
 template <class Element>
 struct size_measure {
     using element_type = Element;
     using measure_type = std::size_t;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty() noexcept
     {
         return 0;
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(const element_type&) noexcept
     {
         return 1;
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type left, const measure_type right)
     {
         return checked_add(left, right);

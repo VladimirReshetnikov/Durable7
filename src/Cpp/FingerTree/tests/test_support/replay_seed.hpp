@@ -1,3 +1,5 @@
+/// Seed capture and override for the generated tests, so a failing case can be replayed exactly.
+
 #pragma once
 
 #include <charconv>
@@ -17,6 +19,7 @@ namespace durable7::finger_tree::tests {
 
 inline constexpr std::string_view replay_seed_environment_variable = "FINGERTREE_REPLAY_SEED";
 
+/// Parses a seed from the replay override's form.
 [[nodiscard]] inline std::uint64_t parse_replay_seed(std::string_view text)
 {
     auto base = 10;
@@ -38,17 +41,20 @@ inline constexpr std::string_view replay_seed_environment_variable = "FINGERTREE
     return value;
 }
 
+/// Where the forced seed is held.
 [[nodiscard]] inline std::optional<std::uint64_t>& replay_seed_override_storage() noexcept
 {
     static auto value = std::optional<std::uint64_t>{};
     return value;
 }
 
+/// Forces every generated case to use the given seed.
 inline void set_replay_seed_override(const std::optional<std::uint64_t> seed) noexcept
 {
     replay_seed_override_storage() = seed;
 }
 
+/// The seed forced by the environment, if one is set.
 [[nodiscard]] inline std::optional<std::uint64_t> replay_seed_override()
 {
     if (const auto explicit_seed = replay_seed_override_storage(); explicit_seed.has_value()) {
@@ -88,6 +94,7 @@ inline void set_replay_seed_override(const std::optional<std::uint64_t> seed) no
     }
 }
 
+/// The seed actually in force, which an override replaces.
 [[nodiscard]] inline std::uint64_t effective_replay_seed(const std::uint64_t default_seed)
 {
     constexpr auto nonzero_fallback = std::uint64_t{0x9e3779b97f4a7c15ULL};
@@ -95,17 +102,20 @@ inline void set_replay_seed_override(const std::optional<std::uint64_t> seed) no
     return selected == 0 ? nonzero_fallback : selected;
 }
 
+/// The seeds recorded so far.
 [[nodiscard]] inline std::vector<std::uint64_t>& captured_replay_seeds() noexcept
 {
     static thread_local auto seeds = std::vector<std::uint64_t>{};
     return seeds;
 }
 
+/// Clears the recorded seeds.
 inline void reset_captured_replay_seeds() noexcept
 {
     captured_replay_seeds().clear();
 }
 
+/// Renders a seed in the form the replay override accepts.
 [[nodiscard]] inline std::string format_replay_seed(const std::uint64_t seed)
 {
     auto output = std::ostringstream{};
@@ -113,6 +123,7 @@ inline void reset_captured_replay_seeds() noexcept
     return output.str();
 }
 
+/// Records the seed a generated case ran under, so a failure can be replayed exactly.
 inline void capture_replay_seed(const std::uint64_t seed)
 {
     auto& seeds = captured_replay_seeds();
@@ -128,6 +139,7 @@ inline void capture_replay_seed(const std::uint64_t seed)
     std::cerr << "[replay] using seed " << format_replay_seed(seed) << '\n' << std::flush;
 }
 
+/// Chooses the seeds a run will use.
 [[nodiscard]] inline std::vector<std::uint64_t> select_replay_seeds(
     const std::vector<std::uint64_t>& default_seeds)
 {

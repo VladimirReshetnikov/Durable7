@@ -1,3 +1,9 @@
+/// A persistent multimap: each key bound to a persistent set of values.
+///
+/// Value sets are themselves persistent, so keys whose values did not change are shared outright
+/// between versions. Every operation returns a new version and leaves its inputs valid, sharing
+/// unchanged structure, so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include "persistent_hash_map.hpp"
@@ -31,6 +37,8 @@ template <
         && std::copyable<KeyEqual>
         && std::copyable<ValueHash>
         && std::copyable<ValueEqual>
+/// A persistent multimap, each key bound to a persistent set of values, so keys whose values did
+/// not change are shared outright between versions.
 class persistent_hash_multimap final {
 public:
     using key_type = Key;
@@ -55,13 +63,16 @@ private:
         group_identity_equal>;
 
 public:
+    /// An empty multimap.
     persistent_hash_multimap() = default;
 
+    /// Whether the multimap holds no pairs.
     [[nodiscard]] static persistent_hash_multimap empty()
     {
         return {};
     }
 
+    /// An empty multimap using the supplied policies, which it retains.
     [[nodiscard]] static persistent_hash_multimap create(
         KeyHash key_hash = {},
         KeyEqual key_equal = {},
@@ -75,6 +86,7 @@ public:
             0};
     }
 
+    /// A multimap holding a range's pairs, built in bulk rather than by repeated insertion.
     template <class Range>
     [[nodiscard]] static persistent_hash_multimap create_range(
         const Range& pairs,
@@ -94,62 +106,74 @@ public:
         return result;
     }
 
+    /// How many distinct keys are present.
     [[nodiscard]] size_type key_count() const noexcept
     {
         return groups_.count();
     }
 
+    /// How many pairs are present in total.
     [[nodiscard]] std::int64_t pair_count() const noexcept
     {
         return pair_count_;
     }
 
+    /// Whether the multimap holds no pairs.
     [[nodiscard]] bool is_empty() const noexcept
     {
         return pair_count_ == 0;
     }
 
+    /// The retained key hashing policy.
     [[nodiscard]] const KeyHash& key_hash_function() const noexcept
     {
         return groups_.hash_function();
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const noexcept
     {
         return groups_.key_eq();
     }
 
+    /// The retained value hashing policy.
     [[nodiscard]] const ValueHash& value_hash_function() const noexcept
     {
         return value_hash_;
     }
 
+    /// The retained value equivalence policy.
     [[nodiscard]] const ValueEqual& value_eq() const noexcept
     {
         return value_equal_;
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const Key& key) const
     {
         return groups_.contains_key(key);
     }
 
+    /// Whether the pair is present.
     [[nodiscard]] bool contains(const Key& key, const Value& value) const
     {
         const auto* values = groups_.try_get(key);
         return values != nullptr && values->contains(value);
     }
 
+    /// Reads the stored key representative, or nothing when absent.
     [[nodiscard]] const Key* try_get_key(const Key& equal_key) const
     {
         return groups_.try_get_key(equal_key);
     }
 
+    /// Reads the values bound to the key, or nothing when the key is absent.
     [[nodiscard]] const value_set* try_get_values(const Key& key) const
     {
         return groups_.try_get(key);
     }
 
+    /// The values bound to the key, empty when the key is absent.
     [[nodiscard]] value_set values_or_empty(const Key& key) const
     {
         if (const auto* values = try_get_values(key)) {
@@ -206,6 +230,7 @@ public:
             std::move(groups), value_hash_, value_equal_, pair_count_ - 1};
     }
 
+    /// A multimap without that key.
     [[nodiscard]] persistent_hash_multimap remove_key(const Key& key) const
     {
         const auto* values = groups_.try_get(key);
@@ -219,6 +244,7 @@ public:
             pair_count_ - static_cast<std::int64_t>(values->count())};
     }
 
+    /// An empty multimap retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] persistent_hash_multimap clear() const
     {
         if (is_empty()) {
@@ -228,6 +254,7 @@ public:
             groups_.clear(), value_hash_, value_equal_, 0};
     }
 
+    /// Calls the function once per key-value pair.
     template <class Function>
         requires std::invocable<Function&, const Key&, const Value&>
     void for_each_pair(Function&& function) const
@@ -239,6 +266,7 @@ public:
         }
     }
 
+    /// Copies the pairs out into a vector, in the multimap's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         auto result = std::vector<value_type>{};
@@ -249,11 +277,14 @@ public:
         return result;
     }
 
+    /// Whether both handles reference the same root node. A representation check used to confirm a
+    /// no-op avoided copying, not an equality test.
     [[nodiscard]] bool shares_root_with(const persistent_hash_multimap& other) const noexcept
     {
         return groups_.shares_root_with(other.groups_);
     }
 
+    /// Checks the multimap's structural invariants. For tests and diagnostics.
     void validate_invariants() const
     {
         if (!groups_.debug_validate_canonical()) {
@@ -275,6 +306,7 @@ public:
         }
     }
 
+    /// Checks the multimap's structural invariants. For tests and diagnostics.
     [[nodiscard]] bool debug_validate() const noexcept
     {
         try {

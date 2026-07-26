@@ -1,3 +1,10 @@
+/// Persistent Patricia maps and sets over 32- and 64-bit integer keys.
+///
+/// Branch nodes store a common prefix and a discriminating bit, so a lookup is bounded by the key
+/// width rather than by the entry count, and keys are visited in signed numeric order. Every
+/// operation returns a new version and leaves its inputs valid, sharing unchanged structure, so an
+/// edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <bit>
@@ -23,6 +30,7 @@ class basic_patricia_set_cursor;
 template<class Key>
 class basic_patricia_set;
 
+/// A persistent Patricia map over integer keys.
 template<class Key, class T>
 class basic_patricia_map {
     static_assert(std::is_signed_v<Key> && std::is_integral_v<Key>);
@@ -33,20 +41,27 @@ class basic_patricia_map {
     using node_ptr = std::shared_ptr<const node>;
 
     struct node {
+        /// An empty node.
         explicit node(std::size_t size) noexcept : size(size) {}
+        /// An empty node.
         virtual ~node() = default;
+        /// Whether this node is a leaf.
         virtual bool is_leaf() const noexcept = 0;
         std::size_t size;
     };
     struct leaf_node final : node {
         path_type path; Key key; T value;
+        /// Constructs the leaf node from the given parts.
         leaf_node(path_type path, Key key, T value) : node(1), path(path), key(key), value(std::move(value)) {}
+        /// Whether this node is a leaf.
         bool is_leaf() const noexcept override { return true; }
     };
     struct branch_node final : node {
         path_type prefix; path_type mask; node_ptr left; node_ptr right;
+        /// Constructs the branch node from the given parts.
         branch_node(path_type prefix, path_type mask, node_ptr left, node_ptr right)
             : node(left->size + right->size), prefix(prefix), mask(mask), left(std::move(left)), right(std::move(right)) {}
+        /// Whether this node is a leaf.
         bool is_leaf() const noexcept override { return false; }
     };
 
@@ -57,11 +72,17 @@ public:
     using cursor_type = basic_patricia_map_cursor<Key, T>;
     using cursor_search_result = basic_patricia_map_cursor_search_result<Key, T>;
 
+    /// An empty map.
     basic_patricia_map() = default;
+    /// Whether both handles reference the same root node. A representation check used to confirm a
+    /// no-op avoided copying, not an equality test.
+    /// Whether the map holds no entries.
+    /// Number of entries in the map.
     [[nodiscard]] std::size_t size() const noexcept { return count_; }
     [[nodiscard]] bool empty() const noexcept { return count_ == 0; }
     [[nodiscard]] bool shares_root_with(const basic_patricia_map& other) const noexcept { return root_.get() == other.root_.get(); }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const T* try_get(Key key) const noexcept {
         const auto path = encode(key);
         auto current = root_.get();
@@ -76,6 +97,7 @@ public:
         }
         return nullptr;
     }
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(Key key) const noexcept { return try_get(key) != nullptr; }
 
     /// Creates an immutable ordered gap cursor at `position`.
@@ -96,18 +118,23 @@ public:
         return changed ? basic_patricia_map(std::move(root), count_ + (added ? 1 : 0)) : *this;
     }
 
+    /// A map without that entry; returns the receiver when absent.
     [[nodiscard]] basic_patricia_map remove(Key key) const {
         bool changed = false;
         auto root = remove_node(root_, encode(key), changed);
         return changed ? basic_patricia_map(std::move(root), count_ - 1) : *this;
     }
 
+    /// The entries of both maps. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     [[nodiscard]] basic_patricia_map union_with(const basic_patricia_map& other) const {
         auto root = union_nodes(root_, other.root_);
         if (root.get() == root_.get()) return *this;
         const auto count = root ? root->size : 0;
         return basic_patricia_map(std::move(root), count);
     }
+    /// The entries of both maps. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     template<class Combine>
     [[nodiscard]] basic_patricia_map union_with(const basic_patricia_map& other, Combine combine) const {
         auto root = union_nodes_with(root_, other.root_, combine);
@@ -116,12 +143,14 @@ public:
         return basic_patricia_map(std::move(root), count);
     }
 
+    /// The entries present in both maps.
     [[nodiscard]] basic_patricia_map intersect_with(const basic_patricia_map& other) const {
         auto root = intersect_nodes(root_, other.root_);
         if (root.get() == root_.get()) return *this;
         const auto count = root ? root->size : 0;
         return basic_patricia_map(std::move(root), count);
     }
+    /// The entries present in both maps.
     template<class Combine>
     [[nodiscard]] basic_patricia_map intersect_with(const basic_patricia_map& other, Combine combine) const {
         auto root = intersect_nodes_with(root_, other.root_, combine);
@@ -130,6 +159,7 @@ public:
         return basic_patricia_map(std::move(root), count);
     }
 
+    /// This map's entries that are absent from the other.
     [[nodiscard]] basic_patricia_map except_with(const basic_patricia_map& other) const {
         auto root = except_nodes(root_, other.root_);
         if (root.get() == root_.get()) return *this;
@@ -137,6 +167,7 @@ public:
         return basic_patricia_map(std::move(root), count);
     }
 
+    /// Copies the entries out into a vector, in the map's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const {
         std::vector<value_type> result; result.reserve(count_); append(root_, result); return result;
     }
@@ -456,39 +487,53 @@ private:
 template<class Key, class T>
 class basic_patricia_map_cursor final {
 public:
+    /// One entry as the collection presents it.
     struct entry_view final {
         const Key& key;
         const T& value;
     };
 
+    /// A cursor over the given map version at the given position.
     basic_patricia_map_cursor() = delete;
 
+    /// Whether the gap follows the last entry.
+    /// Whether the gap precedes the first entry.
+    /// The cursor's gap position.
+    /// Number of entries in the map version the cursor is positioned in.
     [[nodiscard]] std::size_t count() const noexcept { return map_.size(); }
     [[nodiscard]] std::size_t position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == count(); }
 
+    /// The entry immediately before the gap.
     [[nodiscard]] std::optional<entry_view> peek_previous() const & noexcept {
         if (position_ == 0) return std::nullopt;
         return view_at(position_ - 1);
     }
+    /// The entry immediately before the gap.
     [[nodiscard]] std::optional<entry_view> peek_previous() const && = delete;
 
+    /// The entry immediately after the gap.
     [[nodiscard]] std::optional<entry_view> peek_next() const & noexcept {
         return view_at(position_);
     }
+    /// The entry immediately after the gap.
     [[nodiscard]] std::optional<entry_view> peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] basic_patricia_map_cursor move_previous() const {
         if (is_at_start()) throw std::logic_error("Patricia map cursor is already at the start");
         return basic_patricia_map_cursor{map_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] basic_patricia_map_cursor move_next() const {
         if (is_at_end()) throw std::logic_error("Patricia map cursor is already at the end");
         return basic_patricia_map_cursor{map_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same map version.
     [[nodiscard]] basic_patricia_map_cursor seek(std::size_t position) const {
         if (position > count()) throw std::out_of_range("Patricia map cursor position is outside the map bounds");
         return position == position_ ? *this : basic_patricia_map_cursor{map_, position};
@@ -522,18 +567,23 @@ public:
             : basic_patricia_map_cursor{std::move(map), position_};
     }
 
+    /// Removes the entry before the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] basic_patricia_map_cursor delete_previous() const {
         const auto previous = peek_previous();
         if (!previous) throw std::logic_error("Patricia map cursor has no previous entry");
         return basic_patricia_map_cursor{map_.remove(previous->key), position_ - 1};
     }
 
+    /// Removes the entry after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] basic_patricia_map_cursor delete_next() const {
         const auto next = peek_next();
         if (!next) throw std::logic_error("Patricia map cursor has no next entry");
         return basic_patricia_map_cursor{map_.remove(next->key), position_};
     }
 
+    /// The map version this cursor is positioned in.
     [[nodiscard]] basic_patricia_map<Key, T> snapshot() const { return map_; }
 
 private:
@@ -558,6 +608,7 @@ private:
     std::size_t position_;
 };
 
+/// Where a cursor search landed, with whether the key was actually present.
 template<class Key, class T>
 struct basic_patricia_map_cursor_search_result final {
     basic_patricia_map_cursor<Key, T> cursor;
@@ -597,14 +648,19 @@ template<class T> using persistent_long_map = basic_patricia_map<std::int64_t, T
 template<class T> using persistent_int_map_cursor = basic_patricia_map_cursor<std::int32_t, T>;
 template<class T> using persistent_long_map_cursor = basic_patricia_map_cursor<std::int64_t, T>;
 
+/// The unit payload a Patricia set stores, since a set is a map to nothing.
 struct patricia_unit { friend constexpr bool operator==(patricia_unit, patricia_unit) noexcept = default; };
+/// A persistent Patricia set over integer keys, the same trie with nothing stored at the leaves.
 template<class Key>
 class basic_patricia_set {
     using map_type = basic_patricia_map<Key, patricia_unit>;
 public:
     using cursor_type = basic_patricia_set_cursor<Key>;
 
+    /// An empty set.
     basic_patricia_set() = default;
+    /// Whether the set holds no elements.
+    /// Number of elements in the set.
     [[nodiscard]] std::size_t size() const noexcept { return map_.size(); }
     [[nodiscard]] bool empty() const noexcept { return map_.empty(); }
     /// Reports whether both snapshots name the very same root, which is how an add or remove
@@ -632,36 +688,49 @@ private:
 template<class Key>
 class basic_patricia_set_cursor final {
 public:
+    /// A cursor over the given set version at the given position.
     basic_patricia_set_cursor() = delete;
 
+    /// Whether the gap follows the last element.
+    /// Whether the gap precedes the first element.
+    /// The cursor's gap position.
+    /// Number of elements in the set version the cursor is positioned in.
     [[nodiscard]] std::size_t count() const noexcept { return set_.size(); }
     [[nodiscard]] std::size_t position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == count(); }
 
+    /// The element immediately before the gap.
     [[nodiscard]] const Key* peek_previous() const & noexcept {
         if (position_ == 0) return nullptr;
         const auto* leaf = set_.map_.entry_at_node(position_ - 1);
         return leaf == nullptr ? nullptr : std::addressof(leaf->key);
     }
+    /// The element immediately before the gap.
     [[nodiscard]] const Key* peek_previous() const && = delete;
 
+    /// The element immediately after the gap.
     [[nodiscard]] const Key* peek_next() const & noexcept {
         const auto* leaf = set_.map_.entry_at_node(position_);
         return leaf == nullptr ? nullptr : std::addressof(leaf->key);
     }
+    /// The element immediately after the gap.
     [[nodiscard]] const Key* peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] basic_patricia_set_cursor move_previous() const {
         if (is_at_start()) throw std::logic_error("Patricia set cursor is already at the start");
         return basic_patricia_set_cursor{set_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] basic_patricia_set_cursor move_next() const {
         if (is_at_end()) throw std::logic_error("Patricia set cursor is already at the end");
         return basic_patricia_set_cursor{set_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same set version.
     [[nodiscard]] basic_patricia_set_cursor seek(std::size_t position) const {
         if (position > count()) throw std::out_of_range("Patricia set cursor position is outside the set bounds");
         return position == position_ ? *this : basic_patricia_set_cursor{set_, position};
@@ -676,18 +745,23 @@ public:
             : basic_patricia_set_cursor{set_.add(value), position_ + 1};
     }
 
+    /// Removes the element before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] basic_patricia_set_cursor delete_previous() const {
         const auto* previous = peek_previous();
         if (previous == nullptr) throw std::logic_error("Patricia set cursor has no previous item");
         return basic_patricia_set_cursor{set_.remove(*previous), position_ - 1};
     }
 
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] basic_patricia_set_cursor delete_next() const {
         const auto* next = peek_next();
         if (next == nullptr) throw std::logic_error("Patricia set cursor has no next item");
         return basic_patricia_set_cursor{set_.remove(*next), position_};
     }
 
+    /// The set version this cursor is positioned in.
     [[nodiscard]] basic_patricia_set<Key> snapshot() const { return set_; }
 
 private:
@@ -734,9 +808,13 @@ template<class Key>
     return {cursor_type{*this, position}, found};
 }
 
+/// A persistent Patricia set over signed 32-bit keys.
 using persistent_int_set = basic_patricia_set<std::int32_t>;
+/// A persistent Patricia set over signed 64-bit keys.
 using persistent_long_set = basic_patricia_set<std::int64_t>;
+/// A gap cursor over one 32-bit Patricia set version.
 using persistent_int_set_cursor = basic_patricia_set_cursor<std::int32_t>;
+/// A gap cursor over one 64-bit Patricia set version.
 using persistent_long_set_cursor = basic_patricia_set_cursor<std::int64_t>;
 
 } // namespace durable7::hamt

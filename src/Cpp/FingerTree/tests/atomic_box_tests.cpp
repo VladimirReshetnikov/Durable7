@@ -1,3 +1,5 @@
+/// Tests for the atomic box.
+
 #include <durable7/finger_tree/detail/atomic_box.hpp>
 
 #include "test_support/test_runner.hpp"

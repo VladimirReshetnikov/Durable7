@@ -1,3 +1,10 @@
+/// A Merkle search tree: a persistent ordered map whose structure is fixed by its contents.
+///
+/// Each block's digest covers its entries and its children's digests, so equal digests mean equal
+/// contents. Because the shape is derived from the data rather than from the edit history, two
+/// parties who inserted the same entries in different orders hold identical trees, and
+/// synchronizing them costs only what actually differs.
+
 #pragma once
 
 #include <durable7/hamt/merkle_encoding.hpp>
@@ -48,8 +55,16 @@ private:
     };
 
 public:
+    /// An empty tree using the supplied policy, which it retains.
     merkle_search_tree_entry() = delete;
 
+    /// The node's level in the tree.
+    /// The value's canonical encoded bytes.
+    /// The key's canonical encoded bytes.
+    /// A handle on the stored value.
+    /// A handle on the stored key.
+    /// The stored value.
+    /// The stored key.
     [[nodiscard]] const K& key() const noexcept { return *state_->key; }
     [[nodiscard]] const V& value() const noexcept { return *state_->value; }
     [[nodiscard]] std::shared_ptr<const K> key_handle() const noexcept { return state_->key; }
@@ -58,6 +73,7 @@ public:
     [[nodiscard]] const merkle_bytes& value_bytes() const noexcept { return *state_->value_bytes; }
     [[nodiscard]] std::uint8_t level() const noexcept { return state_->level; }
 
+    /// Whether both handles denote the same identity.
     [[nodiscard]] bool shares_identity_with(const merkle_search_tree_entry& other) const noexcept
     {
         return state_ == other.state_;
@@ -194,6 +210,7 @@ struct merkle_search_tree_statistics final {
 
 class merkle_policy_mismatch final : public std::invalid_argument {
 public:
+    /// Constructs the merkle policy mismatch from the given parts.
     merkle_policy_mismatch()
         : std::invalid_argument(
               "Merkle trees must use the same algorithm, policy, and codec domain")
@@ -203,6 +220,7 @@ public:
 
 class merkle_range_error final : public std::invalid_argument {
 public:
+    /// Constructs the merkle range error from the given parts.
     merkle_range_error()
         : std::invalid_argument("the minimum key must not follow the maximum key")
     {
@@ -249,6 +267,8 @@ public:
     using cursor_type = merkle_search_tree_cursor<K, V>;
     using cursor_search_result = merkle_search_tree_cursor_search_result<K, V>;
 
+    /// A forward const iterator over one tree version's entries. It keeps that version alive, so it
+    /// stays valid across later edits.
     class const_iterator final {
     private:
         struct frame final {
@@ -265,6 +285,7 @@ public:
         using pointer = const entry_type*;
         using reference = const entry_type&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] reference operator*() const { return *current_; }
@@ -334,6 +355,7 @@ public:
     {
     }
 
+    /// An empty tree using the supplied policies, which it retains.
     [[nodiscard]] static merkle_search_tree create(policy_type policy)
     {
         return merkle_search_tree{std::move(policy)};
@@ -369,6 +391,12 @@ public:
         return tree;
     }
 
+    /// How many blocks are carried.
+    /// The structure's height.
+    /// Whether the tree holds no entries.
+    /// Number of entries in the tree.
+    /// Number of entries in the tree.
+    /// The policy the tree retains.
     [[nodiscard]] const policy_type& policy() const noexcept { return policy_; }
     [[nodiscard]] size_type size() const noexcept { return root_ == nullptr ? 0 : root_->count; }
     [[nodiscard]] size_type count() const noexcept { return size(); }
@@ -378,6 +406,8 @@ public:
     {
         return root_ == nullptr ? 0 : root_->block_count;
     }
+    /// The root digest. Equal digests mean equal contents, which is what makes comparison and
+    /// synchronization cheap.
     [[nodiscard]] merkle_digest root_hash() const noexcept
     {
         return root_ == nullptr ? policy_.empty_digest() : root_->digest;
@@ -403,11 +433,14 @@ public:
         return root_ == other.root_;
     }
 
+    /// Whether both handles retain the same policy. Policy identity governs whether two collections
+    /// may be combined at all.
     [[nodiscard]] bool shares_policy_with(const merkle_search_tree& other) const noexcept
     {
         return policy_.shares_identity_with(other.policy_);
     }
 
+    /// How many blocks the two versions have in common.
     [[nodiscard]] size_type shared_block_count(const merkle_search_tree& other) const
     {
         auto mine = std::unordered_set<const node*>{};
@@ -436,6 +469,7 @@ public:
         return result;
     }
 
+    /// The entry stored for the key.
     [[nodiscard]] const entry_type* get_entry(const K& key) const
     {
         auto current = root_.get();
@@ -449,20 +483,24 @@ public:
         return nullptr;
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const V* try_get(const K& key) const
     {
         const auto* entry = get_entry(key);
         return entry == nullptr ? nullptr : &entry->value();
     }
 
+    /// Reads the stored key representative, or nothing when absent.
     [[nodiscard]] const K* try_get_key(const K& key) const
     {
         const auto* entry = get_entry(key);
         return entry == nullptr ? nullptr : &entry->key();
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const K& key) const { return get_entry(key) != nullptr; }
 
+    /// The value stored for the key. Raises when the key is absent.
     [[nodiscard]] const V& at(const K& key) const
     {
         const auto* value = try_get(key);
@@ -613,6 +651,7 @@ private:
         size_type minimum_block_bytes = 0;
         size_type maximum_block_bytes = 0;
 
+        /// A collection containing the given element; returns the receiver when already present.
         void add(const node& current)
         {
             entry_count = checked_add(entry_count, current.entries.size());
@@ -628,6 +667,7 @@ private:
             maximum_block_bytes = (std::max)(maximum_block_bytes, current.block_bytes->size());
         }
 
+        /// Shape measurements from a structural audit.
         [[nodiscard]] merkle_search_tree_statistics statistics(const size_type tree_height) const
         {
             return merkle_search_tree_statistics{
@@ -1420,6 +1460,7 @@ public:
     /// constructor. There is consequently no "invalid default" whose members must all throw.
     merkle_search_tree_cursor() = delete;
 
+    /// An unpositioned cursor, holding no version.
     merkle_search_tree_cursor(const merkle_search_tree_cursor&) = default;
     merkle_search_tree_cursor& operator=(const merkle_search_tree_cursor&) = default;
 
@@ -1445,6 +1486,10 @@ public:
         return *this;
     }
 
+    /// Whether the gap follows the last entry.
+    /// Whether the gap precedes the first entry.
+    /// The cursor's gap position.
+    /// Number of entries in the tree version the cursor is positioned in.
     [[nodiscard]] size_type count() const noexcept { return tree_.size(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
@@ -1456,6 +1501,7 @@ public:
     {
         return position_ == 0 ? nullptr : tree_.entry_at_rank_for_cursor(position_ - 1);
     }
+    /// The entry immediately before the gap.
     [[nodiscard]] const entry_type* peek_previous() const && = delete;
 
     /// Returns the retained entry immediately after the gap, or nullptr at the end.
@@ -1464,8 +1510,11 @@ public:
     {
         return tree_.entry_at_rank_for_cursor(position_);
     }
+    /// The entry immediately after the gap.
     [[nodiscard]] const entry_type* peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] merkle_search_tree_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -1474,6 +1523,7 @@ public:
         return merkle_search_tree_cursor{tree_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] merkle_search_tree_cursor move_next() const
     {
         if (is_at_end()) {
@@ -1482,6 +1532,7 @@ public:
         return merkle_search_tree_cursor{tree_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same tree version.
     [[nodiscard]] merkle_search_tree_cursor seek(const size_type position) const
     {
         if (position > count()) {
@@ -1531,6 +1582,8 @@ public:
             : merkle_search_tree_cursor{std::move(tree), position_};
     }
 
+    /// Removes the entry before the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] merkle_search_tree_cursor delete_previous() const
     {
         const auto* previous = peek_previous();
@@ -1540,6 +1593,8 @@ public:
         return merkle_search_tree_cursor{tree_.remove(previous->key()), position_ - 1};
     }
 
+    /// Removes the entry after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] merkle_search_tree_cursor delete_next() const
     {
         const auto* next = peek_next();
@@ -1549,6 +1604,7 @@ public:
         return merkle_search_tree_cursor{tree_.remove(next->key()), position_};
     }
 
+    /// The tree version this cursor is positioned in.
     [[nodiscard]] tree_type snapshot() const { return tree_; }
 
 private:

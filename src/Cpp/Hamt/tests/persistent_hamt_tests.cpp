@@ -1,3 +1,5 @@
+/// Tests for the persistent hash map, set, and the collections derived from them.
+
 #include <durable7/hamt/persistent_bi_map.hpp>
 #include <durable7/hamt/persistent_hash_map.hpp>
 #include <durable7/hamt/persistent_hash_bag.hpp>

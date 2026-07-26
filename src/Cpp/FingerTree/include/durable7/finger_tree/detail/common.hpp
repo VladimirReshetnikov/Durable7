@@ -1,3 +1,5 @@
+/// Shared helpers and range-validation used across the finger tree implementation.
+
 #pragma once
 
 #include <cstddef>
@@ -16,11 +18,13 @@ inline constexpr std::uint32_t version_major = 0;
 inline constexpr std::uint32_t version_minor = 1;
 inline constexpr std::uint32_t version_patch = 0;
 
+/// Whether the index lies inside a sequence of the given size.
 [[nodiscard]] constexpr bool is_valid_index(const std::size_t index, const std::size_t size) noexcept
 {
     return index < size;
 }
 
+/// Raises when the index falls outside the sequence.
 constexpr void throw_if_index_out_of_range(const std::size_t index, const std::size_t size)
 {
     if (!is_valid_index(index, size)) {
@@ -28,6 +32,8 @@ constexpr void throw_if_index_out_of_range(const std::size_t index, const std::s
     }
 }
 
+/// Raises when the insertion position falls outside the sequence, where the position one past the
+/// end is allowed.
 constexpr void throw_if_insert_index_out_of_range(const std::size_t index, const std::size_t size)
 {
     if (index > size) {
@@ -35,6 +41,7 @@ constexpr void throw_if_insert_index_out_of_range(const std::size_t index, const
     }
 }
 
+/// Raises when the split position falls outside the sequence.
 constexpr void throw_if_split_index_out_of_range(const std::size_t index, const std::size_t size)
 {
     if (index > size) {
@@ -42,6 +49,7 @@ constexpr void throw_if_split_index_out_of_range(const std::size_t index, const 
     }
 }
 
+/// Raises when the offset falls outside the text.
 constexpr void throw_if_offset_out_of_range(const std::size_t offset, const std::size_t size)
 {
     if (offset > size) {
@@ -49,6 +57,7 @@ constexpr void throw_if_offset_out_of_range(const std::size_t offset, const std:
     }
 }
 
+/// Raises when the count runs past the end of the sequence.
 constexpr void throw_if_count_out_of_range(const std::size_t count, const std::size_t size)
 {
     if (count > size) {
@@ -56,6 +65,7 @@ constexpr void throw_if_count_out_of_range(const std::size_t count, const std::s
     }
 }
 
+/// A value type comparable for equality.
 template <class T>
 concept equality_comparable_value = requires(const T& left, const T& right) {
     { left == right } -> std::convertible_to<bool>;
@@ -69,6 +79,7 @@ template <std::ranges::input_range LeftRange, std::ranges::input_range RightRang
         std::ranges::range_reference_t<RightRange> right) {
         { left == right } -> std::convertible_to<bool>;
     }
+/// Whether two ranges hold equal elements in the same order.
 [[nodiscard]] constexpr bool sequence_equal(LeftRange&& left, RightRange&& right)
 {
     auto left_iterator = std::ranges::begin(left);
@@ -89,6 +100,7 @@ template <std::ranges::input_range LeftRange, std::ranges::input_range RightRang
 
 } // namespace detail
 
+/// Adds, trapping on overflow rather than wrapping.
 template <class T>
 [[nodiscard]] constexpr T checked_add(const T left, const T right)
     requires(std::is_unsigned_v<T>)

@@ -1,3 +1,8 @@
+/// A persistent sorted map with rank and select over its keys.
+///
+/// Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+/// so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/built_in_measures.hpp>
@@ -17,21 +22,25 @@
 
 namespace durable7::finger_tree {
 
+/// Measures a sorted map's entries by their keys.
 template <class Key, class T>
 struct sorted_map_entry_measure {
     using element_type = std::pair<Key, T>;
     using measure_type = ranked_key<Key>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return {};
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(const element_type& element)
     {
         return measure_type{1, optional_measure<Key>::some(element.first)};
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         return measure_type{

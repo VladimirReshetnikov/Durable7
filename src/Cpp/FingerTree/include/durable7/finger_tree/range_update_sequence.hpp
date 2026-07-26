@@ -1,3 +1,12 @@
+/// A persistent sequence with lazy range updates.
+///
+/// A range update is recorded as a tag at the nodes covering the range rather than applied to each
+/// element, so the cost tracks the tree's height and not the range's length. The tag algebra must
+/// compose associatively and distribute over the measure; those laws are what let a pending tag be
+/// pushed down or folded into a measure on demand. Every operation returns a new version and leaves
+/// its inputs valid, sharing unchanged structure, so an edit copies a path rather than the whole
+/// collection.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -53,6 +62,7 @@ concept range_update_sequence_types =
     && std::copyable<typename Algebra::measure_type>
     && std::copyable<typename Algebra::tag_type>;
 
+/// Shape and pending-tag measurements from a structural audit.
 struct range_update_validation_statistics final {
     std::size_t count = 0;
     std::size_t height = 0;
@@ -73,6 +83,7 @@ template <class Element, class Algebra>
     requires range_update_sequence_types<Element, Algebra>
 class range_update_sequence_cursor;
 
+/// The two sequences a split produced, with any tags covering the split point already pushed down.
 template <class Element, class Algebra>
     requires range_update_sequence_types<Element, Algebra>
 struct range_update_split final {
@@ -104,6 +115,7 @@ private:
         typename Algebra::measure_type measure;
         std::optional<typename Algebra::tag_type> pending;
 
+        /// An empty node.
         node(
             Element value_value,
             node_pointer left_value,
@@ -132,6 +144,8 @@ public:
     using difference_type = std::ptrdiff_t;
     using split_result = range_update_split<value_type, algebra_type>;
 
+    /// A forward const iterator over one sequence version's elements. It keeps that version alive,
+    /// so it stays valid across later edits.
     class const_iterator final {
     private:
         struct frame final {
@@ -147,6 +161,7 @@ public:
         using pointer = void;
         using reference = value_type;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] value_type operator*() const
@@ -256,8 +271,10 @@ public:
         size_type position_ = 0;
     };
 
+    /// An empty sequence.
     range_update_sequence() noexcept = default;
 
+    /// A sequence holding the listed elements.
     range_update_sequence(std::initializer_list<value_type> values)
         : root_(values.size() == 0
                 ? node_pointer{}
@@ -268,11 +285,13 @@ public:
     {
     }
 
+    /// The shared empty sequence.
     [[nodiscard]] static range_update_sequence empty_sequence() noexcept
     {
         return {};
     }
 
+    /// An empty sequence using the supplied policies, which it retains.
     [[nodiscard]] static range_update_sequence create(const std::span<const value_type> values)
     {
         return values.empty()
@@ -299,11 +318,13 @@ public:
         }
     }
 
+    /// Whether the sequence holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return root_ == nullptr;
     }
 
+    /// Number of elements in the sequence.
     [[nodiscard]] size_type size() const noexcept
     {
         return count_of(root_);
@@ -313,6 +334,7 @@ public:
     [[nodiscard]] range_update_sequence_cursor<value_type, algebra_type>
     get_cursor(size_type position = 0) const;
 
+    /// The combined measure of every element, read from the cached root measure.
     [[nodiscard]] measure_type measure() const
     {
         return root_ == nullptr ? empty_measure() : root_->measure;
@@ -330,26 +352,31 @@ public:
         return at(index);
     }
 
+    /// Prepends the given input.
     [[nodiscard]] range_update_sequence prepend(value_type value) const
     {
         return insert_at(0, std::move(value));
     }
 
+    /// Appends the given input.
     [[nodiscard]] range_update_sequence append(value_type value) const
     {
         return insert_at(size(), std::move(value));
     }
 
+    /// A sequence with the element added at the front.
     [[nodiscard]] range_update_sequence push_front(value_type value) const
     {
         return prepend(std::move(value));
     }
 
+    /// A sequence with the element added at the back.
     [[nodiscard]] range_update_sequence push_back(value_type value) const
     {
         return append(std::move(value));
     }
 
+    /// A sequence with the element inserted at the position.
     [[nodiscard]] range_update_sequence insert_at(size_type index, value_type value) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -357,23 +384,27 @@ public:
         return from_root(insert_node(root_, index, std::move(value)));
     }
 
+    /// A sequence with the key bound to the value, adding or replacing as needed.
     [[nodiscard]] range_update_sequence set_item(size_type index, value_type value) const
     {
         throw_if_index_out_of_range(index, size());
         return from_root(set_node(root_, index, std::move(value)));
     }
 
+    /// A sequence with the element at the position replaced.
     [[nodiscard]] range_update_sequence set_at(size_type index, value_type value) const
     {
         return set_item(index, std::move(value));
     }
 
+    /// A sequence without the element at the position.
     [[nodiscard]] range_update_sequence remove_at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
         return from_root(remove_node(root_, index));
     }
 
+    /// The concatenation of two sequences, sharing both operands' unchanged structure.
     [[nodiscard]] range_update_sequence concat(const range_update_sequence& other) const
     {
         (void)checked_add(size(), other.size());
@@ -388,8 +419,10 @@ public:
         return from_root(join(root_, std::move(removed.minimum), std::move(removed.remainder)));
     }
 
+    /// Splits into the elements before the position and those from it onward.
     [[nodiscard]] split_result split_at(size_type index) const;
 
+    /// The elements in the range.
     [[nodiscard]] range_update_sequence get_range(const size_type index, const size_type count) const
     {
         throw_if_range_out_of_bounds(index, count, size());
@@ -407,6 +440,8 @@ public:
         return from_root(std::move(middle));
     }
 
+    /// A sequence with the tag applied over the range, recorded at the covering nodes rather than
+    /// at each element.
     [[nodiscard]] range_update_sequence apply_range(
         const size_type index,
         const size_type count,
@@ -429,6 +464,7 @@ public:
         return from_root(concat_nodes(concat_nodes(std::move(left), std::move(middle)), std::move(right)));
     }
 
+    /// The combined measure of the elements in the range.
     [[nodiscard]] measure_type measure_range(const size_type index, const size_type count) const
     {
         throw_if_range_out_of_bounds(index, count, size());
@@ -442,6 +478,7 @@ public:
         return measure_range_node(*root_, index, count, std::nullopt);
     }
 
+    /// Copies the elements out into a vector, in the sequence's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         auto result = std::vector<value_type>{};
@@ -452,26 +489,32 @@ public:
         return result;
     }
 
+    /// An iterator over the elements, in the sequence's own order.
     [[nodiscard]] const_iterator begin() const
     {
         return const_iterator{root_};
     }
 
+    /// The iterator one past the last element.
     [[nodiscard]] const_iterator end() const noexcept
     {
         return {};
     }
 
+    /// A const iterator over the elements.
     [[nodiscard]] const_iterator cbegin() const
     {
         return begin();
     }
 
+    /// The const iterator one past the last element.
     [[nodiscard]] const_iterator cend() const noexcept
     {
         return end();
     }
 
+    /// Whether both handles reference the same root node. A representation check used to confirm a
+    /// no-op avoided copying, not an equality test.
     [[nodiscard]] bool shares_root_with(const range_update_sequence& other) const noexcept
     {
         return root_ == other.root_;
@@ -494,6 +537,7 @@ public:
         return count_shared_nodes(other.root_.get(), candidates, visited);
     }
 
+    /// Whether the two versions share structure.
     [[nodiscard]] bool shares_structure_with(const range_update_sequence& other) const
     {
         return shared_node_count_with(other) != 0;
@@ -1088,10 +1132,13 @@ public:
     using tag_type = typename algebra_type::tag_type;
     using size_type = std::size_t;
 
+    /// An unpositioned cursor, holding no version.
     range_update_sequence_cursor() = delete;
+    /// An unpositioned cursor, holding no version.
     range_update_sequence_cursor(const range_update_sequence_cursor&) = default;
     range_update_sequence_cursor& operator=(const range_update_sequence_cursor&) = default;
 
+    /// Takes over the source's handle, leaving it empty.
     range_update_sequence_cursor(range_update_sequence_cursor&& other) noexcept(
         std::is_nothrow_copy_constructible_v<range_update_sequence<value_type, algebra_type>>)
         : snapshot_(other.snapshot_)
@@ -1109,6 +1156,12 @@ public:
         return *this;
     }
 
+    /// The combined measure of everything before the gap.
+    /// Whether the gap follows the last element.
+    /// Whether the gap precedes the first element.
+    /// The cursor's gap position.
+    /// Whether the sequence version the cursor is positioned in holds no elements.
+    /// Number of elements in the sequence version the cursor is positioned in.
     [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
     [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
@@ -1118,6 +1171,7 @@ public:
     {
         return snapshot_.measure_range(0, position_);
     }
+    /// The combined measure of everything after the gap.
     [[nodiscard]] measure_type measure_after() const
     {
         return snapshot_.measure_range(position_, snapshot_.size() - position_);
@@ -1131,6 +1185,7 @@ public:
             : std::optional<value_type>{std::in_place, snapshot_.at(position_ - 1)};
     }
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     [[nodiscard]] std::optional<value_type> try_peek_next() const
     {
         return is_at_end()
@@ -1138,6 +1193,8 @@ public:
             : std::optional<value_type>{std::in_place, snapshot_.at(position_)};
     }
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] range_update_sequence_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -1146,6 +1203,7 @@ public:
         return range_update_sequence_cursor{snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] range_update_sequence_cursor move_next() const
     {
         if (is_at_end()) {
@@ -1154,6 +1212,7 @@ public:
         return range_update_sequence_cursor{snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same sequence version.
     [[nodiscard]] range_update_sequence_cursor seek(const size_type position) const
     {
         if (position > snapshot_.size()) {
@@ -1162,6 +1221,7 @@ public:
         return position == position_ ? *this : range_update_sequence_cursor{snapshot_, position};
     }
 
+    /// A sequence with the element inserted.
     [[nodiscard]] range_update_sequence_cursor insert(value_type value) const
     {
         return range_update_sequence_cursor{
@@ -1169,6 +1229,8 @@ public:
             checked_add(position_, size_type{1})};
     }
 
+    /// Removes the element before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] range_update_sequence_cursor delete_previous() const
     {
         if (is_at_start()) {
@@ -1177,6 +1239,8 @@ public:
         return range_update_sequence_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
     }
 
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] range_update_sequence_cursor delete_next() const
     {
         if (is_at_end()) {
@@ -1185,6 +1249,8 @@ public:
         return range_update_sequence_cursor{snapshot_.remove_at(position_), position_};
     }
 
+    /// Replaces the element after the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] range_update_sequence_cursor replace_next(value_type value) const
     {
         if (is_at_end()) {
@@ -1209,6 +1275,7 @@ public:
         return snapshot_.measure_range(position_, count);
     }
 
+    /// Applies the pending tags covering the element before the gap.
     [[nodiscard]] range_update_sequence_cursor apply_previous(
         const size_type count,
         const tag_type& tag) const
@@ -1220,6 +1287,7 @@ public:
             : range_update_sequence_cursor{std::move(updated), position_};
     }
 
+    /// Applies the pending tags covering the element after the gap.
     [[nodiscard]] range_update_sequence_cursor apply_next(
         const size_type count,
         const tag_type& tag) const
@@ -1231,6 +1299,7 @@ public:
             : range_update_sequence_cursor{std::move(updated), position_};
     }
 
+    /// The sequence version this cursor is positioned in.
     [[nodiscard]] range_update_sequence<value_type, algebra_type> snapshot() const
     {
         return snapshot_;

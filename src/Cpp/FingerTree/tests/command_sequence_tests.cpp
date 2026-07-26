@@ -1,3 +1,8 @@
+/// Tests that replay generated command sequences against both the structure and a simple model.
+///
+/// Any divergence between the two is a bug in the structure. Sequences are generated from a
+/// recorded seed, so a failure can be replayed exactly.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/command_model.hpp"

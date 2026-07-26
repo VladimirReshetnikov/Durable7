@@ -1,3 +1,8 @@
+/// The product of two measures, carried side by side over the same elements.
+///
+/// The product of two monoids is a monoid, so one tree can be searched by either component --
+/// counting elements and summing weights at once, for instance.
+
 #pragma once
 
 #include <durable7/finger_tree/built_in_measures.hpp>
@@ -11,6 +16,7 @@
 
 namespace durable7::finger_tree {
 
+/// The measure computed by a product_measure: two measures carried together.
 template <class First, class Second>
 struct measure_pair final {
     First first;
@@ -19,6 +25,7 @@ struct measure_pair final {
     [[nodiscard]] constexpr bool operator==(const measure_pair&) const = default;
 };
 
+/// Runs two measure policies side by side over the same elements.
 template <class Element, class FirstPolicy, class SecondPolicy>
     requires measure_policy<FirstPolicy, Element> && measure_policy<SecondPolicy, Element>
 struct product_measure {
@@ -27,16 +34,19 @@ struct product_measure {
     using second_measure_type = typename SecondPolicy::measure_type;
     using measure_type = measure_pair<first_measure_type, second_measure_type>;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return measure_type{FirstPolicy::empty(), SecondPolicy::empty()};
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(const element_type& element)
     {
         return measure_type{FirstPolicy::measure(element), SecondPolicy::measure(element)};
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         return measure_type{
@@ -56,6 +66,7 @@ template <class Element, class FirstPolicy, class SecondPolicy, class Predicate>
     requires measure_policy<FirstPolicy, Element>
         && measure_policy<SecondPolicy, Element>
         && product_component_predicate<Predicate, typename FirstPolicy::measure_type>
+/// Splits by the product measure's first component.
 [[nodiscard]] finger_tree_split<Element, product_measure<Element, FirstPolicy, SecondPolicy>> split_by_first(
     const finger_tree<Element, product_measure<Element, FirstPolicy, SecondPolicy>>& tree,
     Predicate predicate)
@@ -71,6 +82,7 @@ template <class Element, class FirstPolicy, class SecondPolicy, class Predicate>
     requires measure_policy<FirstPolicy, Element>
         && measure_policy<SecondPolicy, Element>
         && product_component_predicate<Predicate, typename SecondPolicy::measure_type>
+/// Splits by the product measure's second component.
 [[nodiscard]] finger_tree_split<Element, product_measure<Element, FirstPolicy, SecondPolicy>> split_by_second(
     const finger_tree<Element, product_measure<Element, FirstPolicy, SecondPolicy>>& tree,
     Predicate predicate)
@@ -86,6 +98,7 @@ template <class Element, class FirstPolicy, class SecondPolicy, class Predicate>
     requires measure_policy<FirstPolicy, Element>
         && measure_policy<SecondPolicy, Element>
         && product_component_predicate<Predicate, typename FirstPolicy::measure_type>
+/// Splits around a match on the product measure's first component, or nothing when there is none.
 [[nodiscard]] std::optional<finger_tree_item_split<Element, product_measure<Element, FirstPolicy, SecondPolicy>>>
 try_split_find_by_first(
     const finger_tree<Element, product_measure<Element, FirstPolicy, SecondPolicy>>& tree,
@@ -103,6 +116,7 @@ template <class Element, class FirstPolicy, class SecondPolicy, class Predicate>
     requires measure_policy<FirstPolicy, Element>
         && measure_policy<SecondPolicy, Element>
         && product_component_predicate<Predicate, typename SecondPolicy::measure_type>
+/// Splits around a match on the product measure's second component, or nothing when there is none.
 [[nodiscard]] std::optional<finger_tree_item_split<Element, product_measure<Element, FirstPolicy, SecondPolicy>>>
 try_split_find_by_second(
     const finger_tree<Element, product_measure<Element, FirstPolicy, SecondPolicy>>& tree,
@@ -116,6 +130,7 @@ try_split_find_by_second(
         });
 }
 
+/// Splits at the given index.
 template <class Element, class SecondPolicy>
     requires measure_policy<SecondPolicy, Element>
 [[nodiscard]] finger_tree_split<Element, product_measure<Element, size_measure<Element>, SecondPolicy>> split_at_index(
@@ -127,6 +142,7 @@ template <class Element, class SecondPolicy>
     });
 }
 
+/// The largest element, or nothing when empty.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 [[nodiscard]] std::optional<T> try_peek_max(
@@ -140,6 +156,7 @@ template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 [[nodiscard]] std::optional<
     finger_tree_extract_result<T, product_measure<T, size_measure<T>, max_measure<T, Comparison>>>>
+/// The largest element together with the structure remaining, or nothing when empty.
 try_extract_max(const finger_tree<T, product_measure<T, size_measure<T>, max_measure<T, Comparison>>>& tree)
 {
     const auto measure = tree.measure().second;
@@ -160,6 +177,7 @@ try_extract_max(const finger_tree<T, product_measure<T, size_measure<T>, max_mea
         split->left.concat(split->right)};
 }
 
+/// The smallest element, or nothing when empty.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 [[nodiscard]] std::optional<T> try_peek_min(
@@ -173,6 +191,7 @@ template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 [[nodiscard]] std::optional<
     finger_tree_extract_result<T, product_measure<T, size_measure<T>, min_measure<T, Comparison>>>>
+/// The smallest element together with the structure remaining, or nothing when empty.
 try_extract_min(const finger_tree<T, product_measure<T, size_measure<T>, min_measure<T, Comparison>>>& tree)
 {
     const auto measure = tree.measure().second;

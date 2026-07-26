@@ -1,3 +1,5 @@
+/// The summing measure, which makes a tree a cumulative-weight structure.
+
 #pragma once
 
 #include <durable7/finger_tree/measured_finger_tree.hpp>
@@ -25,28 +27,33 @@ concept cumulative_weight_value =
            { left > right } -> std::convertible_to<bool>;
        };
 
+/// Sums elements, turning a measured tree into a cumulative-weight structure.
 template <class T>
     requires addable_monoid_value<T>
 struct sum_measure {
     using element_type = T;
     using measure_type = T;
 
+    /// The identity: the measure of an empty tree.
     [[nodiscard]] static constexpr measure_type empty()
     {
         return T{};
     }
 
+    /// The measure of one element.
     [[nodiscard]] static constexpr measure_type measure(const element_type& element)
     {
         return element;
     }
 
+    /// Combines two measures in order. Must be associative; it need not be commutative.
     [[nodiscard]] static constexpr measure_type combine(const measure_type& left, const measure_type& right)
     {
         return left + right;
     }
 };
 
+/// Where a cumulative-weight search landed.
 template <class T>
 struct cumulative_weight_selection final {
     T value;
@@ -55,6 +62,7 @@ struct cumulative_weight_selection final {
     [[nodiscard]] constexpr bool operator==(const cumulative_weight_selection&) const = default;
 };
 
+/// Where a cumulative-weight search landed, with the index it reached.
 template <class T>
 struct indexed_cumulative_weight_selection final {
     T value;
@@ -64,6 +72,7 @@ struct indexed_cumulative_weight_selection final {
     [[nodiscard]] constexpr bool operator==(const indexed_cumulative_weight_selection&) const = default;
 };
 
+/// Splits at the first point where the accumulated weight passes the threshold.
 template <class T>
     requires cumulative_weight_value<T>
 [[nodiscard]] finger_tree_split<T, sum_measure<T>> split_by_cumulative_weight(
@@ -75,6 +84,8 @@ template <class T>
     });
 }
 
+/// Finds the first point where the accumulated weight passes the threshold, or nothing when none
+/// does.
 template <class T>
     requires cumulative_weight_value<T>
 [[nodiscard]] std::optional<cumulative_weight_selection<T>> try_select_by_cumulative_weight(
@@ -91,6 +102,7 @@ template <class T>
     return cumulative_weight_selection<T>{*located.item, located.measure_before};
 }
 
+/// Splits at the first point where the accumulated weight passes the threshold.
 template <class T>
     requires cumulative_weight_value<T>
 [[nodiscard]] finger_tree_split<T, product_measure<T, size_measure<T>, sum_measure<T>>> split_by_cumulative_weight(
@@ -102,6 +114,8 @@ template <class T>
     });
 }
 
+/// Finds the first point where the accumulated weight passes the threshold, or nothing when none
+/// does.
 template <class T>
     requires cumulative_weight_value<T>
 [[nodiscard]] std::optional<indexed_cumulative_weight_selection<T>> try_select_by_cumulative_weight(

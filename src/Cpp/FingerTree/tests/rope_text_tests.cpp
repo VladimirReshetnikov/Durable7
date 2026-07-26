@@ -1,3 +1,5 @@
+/// Tests for the text rope, including offset-to-line/column conversion in both directions.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/test_runner.hpp"

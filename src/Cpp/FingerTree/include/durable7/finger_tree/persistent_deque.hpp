@@ -1,3 +1,8 @@
+/// A persistent catenable deque: push, pop, concatenate, and split at either end.
+///
+/// Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+/// so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -25,12 +30,15 @@ class persistent_deque;
 template <class T>
 class persistent_deque_cursor;
 
+/// The two deques a positional split produced; both share structure with the original.
 template <class T>
 struct deque_split final {
     persistent_deque<T> left;
     persistent_deque<T> right;
 };
 
+/// The pieces splitting around one element produced: what precedes it, the element, and what
+/// follows.
 template <class T>
 struct deque_item_split final {
     persistent_deque<T> left;
@@ -38,6 +46,7 @@ struct deque_item_split final {
     persistent_deque<T> right;
 };
 
+/// The three deques splitting out a range produced.
 template <class T>
 struct deque_range_split final {
     persistent_deque<T> before;
@@ -45,12 +54,14 @@ struct deque_range_split final {
     persistent_deque<T> after;
 };
 
+/// An endpoint element together with the deque remaining after removing it.
 template <class T>
 struct deque_pop final {
     T value;
     persistent_deque<T> rest;
 };
 
+/// A persistent catenable deque.
 template <class T>
 class persistent_deque final {
 public:
@@ -62,45 +73,55 @@ public:
 
     class const_iterator;
 
+    /// An empty deque.
     persistent_deque() = default;
 
+    /// A deque holding the listed elements.
     persistent_deque(std::initializer_list<T> items)
         : root_(build_tree(items.begin(), items.end(), (std::numeric_limits<size_type>::max)()))
     {
     }
 
+    /// A deque holding the elements an iterator pair yields.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
     persistent_deque(Iterator first, Sentinel last)
         : root_(build_tree(std::move(first), std::move(last), (std::numeric_limits<size_type>::max)()))
     {
     }
 
+    /// The shared empty deque.
     [[nodiscard]] static persistent_deque empty_deque()
     {
         return persistent_deque{};
     }
 
+    /// A deque holding a range's elements, built in bulk rather than by repeated insertion.
     template <std::ranges::input_range Range>
     [[nodiscard]] static persistent_deque from_range(Range&& items)
     {
         return persistent_deque{std::ranges::begin(items), std::ranges::end(items)};
     }
 
+    /// The shared empty deque. One instance is reused, since an empty deque has nothing to
+    /// distinguish.
     [[nodiscard]] bool empty_state() const noexcept
     {
         return root_.size() == 0;
     }
 
+    /// Whether the deque holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return empty_state();
     }
 
+    /// Number of elements in the deque.
     [[nodiscard]] size_type size() const noexcept
     {
         return root_.size();
     }
 
+    /// The root node's address, for tests that a no-op shared rather than copied.
     [[nodiscard]] const void* root_identity() const noexcept
     {
         return root_.identity();
@@ -123,17 +144,20 @@ public:
         return root_.first_leaf();
     }
 
+    /// The last element.
     [[nodiscard]] const_reference back() const
     {
         throw_if_empty();
         return root_.last_leaf();
     }
 
+    /// The first element, or nothing when empty.
     [[nodiscard]] const value_type* try_front() const
     {
         return empty() ? nullptr : &root_.first_leaf();
     }
 
+    /// The last element, or nothing when empty.
     [[nodiscard]] const value_type* try_back() const
     {
         return empty() ? nullptr : &root_.last_leaf();
@@ -144,49 +168,58 @@ public:
         return root_.get_leaf(index);
     }
 
+    /// The element at the given position.
     [[nodiscard]] const_reference at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
         return root_.get_leaf(index);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const value_type* try_get(const size_type index) const
     {
         return index < size() ? &root_.get_leaf(index) : nullptr;
     }
 
+    /// A deque with the element added at the front.
     [[nodiscard]] persistent_deque push_front(value_type item) const
     {
         return persistent_deque{root_.cons(detail::deque_element<T>::leaf(std::move(item)))};
     }
 
+    /// A deque with the element added at the back.
     [[nodiscard]] persistent_deque push_back(value_type item) const
     {
         return persistent_deque{root_.snoc(detail::deque_element<T>::leaf(std::move(item)))};
     }
 
+    /// A deque with the element placed first.
     [[nodiscard]] persistent_deque add_first(value_type item) const
     {
         return push_front(std::move(item));
     }
 
+    /// A deque with the element placed last.
     [[nodiscard]] persistent_deque add_last(value_type item) const
     {
         return push_back(std::move(item));
     }
 
+    /// A deque without its first element.
     [[nodiscard]] persistent_deque remove_first() const
     {
         throw_if_empty();
         return wrap(root_.remove_first().rest);
     }
 
+    /// A deque without its last element.
     [[nodiscard]] persistent_deque remove_last() const
     {
         throw_if_empty();
         return wrap(root_.remove_last().rest);
     }
 
+    /// A deque without its first element, together with that element.
     [[nodiscard]] deque_pop<T> pop_first() const
     {
         throw_if_empty();
@@ -194,6 +227,7 @@ public:
         return deque_pop<T>{result.removed.leaf_value(), wrap(result.rest)};
     }
 
+    /// A deque without its last element, together with that element.
     [[nodiscard]] deque_pop<T> pop_last() const
     {
         throw_if_empty();
@@ -201,6 +235,7 @@ public:
         return deque_pop<T>{result.removed.leaf_value(), wrap(result.rest)};
     }
 
+    /// Removes the first element, or nothing when empty.
     [[nodiscard]] std::optional<deque_pop<T>> try_pop_first() const
     {
         if (empty()) {
@@ -210,6 +245,7 @@ public:
         return pop_first();
     }
 
+    /// Removes the last element, or nothing when empty.
     [[nodiscard]] std::optional<deque_pop<T>> try_pop_last() const
     {
         if (empty()) {
@@ -219,17 +255,20 @@ public:
         return pop_last();
     }
 
+    /// A deque with the key bound to the value, adding or replacing as needed.
     [[nodiscard]] persistent_deque set_item(const size_type index, const value_type& value) const
     {
         throw_if_index_out_of_range(index, size());
         return persistent_deque{root_.set_leaf(index, value)};
     }
 
+    /// A deque with the element at the position replaced.
     [[nodiscard]] persistent_deque set_at(const size_type index, const value_type& value) const
     {
         return set_item(index, value);
     }
 
+    /// A deque with the element at the position replaced.
     template <class Updater>
         requires std::invocable<Updater&, const value_type&>
     [[nodiscard]] persistent_deque update_at(const size_type index, Updater updater) const
@@ -239,6 +278,7 @@ public:
         return persistent_deque{root_.set_leaf(index, updated)};
     }
 
+    /// A deque with the element inserted at the position.
     [[nodiscard]] persistent_deque insert_at(const size_type index, value_type item) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -255,6 +295,7 @@ public:
         return persistent_deque{detail::deque_concat(std::move(inserted), split.right.cons(split.hit))};
     }
 
+    /// A deque with a range's elements inserted at the position.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
     [[nodiscard]] persistent_deque insert_range(const size_type index, Iterator first, Sentinel last) const
     {
@@ -277,12 +318,14 @@ public:
             detail::deque_concat(detail::deque_concat(std::move(split.left), std::move(inserted)), split.right.cons(split.hit))};
     }
 
+    /// A deque with a range's elements inserted at the position.
     template <std::ranges::input_range Range>
     [[nodiscard]] persistent_deque insert_range(const size_type index, Range&& items) const
     {
         return insert_range(index, std::ranges::begin(items), std::ranges::end(items));
     }
 
+    /// A deque without the element at the position.
     [[nodiscard]] persistent_deque remove_at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
@@ -290,6 +333,7 @@ public:
         return wrap(detail::deque_concat(std::move(split.left), std::move(split.right)));
     }
 
+    /// A deque without the elements in the range.
     [[nodiscard]] persistent_deque remove_range(const size_type index, const size_type count) const
     {
         check_range(index, count);
@@ -306,6 +350,7 @@ public:
         return wrap(detail::deque_concat(std::move(first_split.first), std::move(second_split.second)));
     }
 
+    /// The elements in the range.
     [[nodiscard]] persistent_deque get_range(const size_type index, const size_type count) const
     {
         check_range(index, count);
@@ -322,6 +367,7 @@ public:
         return wrap(second_split.first);
     }
 
+    /// Splits into the elements before the position and those from it onward.
     [[nodiscard]] deque_split<T> split_at(const size_type index) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -337,6 +383,7 @@ public:
         return deque_split<T>{wrap(split.first), wrap(split.second)};
     }
 
+    /// Splits around the element at the position, yielding what precedes it, it, and what follows.
     [[nodiscard]] deque_item_split<T> split_item_at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
@@ -344,6 +391,7 @@ public:
         return deque_item_split<T>{wrap(split.left), split.hit.leaf_value(), wrap(split.right)};
     }
 
+    /// Splits out a range, yielding the elements before it, in it, and after it.
     [[nodiscard]] deque_range_split<T> split_range(const size_type index, const size_type count) const
     {
         check_range(index, count);
@@ -352,6 +400,7 @@ public:
         return deque_range_split<T>{wrap(first_split.first), wrap(second_split.first), wrap(second_split.second)};
     }
 
+    /// The concatenation of two deques, sharing both operands' unchanged structure.
     [[nodiscard]] persistent_deque concat(const persistent_deque& other) const
     {
         if (other.empty()) {
@@ -365,11 +414,13 @@ public:
         return persistent_deque{detail::deque_concat(root_, other.root_)};
     }
 
+    /// A deque containing a range's elements as well.
     [[nodiscard]] persistent_deque add_range(const persistent_deque& other) const
     {
         return concat(other);
     }
 
+    /// A deque containing a range's elements as well.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
     [[nodiscard]] persistent_deque add_range(Iterator first, Sentinel last) const
     {
@@ -381,12 +432,14 @@ public:
         return persistent_deque{detail::deque_concat(root_, std::move(appended))};
     }
 
+    /// A deque containing a range's elements as well.
     template <std::ranges::input_range Range>
     [[nodiscard]] persistent_deque add_range(Range&& items) const
     {
         return add_range(std::ranges::begin(items), std::ranges::end(items));
     }
 
+    /// The first position in an already-sorted range not less than the probe.
     template <class Compare = std::less<>>
     [[nodiscard]] size_type sorted_lower_bound(const value_type& item, Compare compare = {}) const
     {
@@ -397,6 +450,7 @@ public:
         return root_.bound_index(predicate);
     }
 
+    /// The first position in an already-sorted range greater than the probe.
     template <class Compare = std::less<>>
     [[nodiscard]] size_type sorted_upper_bound(const value_type& item, Compare compare = {}) const
     {
@@ -407,6 +461,7 @@ public:
         return root_.bound_index(predicate);
     }
 
+    /// Binary-searches an already-sorted range.
     template <class Compare = std::less<>>
     [[nodiscard]] difference_type sorted_binary_search(const value_type& item, Compare compare = {}) const
     {
@@ -418,24 +473,28 @@ public:
         return ~checked_difference(lower);
     }
 
+    /// Whether an already-sorted range holds the value.
     template <class Compare = std::less<>>
     [[nodiscard]] bool sorted_contains(const value_type& item, Compare compare = {}) const
     {
         return sorted_binary_search(item, compare) >= 0;
     }
 
+    /// Splits an already-sorted range at its lower bound for the probe.
     template <class Compare = std::less<>>
     [[nodiscard]] deque_split<T> split_at_sorted_lower_bound(const value_type& item, Compare compare = {}) const
     {
         return split_at(sorted_lower_bound(item, compare));
     }
 
+    /// Splits an already-sorted range at its upper bound for the probe.
     template <class Compare = std::less<>>
     [[nodiscard]] deque_split<T> split_at_sorted_upper_bound(const value_type& item, Compare compare = {}) const
     {
         return split_at(sorted_upper_bound(item, compare));
     }
 
+    /// Splits an already-sorted range around the run equal to the probe.
     template <class Compare = std::less<>>
     [[nodiscard]] deque_range_split<T> split_at_sorted_equal_range(const value_type& item, Compare compare = {}) const
     {
@@ -446,12 +505,14 @@ public:
         return deque_range_split<T>{wrap(first_split.first), wrap(second_split.first), wrap(second_split.second)};
     }
 
+    /// Inserts into an already-sorted range, keeping it sorted.
     template <class Compare = std::less<>>
     [[nodiscard]] persistent_deque insert_sorted(value_type item, Compare compare = {}) const
     {
         return insert_at(sorted_upper_bound(item, compare), std::move(item));
     }
 
+    /// Removes every match from an already-sorted range.
     template <class Compare = std::less<>>
     [[nodiscard]] persistent_deque remove_all_sorted(const value_type& item, Compare compare = {}) const
     {
@@ -460,6 +521,7 @@ public:
         return lower == upper ? *this : remove_range(lower, upper - lower);
     }
 
+    /// Copies the elements out into a vector, in the deque's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         auto result = std::vector<value_type>{};
@@ -468,6 +530,7 @@ public:
         return result;
     }
 
+    /// Copies the elements into the destination.
     template <std::output_iterator<const value_type&> OutputIterator>
     void copy_to(OutputIterator output) const
     {
@@ -476,19 +539,24 @@ public:
         }
     }
 
+    /// An iterator over the elements, in the deque's own order.
     [[nodiscard]] const_iterator begin() const
     {
         return const_iterator{root_};
     }
 
+    /// The iterator one past the last element.
     [[nodiscard]] const_iterator end() const noexcept
     {
         return const_iterator{};
     }
 
+    /// The const iterator one past the last element.
+    /// A const iterator over the elements.
     [[nodiscard]] const_iterator cbegin() const { return begin(); }
     [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
+    /// Checks the deque's structural invariants. For tests and diagnostics.
     void validate_invariants() const
     {
         const auto computed = root_.validate_and_count();
@@ -497,11 +565,14 @@ public:
         }
     }
 
+    /// The tree's depth.
     [[nodiscard]] size_type tree_depth() const
     {
         return root_.depth();
     }
 
+    /// A forward const iterator over one deque version's elements. It keeps that version alive, so
+    /// it stays valid across later edits.
     class const_iterator final {
     public:
         using iterator_concept = std::forward_iterator_tag;
@@ -511,8 +582,10 @@ public:
         using pointer = const T*;
         using reference = const T&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
+        /// Takes a second handle on the same collection version; the nodes are shared, not copied.
         const_iterator(const const_iterator& other)
             : root_owner_(other.root_owner_)
             , current_(other.current_)
@@ -532,6 +605,7 @@ public:
             return *this;
         }
 
+        /// An unpositioned cursor, holding no version.
         const_iterator(const_iterator&&) noexcept = default;
         const_iterator& operator=(const_iterator&&) noexcept = default;
 
@@ -579,17 +653,22 @@ public:
         friend class persistent_deque;
 
         struct frame final {
+            /// Which kind of frame a traversal step is in.
             enum class frame_kind {
                 tree,
                 node,
             };
 
+            /// Takes a second handle on the same collection version; the nodes are shared, not
+            /// copied.
             explicit frame(detail::deque_tree<T> value)
                 : kind(frame_kind::tree)
                 , tree(std::move(value))
             {
             }
 
+            /// Takes a second handle on the same collection version; the nodes are shared, not
+            /// copied.
             explicit frame(typename detail::deque_element<T>::node_pointer value)
                 : kind(frame_kind::node)
                 , node(std::move(value))
@@ -601,11 +680,13 @@ public:
             typename detail::deque_element<T>::node_pointer node;
             size_type next_child = 0;
 
+            /// How many children this node has.
             [[nodiscard]] size_type child_count() const
             {
                 return kind == frame_kind::tree ? tree.enumeration_child_count() : node->child_count();
             }
 
+            /// The child at the given index.
             [[nodiscard]] detail::deque_enumeration_child<T> child(const size_type index) const
             {
                 if (kind == frame_kind::tree) {
@@ -750,7 +831,9 @@ public:
     using value_type = T;
     using size_type = std::size_t;
 
+    /// An unpositioned cursor, holding no version.
     persistent_deque_cursor() = delete;
+    /// An unpositioned cursor, holding no version.
     persistent_deque_cursor(const persistent_deque_cursor&) = default;
     persistent_deque_cursor& operator=(const persistent_deque_cursor&) = default;
 
@@ -773,6 +856,11 @@ public:
         return *this;
     }
 
+    /// Whether the gap follows the last element.
+    /// Whether the gap precedes the first element.
+    /// The cursor's gap position.
+    /// Whether the deque version the cursor is positioned in holds no elements.
+    /// Number of elements in the deque version the cursor is positioned in.
     [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
     [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
@@ -785,6 +873,7 @@ public:
         return position_ == 0 ? nullptr : snapshot_.try_get(position_ - 1);
     }
 
+    /// Reads the element immediately before the gap, or nothing at the start.
     const value_type* try_peek_previous() const && = delete;
 
     /// Returns a pointer borrowed from this cursor's retained snapshot, or null at the end.
@@ -793,8 +882,11 @@ public:
         return snapshot_.try_get(position_);
     }
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     const value_type* try_peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] persistent_deque_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -803,6 +895,7 @@ public:
         return persistent_deque_cursor{snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] persistent_deque_cursor move_next() const
     {
         if (is_at_end()) {
@@ -811,6 +904,7 @@ public:
         return persistent_deque_cursor{snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same deque version.
     [[nodiscard]] persistent_deque_cursor seek(const size_type position) const
     {
         if (position > snapshot_.size()) {
@@ -819,6 +913,7 @@ public:
         return position == position_ ? *this : persistent_deque_cursor{snapshot_, position};
     }
 
+    /// A deque with the element inserted.
     [[nodiscard]] persistent_deque_cursor insert(value_type value) const
     {
         return persistent_deque_cursor{
@@ -826,6 +921,7 @@ public:
             checked_add(position_, size_type{1})};
     }
 
+    /// A deque with a range's elements inserted at the position.
     template <std::ranges::input_range Range>
         requires(!std::same_as<std::remove_cvref_t<Range>, persistent_deque<value_type>>)
     [[nodiscard]] persistent_deque_cursor insert_range(Range&& values) const
@@ -847,6 +943,8 @@ public:
             checked_add(position_, values.size())};
     }
 
+    /// Removes the element before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] persistent_deque_cursor delete_previous() const
     {
         if (is_at_start()) {
@@ -855,6 +953,8 @@ public:
         return persistent_deque_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
     }
 
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] persistent_deque_cursor delete_next() const
     {
         if (is_at_end()) {
@@ -863,6 +963,8 @@ public:
         return persistent_deque_cursor{snapshot_.remove_at(position_), position_};
     }
 
+    /// Replaces the element after the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] persistent_deque_cursor replace_next(value_type value) const
     {
         if (is_at_end()) {
@@ -871,6 +973,7 @@ public:
         return persistent_deque_cursor{snapshot_.set_item(position_, std::move(value)), position_};
     }
 
+    /// The deque version this cursor is positioned in.
     [[nodiscard]] persistent_deque<value_type> snapshot() const { return snapshot_; }
 
 private:

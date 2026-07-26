@@ -1,3 +1,10 @@
+/// A persistent rope: a sequence storing elements in chunked leaves.
+///
+/// Chunking keeps the node count proportional to the size divided by the chunk size rather than to
+/// the size, which is what makes a large text cheap to hold and to concatenate. Every operation
+/// returns a new version and leaves its inputs valid, sharing unchanged structure, so an edit
+/// copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -25,12 +32,15 @@ class rope;
 template <class T>
 class rope_cursor;
 
+/// The two ropes a split produced.
 template <class T>
 struct rope_split final {
     rope<T> left;
     rope<T> right;
 };
 
+/// A persistent sequence storing elements in chunked leaves, so its node count is proportional to
+/// its size divided by the chunk size rather than to its size.
 template <class T>
 class rope final {
 public:
@@ -45,34 +55,41 @@ public:
     static constexpr size_type min_chunk_size = 256;
     static constexpr size_type max_chunk_size = 2048;
 
+    /// An empty rope.
     rope() = default;
 
+    /// A rope holding the listed elements.
     rope(std::initializer_list<value_type> values)
         : tree_(build_tree(values.begin(), values.end()))
     {
     }
 
+    /// A rope holding the elements an iterator pair yields.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
     rope(Iterator first, Sentinel last)
         : tree_(build_tree(std::move(first), std::move(last)))
     {
     }
 
+    /// The shared empty rope.
     [[nodiscard]] static rope empty_rope()
     {
         return rope{};
     }
 
+    /// An empty rope using the supplied policies, which it retains.
     [[nodiscard]] static rope create(std::initializer_list<value_type> values)
     {
         return rope{values};
     }
 
+    /// An empty rope using the supplied policies, which it retains.
     [[nodiscard]] static rope create(std::span<const value_type> values)
     {
         return values.empty() ? rope{} : rope{build_tree(values.begin(), values.end())};
     }
 
+    /// A rope holding a range's elements, built in bulk rather than by repeated insertion.
     template <std::ranges::input_range Range>
         requires std::convertible_to<std::ranges::range_reference_t<Range>, value_type>
     [[nodiscard]] static rope from_range(Range&& values)
@@ -80,11 +97,13 @@ public:
         return rope{std::ranges::begin(values), std::ranges::end(values)};
     }
 
+    /// A rope built from already-chunked input.
     [[nodiscard]] static rope from_chunks(std::initializer_list<chunk_storage> chunks)
     {
         return rope{build_tree_from_chunks(chunks.begin(), chunks.end())};
     }
 
+    /// A rope built from already-chunked input.
     template <std::ranges::input_range Range>
         requires std::convertible_to<std::ranges::range_reference_t<Range>, chunk_storage>
     [[nodiscard]] static rope from_chunks(Range&& chunks)
@@ -92,18 +111,22 @@ public:
         return rope{build_tree_from_chunks(std::ranges::begin(chunks), std::ranges::end(chunks))};
     }
 
+    /// Whether the rope holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return tree_.empty();
     }
 
+    /// Number of elements in the rope.
     [[nodiscard]] size_type size() const
     {
         return tree_.measure();
     }
 
+    /// A cursor at the given gap of the rope.
     [[nodiscard]] rope_cursor<value_type> get_cursor(size_type position = 0) const;
 
+    /// The first element.
     [[nodiscard]] const_reference front() const
     {
         if (auto view = tree_.try_view_left()) {
@@ -113,6 +136,7 @@ public:
         throw empty_error();
     }
 
+    /// The last element.
     [[nodiscard]] const_reference back() const
     {
         if (auto view = tree_.try_view_right()) {
@@ -122,6 +146,7 @@ public:
         throw empty_error();
     }
 
+    /// The element at the given position.
     [[nodiscard]] const_reference at(const size_type index) const
     {
         throw_if_index_out_of_range(index, size());
@@ -138,6 +163,7 @@ public:
         return at(index);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const value_type* try_get(const size_type index) const
     {
         if (index >= size()) {
@@ -152,6 +178,7 @@ public:
         return &located.item.value()[index - located.measure_before];
     }
 
+    /// A rope with the key bound to the value, adding or replacing as needed.
     [[nodiscard]] rope set_item(const size_type index, value_type value) const
     {
         throw_if_index_out_of_range(index, size());
@@ -160,31 +187,37 @@ public:
         return wrap(split->left.append(split->item.set_at(offset, std::move(value))).concat(split->right));
     }
 
+    /// A rope with the element at the position replaced.
     [[nodiscard]] rope set_at(const size_type index, value_type value) const
     {
         return set_item(index, std::move(value));
     }
 
+    /// A rope with the element added at the front.
     [[nodiscard]] rope push_front(value_type value) const
     {
         return insert_at(0, std::move(value));
     }
 
+    /// A rope with the element added at the back.
     [[nodiscard]] rope push_back(value_type value) const
     {
         return insert_at(size(), std::move(value));
     }
 
+    /// A rope with the element placed first.
     [[nodiscard]] rope add_first(value_type value) const
     {
         return push_front(std::move(value));
     }
 
+    /// A rope with the element placed last.
     [[nodiscard]] rope add_last(value_type value) const
     {
         return push_back(std::move(value));
     }
 
+    /// A rope without its first element.
     [[nodiscard]] rope remove_first() const
     {
         if (empty()) {
@@ -194,6 +227,7 @@ public:
         return remove_at(0);
     }
 
+    /// A rope without its last element.
     [[nodiscard]] rope remove_last() const
     {
         if (empty()) {
@@ -203,6 +237,7 @@ public:
         return remove_at(size() - 1);
     }
 
+    /// A rope with the element inserted at the position.
     [[nodiscard]] rope insert_at(size_type index, value_type value) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -229,6 +264,7 @@ public:
     template <std::ranges::input_range Range>
         requires(!std::same_as<std::remove_cvref_t<Range>, rope>)
             && std::convertible_to<std::ranges::range_reference_t<Range>, value_type>
+    /// A rope with a range's elements inserted at the position.
     [[nodiscard]] rope insert_range(const size_type index, Range&& values) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -236,6 +272,7 @@ public:
         return middle.empty() ? *this : insert_range(index, middle);
     }
 
+    /// A rope with a range's elements inserted at the position.
     [[nodiscard]] rope insert_range(const size_type index, const rope& values) const
     {
         throw_if_insert_index_out_of_range(index, size());
@@ -248,6 +285,7 @@ public:
         return split.left.concat(values).concat(split.right);
     }
 
+    /// A rope without the element at the position.
     [[nodiscard]] rope remove_at(size_type index) const
     {
         throw_if_index_out_of_range(index, size());
@@ -260,6 +298,7 @@ public:
         return wrap(join_shrunk(split->left, split->item.remove_at(offset), split->right));
     }
 
+    /// A rope without the elements in the range.
     [[nodiscard]] rope remove_range(const size_type index, const size_type count) const
     {
         throw_if_range_out_of_bounds(index, count);
@@ -272,6 +311,7 @@ public:
         return left_rest.left.concat(middle_right.right);
     }
 
+    /// The elements in the given range.
     [[nodiscard]] rope slice(const size_type index, const size_type count) const
     {
         throw_if_range_out_of_bounds(index, count);
@@ -287,6 +327,7 @@ public:
         return left_rest.right.split_at(count).left;
     }
 
+    /// The elements in the given range.
     [[nodiscard]] rope slice(const size_type index) const
     {
         if (index > size()) {
@@ -296,6 +337,7 @@ public:
         return slice(index, size() - index);
     }
 
+    /// Splits into the elements before the position and those from it onward.
     [[nodiscard]] rope_split<value_type> split_at(const size_type index) const
     {
         throw_if_split_index_out_of_range(index, size());
@@ -314,6 +356,7 @@ public:
         return rope_split<value_type>{wrap(std::move(left)), wrap(std::move(right))};
     }
 
+    /// The concatenation of two ropes, sharing both operands' unchanged structure.
     [[nodiscard]] rope concat(const rope& other) const
     {
         (void)checked_add(size(), other.size());
@@ -336,6 +379,7 @@ public:
         return wrap(tree_.concat(other.tree_));
     }
 
+    /// Copies the elements out into a vector, in the rope's own order.
     [[nodiscard]] std::vector<value_type> to_vector() const
     {
         auto result = std::vector<value_type>{};
@@ -347,6 +391,7 @@ public:
         return result;
     }
 
+    /// Calls the function once per element, in the rope's own order.
     template <class Function>
         requires std::invocable<Function&, const value_type&>
     void for_each(Function function) const
@@ -358,11 +403,13 @@ public:
         });
     }
 
+    /// The elements in the range.
     [[nodiscard]] std::vector<value_type> get_range(const size_type index, const size_type count) const
     {
         return slice(index, count).to_vector();
     }
 
+    /// Copies the elements into the destination.
     void copy_to(const size_type index, std::span<value_type> destination) const
     {
         throw_if_range_out_of_bounds(index, destination.size());
@@ -378,19 +425,25 @@ public:
         });
     }
 
+    /// An iterator over the elements, in the rope's own order.
     [[nodiscard]] const_iterator begin() const
     {
         return const_iterator{tree_};
     }
 
+    /// The iterator one past the last element.
     [[nodiscard]] const_iterator end() const noexcept
     {
         return const_iterator{};
     }
 
+    /// The const iterator one past the last element.
+    /// A const iterator over the elements.
     [[nodiscard]] const_iterator cbegin() const { return begin(); }
     [[nodiscard]] const_iterator cend() const noexcept { return end(); }
 
+    /// A forward const iterator over one rope version's elements. It keeps that version alive, so
+    /// it stays valid across later edits.
     class const_iterator final {
     public:
         using iterator_concept = std::forward_iterator_tag;
@@ -400,6 +453,7 @@ public:
         using pointer = const T*;
         using reference = const T&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] reference operator*() const
@@ -467,11 +521,13 @@ public:
         size_type offset_ = 0;
     };
 
+    /// Rebuilds the structure into its compact form, dropping slack accumulated by earlier edits.
     [[nodiscard]] rope compact() const
     {
         return empty() ? rope{} : rope::from_range(to_vector());
     }
 
+    /// Checks the rope's structural invariants. For tests and diagnostics.
     void validate_invariants() const
     {
         auto total = size_type{0};
@@ -492,6 +548,7 @@ public:
         }
     }
 
+    /// How many chunks the structure holds.
     [[nodiscard]] size_type chunk_count() const
     {
         auto count = size_type{0};
@@ -632,7 +689,9 @@ public:
     using value_type = T;
     using size_type = std::size_t;
 
+    /// An unpositioned cursor, holding no version.
     rope_cursor() = delete;
+    /// An unpositioned cursor, holding no version.
     rope_cursor(const rope_cursor&) = default;
     rope_cursor& operator=(const rope_cursor&) = default;
 
@@ -656,21 +715,25 @@ public:
         return *this;
     }
 
+    /// Number of elements in the rope version the cursor is positioned in.
     [[nodiscard]] size_type size() const
     {
         return snapshot_.size();
     }
 
+    /// The cursor's gap position.
     [[nodiscard]] size_type position() const noexcept
     {
         return position_;
     }
 
+    /// Whether the gap precedes the first element.
     [[nodiscard]] bool is_at_start() const noexcept
     {
         return position_ == 0;
     }
 
+    /// Whether the gap follows the last element.
     [[nodiscard]] bool is_at_end() const
     {
         return position_ == snapshot_.size();
@@ -682,6 +745,7 @@ public:
         return position_ == 0 ? nullptr : snapshot_.try_get(position_ - 1);
     }
 
+    /// Reads the element immediately before the gap, or nothing at the start.
     const value_type* try_peek_previous() const && = delete;
 
     /// Returns a pointer borrowed from this cursor's retained snapshot, or nullptr at the end.
@@ -690,8 +754,11 @@ public:
         return snapshot_.try_get(position_);
     }
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     const value_type* try_peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] rope_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -701,6 +768,7 @@ public:
         return rope_cursor{snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] rope_cursor move_next() const
     {
         if (is_at_end()) {
@@ -710,6 +778,7 @@ public:
         return rope_cursor{snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given position within the same rope version.
     [[nodiscard]] rope_cursor seek(const size_type position) const
     {
         if (position > snapshot_.size()) {
@@ -719,6 +788,7 @@ public:
         return position == position_ ? *this : rope_cursor{snapshot_, position};
     }
 
+    /// A rope with the element inserted.
     [[nodiscard]] rope_cursor insert(value_type value) const
     {
         const auto next_position = checked_add(position_, size_type{1});
@@ -728,12 +798,14 @@ public:
     template <std::ranges::input_range Range>
         requires(!std::same_as<std::remove_cvref_t<Range>, rope<value_type>>)
             && std::convertible_to<std::ranges::range_reference_t<Range>, value_type>
+    /// A rope with a range's elements inserted at the position.
     [[nodiscard]] rope_cursor insert_range(Range&& values) const
     {
         auto middle = rope<value_type>::from_range(std::forward<Range>(values));
         return middle.empty() ? *this : insert_range(middle);
     }
 
+    /// A rope with a range's elements inserted at the position.
     [[nodiscard]] rope_cursor insert_range(const rope<value_type>& values) const
     {
         if (values.empty()) {
@@ -744,6 +816,8 @@ public:
         return rope_cursor{snapshot_.insert_range(position_, values), next_position};
     }
 
+    /// Removes the element before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] rope_cursor delete_previous() const
     {
         if (is_at_start()) {
@@ -753,6 +827,8 @@ public:
         return rope_cursor{snapshot_.remove_at(position_ - 1), position_ - 1};
     }
 
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] rope_cursor delete_next() const
     {
         if (is_at_end()) {
@@ -762,6 +838,8 @@ public:
         return rope_cursor{snapshot_.remove_at(position_), position_};
     }
 
+    /// Replaces the element after the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] rope_cursor replace_next(value_type value) const
     {
         if (is_at_end()) {
@@ -771,6 +849,7 @@ public:
         return rope_cursor{snapshot_.set_item(position_, std::move(value)), position_};
     }
 
+    /// The rope version this cursor is positioned in.
     [[nodiscard]] rope<value_type> snapshot() const
     {
         return snapshot_;

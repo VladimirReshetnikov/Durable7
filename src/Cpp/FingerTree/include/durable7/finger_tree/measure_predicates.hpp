@@ -1,3 +1,9 @@
+/// The predicates a measured search descends by.
+///
+/// A split predicate must be monotone in the accumulated measure: false up to some point and true
+/// from there on. That is what lets the descent skip a subtree on its cached measure alone instead
+/// of visiting its elements.
+
 #pragma once
 
 #include <durable7/finger_tree/built_in_measures.hpp>
@@ -17,9 +23,11 @@ concept measure_predicate =
            { predicate(measure) } -> std::convertible_to<bool>;
        };
 
+/// Wraps a caller-supplied function as a measure predicate.
 template <class Function>
 class function_measure_predicate final {
 public:
+    /// Constructs the function measure predicate from the given parts.
     explicit constexpr function_measure_predicate(Function function)
         : function_(std::move(function))
     {
@@ -38,9 +46,11 @@ private:
     Function function_;
 };
 
+/// Matches once the accumulated count passes a threshold.
 template <class T>
 class count_above_predicate final {
 public:
+    /// Constructs the count above predicate from the given parts.
     explicit constexpr count_above_predicate(const std::size_t rank) noexcept
         : rank_(rank)
     {
@@ -55,8 +65,11 @@ private:
     std::size_t rank_;
 };
 
+/// Matches once the accumulated element count passes a threshold, which is how a positional split
+/// is expressed as a measured one.
 class size_above_predicate final {
 public:
+    /// Constructs the size above predicate from the given parts.
     explicit constexpr size_above_predicate(const std::size_t index) noexcept
         : index_(index)
     {
@@ -71,9 +84,11 @@ private:
     std::size_t index_;
 };
 
+/// Matches once the accumulated key reaches the probe, giving a lower-bound search.
 template <class T, class Less = std::less<>>
 class key_at_least_predicate final {
 public:
+    /// Constructs the key at least predicate from the given parts.
     constexpr key_at_least_predicate(T key, Less less = Less{})
         : key_(std::move(key))
         , less_(std::move(less))
@@ -90,9 +105,11 @@ private:
     Less less_;
 };
 
+/// Matches once the accumulated key passes the probe, giving an upper-bound search.
 template <class T, class Less = std::less<>>
 class key_above_predicate final {
 public:
+    /// Constructs the key above predicate from the given parts.
     constexpr key_above_predicate(T key, Less less = Less{})
         : key_(std::move(key))
         , less_(std::move(less))
@@ -109,9 +126,11 @@ private:
     Less less_;
 };
 
+/// Applies an at-least test to an optional measure.
 template <class T, class Less = std::less<>>
 class optional_at_least_predicate final {
 public:
+    /// Constructs the optional at least predicate from the given parts.
     constexpr optional_at_least_predicate(T target, Less less = Less{})
         : target_(std::move(target))
         , less_(std::move(less))
@@ -128,9 +147,11 @@ private:
     Less less_;
 };
 
+/// Applies an at-most test to an optional measure.
 template <class T, class Less = std::less<>>
 class optional_at_most_predicate final {
 public:
+    /// Constructs the optional at most predicate from the given parts.
     constexpr optional_at_most_predicate(T target, Less less = Less{})
         : target_(std::move(target))
         , less_(std::move(less))
@@ -147,9 +168,11 @@ private:
     Less less_;
 };
 
+/// Applies an above-threshold test to an optional measure, treating the identity as not matching.
 template <class T, class Less = std::less<>>
 class optional_above_predicate final {
 public:
+    /// Constructs the optional above predicate from the given parts.
     constexpr optional_above_predicate(T target, Less less = Less{})
         : target_(std::move(target))
         , less_(std::move(less))
@@ -166,10 +189,12 @@ private:
     Less less_;
 };
 
+/// The stateless form of optional_at_least_predicate.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 class static_optional_at_least_predicate final {
 public:
+    /// Constructs the static optional at least predicate from the given parts.
     explicit constexpr static_optional_at_least_predicate(T target)
         : target_(std::move(target))
     {
@@ -184,10 +209,12 @@ private:
     T target_;
 };
 
+/// The stateless form of optional_at_most_predicate.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 class static_optional_at_most_predicate final {
 public:
+    /// Constructs the static optional at most predicate from the given parts.
     explicit constexpr static_optional_at_most_predicate(T target)
         : target_(std::move(target))
     {
@@ -202,10 +229,12 @@ private:
     T target_;
 };
 
+/// The stateless form of optional_above_predicate, for a comparison carrying no state.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 class static_optional_above_predicate final {
 public:
+    /// Constructs the static optional above predicate from the given parts.
     explicit constexpr static_optional_above_predicate(T target)
         : target_(std::move(target))
     {
@@ -220,10 +249,12 @@ private:
     T target_;
 };
 
+/// Matches once the accumulated ranked key reaches the probe.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 class ranked_key_at_least_predicate final {
 public:
+    /// Constructs the ranked key at least predicate from the given parts.
     explicit constexpr ranked_key_at_least_predicate(T key)
         : key_(std::move(key))
     {
@@ -238,10 +269,12 @@ private:
     T key_;
 };
 
+/// Matches once the accumulated ranked key passes the probe.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 class ranked_key_above_predicate final {
 public:
+    /// Constructs the ranked key above predicate from the given parts.
     explicit constexpr ranked_key_above_predicate(T key)
         : key_(std::move(key))
     {
@@ -256,9 +289,12 @@ private:
     T key_;
 };
 
+/// Matches at the first entry carrying the minimum priority, which is what makes the minimum a
+/// descent rather than a scan.
 template <class Priority, class Less = std::less<>>
 class priority_front_predicate final {
 public:
+    /// Constructs the priority front predicate from the given parts.
     constexpr priority_front_predicate(Priority target, Less less = Less{})
         : target_(std::move(target))
         , less_(std::move(less))
@@ -275,9 +311,12 @@ private:
     Less less_;
 };
 
+/// Matches once a subtree's cached maximum high endpoint reaches the probe. Subtrees that fail it
+/// cannot contain an overlap and are skipped whole.
 template <class T, class Less = std::less<>>
 class max_high_at_least_predicate final {
 public:
+    /// Constructs the max high at least predicate from the given parts.
     constexpr max_high_at_least_predicate(T low, Less less = Less{})
         : low_(std::move(low))
         , less_(std::move(less))
@@ -294,9 +333,11 @@ private:
     Less less_;
 };
 
+/// Matches once the last low endpoint reaches the probe.
 template <class T, class Less = std::less<>>
 class last_low_at_least_predicate final {
 public:
+    /// Constructs the last low at least predicate from the given parts.
     constexpr last_low_at_least_predicate(T low, Less less = Less{})
         : low_(std::move(low))
         , less_(std::move(less))
@@ -313,9 +354,11 @@ private:
     Less less_;
 };
 
+/// Matches once the last low endpoint passes the probe.
 template <class T, class Less = std::less<>>
 class last_low_above_predicate final {
 public:
+    /// Constructs the last low above predicate from the given parts.
     constexpr last_low_above_predicate(T low, Less less = Less{})
         : low_(std::move(low))
         , less_(std::move(less))
@@ -332,9 +375,11 @@ private:
     Less less_;
 };
 
+/// Matches once the accumulated sum passes a threshold.
 template <class T>
 class sum_above_predicate final {
 public:
+    /// Constructs the sum above predicate from the given parts.
     explicit constexpr sum_above_predicate(T threshold)
         : threshold_(std::move(threshold))
     {
@@ -349,9 +394,11 @@ private:
     T threshold_;
 };
 
+/// Applies a predicate to a product measure's first component.
 template <class Inner, class First, class Second>
 class first_component_predicate final {
 public:
+    /// Constructs the first component predicate from the given parts.
     explicit constexpr first_component_predicate(Inner inner)
         : inner_(std::move(inner))
     {
@@ -367,9 +414,11 @@ private:
     Inner inner_;
 };
 
+/// Applies a predicate to a product measure's second component.
 template <class Inner, class First, class Second>
 class second_component_predicate final {
 public:
+    /// Constructs the second component predicate from the given parts.
     explicit constexpr second_component_predicate(Inner inner)
         : inner_(std::move(inner))
     {

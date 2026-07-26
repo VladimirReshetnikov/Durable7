@@ -1,3 +1,11 @@
+/// The measured finger tree: a persistent sequence caching a monoidal measure at every node.
+///
+/// Because each node's measure is readable without descending into it, one generic split answers
+/// any monotone question the measure can express without visiting the elements it skips. Nearly
+/// every other collection in this workspace is this tree under a different measure. Every operation
+/// returns a new version and leaves its inputs valid, sharing unchanged structure, so an edit
+/// copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/built_in_measures.hpp>

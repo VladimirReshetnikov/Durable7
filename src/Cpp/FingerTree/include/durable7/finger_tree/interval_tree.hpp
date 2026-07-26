@@ -1,3 +1,9 @@
+/// A persistent bag of closed intervals, with overlap and containment queries.
+///
+/// Each subtree caches the maximum high endpoint below it, so a query visits only the subtrees that
+/// can still hold a match. Every operation returns a new version and leaves its inputs valid,
+/// sharing unchanged structure, so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/finger_tree/built_in_measures.hpp>
@@ -20,6 +26,8 @@ namespace ordered_search_cursor_detail {
 struct access;
 }
 
+/// A persistent bag of closed intervals. Each subtree's maximum high endpoint is cached, so a query
+/// visits only the subtrees that can still contain a match.
 template <class T, class Comparison = default_comparison<T>>
     requires static_comparison_policy<Comparison, T>
 class interval_tree final {
@@ -33,8 +41,10 @@ public:
     using size_type = std::size_t;
     using const_iterator = typename tree_type::const_iterator;
 
+    /// An empty tree.
     interval_tree() = default;
 
+    /// A tree holding the listed intervals.
     interval_tree(std::initializer_list<interval_type> intervals)
     {
         auto current = interval_tree{};
@@ -45,6 +55,7 @@ public:
         tree_ = std::move(current.tree_);
     }
 
+    /// A tree holding the intervals an iterator pair yields.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
     interval_tree(Iterator first, Sentinel last)
     {
@@ -56,33 +67,39 @@ public:
         tree_ = std::move(current.tree_);
     }
 
+    /// The shared empty tree.
     [[nodiscard]] static interval_tree empty_tree()
     {
         return interval_tree{};
     }
 
+    /// A tree holding a range's intervals, built in bulk rather than by repeated insertion.
     template <std::ranges::input_range Range>
     [[nodiscard]] static interval_tree from_range(Range&& intervals)
     {
         return interval_tree{std::ranges::begin(intervals), std::ranges::end(intervals)};
     }
 
+    /// Whether the tree holds no intervals.
     [[nodiscard]] bool empty() const noexcept
     {
         return tree_.empty();
     }
 
+    /// Number of intervals in the tree.
     [[nodiscard]] size_type size() const
     {
         return tree_.measure().count;
     }
 
+    /// A tree with the interval inserted.
     [[nodiscard]] interval_tree insert(interval_type item) const
     {
         auto split = tree_.split(last_low_at_least{item.low});
         return interval_tree{split.left.append(std::move(item)).concat(split.right)};
     }
 
+    /// A tree with the interval inserted.
     [[nodiscard]] interval_tree insert(value_type low, value_type high) const
     {
         return insert(interval_type{std::move(low), std::move(high)});
@@ -113,6 +130,7 @@ public:
         return located.has_value() ? located.item : nullptr;
     }
 
+    /// An interval overlapping the probe, or nothing when none does.
     [[nodiscard]] std::optional<interval_type> try_find_overlap(const interval_type& query) const
     {
         auto located = tree_.try_locate(max_high_at_least{query.low});
@@ -127,16 +145,20 @@ public:
         return std::nullopt;
     }
 
+    /// An interval overlapping the probe, or nothing when none does.
     [[nodiscard]] std::optional<interval_type> try_find_overlap(const value_type& low, const value_type& high) const
     {
         return try_find_overlap(interval_type{low, high});
     }
 
+    /// An interval containing the point, or nothing when none does.
     [[nodiscard]] std::optional<interval_type> try_find_containing(const value_type& point) const
     {
         return try_find_overlap(interval_type{point, point});
     }
 
+    /// Every interval overlapping the probe. Subtrees whose cached maximum endpoint falls short of
+    /// the probe are skipped whole.
     [[nodiscard]] std::vector<interval_type> find_overlaps(const interval_type& query) const
     {
         auto results = std::vector<interval_type>{};
@@ -156,6 +178,7 @@ public:
         return results;
     }
 
+    /// How many stored intervals overlap the probe.
     [[nodiscard]] size_type count_overlaps(const interval_type& query) const
     {
         auto count = size_type{0};
@@ -175,6 +198,7 @@ public:
         return count;
     }
 
+    /// Whether the interval is present.
     [[nodiscard]] bool contains(const interval_type& item) const
     {
         auto split = tree_.split(last_low_at_least{item.low});
@@ -195,6 +219,7 @@ public:
         return false;
     }
 
+    /// Removes the interval, reporting whether it was present.
     [[nodiscard]] std::optional<interval_tree> try_remove(const interval_type& item) const
     {
         auto split = tree_.split(last_low_at_least{item.low});
@@ -217,12 +242,14 @@ public:
         return std::nullopt;
     }
 
+    /// A tree without that interval; returns the receiver when absent.
     [[nodiscard]] interval_tree remove(const interval_type& item) const
     {
         auto removed = try_remove(item);
         return removed.has_value() ? *removed : *this;
     }
 
+    /// Merges adjacent pieces that can be represented as one.
     [[nodiscard]] interval_tree coalesce() const
     {
         if (empty()) {
@@ -253,17 +280,23 @@ public:
         return interval_tree{std::move(rebuilt)};
     }
 
+    /// Copies the intervals out into a vector, in the tree's own order.
     [[nodiscard]] std::vector<interval_type> to_vector() const
     {
         return tree_.to_vector();
     }
 
+    /// Copies the intervals into the destination.
     template <std::output_iterator<const interval_type&> OutputIterator>
     void copy_to(OutputIterator output) const
     {
         tree_.copy_to(std::move(output));
     }
 
+    /// The const iterator one past the last element.
+    /// A const iterator over the intervals.
+    /// The iterator one past the last element.
+    /// An iterator over the intervals, in the tree's own order.
     [[nodiscard]] const_iterator begin() const { return tree_.begin(); }
     [[nodiscard]] const_iterator end() const noexcept { return tree_.end(); }
     [[nodiscard]] const_iterator cbegin() const { return begin(); }

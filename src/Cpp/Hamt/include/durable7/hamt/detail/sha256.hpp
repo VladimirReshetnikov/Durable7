@@ -1,3 +1,5 @@
+/// The SHA-256 implementation the default Merkle policy hashes with.
+
 #pragma once
 
 #include <array>
@@ -28,6 +30,7 @@ inline constexpr std::size_t sha256_digest_size = 32;
 
 #if defined(_WIN32)
 
+/// Raises the error a failed CNG call reported.
 [[noreturn]] inline void throw_bcrypt_failure(const char* operation, const NTSTATUS status)
 {
     throw std::runtime_error(
@@ -35,6 +38,7 @@ inline constexpr std::size_t sha256_digest_size = 32;
         + std::to_string(static_cast<std::int32_t>(status)));
 }
 
+/// Fails when a CNG call reports an error.
 inline void require_bcrypt_success(const char* operation, const NTSTATUS status)
 {
     if (status < 0) {
@@ -42,8 +46,10 @@ inline void require_bcrypt_success(const char* operation, const NTSTATUS status)
     }
 }
 
+/// The interface a SHA-256 implementation is supplied through.
 class sha256_provider final {
 public:
+    /// Constructs the sha256 provider from the given parts.
     sha256_provider()
     {
         require_bcrypt_success(
@@ -84,9 +90,11 @@ public:
         }
     }
 
+    /// Takes a second handle on the same collection version; the nodes are shared, not copied.
     sha256_provider(const sha256_provider&) = delete;
     sha256_provider& operator=(const sha256_provider&) = delete;
 
+    /// Constructs the sha256 provider from the given parts.
     ~sha256_provider()
     {
         if (handle_ != nullptr) {
@@ -94,6 +102,8 @@ public:
         }
     }
 
+    /// How many bytes the value occupies.
+    /// A handle on the stored value.
     [[nodiscard]] BCRYPT_ALG_HANDLE handle() const noexcept { return handle_; }
     [[nodiscard]] ULONG object_length() const noexcept { return object_length_; }
 
@@ -102,12 +112,14 @@ private:
     ULONG object_length_ = 0;
 };
 
+/// The shared platform SHA-256 provider, created once and reused.
 [[nodiscard]] inline const sha256_provider& native_sha256_provider()
 {
     static const sha256_provider provider{};
     return provider;
 }
 
+/// The SHA-256 digest of the input.
 [[nodiscard]] inline std::array<std::byte, sha256_digest_size> sha256(
     const std::span<const std::byte> message)
 {
@@ -159,6 +171,7 @@ private:
 
 #else
 
+/// The SHA-256 digest of the input.
 [[nodiscard]] inline std::array<std::byte, sha256_digest_size> sha256(
     const std::span<const std::byte> message)
 {

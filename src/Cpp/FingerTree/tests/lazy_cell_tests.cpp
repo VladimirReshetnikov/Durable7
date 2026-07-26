@@ -1,3 +1,5 @@
+/// Tests for the lazy cell, including that a cell is forced at most once.
+
 #include <durable7/finger_tree/detail/lazy_cell.hpp>
 
 #include "test_support/test_runner.hpp"

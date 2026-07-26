@@ -1,3 +1,6 @@
+/// The Hamt workspace's umbrella header: the persistent hash map, set, and everything built on
+/// them.
+
 #pragma once
 
 #include <durable7/hamt/merkle_encoding.hpp>

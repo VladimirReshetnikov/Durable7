@@ -1,3 +1,5 @@
+/// A minimal test runner: named cases, run in order, each result reported.
+
 #pragma once
 
 #include "replay_seed.hpp"
@@ -16,14 +18,17 @@
 
 namespace durable7::finger_tree::tests {
 
+/// Raised when an assertion fails, carrying the message the report shows.
 class test_failure final : public std::runtime_error {
 public:
+    /// Constructs the test failure from the given parts.
     explicit test_failure(const std::string& message)
         : std::runtime_error(message)
     {
     }
 };
 
+/// Fails the current case unless the condition holds.
 inline void require(
     const bool condition,
     const std::string_view expression,
@@ -38,6 +43,7 @@ inline void require(
     throw test_failure(message.str());
 }
 
+/// Fails the current case unless the two values are equal, reporting both.
 template <class T, class U>
 void require_equal(
     const T& actual,
@@ -56,6 +62,7 @@ void require_equal(
     throw test_failure(message.str());
 }
 
+/// Fails the current case unless the action raises the expected exception.
 template <class Exception, class Function>
 void require_throws(
     Function&& function,
@@ -83,10 +90,12 @@ void require_throws(
     throw test_failure(message.str());
 }
 
+/// A test suite: named cases run in order, reporting each result.
 class suite final {
 public:
     using test_function = std::function<void()>;
 
+    /// A version with the key's whole group of values replaced.
     void set_group(std::string group)
     {
         if (group.empty()) {
@@ -96,6 +105,7 @@ public:
         current_group_ = std::move(group);
     }
 
+    /// A collection containing the given element; returns the receiver when already present.
     void add(std::string name, test_function body)
     {
         if (current_group_.empty()) {
@@ -105,6 +115,7 @@ public:
         tests_.push_back(test_case{current_group_, std::move(name), std::move(body)});
     }
 
+    /// Runs the operation.
     [[nodiscard]] int run(const int argument_count, const char* const* arguments) const
     {
         auto options = runner_options{};

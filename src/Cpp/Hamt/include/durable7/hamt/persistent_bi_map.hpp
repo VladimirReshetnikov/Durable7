@@ -1,3 +1,9 @@
+/// A persistent bidirectional map: a one-to-one correspondence indexed from both sides.
+///
+/// An insertion that would break the correspondence is rejected rather than silently displacing a
+/// pair. Every operation returns a new version and leaves its inputs valid, sharing unchanged
+/// structure, so an edit copies a path rather than the whole collection.
+
 #pragma once
 
 #include <durable7/hamt/persistent_hash_map.hpp>
@@ -12,14 +18,18 @@
 
 namespace durable7::hamt {
 
+/// Which side of the bijection blocked an insertion. The key domain is reported in preference to
+/// the value domain when both conflict.
 enum class bimap_conflict {
     none,
     key,
     value,
 };
 
+/// Raised when a strict bimap insertion would break the one-to-one correspondence.
 class bimap_conflict_error final : public std::invalid_argument {
 public:
+    /// Constructs the bimap conflict error from the given parts.
     explicit bimap_conflict_error(bimap_conflict conflict)
         : std::invalid_argument(
             conflict == bimap_conflict::key
@@ -28,6 +38,7 @@ public:
           conflict_(conflict) {
     }
 
+    /// The conflict this result carries.
     [[nodiscard]] bimap_conflict conflict() const noexcept {
         return conflict_;
     }
@@ -47,6 +58,7 @@ template <
     class KeyEqual = std::equal_to<Key>,
     class ValueHash = std::hash<T>,
     class ValueEqual = std::equal_to<T>>
+/// A persistent bidirectional map: a one-to-one correspondence indexed from both sides.
 class persistent_bi_map {
 private:
     using forward_map_type = persistent_hash_map<Key, T, KeyHash, KeyEqual, ValueEqual>;
@@ -67,12 +79,15 @@ public:
     using inverse_type = persistent_bi_map<T, Key, ValueHash, ValueEqual, KeyHash, KeyEqual>;
     using const_iterator = typename forward_map_type::const_iterator;
 
+    /// An empty bimap.
     persistent_bi_map() = default;
 
+    /// Whether the bimap holds no pairs.
     [[nodiscard]] static persistent_bi_map empty() {
         return {};
     }
 
+    /// An empty bimap using the supplied policies, which it retains.
     [[nodiscard]] static persistent_bi_map create(
         KeyHash key_hash = {},
         KeyEqual keys_equal = {},
@@ -83,6 +98,7 @@ public:
             inverse_map_type::create(value_hash, values_equal, keys_equal));
     }
 
+    /// A bimap holding a range's pairs, built in bulk rather than by repeated insertion.
     template <class Range>
     [[nodiscard]] static persistent_bi_map create_range(
         const Range& entries,
@@ -101,34 +117,42 @@ public:
         return result;
     }
 
+    /// Number of pairs in the bimap.
     [[nodiscard]] size_type count() const noexcept {
         return forward_.count();
     }
 
+    /// Whether the bimap holds no pairs.
     [[nodiscard]] bool is_empty() const noexcept {
         return forward_.is_empty();
     }
 
+    /// The retained key hashing policy.
     [[nodiscard]] const KeyHash& key_hash_function() const noexcept {
         return forward_.hash_function();
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const noexcept {
         return forward_.key_eq();
     }
 
+    /// The retained value hashing policy.
     [[nodiscard]] const ValueHash& value_hash_function() const noexcept {
         return inverse_.hash_function();
     }
 
+    /// The retained value equivalence policy.
     [[nodiscard]] const ValueEqual& value_eq() const noexcept {
         return inverse_.key_eq();
     }
 
+    /// Whether the key is present.
     [[nodiscard]] bool contains_key(const Key& key) const {
         return forward_.contains_key(key);
     }
 
+    /// Whether any entry holds the value.
     [[nodiscard]] bool contains_value(const T& value) const {
         return inverse_.contains_key(value);
     }
@@ -138,14 +162,17 @@ public:
         return forward_.try_get(key);
     }
 
+    /// Reads the stored key representative, or nothing when absent.
     [[nodiscard]] const Key* try_get_key(const T& value) const {
         return inverse_.try_get(value);
     }
 
+    /// The value stored for the key. Raises when the key is absent.
     [[nodiscard]] const T& at(const Key& key) const {
         return forward_.at(key);
     }
 
+    /// A bimap containing the given pair; returns the receiver when already present.
     [[nodiscard]] persistent_bi_map add(const Key& key, const T& value) const {
         auto [result, added, conflict] = try_add(key, value);
         if (!added) {

@@ -1,3 +1,5 @@
+/// The Ordered workspace's umbrella header: the insertion-ordered collections.
+
 #pragma once
 
 #include <durable7/ordered/persistent_ordered_map.hpp>

@@ -1,3 +1,5 @@
+/// Tests for the insertion-ordered collections' cursors.
+
 #include <durable7/ordered/ordered.hpp>
 
 #include "../../FingerTree/tests/test_support/test_runner.hpp"

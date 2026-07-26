@@ -1,3 +1,5 @@
+/// A minimal end-to-end check that the library builds and runs.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"

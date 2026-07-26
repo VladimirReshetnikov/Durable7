@@ -1,3 +1,9 @@
+/// Merkle presence and absence proofs, synchronization plans, and three-way merge.
+///
+/// A proof carries only the blocks a verifier must descend into, taking the rest on their digests.
+/// A synchronization plan requests only the blocks that actually differ: subtrees whose digests
+/// already match are skipped whole.
+
 #pragma once
 
 #include <durable7/hamt/merkle_persistence.hpp>
@@ -31,6 +37,7 @@ enum class merkle_proof_kind : std::uint8_t {
 /// One authenticated block and the child intervals expanded elsewhere in a proof.
 class merkle_proof_step final {
 public:
+    /// Constructs the merkle proof step from the given parts.
     merkle_proof_step(merkle_block block, std::vector<std::size_t> expanded_child_indexes)
         : block_(std::move(block)),
           expanded_child_indexes_(std::move(expanded_child_indexes))
@@ -46,6 +53,9 @@ public:
         }
     }
 
+    /// Which of a step's children the proof expands, so a verifier knows which subtrees it must
+    /// descend into and which it may take on their digests.
+    /// The block this value holds.
     [[nodiscard]] const merkle_block& block() const noexcept { return block_; }
     [[nodiscard]] std::span<const std::size_t> expanded_child_indexes() const noexcept
     {
@@ -62,6 +72,7 @@ private:
 /// Immutable membership, nonmembership, or inclusive-range proof.
 class merkle_proof final {
 public:
+    /// Constructs the merkle proof.
     merkle_proof(
         std::string algorithm_id,
         const merkle_digest domain_digest,
@@ -103,6 +114,17 @@ public:
         }
     }
 
+    /// How many bytes the blocks occupy in total, which a receiver charges against its verification
+    /// budget.
+    /// The proof's chain of blocks.
+    /// The key or key range this proof answers.
+    /// Which case this value is.
+    /// The root digest. Equal digests mean equal contents, which is what makes comparison and
+    /// synchronization cheap.
+    /// The digest of the policy's domain: its algorithm and its key and value encodings together.
+    /// Two trees whose domain digests differ describe incomparable data.
+    /// The algorithm identifier this value was produced under. Mixed into every digest, so a change
+    /// of algorithm cannot be mistaken for a change of data.
     [[nodiscard]] const std::string& algorithm_id() const noexcept { return algorithm_id_; }
     [[nodiscard]] merkle_digest domain_digest() const noexcept { return domain_digest_; }
     [[nodiscard]] merkle_digest root_hash() const noexcept { return root_hash_; }
@@ -126,6 +148,7 @@ private:
 /// Immutable proof-verification outcome.
 class merkle_proof_verification_result final {
 public:
+    /// Whether the operation completed without unresolved conflicts.
     [[nodiscard]] static merkle_proof_verification_result success(
         const merkle_digest root_hash,
         const std::size_t verified_block_count,
@@ -140,6 +163,7 @@ public:
             verified_byte_count};
     }
 
+    /// The failure this result carries.
     [[nodiscard]] static merkle_proof_verification_result failure(
         const merkle_verification_error& error,
         const std::size_t verified_block_count,
@@ -155,23 +179,29 @@ public:
             verified_byte_count};
     }
 
+    /// Which kind of failure occurred.
+    /// Whether the handle is initialized and still usable.
     [[nodiscard]] bool valid() const noexcept { return valid_; }
     [[nodiscard]] merkle_verification_failure_kind failure_kind() const noexcept
     {
         return failure_kind_;
     }
+    /// A readable description of the failure.
     [[nodiscard]] const std::string& failure_message() const noexcept
     {
         return failure_message_;
     }
+    /// The root digest the verifier derived, to be checked against the claimed one.
     [[nodiscard]] std::optional<merkle_digest> computed_root_hash() const noexcept
     {
         return computed_root_hash_;
     }
+    /// How many blocks have been verified.
     [[nodiscard]] std::size_t verified_block_count() const noexcept
     {
         return verified_block_count_;
     }
+    /// How many bytes have been verified.
     [[nodiscard]] std::uint64_t verified_byte_count() const noexcept
     {
         return verified_byte_count_;
@@ -206,6 +236,8 @@ private:
 template <class V>
 class merkle_merge_value final {
 public:
+    /// The state meaning a value is present.
+    /// The state meaning no value is present.
     [[nodiscard]] static merkle_merge_value absent() noexcept { return merkle_merge_value{}; }
     [[nodiscard]] static merkle_merge_value present(std::shared_ptr<const V> value)
     {
@@ -215,6 +247,9 @@ public:
         return merkle_merge_value{std::move(value)};
     }
 
+    /// A handle on the stored value.
+    /// The stored value.
+    /// Whether a value is present. Explicit, so a stored null stays distinct from absence.
     [[nodiscard]] bool is_present() const noexcept { return value_ != nullptr; }
     [[nodiscard]] const V* value() const noexcept { return value_.get(); }
     [[nodiscard]] std::shared_ptr<const V> value_handle() const noexcept { return value_; }
@@ -238,6 +273,7 @@ struct merkle_three_way_merge_conflict final {
     merkle_merge_value<V> right;
 };
 
+/// How a resolver settled one conflicting key.
 enum class merkle_merge_resolution_kind {
     unresolved,
     use_base,
@@ -251,33 +287,41 @@ enum class merkle_merge_resolution_kind {
 template <class V>
 class merkle_merge_resolution final {
 public:
+    /// The keys the resolver declined to settle.
     [[nodiscard]] static merkle_merge_resolution unresolved()
     {
         return merkle_merge_resolution{merkle_merge_resolution_kind::unresolved};
     }
+    /// Keep the common ancestor's state for this key.
     [[nodiscard]] static merkle_merge_resolution use_base()
     {
         return merkle_merge_resolution{merkle_merge_resolution_kind::use_base};
     }
+    /// Keep the left side's state for this key.
     [[nodiscard]] static merkle_merge_resolution use_left()
     {
         return merkle_merge_resolution{merkle_merge_resolution_kind::use_left};
     }
+    /// Keep the right side's state for this key.
     [[nodiscard]] static merkle_merge_resolution use_right()
     {
         return merkle_merge_resolution{merkle_merge_resolution_kind::use_right};
     }
+    /// A collection without that key.
     [[nodiscard]] static merkle_merge_resolution delete_key()
     {
         return merkle_merge_resolution{merkle_merge_resolution_kind::delete_key};
     }
+    /// A version with the value replaced.
     [[nodiscard]] static merkle_merge_resolution set_value(V value)
     {
         return merkle_merge_resolution{std::move(value)};
     }
 
+    /// Which case this value is.
     [[nodiscard]] merkle_merge_resolution_kind kind() const noexcept { return kind_; }
 
+    /// Takes the stored value out.
     [[nodiscard]] V take_value() &&
     {
         if (kind_ != merkle_merge_resolution_kind::set_value || !value_.has_value()) {
@@ -308,10 +352,12 @@ public:
     using tree_type = merkle_search_tree<K, V>;
     using conflict_type = merkle_three_way_merge_conflict<K, V>;
 
+    /// Whether the operation completed without unresolved conflicts.
     [[nodiscard]] static merkle_three_way_merge_result success(tree_type tree)
     {
         return merkle_three_way_merge_result{std::move(tree), {}};
     }
+    /// Whether a conflict occurred.
     [[nodiscard]] static merkle_three_way_merge_result conflicted(
         std::vector<conflict_type> conflicts)
     {
@@ -321,15 +367,20 @@ public:
         return merkle_three_way_merge_result{std::nullopt, std::move(conflicts)};
     }
 
+    /// The merged tree.
+    /// Whether the operation completed without unresolved conflicts.
     [[nodiscard]] bool success() const noexcept { return merged_tree_.has_value(); }
     [[nodiscard]] const tree_type* merged_tree() const noexcept
     {
         return merged_tree_ ? &*merged_tree_ : nullptr;
     }
+    /// Takes the merged tree out.
     [[nodiscard]] std::optional<tree_type> take_merged_tree() &&
     {
         return std::move(merged_tree_);
     }
+    /// The conflicts the resolver declined to settle. A single unresolved key fails the whole merge
+    /// rather than producing a partly merged tree.
     [[nodiscard]] std::span<const conflict_type> unresolved_conflicts() const noexcept
     {
         return conflicts_;
@@ -351,6 +402,7 @@ namespace merkle_proof_detail {
 
 inline constexpr auto proof_magic = std::string_view{"MSP2"};
 
+/// Fails when a query's length is not what the format requires.
 inline void require_query_length(const std::size_t length)
 {
     if (length > static_cast<std::size_t>((std::numeric_limits<std::int32_t>::max)())) {
@@ -358,6 +410,7 @@ inline void require_query_length(const std::size_t length)
     }
 }
 
+/// Appends one field of an encoded proof query.
 inline void append_query_field(merkle_bytes& destination, const std::span<const std::byte> field)
 {
     require_query_length(field.size());
@@ -365,6 +418,7 @@ inline void append_query_field(merkle_bytes& destination, const std::span<const 
     destination.insert(destination.end(), field.begin(), field.end());
 }
 
+/// Encodes a single-key proof query.
 [[nodiscard]] inline merkle_bytes encode_point_query(
     const merkle_proof_kind kind,
     const std::span<const std::byte> key,
@@ -397,6 +451,7 @@ inline void append_query_field(merkle_bytes& destination, const std::span<const 
     return result;
 }
 
+/// Encodes a key-range proof query.
 [[nodiscard]] inline merkle_bytes encode_range_query(
     const std::span<const std::byte> minimum,
     const std::span<const std::byte> maximum)
@@ -418,6 +473,8 @@ inline void append_query_field(merkle_bytes& destination, const std::span<const 
     return result;
 }
 
+/// Whether a child's cached interval can still contain a match, which is the test that lets a query
+/// skip whole subtrees.
 template <class K, class V>
 [[nodiscard]] bool child_interval_intersects(
     const merkle_search_tree<K, V>& tree,
@@ -432,6 +489,7 @@ template <class K, class V>
             || tree.policy().compare(entries[child_index].key(), minimum) > 0);
 }
 
+/// Collects the blocks a range proof must carry.
 template <class K, class V>
 void collect_range_steps(
     const merkle_search_tree<K, V>& tree,
@@ -532,6 +590,7 @@ template <class K, class V>
 
 namespace merkle_proof_detail {
 
+/// Decodes a proof query's key value.
 template <class T>
 [[nodiscard]] T decode_query_value(
     const merkle_codec<T>& codec,
@@ -577,6 +636,7 @@ template <class T>
     return value;
 }
 
+/// A bounds-checked reader over a proof query's bytes.
 inline merkle_persistence_detail::byte_reader query_reader(const merkle_proof& proof)
 {
     auto reader = merkle_persistence_detail::byte_reader{
@@ -599,18 +659,21 @@ inline merkle_persistence_detail::byte_reader query_reader(const merkle_proof& p
     return reader;
 }
 
+/// A proof query naming one key.
 template <class K>
 struct point_query final {
     K key;
     std::optional<std::span<const std::byte>> value_bytes;
 };
 
+/// A proof query naming a key range.
 template <class K>
 struct range_query final {
     K minimum;
     K maximum;
 };
 
+/// Decodes a single-key proof query.
 template <class K, class V>
 [[nodiscard]] point_query<K> decode_point_query(
     const merkle_search_tree<K, V>& verifier,
@@ -1033,6 +1096,8 @@ template <class K, class V>
 struct merge_side final {
     const typename merkle_search_tree<K, V>::entry_type* entry = nullptr;
 
+    /// The stored value.
+    /// The state meaning a value is present.
     [[nodiscard]] bool present() const noexcept { return entry != nullptr; }
     [[nodiscard]] merkle_merge_value<V> value() const
     {

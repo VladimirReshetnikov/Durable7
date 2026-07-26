@@ -1,3 +1,5 @@
+/// The measured tree's operations: construction, splitting, concatenation, and measured search.
+
 #pragma once
 
 #include <durable7/finger_tree/detail/common.hpp>
@@ -30,6 +32,7 @@ template <class Element, class MeasurePolicy>
     requires measure_policy<MeasurePolicy, Element>
 struct finger_tree_cursor_search_result;
 
+/// The two trees a split produced; both carry their own recomputed measure.
 template <class Element, class MeasurePolicy>
 struct finger_tree_split final {
     /// Elements before the first prefix for which the split predicate holds.
@@ -38,6 +41,7 @@ struct finger_tree_split final {
     finger_tree<Element, MeasurePolicy> right;
 };
 
+/// The pieces splitting around one element produced, with the element itself.
 template <class Element, class MeasurePolicy>
 struct finger_tree_item_split final {
     /// Elements strictly before the located boundary element.
@@ -48,6 +52,7 @@ struct finger_tree_item_split final {
     finger_tree<Element, MeasurePolicy> right;
 };
 
+/// The tree remaining after an extraction, together with what was extracted.
 template <class Element, class MeasurePolicy>
 struct finger_tree_extract_result final {
     /// A value copy of the extracted element.
@@ -56,6 +61,7 @@ struct finger_tree_extract_result final {
     finger_tree<Element, MeasurePolicy> rest;
 };
 
+/// Where a measured search landed, with the element it found.
 template <class Element, class MeasurePolicy>
 struct finger_tree_locate_result final {
     /// The measure of elements strictly before `item`, or the whole-tree
@@ -64,6 +70,7 @@ struct finger_tree_locate_result final {
     /// A value copy of the boundary element, or empty when no prefix matches.
     std::optional<Element> item;
 
+    /// Whether a value is present.
     [[nodiscard]] bool has_value() const noexcept
     {
         return item.has_value();
@@ -72,6 +79,7 @@ struct finger_tree_locate_result final {
     [[nodiscard]] bool operator==(const finger_tree_locate_result&) const = default;
 };
 
+/// Where a measured search landed, borrowing the element in place rather than copying it out.
 template <class Element, class MeasurePolicy>
 struct finger_tree_locate_reference_result final {
     /// The measure of elements strictly before `item`, or the whole-tree
@@ -82,6 +90,7 @@ struct finger_tree_locate_reference_result final {
     /// remains alive.
     const Element* item;
 
+    /// Whether a value is present.
     [[nodiscard]] bool has_value() const noexcept
     {
         return item != nullptr;
@@ -127,35 +136,42 @@ public:
 
     class const_iterator;
 
+    /// An empty tree.
     finger_tree() = default;
 
+    /// A tree holding the listed elements.
     finger_tree(std::initializer_list<value_type> values)
         : root_(build_tree(values.begin(), values.end()))
     {
     }
 
+    /// A tree holding the elements an iterator pair yields.
     template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
     finger_tree(Iterator first, Sentinel last)
         : root_(build_tree(std::move(first), std::move(last)))
     {
     }
 
+    /// The shared empty tree.
     [[nodiscard]] static finger_tree empty_tree()
     {
         return finger_tree{};
     }
 
+    /// A tree holding a range's elements, built in bulk rather than by repeated insertion.
     template <std::ranges::input_range Range>
     [[nodiscard]] static finger_tree from_range(Range&& values)
     {
         return finger_tree{std::ranges::begin(values), std::ranges::end(values)};
     }
 
+    /// Whether the tree holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return root_.is_empty();
     }
 
+    /// The root node's address, for tests that a no-op shared rather than copied.
     [[nodiscard]] const void* root_identity() const noexcept
     {
         return root_.identity();
@@ -239,6 +255,7 @@ public:
         return finger_tree{root_.concat(other.root_)};
     }
 
+    /// Views the leftmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<finger_tree_item_split<Element, MeasurePolicy>> try_view_left() const
     {
         if (auto view = root_.try_view_left()) {
@@ -248,6 +265,7 @@ public:
         return std::nullopt;
     }
 
+    /// Views the rightmost element together with the rest, or nothing when empty.
     [[nodiscard]] std::optional<finger_tree_item_split<Element, MeasurePolicy>> try_view_right() const
     {
         if (auto view = root_.try_view_right()) {
@@ -386,8 +404,10 @@ public:
         using pointer = const Element*;
         using reference = const Element&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
+        /// Takes a second handle on the same collection version; the nodes are shared, not copied.
         const_iterator(const const_iterator& other)
             : root_owner_(other.root_owner_)
             , current_(other.current_)
@@ -407,6 +427,7 @@ public:
             return *this;
         }
 
+        /// An unpositioned cursor, holding no version.
         const_iterator(const_iterator&&) noexcept = default;
         const_iterator& operator=(const_iterator&&) noexcept = default;
 
@@ -452,17 +473,22 @@ public:
         using child_kind = typename child_type::child_kind;
 
         struct frame final {
+            /// Which kind of frame a traversal step is in.
             enum class frame_kind {
                 tree,
                 node,
             };
 
+            /// Takes a second handle on the same collection version; the nodes are shared, not
+            /// copied.
             explicit frame(tree_type value)
                 : kind(frame_kind::tree)
                 , tree(std::move(value))
             {
             }
 
+            /// Takes a second handle on the same collection version; the nodes are shared, not
+            /// copied.
             explicit frame(node_pointer value)
                 : kind(frame_kind::node)
                 , node(std::move(value))
@@ -474,11 +500,13 @@ public:
             node_pointer node;
             size_type next_child = 0;
 
+            /// How many children this node has.
             [[nodiscard]] size_type child_count() const
             {
                 return kind == frame_kind::tree ? tree.enumeration_child_count() : node->children().size();
             }
 
+            /// The child at the given index.
             [[nodiscard]] child_type child(const size_type index) const
             {
                 if (kind == frame_kind::tree) {
@@ -605,10 +633,13 @@ public:
     using measure_policy = MeasurePolicy;
     using measure_type = typename measure_policy::measure_type;
 
+    /// An unpositioned cursor, holding no version.
     finger_tree_cursor() = delete;
+    /// An unpositioned cursor, holding no version.
     finger_tree_cursor(const finger_tree_cursor&) = default;
     finger_tree_cursor& operator=(const finger_tree_cursor&) = default;
 
+    /// Takes over the source's handle, leaving it empty.
     finger_tree_cursor(finger_tree_cursor&& other) noexcept(
         std::is_nothrow_copy_constructible_v<finger_tree<value_type, measure_policy>>)
         : snapshot_(other.snapshot_)
@@ -628,25 +659,35 @@ public:
         return *this;
     }
 
+    /// The combined measure of everything after the gap.
+    /// The combined measure of everything before the gap.
+    /// Whether the gap follows the last element.
+    /// Whether the gap precedes the first element.
     [[nodiscard]] bool is_at_start() const noexcept { return left_.empty(); }
     [[nodiscard]] bool is_at_end() const noexcept { return right_.empty(); }
     [[nodiscard]] measure_type measure_before() const { return left_.measure(); }
     [[nodiscard]] measure_type measure_after() const { return right_.measure(); }
 
+    /// Reads the element immediately before the gap, or nothing at the start.
     [[nodiscard]] const value_type* try_peek_previous() const &
     {
         return left_.empty() ? nullptr : &left_.back();
     }
 
+    /// Reads the element immediately before the gap, or nothing at the start.
     const value_type* try_peek_previous() const && = delete;
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     [[nodiscard]] const value_type* try_peek_next() const &
     {
         return right_.empty() ? nullptr : &right_.front();
     }
 
+    /// Reads the element immediately after the gap, or nothing at the end.
     const value_type* try_peek_next() const && = delete;
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] finger_tree_cursor move_previous() const
     {
         const auto view = left_.root_.try_view_right();
@@ -659,6 +700,7 @@ public:
             finger_tree<value_type, measure_policy>::wrap(right_.root_.cons(view->value))};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] finger_tree_cursor move_next() const
     {
         const auto view = right_.root_.try_view_left();
@@ -678,6 +720,7 @@ public:
     [[nodiscard]] finger_tree_cursor_search_result<value_type, measure_policy>
     seek_by_measure(Predicate predicate) const;
 
+    /// A tree with the element inserted.
     [[nodiscard]] finger_tree_cursor insert(value_type value) const
     {
         auto left = left_.append(std::move(value));
@@ -685,6 +728,8 @@ public:
         return finger_tree_cursor{snapshot, std::move(left), right_};
     }
 
+    /// Removes the element before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] finger_tree_cursor delete_previous() const
     {
         const auto view = left_.root_.try_view_right();
@@ -696,6 +741,8 @@ public:
         return finger_tree_cursor{snapshot, std::move(left), right_};
     }
 
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] finger_tree_cursor delete_next() const
     {
         const auto view = right_.root_.try_view_left();
@@ -707,6 +754,8 @@ public:
         return finger_tree_cursor{snapshot, left_, std::move(right)};
     }
 
+    /// Replaces the element after the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] finger_tree_cursor replace_next(value_type value) const
     {
         const auto view = right_.root_.try_view_left();
@@ -719,6 +768,7 @@ public:
         return finger_tree_cursor{snapshot, left_, std::move(right)};
     }
 
+    /// The tree version this cursor is positioned in.
     [[nodiscard]] finger_tree<value_type, measure_policy> snapshot() const { return snapshot_; }
 
 private:

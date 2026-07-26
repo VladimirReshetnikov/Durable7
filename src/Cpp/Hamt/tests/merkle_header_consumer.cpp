@@ -1,3 +1,6 @@
+/// A second translation unit including the Merkle headers, so a missing `inline` shows up as a link
+/// error here rather than in a consumer's build.
+
 #include <durable7/hamt/hamt.hpp>
 
 #include <cstdint>

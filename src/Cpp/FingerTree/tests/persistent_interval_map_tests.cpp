@@ -1,3 +1,5 @@
+/// Tests for the interval-keyed persistent map.
+
 #include <durable7/finger_tree/persistent_interval_map.hpp>
 
 #include "test_support/test_runner.hpp"

@@ -1,3 +1,5 @@
+/// Tests for the persistent priority queue, including that equal priorities keep enqueue order.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/command_model.hpp"

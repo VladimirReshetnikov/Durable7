@@ -1,3 +1,8 @@
+/// Tests for the built-in measures.
+///
+/// Checks the monoid laws as well as the values, since a measure that is not associative produces
+/// wrong answers only for particular tree shapes.
+
 #include <durable7/finger_tree/finger_tree.hpp>
 
 #include "test_support/allocation_counter.hpp"

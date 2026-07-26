@@ -1,3 +1,10 @@
+/// A persistent set that remembers insertion order.
+///
+/// A hashed index gives membership tests and a separate order index gives the sequence, so neither
+/// question is answered by scanning for the other. Every operation returns a new version and leaves
+/// its inputs valid, sharing unchanged structure, so an edit copies a path rather than the whole
+/// collection.
+
 #pragma once
 
 #include <durable7/hamt/persistent_hash_map.hpp>
@@ -36,6 +43,8 @@ template <
     requires std::copyable<T>
         && std::copyable<Hash>
         && std::copyable<KeyEqual>
+/// A persistent set that remembers insertion order, keeping a hashed index for membership and a
+/// separate order index for the sequence.
 class persistent_ordered_set final {
 private:
     static constexpr std::int64_t stamp_stride = std::int64_t{1} << 20;
@@ -82,6 +91,8 @@ public:
     using key_equal = KeyEqual;
     using const_reference = const T&;
 
+    /// A forward const iterator over one set version's elements. It keeps that version alive, so it
+    /// stays valid across later edits.
     class const_iterator final {
     public:
         using iterator_concept = std::forward_iterator_tag;
@@ -91,6 +102,7 @@ public:
         using pointer = const T*;
         using reference = const T&;
 
+        /// An unpositioned cursor, holding no version.
         const_iterator() = default;
 
         [[nodiscard]] reference operator*() const
@@ -137,8 +149,11 @@ public:
         typename entry_deque::const_iterator inner_;
     };
 
+    /// An empty set.
     persistent_ordered_set() = default;
+    /// An empty set.
     persistent_ordered_set(const persistent_ordered_set&) = default;
+    /// An empty set.
     persistent_ordered_set(persistent_ordered_set&&) noexcept(
         std::is_nothrow_move_constructible_v<entry_deque>
         && std::is_nothrow_move_constructible_v<index_map>) = default;
@@ -146,6 +161,7 @@ public:
     persistent_ordered_set& operator=(persistent_ordered_set&&) noexcept(
         std::is_nothrow_move_assignable_v<entry_deque>
         && std::is_nothrow_move_assignable_v<index_map>) = default;
+    /// An empty set.
     ~persistent_ordered_set() = default;
 
     /// Returns an empty set with default-constructed policies.
@@ -177,6 +193,7 @@ public:
             std::forward<Range>(items), std::move(hash), std::move(equal));
     }
 
+    /// A set holding a range's elements, built in bulk rather than by repeated insertion.
     [[nodiscard]] static persistent_ordered_set create_range(
         std::initializer_list<T> items,
         Hash hash = {},
@@ -185,53 +202,63 @@ public:
         return create_range_impl(items, std::move(hash), std::move(equal));
     }
 
+    /// Number of elements in the set.
     [[nodiscard]] size_type size() const noexcept
     {
         return order_.size();
     }
 
+    /// Whether the set holds no elements.
     [[nodiscard]] bool empty() const noexcept
     {
         return order_.empty();
     }
 
+    /// Number of elements in the set.
     [[nodiscard]] size_type count() const noexcept
     {
         return size();
     }
 
+    /// Whether the set holds no elements.
     [[nodiscard]] bool is_empty() const noexcept
     {
         return empty();
     }
 
+    /// The retained hashing policy. Keys the policy treats as equivalent must hash identically.
     [[nodiscard]] const Hash& hash_function() const noexcept
     {
         return stamps_.hash_function();
     }
 
+    /// The retained key equivalence policy.
     [[nodiscard]] const KeyEqual& key_eq() const noexcept
     {
         return stamps_.key_eq();
     }
 
+    /// The first element.
     [[nodiscard]] const_reference front() const
     {
         throw_if_empty();
         return item_of(order_.front());
     }
 
+    /// The last element.
     [[nodiscard]] const_reference back() const
     {
         throw_if_empty();
         return item_of(order_.back());
     }
 
+    /// The first element.
     [[nodiscard]] const_reference first() const
     {
         return front();
     }
 
+    /// The last element.
     [[nodiscard]] const_reference last() const
     {
         return back();
@@ -242,17 +269,20 @@ public:
         return at(index);
     }
 
+    /// The element at the given position.
     [[nodiscard]] const_reference at(const size_type index) const
     {
         check_element_index(index);
         return item_of(order_[index]);
     }
 
+    /// The element at the given position.
     [[nodiscard]] const_reference get_at(const size_type index) const
     {
         return at(index);
     }
 
+    /// Whether the element is present.
     [[nodiscard]] bool contains(const T& item) const
     {
         return stamps_.contains_key(item);
@@ -266,11 +296,13 @@ public:
         return stamps_.try_get_key(equal_value);
     }
 
+    /// Reads the value stored for the key, or nothing when absent.
     [[nodiscard]] const T* try_get(const T& equal_value) const
     {
         return try_get_value(equal_value);
     }
 
+    /// The position of the given element.
     [[nodiscard]] difference_type index_of(const T& equal_value) const
     {
         const auto* stamp = stamps_.try_get(equal_value);
@@ -284,22 +316,26 @@ public:
         return insert_absent(size(), item);
     }
 
+    /// A set with the element placed first.
     [[nodiscard]] persistent_ordered_set add_first(const T& item) const
     {
         return insert_absent(0, item);
     }
 
+    /// A set with the element inserted.
     [[nodiscard]] persistent_ordered_set insert(const size_type index, const T& item) const
     {
         check_insert_index(index);
         return insert_absent(index, item);
     }
 
+    /// A cursor before the first element.
     [[nodiscard]] persistent_ordered_set move_to_first(const T& equal_value) const
     {
         return move_existing(0, equal_value);
     }
 
+    /// A cursor after the last element.
     [[nodiscard]] persistent_ordered_set move_to_last(const T& equal_value) const
     {
         return move_existing(empty() ? 0 : size() - 1, equal_value);
@@ -315,6 +351,7 @@ public:
         return move_existing(final_index, equal_value);
     }
 
+    /// A set without that element; returns the receiver when absent.
     [[nodiscard]] persistent_ordered_set remove(const T& equal_value) const
     {
         const auto* stamp = stamps_.try_get(equal_value);
@@ -328,6 +365,7 @@ public:
             stamps_.remove(equal_value)};
     }
 
+    /// Removes the element, reporting whether it was present.
     [[nodiscard]] std::pair<persistent_ordered_set, bool> try_remove(
         const T& equal_value) const
     {
@@ -344,6 +382,7 @@ public:
             true};
     }
 
+    /// A set without the element at the position.
     [[nodiscard]] persistent_ordered_set remove_at(const size_type index) const
     {
         check_element_index(index);
@@ -353,18 +392,21 @@ public:
             stamps_.remove(removed)};
     }
 
+    /// A set without its first element.
     [[nodiscard]] persistent_ordered_set remove_first() const
     {
         throw_if_empty();
         return remove_at(0);
     }
 
+    /// A set without its last element.
     [[nodiscard]] persistent_ordered_set remove_last() const
     {
         throw_if_empty();
         return remove_at(size() - 1);
     }
 
+    /// An empty set retaining the same policies; returns the receiver when already empty.
     [[nodiscard]] persistent_ordered_set clear() const
     {
         if (empty()) {
@@ -374,6 +416,7 @@ public:
         return persistent_ordered_set{entry_deque{}, stamps_.clear()};
     }
 
+    /// The elements in the range.
     [[nodiscard]] persistent_ordered_set get_range(
         const size_type index,
         const size_type count) const
@@ -401,18 +444,21 @@ public:
         return persistent_ordered_set{std::move(split.range), std::move(index_result)};
     }
 
+    /// The first n elements.
     [[nodiscard]] persistent_ordered_set take(const size_type count) const
     {
         check_count(count);
         return get_range(0, count);
     }
 
+    /// The elements after the first n.
     [[nodiscard]] persistent_ordered_set drop(const size_type count) const
     {
         check_count(count);
         return get_range(count, size() - count);
     }
 
+    /// The set in the opposite order.
     [[nodiscard]] persistent_ordered_set reverse() const
     {
         if (size() <= 1) {
@@ -480,18 +526,24 @@ public:
         return unchanged ? *this : rebuild_entries(std::move(entries));
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     [[nodiscard]] persistent_ordered_set union_with(
         const persistent_ordered_set& other) const
     {
         return union_core(other);
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     [[nodiscard]] persistent_ordered_set union_with(
         std::initializer_list<T> other) const
     {
         return union_core(other);
     }
 
+    /// The elements of both sets. Subtrees the operands already share are adopted whole rather than
+    /// re-entered.
     template <std::ranges::input_range Range>
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
     [[nodiscard]] persistent_ordered_set union_with(Range&& other) const
@@ -499,18 +551,21 @@ public:
         return union_core(std::forward<Range>(other));
     }
 
+    /// The elements present in both sets.
     [[nodiscard]] persistent_ordered_set intersect_with(
         const persistent_ordered_set& other) const
     {
         return intersect_core(other);
     }
 
+    /// The elements present in both sets.
     [[nodiscard]] persistent_ordered_set intersect_with(
         std::initializer_list<T> other) const
     {
         return intersect_core(other);
     }
 
+    /// The elements present in both sets.
     template <std::ranges::input_range Range>
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
     [[nodiscard]] persistent_ordered_set intersect_with(Range&& other) const
@@ -518,18 +573,21 @@ public:
         return intersect_core(std::forward<Range>(other));
     }
 
+    /// This set's elements that are absent from the other.
     [[nodiscard]] persistent_ordered_set except_with(
         const persistent_ordered_set& other) const
     {
         return except_core(other);
     }
 
+    /// This set's elements that are absent from the other.
     [[nodiscard]] persistent_ordered_set except_with(
         std::initializer_list<T> other) const
     {
         return except_core(other);
     }
 
+    /// This set's elements that are absent from the other.
     template <std::ranges::input_range Range>
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
     [[nodiscard]] persistent_ordered_set except_with(Range&& other) const
@@ -537,18 +595,21 @@ public:
         return except_core(std::forward<Range>(other));
     }
 
+    /// The elements present in exactly one of the two sets.
     [[nodiscard]] persistent_ordered_set symmetric_except_with(
         const persistent_ordered_set& other) const
     {
         return symmetric_except_core(other);
     }
 
+    /// The elements present in exactly one of the two sets.
     [[nodiscard]] persistent_ordered_set symmetric_except_with(
         std::initializer_list<T> other) const
     {
         return symmetric_except_core(other);
     }
 
+    /// The elements present in exactly one of the two sets.
     template <std::ranges::input_range Range>
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
     [[nodiscard]] persistent_ordered_set symmetric_except_with(Range&& other) const
@@ -556,6 +617,7 @@ public:
         return symmetric_except_core(std::forward<Range>(other));
     }
 
+    /// Whether every element of this set also occurs in the other.
     template <std::ranges::input_range Range>
         requires std::constructible_from<T, std::ranges::range_reference_t<Range>>
     [[nodiscard]] bool is_subset_of(Range&& other) const

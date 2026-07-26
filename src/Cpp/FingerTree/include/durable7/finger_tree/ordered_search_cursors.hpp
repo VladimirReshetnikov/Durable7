@@ -1,3 +1,9 @@
+/// Gap cursors over the ordered collections, and the bound searches that position them.
+///
+/// A cursor holds one exact version and a gap position in 0..count. Moving it produces a cursor
+/// rather than mutating one, and an edit through a cursor produces a new version the returned
+/// cursor is positioned in, so a cursor can never observe a version it did not name.
+
 #pragma once
 
 #include <durable7/finger_tree/canonical_sorted_set.hpp>
@@ -40,6 +46,7 @@ namespace ordered_search_cursor_detail {
 
 /// Narrow friendship bridge for occurrence-sensitive rank erasure.
 struct access final {
+    /// A collection without the element at the position.
     template <class T, class Less>
     [[nodiscard]] static sorted_bag<T, Less> erase_at(
         const sorted_bag<T, Less>& bag,
@@ -48,6 +55,7 @@ struct access final {
         return bag.cursor_erase_at(rank);
     }
 
+    /// A collection without the element at the position.
     template <class T, class Comparison>
     [[nodiscard]] static interval_tree<T, Comparison> erase_at(
         const interval_tree<T, Comparison>& tree,
@@ -57,18 +65,27 @@ struct access final {
     }
 };
 
+/// The shared implementation behind the rank-addressed cursors: a root plus a gap position in
+/// 0..count.
 template <class Derived, class Collection>
 class rank_cursor_base {
 public:
     using collection_type = Collection;
     using size_type = std::size_t;
 
+    /// Whether the gap follows the last element.
+    /// Whether the gap precedes the first element.
+    /// The cursor's gap position.
+    /// Whether the collection holds no elements.
+    /// Number of elements in the collection.
     [[nodiscard]] size_type size() const noexcept { return snapshot_.size(); }
     [[nodiscard]] bool empty() const noexcept { return snapshot_.empty(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const noexcept { return position_ == size(); }
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] Derived move_previous() const
     {
         if (is_at_start()) {
@@ -77,6 +94,7 @@ public:
         return Derived{snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] Derived move_next() const
     {
         if (is_at_end()) {
@@ -85,6 +103,7 @@ public:
         return Derived{snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given rank within the same version.
     [[nodiscard]] Derived seek_rank(const size_type rank) const
     {
         if (rank > size()) {
@@ -93,6 +112,7 @@ public:
         return rank == position_ ? static_cast<const Derived&>(*this) : Derived{snapshot_, rank};
     }
 
+    /// The collection version this cursor is positioned in.
     [[nodiscard]] Collection snapshot() const { return snapshot_; }
 
 protected:
@@ -174,6 +194,7 @@ public:
     }
 };
 
+/// A cursor at the given gap of the collection.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor(
     const sorted_bag<T, Less>& bag,
@@ -182,6 +203,7 @@ template <class T, class Less>
     return {bag, position};
 }
 
+/// A cursor before the first key not less than the probe.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor_lower_bound(
     const sorted_bag<T, Less>& bag,
@@ -190,6 +212,7 @@ template <class T, class Less>
     return {bag, bag.count_less_than(item)};
 }
 
+/// A cursor after any key equal to the probe.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor_upper_bound(
     const sorted_bag<T, Less>& bag,
@@ -198,6 +221,8 @@ template <class T, class Less>
     return {bag, bag.count_at_most(item)};
 }
 
+/// A cursor at the element together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor_at_item(
     const sorted_bag<T, Less>& bag,
@@ -265,6 +290,7 @@ public:
     }
 };
 
+/// A cursor at the given gap of the collection.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor(
     const sorted_set<T, Less>& set,
@@ -273,6 +299,7 @@ template <class T, class Less>
     return {set, position};
 }
 
+/// A cursor before the first key not less than the probe.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor_lower_bound(
     const sorted_set<T, Less>& set,
@@ -281,6 +308,7 @@ template <class T, class Less>
     return {set, set.count_less_than(item)};
 }
 
+/// A cursor after any key equal to the probe.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor_upper_bound(
     const sorted_set<T, Less>& set,
@@ -289,6 +317,8 @@ template <class T, class Less>
     return {set, set.count_at_most(item)};
 }
 
+/// A cursor at the element together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class T, class Less>
 [[nodiscard]] auto get_cursor_at_item(
     const sorted_set<T, Less>& set,
@@ -397,6 +427,7 @@ public:
     }
 };
 
+/// A cursor at the given gap of the collection.
 template <class Key, class T, class Less>
 [[nodiscard]] auto get_cursor(
     const sorted_map<Key, T, Less>& map,
@@ -405,6 +436,7 @@ template <class Key, class T, class Less>
     return {map, position};
 }
 
+/// A cursor before the first key not less than the probe.
 template <class Key, class T, class Less>
 [[nodiscard]] auto get_cursor_lower_bound(
     const sorted_map<Key, T, Less>& map,
@@ -413,6 +445,7 @@ template <class Key, class T, class Less>
     return {map, map.count_keys_less_than(key)};
 }
 
+/// A cursor after any key equal to the probe.
 template <class Key, class T, class Less>
 [[nodiscard]] auto get_cursor_upper_bound(
     const sorted_map<Key, T, Less>& map,
@@ -421,6 +454,8 @@ template <class Key, class T, class Less>
     return {map, map.count_keys_at_most(key)};
 }
 
+/// A cursor at the key together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class Key, class T, class Less>
 [[nodiscard]] auto get_cursor_at_key(
     const sorted_map<Key, T, Less>& map,
@@ -489,6 +524,7 @@ public:
     }
 };
 
+/// A cursor at the given gap of the collection.
 template <class T>
 [[nodiscard]] auto get_cursor(
     const canonical_sorted_set<T>& set,
@@ -497,6 +533,7 @@ template <class T>
     return {set, position};
 }
 
+/// A cursor before the first key not less than the probe.
 template <class T>
 [[nodiscard]] auto get_cursor_lower_bound(
     const canonical_sorted_set<T>& set,
@@ -505,6 +542,7 @@ template <class T>
     return {set, set.count_less_than(item)};
 }
 
+/// A cursor after any key equal to the probe.
 template <class T>
 [[nodiscard]] auto get_cursor_upper_bound(
     const canonical_sorted_set<T>& set,
@@ -513,6 +551,8 @@ template <class T>
     return {set, set.count_at_most(item)};
 }
 
+/// A cursor at the element together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class T>
 [[nodiscard]] auto get_cursor_at_item(
     const canonical_sorted_set<T>& set,
@@ -654,6 +694,7 @@ public:
     }
 };
 
+/// A cursor at the given gap of the collection.
 template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
 [[nodiscard]] auto get_cursor(
     const priority_search_queue<Key, Priority, T, KeyLess, PriorityLess>& queue,
@@ -663,6 +704,7 @@ template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
     return {queue, position};
 }
 
+/// A cursor before the first key not less than the probe.
 template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
 [[nodiscard]] auto get_cursor_lower_bound(
     const priority_search_queue<Key, Priority, T, KeyLess, PriorityLess>& queue,
@@ -672,6 +714,7 @@ template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
     return {queue, queue.count_keys_less_than(key)};
 }
 
+/// A cursor after any key equal to the probe.
 template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
 [[nodiscard]] auto get_cursor_upper_bound(
     const priority_search_queue<Key, Priority, T, KeyLess, PriorityLess>& queue,
@@ -681,6 +724,8 @@ template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
     return {queue, queue.count_keys_at_most(key)};
 }
 
+/// A cursor at the key together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
 [[nodiscard]] auto get_cursor_at_key(
     const priority_search_queue<Key, Priority, T, KeyLess, PriorityLess>& queue,
@@ -691,6 +736,8 @@ template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
     return {get_cursor_lower_bound(queue, key), queue.contains_key(key)};
 }
 
+/// A cursor at the minimum-priority entry, found through the cached priority rather than by
+/// scanning.
 template <class Key, class Priority, class T, class KeyLess, class PriorityLess>
 [[nodiscard]] auto get_cursor_at_minimum_priority(
     const priority_search_queue<Key, Priority, T, KeyLess, PriorityLess>& queue)
@@ -779,6 +826,7 @@ public:
     }
 };
 
+/// A cursor at the given gap of the collection.
 template <class T, class Comparison>
 [[nodiscard]] auto get_cursor(
     const interval_tree<T, Comparison>& tree,
@@ -787,6 +835,7 @@ template <class T, class Comparison>
     return {tree, position};
 }
 
+/// A cursor before the first key not less than the probe.
 template <class T, class Comparison>
 [[nodiscard]] auto get_cursor_lower_bound(
     const interval_tree<T, Comparison>& tree,
@@ -795,6 +844,7 @@ template <class T, class Comparison>
     return {tree, tree.count_low_less_than(low)};
 }
 
+/// A cursor after any key equal to the probe.
 template <class T, class Comparison>
 [[nodiscard]] auto get_cursor_upper_bound(
     const interval_tree<T, Comparison>& tree,
@@ -803,6 +853,7 @@ template <class T, class Comparison>
     return {tree, tree.count_low_at_most(low)};
 }
 
+/// A cursor at the interval together with an exact-match discriminator.
 template <class T, class Comparison>
 [[nodiscard]] auto get_cursor_at_interval(
     const interval_tree<T, Comparison>& tree,
@@ -824,6 +875,7 @@ template <class T, class Comparison>
     return {get_cursor(tree, start), false};
 }
 
+/// A cursor at the first interval overlapping the probe, starting from the given position.
 template <class T, class Comparison>
 [[nodiscard]] auto find_overlap_cursor_from(
     const interval_tree<T, Comparison>& tree,
@@ -849,6 +901,7 @@ template <class T, class Comparison>
     return {get_cursor(tree, tree.size()), false};
 }
 
+/// A cursor at the first interval overlapping the probe.
 template <class T, class Comparison>
 [[nodiscard]] auto find_overlap_cursor(
     const interval_tree<T, Comparison>& tree,
@@ -858,6 +911,7 @@ template <class T, class Comparison>
     return find_overlap_cursor_from(tree, 0, query);
 }
 
+/// A cursor at the first interval containing the point.
 template <class T, class Comparison>
 [[nodiscard]] auto find_containing_cursor(
     const interval_tree<T, Comparison>& tree,
@@ -979,6 +1033,7 @@ public:
     }
 };
 
+/// A cursor at the given gap of the collection.
 template <class Endpoint, class T, class Comparison, class ValueEqual>
 [[nodiscard]] auto get_cursor(
     const persistent_interval_map<Endpoint, T, Comparison, ValueEqual>& map,
@@ -988,6 +1043,7 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     return {map, position};
 }
 
+/// A cursor before the first key not less than the probe.
 template <class Endpoint, class T, class Comparison, class ValueEqual>
 [[nodiscard]] auto get_cursor_lower_bound(
     const persistent_interval_map<Endpoint, T, Comparison, ValueEqual>& map,
@@ -997,6 +1053,7 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     return {map, map.count_keys_less_than(key)};
 }
 
+/// A cursor after any key equal to the probe.
 template <class Endpoint, class T, class Comparison, class ValueEqual>
 [[nodiscard]] auto get_cursor_upper_bound(
     const persistent_interval_map<Endpoint, T, Comparison, ValueEqual>& map,
@@ -1006,6 +1063,8 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     return {map, map.count_keys_at_most(key)};
 }
 
+/// A cursor at the key together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 template <class Endpoint, class T, class Comparison, class ValueEqual>
 [[nodiscard]] auto get_cursor_at_key(
     const persistent_interval_map<Endpoint, T, Comparison, ValueEqual>& map,
@@ -1016,6 +1075,7 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     return {get_cursor_lower_bound(map, key), map.contains_key(key)};
 }
 
+/// A cursor at the first interval overlapping the probe, starting from the given position.
 template <class Endpoint, class T, class Comparison, class ValueEqual>
 [[nodiscard]] auto find_overlap_cursor_from(
     const persistent_interval_map<Endpoint, T, Comparison, ValueEqual>& map,
@@ -1042,6 +1102,7 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     return {get_cursor(map, map.size()), false};
 }
 
+/// A cursor at the first interval overlapping the probe.
 template <class Endpoint, class T, class Comparison, class ValueEqual>
 [[nodiscard]] auto find_overlap_cursor(
     const persistent_interval_map<Endpoint, T, Comparison, ValueEqual>& map,
@@ -1052,6 +1113,7 @@ template <class Endpoint, class T, class Comparison, class ValueEqual>
     return find_overlap_cursor_from(map, 0, query);
 }
 
+/// A cursor at the first interval containing the point.
 template <class Endpoint, class T, class Comparison, class ValueEqual>
 [[nodiscard]] auto find_containing_cursor(
     const persistent_interval_map<Endpoint, T, Comparison, ValueEqual>& map,
@@ -1069,6 +1131,7 @@ public:
     using value_type = collection_type::value_type;
     using size_type = collection_type::size_type;
 
+    /// A cursor over the given bit set version at the given position.
     persistent_chunked_bit_set_cursor(collection_type snapshot, const size_type position)
         : snapshot_(std::move(snapshot))
         , position_(position)
@@ -1078,22 +1141,31 @@ public:
         }
     }
 
+    /// Whether the gap follows the last set bit.
+    /// Whether the gap precedes the first set bit.
+    /// The cursor's gap position.
+    /// Whether the bit set version the cursor is positioned in holds no set bits.
+    /// Number of set bits in the bit set version the cursor is positioned in.
     [[nodiscard]] size_type count() const { return snapshot_.count(); }
     [[nodiscard]] bool empty() const noexcept { return snapshot_.is_empty(); }
     [[nodiscard]] size_type position() const noexcept { return position_; }
     [[nodiscard]] bool is_at_start() const noexcept { return position_ == 0; }
     [[nodiscard]] bool is_at_end() const { return position_ == count(); }
 
+    /// Reads the set bit immediately before the gap, or nothing at the start.
     [[nodiscard]] std::optional<value_type> try_peek_previous() const
     {
         return is_at_start() ? std::nullopt : snapshot_.try_select(position_ - 1);
     }
 
+    /// Reads the set bit immediately after the gap, or nothing at the end.
     [[nodiscard]] std::optional<value_type> try_peek_next() const
     {
         return snapshot_.try_select(position_);
     }
 
+    /// A cursor one position earlier. The receiver is unchanged; movement produces a new cursor
+    /// over the same version.
     [[nodiscard]] persistent_chunked_bit_set_cursor move_previous() const
     {
         if (is_at_start()) {
@@ -1102,6 +1174,7 @@ public:
         return {snapshot_, position_ - 1};
     }
 
+    /// A cursor one position later. The receiver is unchanged.
     [[nodiscard]] persistent_chunked_bit_set_cursor move_next() const
     {
         if (is_at_end()) {
@@ -1110,11 +1183,13 @@ public:
         return {snapshot_, position_ + 1};
     }
 
+    /// A cursor at the given rank within the same version.
     [[nodiscard]] persistent_chunked_bit_set_cursor seek_rank(const size_type rank) const
     {
         return rank == position_ ? *this : persistent_chunked_bit_set_cursor{snapshot_, rank};
     }
 
+    /// A bit set containing the given set bit; returns the receiver when already present.
     [[nodiscard]] persistent_chunked_bit_set_cursor add(const value_type bit_index) const
     {
         if (snapshot_.contains(bit_index)) {
@@ -1124,6 +1199,8 @@ public:
         return {snapshot_.add(bit_index), checked_add(insertion_rank, size_type{1})};
     }
 
+    /// Removes the set bit before the gap, producing a new version the returned cursor is
+    /// positioned in.
     [[nodiscard]] persistent_chunked_bit_set_cursor delete_previous() const
     {
         const auto bit = try_peek_previous();
@@ -1133,6 +1210,8 @@ public:
         return {snapshot_.remove(*bit), position_ - 1};
     }
 
+    /// Removes the set bit after the gap, producing a new version the returned cursor is positioned
+    /// in.
     [[nodiscard]] persistent_chunked_bit_set_cursor delete_next() const
     {
         const auto bit = try_peek_next();
@@ -1142,6 +1221,7 @@ public:
         return {snapshot_.remove(*bit), position_};
     }
 
+    /// The bit set version this cursor is positioned in.
     [[nodiscard]] collection_type snapshot() const { return snapshot_; }
 
 private:
@@ -1149,6 +1229,7 @@ private:
     size_type position_;
 };
 
+/// A cursor at the given gap of the collection.
 [[nodiscard]] inline persistent_chunked_bit_set_cursor get_cursor(
     const persistent_chunked_bit_set& set,
     const persistent_chunked_bit_set::size_type position = 0)
@@ -1156,6 +1237,7 @@ private:
     return {set, position};
 }
 
+/// A cursor before the first element at or after the probe.
 [[nodiscard]] inline persistent_chunked_bit_set_cursor get_cursor_at_or_after(
     const persistent_chunked_bit_set& set,
     const persistent_chunked_bit_set::value_type bit_index)
@@ -1166,6 +1248,8 @@ private:
     return {set, position};
 }
 
+/// A cursor at the element together with an exact-match discriminator; on a miss it sits at the
+/// insertion point.
 [[nodiscard]] inline ordered_cursor_search_result<persistent_chunked_bit_set_cursor>
 get_cursor_at_item(
     const persistent_chunked_bit_set& set,

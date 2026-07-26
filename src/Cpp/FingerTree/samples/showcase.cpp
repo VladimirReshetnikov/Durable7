@@ -1,3 +1,5 @@
+/// A sample walking through the library's main collections.
+
 #include "sample_runs.hpp"
 
 #include <durable7/finger_tree/finger_tree.hpp>

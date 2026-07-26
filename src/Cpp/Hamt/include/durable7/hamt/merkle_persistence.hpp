@@ -1,3 +1,8 @@
+/// Merkle block storage, packs, and verified loading.
+///
+/// A block is always checked against the digest it was fetched by, and every verification is
+/// charged against a caller-supplied budget, so crafted input cannot force unbounded work.
+
 #pragma once
 
 #include <durable7/hamt/merkle_search_tree.hpp>
@@ -25,17 +30,24 @@ namespace durable7::hamt {
 /// One immutable serialized block paired with its claimed content address.
 class merkle_block final {
 public:
+    /// Constructs the merkle block from the given parts.
     merkle_block(merkle_digest digest, merkle_bytes content)
         : digest_(digest),
           content_(std::make_shared<const merkle_bytes>(std::move(content)))
     {
     }
 
+    /// Takes a second handle on the same collection version; the nodes are shared, not copied.
     merkle_block(const merkle_digest digest, const std::span<const std::byte> content)
         : merkle_block(digest, merkle_bytes{content.begin(), content.end()})
     {
     }
 
+    /// The contents as bytes.
+    /// Whether the collection holds no elements.
+    /// Number of elements in the collection.
+    /// The stored bytes.
+    /// The digest, which is also the key this value is stored and fetched under.
     [[nodiscard]] merkle_digest digest() const noexcept { return digest_; }
     [[nodiscard]] std::span<const std::byte> content() const noexcept { return *content_; }
     [[nodiscard]] std::size_t size() const noexcept { return content_->size(); }
@@ -73,6 +85,7 @@ enum class merkle_verification_failure_kind {
 /// A precise verified-persistence failure with an optional offending address.
 class merkle_verification_error final : public std::runtime_error {
 public:
+    /// Constructs the merkle verification error from the given parts.
     merkle_verification_error(
         const merkle_verification_failure_kind kind,
         std::string message,
@@ -86,12 +99,15 @@ public:
         }
     }
 
+    /// The digest of the block this concerns.
+    /// Which case this value is.
     [[nodiscard]] merkle_verification_failure_kind kind() const noexcept { return kind_; }
     [[nodiscard]] std::optional<merkle_digest> block_digest() const noexcept
     {
         return block_digest_;
     }
 
+    /// The block whose contents conflicted.
     [[nodiscard]] static merkle_verification_error conflicting_block(
         const merkle_digest digest,
         std::string message)
@@ -110,28 +126,39 @@ private:
 /// Concurrent-safe storage for immutable content-addressed blocks.
 class merkle_block_store {
 public:
+    /// Constructs the merkle block store.
     virtual ~merkle_block_store() = default;
 
+    /// Number of elements in the collection.
     [[nodiscard]] virtual std::size_t size() const = 0;
+    /// Every stored digest.
     [[nodiscard]] virtual std::vector<merkle_digest> digests() const = 0;
+    /// Whether the element is present.
     [[nodiscard]] virtual bool contains(merkle_digest digest) const = 0;
+    /// Reads the value stored for the key.
     [[nodiscard]] virtual std::optional<merkle_block> get(merkle_digest digest) const = 0;
+    /// A collection with the key bound to the value, adding or replacing as needed.
     virtual bool put(merkle_block block) = 0;
+    /// A collection without that element; returns the receiver when absent.
     virtual bool remove(merkle_digest digest) = 0;
+    /// An empty collection retaining the same policies; returns the receiver when already empty.
     virtual void clear() = 0;
 
+    /// Whether the collection holds no elements.
     [[nodiscard]] bool empty() const { return size() == 0; }
 };
 
 /// Thread-safe ephemeral block store backed by a reader/writer lock.
 class in_memory_merkle_block_store final : public merkle_block_store {
 public:
+    /// Number of elements in the collection.
     [[nodiscard]] std::size_t size() const override
     {
         const auto lock = std::shared_lock{mutex_};
         return blocks_.size();
     }
 
+    /// Every stored digest.
     [[nodiscard]] std::vector<merkle_digest> digests() const override
     {
         const auto lock = std::shared_lock{mutex_};
@@ -144,12 +171,14 @@ public:
         return result;
     }
 
+    /// Whether the element is present.
     [[nodiscard]] bool contains(const merkle_digest digest) const override
     {
         const auto lock = std::shared_lock{mutex_};
         return blocks_.contains(digest);
     }
 
+    /// Reads the value stored for the key.
     [[nodiscard]] std::optional<merkle_block> get(const merkle_digest digest) const override
     {
         const auto lock = std::shared_lock{mutex_};
@@ -159,6 +188,7 @@ public:
             : std::optional<merkle_block>{iterator->second};
     }
 
+    /// A collection with the key bound to the value, adding or replacing as needed.
     bool put(merkle_block block) override
     {
         const auto lock = std::unique_lock{mutex_};
@@ -175,12 +205,14 @@ public:
         return true;
     }
 
+    /// A collection without that element; returns the receiver when absent.
     bool remove(const merkle_digest digest) override
     {
         const auto lock = std::unique_lock{mutex_};
         return blocks_.erase(digest) != 0;
     }
 
+    /// An empty collection retaining the same policies; returns the receiver when already empty.
     void clear() override
     {
         const auto lock = std::unique_lock{mutex_};
@@ -195,6 +227,7 @@ private:
 // Implementation namespace: unstable and deliberately excluded from the supported API.
 namespace merkle_persistence_detail {
 
+/// Whether the identifier is empty or all whitespace.
 [[nodiscard]] inline bool is_blank_identifier(const std::string_view value) noexcept
 {
     if (value.empty()) {
@@ -205,6 +238,7 @@ namespace merkle_persistence_detail {
         || merkle_detail::is_all_unicode_whitespace(bytes);
 }
 
+/// Fails the current case with the given message.
 [[noreturn]] inline void fail(
     const merkle_verification_failure_kind kind,
     std::string message,
@@ -213,6 +247,7 @@ namespace merkle_persistence_detail {
     throw merkle_verification_error{kind, std::move(message), digest};
 }
 
+/// The value as an unsigned 64-bit integer.
 [[nodiscard]] inline std::uint64_t as_u64(
     const std::size_t value,
     const merkle_digest digest,
@@ -231,6 +266,7 @@ namespace merkle_persistence_detail {
 /// Immutable complete or partial transfer pack with unique block addresses.
 class merkle_block_pack final {
 public:
+    /// Constructs the merkle block pack.
     merkle_block_pack(
         std::string algorithm_id,
         const merkle_digest domain_digest,
@@ -265,6 +301,18 @@ public:
         }
     }
 
+    /// Whether the pack carries the block its root digest names. A pack that does not cannot stand
+    /// on its own.
+    /// How many bytes the blocks occupy in total, which a receiver charges against its verification
+    /// budget.
+    /// How many blocks are carried.
+    /// The blocks this value carries.
+    /// The root digest. Equal digests mean equal contents, which is what makes comparison and
+    /// synchronization cheap.
+    /// The digest of the policy's domain: its algorithm and its key and value encodings together.
+    /// Two trees whose domain digests differ describe incomparable data.
+    /// The algorithm identifier this value was produced under. Mixed into every digest, so a change
+    /// of algorithm cannot be mistaken for a change of data.
     [[nodiscard]] const std::string& algorithm_id() const noexcept { return algorithm_id_; }
     [[nodiscard]] merkle_digest domain_digest() const noexcept { return domain_digest_; }
     [[nodiscard]] merkle_digest root_hash() const noexcept { return root_hash_; }
@@ -287,6 +335,7 @@ private:
 /// One deterministic missing-frontier synchronization round.
 class merkle_sync_plan final {
 public:
+    /// Constructs the merkle sync plan.
     merkle_sync_plan(
         std::string algorithm_id,
         const merkle_digest domain_digest,
@@ -312,6 +361,13 @@ public:
         }
     }
 
+    /// The digests of the blocks the plan asks for.
+    /// The root digest the plan is trying to reach.
+    /// The root digest of the local tree the plan was computed from.
+    /// The digest of the policy's domain: its algorithm and its key and value encodings together.
+    /// Two trees whose domain digests differ describe incomparable data.
+    /// The algorithm identifier this value was produced under. Mixed into every digest, so a change
+    /// of algorithm cannot be mistaken for a change of data.
     [[nodiscard]] const std::string& algorithm_id() const noexcept { return algorithm_id_; }
     [[nodiscard]] merkle_digest domain_digest() const noexcept { return domain_digest_; }
     [[nodiscard]] merkle_digest local_root_hash() const noexcept { return local_root_hash_; }
@@ -320,18 +376,22 @@ public:
     {
         return requested_blocks_;
     }
+    /// How many blocks the plan had to examine locally, which is what bounds its cost.
     [[nodiscard]] std::size_t examined_block_count() const noexcept
     {
         return examined_block_count_;
     }
+    /// How many bytes the plan had to examine locally.
     [[nodiscard]] std::uint64_t examined_byte_count() const noexcept
     {
         return examined_byte_count_;
     }
+    /// Whether the two roots already agree, in which case nothing needs transferring.
     [[nodiscard]] bool roots_match() const noexcept
     {
         return local_root_hash_ == target_root_hash_;
     }
+    /// Whether the plan still needs blocks from the far side.
     [[nodiscard]] bool requires_blocks() const noexcept { return !requested_blocks_.empty(); }
 
     friend bool operator==(const merkle_sync_plan&, const merkle_sync_plan&) = default;
@@ -349,6 +409,7 @@ private:
 /// Seven finite limits checked before allocation, decoding, hashing, and expansion.
 class merkle_verification_budget final {
 public:
+    /// Constructs the merkle verification budget.
     explicit merkle_verification_budget(
         const std::size_t max_block_count = 1'000'000,
         const std::uint64_t max_total_byte_count = std::uint64_t{1} << 30,
@@ -578,17 +639,24 @@ using persistence_node_pointer = typename persistence_access<K, V>::node_pointer
 template <class K, class V>
 using persistence_entry = typename persistence_access<K, V>::entry_type;
 
+/// Accounting state charging a verification against its budget, so untrusted input cannot force
+/// unbounded work.
 class verification_context final {
 public:
+    /// Constructs the verification context from the given parts.
     explicit verification_context(const merkle_verification_budget& budget)
         : budget_(budget)
     {
     }
 
+    /// How many bytes have been charged so far.
+    /// How many blocks are carried.
+    /// The limits this verification is charged against.
     [[nodiscard]] const merkle_verification_budget& budget() const noexcept { return budget_; }
     [[nodiscard]] std::size_t block_count() const noexcept { return block_count_; }
     [[nodiscard]] std::uint64_t total_bytes() const noexcept { return total_bytes_; }
 
+    /// Fails when the depth exceeds the budget, bounding how deep a chain the input can force.
     void check_depth(
         const std::size_t depth,
         const std::optional<merkle_digest> digest = std::nullopt) const
@@ -601,6 +669,8 @@ public:
         }
     }
 
+    /// Charges one block, reporting whether it had not already been counted. A block already seen
+    /// is not charged twice, so a shared subtree costs once.
     [[nodiscard]] bool account(const merkle_block& block, const std::size_t depth)
     {
         check_depth(depth, block.digest());
@@ -628,6 +698,7 @@ public:
         return true;
     }
 
+    /// Charges decoded entries against the budget.
     void account_entries(const std::size_t count, const merkle_digest digest)
     {
         const auto value = as_u64(count, digest, "a Merkle entry count exceeds verification limits");
@@ -640,6 +711,7 @@ public:
         entry_count_ += value;
     }
 
+    /// Charges a proof query's bytes against both the per-query and total ceilings.
     void account_proof_query(const std::size_t byte_count, const merkle_digest root_hash)
     {
         const auto length = as_u64(
@@ -662,6 +734,7 @@ private:
     std::set<merkle_digest> blocks_;
 };
 
+/// Checks a pack or proof's algorithm and domain identifiers before anything inside it is trusted.
 inline void verify_envelope(
     const std::string_view algorithm_id,
     const merkle_digest domain_digest,
@@ -679,6 +752,7 @@ inline void verify_envelope(
     }
 }
 
+/// Checks the store can answer the plan before any of it is trusted.
 inline void preflight_store(
     const std::span<const merkle_block> blocks,
     const merkle_block_store& store)
@@ -872,8 +946,11 @@ template <class K, class V>
 
 namespace merkle_persistence_detail {
 
+/// A bounds-checked reader over encoded bytes; a read past the end is reported as malformed input
+/// rather than as an internal error.
 class byte_reader final {
 public:
+    /// Constructs the byte reader.
     byte_reader(
         const std::span<const std::byte> bytes,
         const std::optional<merkle_digest> digest = std::nullopt,
@@ -883,8 +960,10 @@ public:
     {
     }
 
+    /// Whether the traversal has finished.
     [[nodiscard]] bool at_end() const noexcept { return offset_ == bytes_.size(); }
 
+    /// The first n elements.
     [[nodiscard]] std::span<const std::byte> take(const std::size_t length)
     {
         if (length > bytes_.size() - offset_) {
@@ -895,11 +974,13 @@ public:
         return result;
     }
 
+    /// Reads one byte.
     [[nodiscard]] std::uint8_t read_u8()
     {
         return merkle_detail::as_u8(take(1).front());
     }
 
+    /// Reads a signed 32-bit value in the canonical big-endian framing.
     [[nodiscard]] std::int32_t read_i32()
     {
         const auto value = take(4);
@@ -910,6 +991,7 @@ public:
         return std::bit_cast<std::int32_t>(bits);
     }
 
+    /// Reads a length-prefixed byte string.
     [[nodiscard]] std::span<const std::byte> read_length_prefixed()
     {
         const auto length = read_i32();
@@ -926,6 +1008,8 @@ private:
     std::size_t offset_ = 0;
 };
 
+/// A block decoded back into its level, entries, and child digests, ready to be checked against its
+/// own digest.
 template <class K, class V>
 struct decoded_block final {
     merkle_block block;
@@ -935,6 +1019,7 @@ struct decoded_block final {
     std::vector<merkle_digest> child_digests;
 };
 
+/// Decodes a value, rejecting noncanonical input rather than accepting it leniently.
 template <class T>
 [[nodiscard]] T decode_canonical(
     const merkle_codec<T>& codec,
@@ -981,6 +1066,7 @@ template <class T>
     return value;
 }
 
+/// Encodes a block's bytes without hashing them.
 template <class K, class V>
 [[nodiscard]] merkle_bytes encode_raw_block(
     const merkle_search_tree<K, V>& tree,
@@ -1044,6 +1130,7 @@ template <class K, class V>
     return result;
 }
 
+/// Decodes one block after confirming its bytes hash to the digest it was fetched by.
 template <class K, class V>
 [[nodiscard]] decoded_block<K, V> decode_block(
     const merkle_search_tree<K, V>& verifier,
@@ -1190,6 +1277,9 @@ template <class K, class V>
         std::move(child_digests)};
 }
 
+/// Checks that a child block sits below its parent's level and stays strictly inside its key
+/// separators. Verified on decode, so a crafted pack cannot present an out-of-order or level-
+/// inverted tree as valid.
 template <class K, class V>
 void validate_reference(
     const merkle_search_tree<K, V>& tree,
@@ -1222,6 +1312,7 @@ void validate_reference(
     }
 }
 
+/// Loads one block and decodes it into a node.
 template <class K, class V>
 [[nodiscard]] persistence_node_pointer<K, V> load_node(
     const merkle_search_tree<K, V>& verifier,
@@ -1330,8 +1421,11 @@ template <class K, class V>
     }
 }
 
+/// A block store layering writes over a read-only base, so a verification can stage blocks without
+/// committing them.
 class overlay_block_store final : public merkle_block_store {
 public:
+    /// Constructs the overlay block store from the given parts.
     overlay_block_store(
         const std::map<merkle_digest, merkle_block>& staged,
         const merkle_block_store* fallback)
@@ -1339,6 +1433,8 @@ public:
     {
     }
 
+    /// Every stored digest.
+    /// Number of elements in the collection.
     [[nodiscard]] std::size_t size() const override { return digests().size(); }
     [[nodiscard]] std::vector<merkle_digest> digests() const override
     {
@@ -1353,11 +1449,13 @@ public:
         }
         return {result.begin(), result.end()};
     }
+    /// Whether the element is present.
     [[nodiscard]] bool contains(const merkle_digest digest) const override
     {
         return staged_.contains(digest)
             || (fallback_ != nullptr && fallback_->contains(digest));
     }
+    /// Reads the value stored for the key.
     [[nodiscard]] std::optional<merkle_block> get(const merkle_digest digest) const override
     {
         if (const auto iterator = staged_.find(digest); iterator != staged_.end()) {
@@ -1365,14 +1463,17 @@ public:
         }
         return fallback_ == nullptr ? std::nullopt : fallback_->get(digest);
     }
+    /// A collection with the key bound to the value, adding or replacing as needed.
     bool put(merkle_block) override
     {
         throw std::logic_error("a verification overlay is read-only");
     }
+    /// A collection without that element; returns the receiver when absent.
     bool remove(merkle_digest) override
     {
         throw std::logic_error("a verification overlay is read-only");
     }
+    /// An empty collection retaining the same policies; returns the receiver when already empty.
     void clear() override { throw std::logic_error("a verification overlay is read-only"); }
 
 private:
@@ -1380,6 +1481,7 @@ private:
     const merkle_block_store* fallback_;
 };
 
+/// Loads a subtree, charging every block against the verification context.
 template <class K, class V>
 [[nodiscard]] merkle_search_tree<K, V> load_with_context(
     const merkle_digest root_hash,

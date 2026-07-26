@@ -1,3 +1,5 @@
+/// Runs each sample and checks it completes, so the samples cannot rot.
+
 #include "sample_runs.hpp"
 
 #include <durable7/test_support/headless_test_process.h>
