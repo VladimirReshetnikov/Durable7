@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NumericUnderscores #-}
 
+-- | Entry point for the durable7-fingertree test suite.
 module Main (main) where
 
 import Prelude hiding (lines, null, reverse, splitAt)
@@ -40,6 +41,7 @@ import qualified CanonicalSortedSetTests
 import qualified RangeUpdateSequenceTests
 import qualified OrderedSearchCursorTests
 
+-- | Entry point running this package's test suite.
 main :: IO ()
 main = do
   testMeasuredTree
@@ -199,7 +201,7 @@ testMeasuredTree = do
     _ :> Elem 10 -> pure ()
     _ -> fail "viewR did not expose last element"
 
--- Locks the incremental cached-measure order in cons/snoc under a
+-- | Locks the incremental cached-measure order in cons/snoc under a
 -- non-commutative monoid: a cons combines the new element's measure on the
 -- LEFT of the cached total, a snoc on the RIGHT, so the accumulated trace
 -- must read exactly in sequence order through digit-overflow cascades.
@@ -1657,7 +1659,7 @@ runConcurrent label workerCount action = do
       Right () -> pure ()
       Left exception -> fail (label ++ ": worker failed: " ++ show exception)
 
--- A non-commutative measure (list concatenation) that records the order in
+-- | A non-commutative measure (list concatenation) that records the order in
 -- which element measures were combined into the cached total.
 newtype Trace = Trace [Int]
   deriving (Eq, Show)
@@ -1674,7 +1676,7 @@ newtype Traced = Traced Int
 instance FT.Measured Trace Traced where
   measure (Traced value) = Trace [value]
 
--- An element whose ordering ignores the label, standing in for
+-- | An element whose ordering ignores the label, standing in for
 -- comparer-equal-but-distinct instances.
 data Keyed = Keyed Int String
   deriving (Show)
@@ -1688,7 +1690,7 @@ instance Ord Keyed where
 keyedLabel :: Keyed -> String
 keyedLabel (Keyed _ label) = label
 
--- Deliberately has no Eq instance: cursor replacement must neither require
+-- | Deliberately has no Eq instance: cursor replacement must neither require
 -- nor consult element equality, and must retain the supplied representative.
 data CursorRepresentative = CursorRepresentative Int String
   deriving (Show)

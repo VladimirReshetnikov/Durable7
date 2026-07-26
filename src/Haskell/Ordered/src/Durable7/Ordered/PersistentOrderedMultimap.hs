@@ -1,3 +1,7 @@
+-- | A persistent multimap that remembers insertion order, both across keys and within a key.
+--
+-- Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+-- so an edit copies a path rather than the whole collection.
 module Durable7.Ordered.PersistentOrderedMultimap
   ( PersistentOrderedMultimap
   , empty
@@ -42,49 +46,64 @@ data PersistentOrderedMultimap k v = PersistentOrderedMultimap
   !Int
   !(PersistentOrderedMap k (PersistentOrderedSet v))
 
+-- | The empty multimap.
 empty :: (Eq k, Hashable k, Eq v, Hashable v) => PersistentOrderedMultimap k v
 empty = emptyWith HashMap.defaultPolicy HashMap.defaultPolicy
 
+-- | The empty multimap under the given policy, which it retains.
 emptyWith :: HashPolicy k -> HashPolicy v -> PersistentOrderedMultimap k v
 emptyWith keys values = PersistentOrderedMultimap values 0 (OrderedMap.emptyWith keys)
 
+-- | A multimap holding a list's pairs, built in bulk rather than by repeated insertion.
 fromList :: (Eq k, Hashable k, Eq v, Hashable v) => [(k, v)] -> PersistentOrderedMultimap k v
 fromList = List.foldl' (\current (key, value) -> insert key value current) empty
 
+-- | A multimap holding a list's pairs, under the given policy.
 fromListWith :: HashPolicy k -> HashPolicy v -> [(k, v)] -> PersistentOrderedMultimap k v
 fromListWith keys values =
   List.foldl' (\current (key, value) -> insert key value current) (emptyWith keys values)
 
+-- | How many distinct keys are present.
 keyCount :: PersistentOrderedMultimap k v -> Int
 keyCount (PersistentOrderedMultimap _ _ groups) = OrderedMap.size groups
 
+-- | Number of pairs in the multimap.
 size :: PersistentOrderedMultimap k v -> Int
 size (PersistentOrderedMultimap _ pairCount _) = pairCount
 
+-- | Whether the multimap holds no pairs.
 null :: PersistentOrderedMultimap k v -> Bool
 null values = size values == 0
 
+-- | The retained key policy.
 keyPolicy :: PersistentOrderedMultimap k v -> HashPolicy k
 keyPolicy (PersistentOrderedMultimap _ _ groups) = OrderedMap.policy groups
 
+-- | The retained value policy.
 valuePolicy :: PersistentOrderedMultimap k v -> HashPolicy v
 valuePolicy (PersistentOrderedMultimap values _ _) = values
 
+-- | Whether the pair is present.
 member :: k -> v -> PersistentOrderedMultimap k v -> Bool
 member key value values = maybe False (OrderedSet.contains value) (lookupValues key values)
 
+-- | Whether the key is present.
 memberKey :: k -> PersistentOrderedMultimap k v -> Bool
 memberKey key (PersistentOrderedMultimap _ _ groups) = OrderedMap.member key groups
 
+-- | The stored key representative, which need not be the key passed in.
 actualKey :: k -> PersistentOrderedMultimap k v -> Maybe k
 actualKey key (PersistentOrderedMultimap _ _ groups) = OrderedMap.actualKey key groups
 
+-- | The stored value representative.
 actualValue :: k -> v -> PersistentOrderedMultimap k v -> Maybe v
 actualValue key value values = lookupValues key values >>= OrderedSet.actualValue value
 
+-- | The values bound to the key, or `Nothing` when the key is absent.
 lookupValues :: k -> PersistentOrderedMultimap k v -> Maybe (PersistentOrderedSet v)
 lookupValues key (PersistentOrderedMultimap _ _ groups) = OrderedMap.lookup key groups
 
+-- | A multimap containing the given pair.
 insert :: k -> v -> PersistentOrderedMultimap k v -> PersistentOrderedMultimap k v
 insert key value values@(PersistentOrderedMultimap valuesPolicy pairCount groups) =
   case OrderedMap.lookup key groups of
@@ -99,6 +118,7 @@ insert key value values@(PersistentOrderedMultimap valuesPolicy pairCount groups
             (checkedIncrement pairCount)
             (OrderedMap.set key (OrderedSet.add value group) groups)
 
+-- | A multimap without that pair.
 delete :: k -> v -> PersistentOrderedMultimap k v -> PersistentOrderedMultimap k v
 delete key value values@(PersistentOrderedMultimap valuesPolicy pairCount groups) =
   case OrderedMap.lookup key groups >>= OrderedSet.tryRemove value of
@@ -109,6 +129,7 @@ delete key value values@(PersistentOrderedMultimap valuesPolicy pairCount groups
             | otherwise = OrderedMap.set key group groups
        in PersistentOrderedMultimap valuesPolicy (pairCount - 1) nextGroups
 
+-- | A multimap without that key.
 deleteKey :: k -> PersistentOrderedMultimap k v -> PersistentOrderedMultimap k v
 deleteKey key values@(PersistentOrderedMultimap valuesPolicy pairCount groups) =
   case OrderedMap.lookup key groups of
@@ -116,11 +137,13 @@ deleteKey key values@(PersistentOrderedMultimap valuesPolicy pairCount groups) =
     Just group ->
       PersistentOrderedMultimap valuesPolicy (pairCount - OrderedSet.size group) (OrderedMap.delete key groups)
 
+-- | The empty multimap, retaining the same policies.
 clear :: PersistentOrderedMultimap k v -> PersistentOrderedMultimap k v
 clear values
   | null values = values
   | otherwise = emptyWith (keyPolicy values) (valuePolicy values)
 
+-- | The pairs, in the multimap's own order.
 toList :: PersistentOrderedMultimap k v -> [(k, v)]
 toList (PersistentOrderedMultimap _ _ groups) =
   [ (key, value)
@@ -128,10 +151,12 @@ toList (PersistentOrderedMultimap _ _ groups) =
   , value <- OrderedSet.toList values
   ]
 
+-- | Whether both versions share their group index.
 sharesGroupsWith :: PersistentOrderedMultimap k v -> PersistentOrderedMultimap k v -> Bool
 sharesGroupsWith (PersistentOrderedMultimap _ _ left) (PersistentOrderedMultimap _ _ right) =
   OrderedMap.sharesOrderWith left right && OrderedMap.sharesValuesWith left right
 
+-- | Whether the multimap's structural invariants hold. For tests and diagnostics.
 validStructure :: PersistentOrderedMultimap k v -> Bool
 validStructure values@(PersistentOrderedMultimap _ pairCount groups) =
   OrderedMap.validStructure groups

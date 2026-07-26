@@ -3,6 +3,12 @@
 -- | Brodal and Okasaki's bootstrapped skew-binomial min-heap.  The global
 -- minimum is stored at the rank-zero root; its children fuse the primitive
 -- skew tree children with the embedded heap forest described by the paper.
+-- | A persistent Brodal-Okasaki heap: worst-case constant-time meld and minimum.
+--
+-- Melding links two forests rather than merging their contents, which is what keeps it constant
+-- time in the worst case rather than only amortized. Every operation returns a new version and
+-- leaves its inputs valid, sharing unchanged structure, so an edit copies a path rather than the
+-- whole collection.
 module Durable7.FingerTree.BrodalOkasakiHeap
   ( BrodalOkasakiHeap
   , BrodalOkasakiHeapStatistics(..)
@@ -27,9 +33,13 @@ import qualified Data.List as List
 data Tree a = Tree !Int !a ![Tree a]
   deriving (Eq, Ord, Read, Show)
 
+-- | A persistent Brodal-Okasaki heap: worst-case constant-time meld and minimum. Melding links two
+-- forests rather than merging their contents, which is what keeps it constant time in the worst
+-- case rather than only amortized.
 data BrodalOkasakiHeap a = BrodalOkasakiHeap !Int !(Maybe (Tree a))
   deriving (Eq, Ord, Read, Show)
 
+-- | Shape measurements from a structural audit.
 data BrodalOkasakiHeapStatistics = BrodalOkasakiHeapStatistics
   { brodalStatisticsCount :: !Int
   , brodalStatisticsRootForestLength :: !Int
@@ -38,9 +48,11 @@ data BrodalOkasakiHeapStatistics = BrodalOkasakiHeapStatistics
   }
   deriving (Eq, Ord, Read, Show)
 
+-- | The empty heap.
 empty :: BrodalOkasakiHeap a
 empty = BrodalOkasakiHeap 0 Nothing
 
+-- | A heap holding one element.
 singleton :: a -> BrodalOkasakiHeap a
 singleton value = BrodalOkasakiHeap 1 (Just (Tree 0 value []))
 
@@ -48,14 +60,17 @@ singleton value = BrodalOkasakiHeap 1 (Just (Tree 0 value []))
 fromList :: Ord a => [a] -> BrodalOkasakiHeap a
 fromList = List.foldl' (flip insert) empty
 
+-- | Number of elements in the heap.
 count :: BrodalOkasakiHeap a -> Int
 count (BrodalOkasakiHeap total _) = total
 
+-- | Whether the heap holds no elements.
 null :: BrodalOkasakiHeap a -> Bool
 null (BrodalOkasakiHeap _ root) = case root of
   Nothing -> True
   Just _ -> False
 
+-- | The minimum-priority entry, found through the cached priority rather than by scanning.
 minimum :: BrodalOkasakiHeap a -> Maybe a
 minimum (BrodalOkasakiHeap _ Nothing) = Nothing
 minimum (BrodalOkasakiHeap _ (Just (Tree _ value _))) = Just value
@@ -95,6 +110,7 @@ minView (BrodalOkasakiHeap total (Just (Tree _ value children))) =
       remaining = BrodalOkasakiHeap (checkedSubtract total 1) (Just (Tree 0 minimumValue restored))
   in Just (value, remaining)
 
+-- | A heap without its minimum-priority entry.
 deleteMinimum :: Ord a => BrodalOkasakiHeap a -> BrodalOkasakiHeap a
 deleteMinimum heap = case minView heap of
   Nothing -> heap
@@ -215,7 +231,7 @@ unionUnique left@(first@(Tree leftRank _ _) : leftRest)
   | leftRank > rightRank = second : unionUnique left rightRest
   | otherwise = insertRanked (link first second) (unionUnique leftRest rightRest)
 
--- Decodes the primitive children c from the fused list c ++ f and returns f.
+-- | Decodes the primitive children c from the fused list c ++ f and returns f.
 validateFusedChildren :: Tree a -> Maybe [Tree a]
 validateFusedChildren (Tree initialRank _ initialForest) = go initialRank initialForest
   where

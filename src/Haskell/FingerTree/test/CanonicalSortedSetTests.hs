@@ -2,6 +2,10 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# OPTIONS_GHC -fno-cse -fno-full-laziness #-}
 
+-- | Tests for the canonical sorted set.
+--
+-- The central property is history independence: sets reaching the same contents by different
+-- sequences of edits must be structurally identical.
 module CanonicalSortedSetTests (run) where
 
 import Control.Monad (foldM, forM_, when)
@@ -16,6 +20,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Durable7.FingerTree.CanonicalSortedSet as Canonical
 
+-- | Runs this module's test cases, reporting each result.
 run :: IO ()
 run = do
   testRankVectorsAndPolicyModes

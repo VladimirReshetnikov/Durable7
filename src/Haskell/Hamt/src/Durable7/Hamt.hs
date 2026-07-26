@@ -1,3 +1,8 @@
+-- | The durable7-hamt package's umbrella module: the persistent hash collections and everything
+-- built on them.
+--
+-- Re-exports the CHAMP-backed map and set together with the multiset, multimap, bimap, relation,
+-- graph, indexed map, patch, Patricia tries and Merkle search tree.
 module Durable7.Hamt
   ( HashMap.HashMap
   , BiMap.BiMap

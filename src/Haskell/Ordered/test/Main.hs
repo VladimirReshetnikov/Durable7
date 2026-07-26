@@ -1,3 +1,4 @@
+-- | Entry point for the durable7-ordered test suite.
 module Main (main) where
 
 import Prelude hiding (drop, last, null, reverse, take)
@@ -16,6 +17,7 @@ import qualified Durable7.Ordered.PersistentOrderedSet as Ordered
 import qualified Durable7.Ordered.PersistentOrderedMap as OrderedMap
 import qualified Durable7.Ordered.PersistentOrderedMultimap as OrderedMultimap
 
+-- | Entry point running this package's test suite.
 main :: IO ()
 main = do
   testConstructionAndRepresentatives

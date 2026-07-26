@@ -1,4 +1,5 @@
 -- | Immutable snapshot-plus-gap cursors for neutral insertion-ordered collections.
+-- | Gap cursors over the insertion-ordered collections.
 module Durable7.Ordered.Cursor
   ( OrderedCursorSearch(..)
   , OrderedCursorInsert(..)
@@ -90,6 +91,7 @@ checkedSuccessor position
 -- | Immutable root-plus-explicit-order-position gap cursor.
 data PersistentOrderedSetCursor a = PersistentOrderedSetCursor !(PersistentOrderedSet a) !Int
 
+-- | A cursor at the given gap of the set.
 orderedSetCursorAt :: Int -> PersistentOrderedSet a -> Maybe (PersistentOrderedSetCursor a)
 orderedSetCursorAt position value
   | validPosition position (OrderedSet.size value) = Just (PersistentOrderedSetCursor value position)
@@ -101,38 +103,48 @@ findOrderedSetCursor item value =
   let index = OrderedSet.indexOf item value
    in OrderedCursorSearch (index >= 0) (PersistentOrderedSetCursor value (if index < 0 then OrderedSet.size value else index))
 
+-- | The cursor's gap position.
 orderedSetCursorPosition :: PersistentOrderedSetCursor a -> Int
 orderedSetCursorPosition (PersistentOrderedSetCursor _ position) = position
 
+-- | Number of elements in the version the cursor is positioned in.
 orderedSetCursorSize :: PersistentOrderedSetCursor a -> Int
 orderedSetCursorSize (PersistentOrderedSetCursor value _) = OrderedSet.size value
 
+-- | A cursor before the first element.
 orderedSetCursorAtStart :: PersistentOrderedSetCursor a -> Bool
 orderedSetCursorAtStart cursor = orderedSetCursorPosition cursor == 0
 
+-- | A cursor after the last element.
 orderedSetCursorAtEnd :: PersistentOrderedSetCursor a -> Bool
 orderedSetCursorAtEnd cursor = orderedSetCursorPosition cursor == orderedSetCursorSize cursor
 
+-- | The element immediately before the gap, or `Nothing` at the start.
 orderedSetCursorPeekPrevious :: PersistentOrderedSetCursor a -> Maybe a
 orderedSetCursorPeekPrevious (PersistentOrderedSetCursor value position)
   | position == 0 = Nothing
   | otherwise = OrderedSet.at (position - 1) value
 
+-- | The element immediately after the gap, or `Nothing` at the end.
 orderedSetCursorPeekNext :: PersistentOrderedSetCursor a -> Maybe a
 orderedSetCursorPeekNext cursor@(PersistentOrderedSetCursor value position)
   | orderedSetCursorAtEnd cursor = Nothing
   | otherwise = OrderedSet.at position value
 
+-- | A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+-- the same version.
 orderedSetCursorMovePrevious :: PersistentOrderedSetCursor a -> Maybe (PersistentOrderedSetCursor a)
 orderedSetCursorMovePrevious (PersistentOrderedSetCursor value position)
   | position == 0 = Nothing
   | otherwise = Just (PersistentOrderedSetCursor value (position - 1))
 
+-- | A cursor one position later. The receiver is unchanged.
 orderedSetCursorMoveNext :: PersistentOrderedSetCursor a -> Maybe (PersistentOrderedSetCursor a)
 orderedSetCursorMoveNext cursor@(PersistentOrderedSetCursor value position)
   | orderedSetCursorAtEnd cursor = Nothing
   | otherwise = Just (PersistentOrderedSetCursor value (position + 1))
 
+-- | A cursor at the given position within the same set version.
 orderedSetCursorSeek :: Int -> PersistentOrderedSetCursor a -> Maybe (PersistentOrderedSetCursor a)
 orderedSetCursorSeek position (PersistentOrderedSetCursor value _) = orderedSetCursorAt position value
 
@@ -145,21 +157,28 @@ orderedSetCursorInsert item cursor@(PersistentOrderedSetCursor value position)
         Just next -> PersistentOrderedSetCursor next (checkedSuccessor position)
         Nothing -> error "validated ordered-set cursor insertion failed"
 
+-- | Inserts the element at the gap unless it is present, producing a new version the returned
+-- cursor is positioned in.
 orderedSetCursorTryInsert :: a -> PersistentOrderedSetCursor a -> OrderedCursorInsert (PersistentOrderedSetCursor a)
 orderedSetCursorTryInsert item cursor@(PersistentOrderedSetCursor value _)
   | OrderedSet.contains item value = OrderedCursorInsert False cursor
   | otherwise = OrderedCursorInsert True (orderedSetCursorInsert item cursor)
 
+-- | Removes the element before the gap, producing a new version the returned cursor is positioned
+-- in.
 orderedSetCursorDeletePrevious :: PersistentOrderedSetCursor a -> Maybe (PersistentOrderedSetCursor a)
 orderedSetCursorDeletePrevious (PersistentOrderedSetCursor value position)
   | position == 0 = Nothing
   | otherwise = (`PersistentOrderedSetCursor` (position - 1)) <$> OrderedSet.deleteAt (position - 1) value
 
+-- | Removes the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 orderedSetCursorDeleteNext :: PersistentOrderedSetCursor a -> Maybe (PersistentOrderedSetCursor a)
 orderedSetCursorDeleteNext cursor@(PersistentOrderedSetCursor value position)
   | orderedSetCursorAtEnd cursor = Nothing
   | otherwise = (`PersistentOrderedSetCursor` position) <$> OrderedSet.deleteAt position value
 
+-- | The set version this cursor is positioned in.
 orderedSetCursorSnapshot :: PersistentOrderedSetCursor a -> PersistentOrderedSet a
 orderedSetCursorSnapshot (PersistentOrderedSetCursor value _) = value
 
@@ -168,6 +187,7 @@ orderedSetCursorSnapshot (PersistentOrderedSetCursor value _) = value
 -- | Immutable root-plus-explicit-order-position map gap cursor.
 data PersistentOrderedMapCursor k v = PersistentOrderedMapCursor !(PersistentOrderedMap k v) !Int
 
+-- | A cursor at the given gap of the map.
 orderedMapCursorAt :: Int -> PersistentOrderedMap k v -> Maybe (PersistentOrderedMapCursor k v)
 orderedMapCursorAt position value
   | validPosition position (OrderedMap.size value) = Just (PersistentOrderedMapCursor value position)
@@ -179,38 +199,48 @@ findOrderedMapCursor key value =
   let index = OrderedMap.indexOf key value
    in OrderedCursorSearch (index >= 0) (PersistentOrderedMapCursor value (if index < 0 then OrderedMap.size value else index))
 
+-- | The cursor's gap position.
 orderedMapCursorPosition :: PersistentOrderedMapCursor k v -> Int
 orderedMapCursorPosition (PersistentOrderedMapCursor _ position) = position
 
+-- | Number of entries in the version the cursor is positioned in.
 orderedMapCursorSize :: PersistentOrderedMapCursor k v -> Int
 orderedMapCursorSize (PersistentOrderedMapCursor value _) = OrderedMap.size value
 
+-- | A cursor before the first entry.
 orderedMapCursorAtStart :: PersistentOrderedMapCursor k v -> Bool
 orderedMapCursorAtStart cursor = orderedMapCursorPosition cursor == 0
 
+-- | A cursor after the last entry.
 orderedMapCursorAtEnd :: PersistentOrderedMapCursor k v -> Bool
 orderedMapCursorAtEnd cursor = orderedMapCursorPosition cursor == orderedMapCursorSize cursor
 
+-- | The entry immediately before the gap, or `Nothing` at the start.
 orderedMapCursorPeekPrevious :: PersistentOrderedMapCursor k v -> Maybe (k, v)
 orderedMapCursorPeekPrevious (PersistentOrderedMapCursor value position)
   | position == 0 = Nothing
   | otherwise = OrderedMap.entryAt (position - 1) value
 
+-- | The entry immediately after the gap, or `Nothing` at the end.
 orderedMapCursorPeekNext :: PersistentOrderedMapCursor k v -> Maybe (k, v)
 orderedMapCursorPeekNext cursor@(PersistentOrderedMapCursor value position)
   | orderedMapCursorAtEnd cursor = Nothing
   | otherwise = OrderedMap.entryAt position value
 
+-- | A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+-- the same version.
 orderedMapCursorMovePrevious :: PersistentOrderedMapCursor k v -> Maybe (PersistentOrderedMapCursor k v)
 orderedMapCursorMovePrevious (PersistentOrderedMapCursor value position)
   | position == 0 = Nothing
   | otherwise = Just (PersistentOrderedMapCursor value (position - 1))
 
+-- | A cursor one position later. The receiver is unchanged.
 orderedMapCursorMoveNext :: PersistentOrderedMapCursor k v -> Maybe (PersistentOrderedMapCursor k v)
 orderedMapCursorMoveNext cursor@(PersistentOrderedMapCursor value position)
   | orderedMapCursorAtEnd cursor = Nothing
   | otherwise = Just (PersistentOrderedMapCursor value (position + 1))
 
+-- | A cursor at the given position within the same map version.
 orderedMapCursorSeek :: Int -> PersistentOrderedMapCursor k v -> Maybe (PersistentOrderedMapCursor k v)
 orderedMapCursorSeek position (PersistentOrderedMapCursor value _) = orderedMapCursorAt position value
 
@@ -230,21 +260,26 @@ orderedMapCursorTryInsert key item cursor@(PersistentOrderedMapCursor value _) =
           Just next -> OrderedCursorInsert True next
           Nothing -> error "validated ordered-map cursor insertion failed"
 
+-- | Replaces the value of the entry after the gap, producing a new version the returned cursor is
+-- positioned in.
 orderedMapCursorSetNextValue :: v -> PersistentOrderedMapCursor k v -> Maybe (PersistentOrderedMapCursor k v)
 orderedMapCursorSetNextValue item cursor@(PersistentOrderedMapCursor value position) = do
   (key, _) <- orderedMapCursorPeekNext cursor
   pure (PersistentOrderedMapCursor (OrderedMap.set key item value) position)
 
+-- | Removes the entry before the gap, producing a new version the returned cursor is positioned in.
 orderedMapCursorDeletePrevious :: PersistentOrderedMapCursor k v -> Maybe (PersistentOrderedMapCursor k v)
 orderedMapCursorDeletePrevious (PersistentOrderedMapCursor value position)
   | position == 0 = Nothing
   | otherwise = (`PersistentOrderedMapCursor` (position - 1)) <$> OrderedMap.deleteAt (position - 1) value
 
+-- | Removes the entry after the gap, producing a new version the returned cursor is positioned in.
 orderedMapCursorDeleteNext :: PersistentOrderedMapCursor k v -> Maybe (PersistentOrderedMapCursor k v)
 orderedMapCursorDeleteNext cursor@(PersistentOrderedMapCursor value position)
   | orderedMapCursorAtEnd cursor = Nothing
   | otherwise = (`PersistentOrderedMapCursor` position) <$> OrderedMap.deleteAt position value
 
+-- | The map version this cursor is positioned in.
 orderedMapCursorSnapshot :: PersistentOrderedMapCursor k v -> PersistentOrderedMap k v
 orderedMapCursorSnapshot (PersistentOrderedMapCursor value _) = value
 
@@ -254,6 +289,7 @@ orderedMapCursorSnapshot (PersistentOrderedMapCursor value _) = value
 data PersistentOrderedMultimapCursor k v =
   PersistentOrderedMultimapCursor !(PersistentOrderedMultimap k v) !Int
 
+-- | A cursor at the given gap of the multimap.
 orderedMultimapCursorAt :: Int -> PersistentOrderedMultimap k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorAt position value
   | validPosition position (OrderedMultimap.size value) = Just (PersistentOrderedMultimapCursor value position)
@@ -275,38 +311,48 @@ findOrderedMultimapGroupCursor key value = search 0 (OrderedMultimap.toList valu
       | equivalent storedKey key = OrderedCursorSearch True (PersistentOrderedMultimapCursor value index)
       | otherwise = search (checkedSuccessor index) rest
 
+-- | The cursor's gap position.
 orderedMultimapCursorPosition :: PersistentOrderedMultimapCursor k v -> Int
 orderedMultimapCursorPosition (PersistentOrderedMultimapCursor _ position) = position
 
+-- | Number of pairs in the version the cursor is positioned in.
 orderedMultimapCursorSize :: PersistentOrderedMultimapCursor k v -> Int
 orderedMultimapCursorSize (PersistentOrderedMultimapCursor value _) = OrderedMultimap.size value
 
+-- | A cursor before the first pair.
 orderedMultimapCursorAtStart :: PersistentOrderedMultimapCursor k v -> Bool
 orderedMultimapCursorAtStart cursor = orderedMultimapCursorPosition cursor == 0
 
+-- | A cursor after the last pair.
 orderedMultimapCursorAtEnd :: PersistentOrderedMultimapCursor k v -> Bool
 orderedMultimapCursorAtEnd cursor = orderedMultimapCursorPosition cursor == orderedMultimapCursorSize cursor
 
+-- | The pair immediately before the gap, or `Nothing` at the start.
 orderedMultimapCursorPeekPrevious :: PersistentOrderedMultimapCursor k v -> Maybe (k, v)
 orderedMultimapCursorPeekPrevious (PersistentOrderedMultimapCursor value position)
   | position == 0 = Nothing
   | otherwise = listAt (position - 1) (OrderedMultimap.toList value)
 
+-- | The pair immediately after the gap, or `Nothing` at the end.
 orderedMultimapCursorPeekNext :: PersistentOrderedMultimapCursor k v -> Maybe (k, v)
 orderedMultimapCursorPeekNext cursor@(PersistentOrderedMultimapCursor value position)
   | orderedMultimapCursorAtEnd cursor = Nothing
   | otherwise = listAt position (OrderedMultimap.toList value)
 
+-- | A cursor one position earlier. The receiver is unchanged; movement produces a new cursor over
+-- the same version.
 orderedMultimapCursorMovePrevious :: PersistentOrderedMultimapCursor k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorMovePrevious (PersistentOrderedMultimapCursor value position)
   | position == 0 = Nothing
   | otherwise = Just (PersistentOrderedMultimapCursor value (position - 1))
 
+-- | A cursor one position later. The receiver is unchanged.
 orderedMultimapCursorMoveNext :: PersistentOrderedMultimapCursor k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorMoveNext cursor@(PersistentOrderedMultimapCursor value position)
   | orderedMultimapCursorAtEnd cursor = Nothing
   | otherwise = Just (PersistentOrderedMultimapCursor value (position + 1))
 
+-- | A cursor at the given position within the same multimap version.
 orderedMultimapCursorSeek :: Int -> PersistentOrderedMultimapCursor k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorSeek position (PersistentOrderedMultimapCursor value _) = orderedMultimapCursorAt position value
 
@@ -326,23 +372,28 @@ orderedMultimapCursorInsert key item cursor@(PersistentOrderedMultimapCursor val
       let next = OrderedMultimap.insert key item value
        in PersistentOrderedMultimapCursor next (orderedMultimapGroupEnd key next)
 
+-- | Inserts the pair at the gap unless it is present, producing a new version the returned cursor
+-- is positioned in.
 orderedMultimapCursorTryInsert :: k -> v -> PersistentOrderedMultimapCursor k v -> OrderedCursorInsert (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorTryInsert key item cursor@(PersistentOrderedMultimapCursor value _)
   | OrderedMultimap.member key item value = OrderedCursorInsert False cursor
   | otherwise = OrderedCursorInsert True (orderedMultimapCursorInsert key item cursor)
 
+-- | Removes the pair before the gap, producing a new version the returned cursor is positioned in.
 orderedMultimapCursorDeletePrevious :: PersistentOrderedMultimapCursor k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorDeletePrevious cursor@(PersistentOrderedMultimapCursor value position) = do
   (key, item) <- orderedMultimapCursorPeekPrevious cursor
   next <- orderedMultimapDeletedPair key item value
   pure (PersistentOrderedMultimapCursor next (position - 1))
 
+-- | Removes the pair after the gap, producing a new version the returned cursor is positioned in.
 orderedMultimapCursorDeleteNext :: PersistentOrderedMultimapCursor k v -> Maybe (PersistentOrderedMultimapCursor k v)
 orderedMultimapCursorDeleteNext cursor@(PersistentOrderedMultimapCursor value position) = do
   (key, item) <- orderedMultimapCursorPeekNext cursor
   next <- orderedMultimapDeletedPair key item value
   pure (PersistentOrderedMultimapCursor next position)
 
+-- | The multimap version this cursor is positioned in.
 orderedMultimapCursorSnapshot :: PersistentOrderedMultimapCursor k v -> PersistentOrderedMultimap k v
 orderedMultimapCursorSnapshot (PersistentOrderedMultimapCursor value _) = value
 

@@ -1,6 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 
+-- | A persistent hash map backed by a CHAMP trie.
+--
+-- Branching is 32-way and bitmap-indexed with immutable collision buckets, so operations are
+-- constant time in expectation while versions share every unchanged node. A map retains its
+-- hashing and equivalence policy, so equivalence classes are defined by the policy rather than by
+-- the platform. Every operation returns a new version and leaves its inputs valid, sharing
+-- unchanged structure, so an edit copies a path rather than the whole collection.
 module Durable7.Hamt.HashMap
   ( HashMap
   , HashPolicy(..)
@@ -55,14 +62,20 @@ import GHC.Exts (isTrue#, reallyUnsafePtrEquality#)
 
 import Durable7.Hamt.Hashable (Hashable(..))
 
+-- | Hashing and equivalence policy for the persistent hash collections. A collection retains its
+-- policy, so equivalence classes are defined by the policy rather than by the platform.
 data HashPolicy k = HashPolicy
   { hashKey :: k -> Int
   , equalKeys :: k -> k -> Bool
   }
 
+-- | The policy using the platform's own hashing and equality.
 defaultPolicy :: (Eq k, Hashable k) => HashPolicy k
 defaultPolicy = HashPolicy hash (==)
 
+-- | A persistent hash map backed by a CHAMP trie. Branching is 32-way and bitmap-indexed with
+-- immutable collision buckets, so operations are constant time in expectation while versions
+-- share every unchanged node.
 data HashMap k v = HashMap !(HashPolicy k) !Int !(Node k v)
 
 data Node k v
@@ -84,36 +97,44 @@ data AdjustResult k v
   = NotFound
   | Adjusted !(Node k v)
 
--- Existing hit values stay lazy. Every selected factory result is forced at
+-- | Existing hit values stay lazy. Every selected factory result is forced at
 -- its call site before one of these constructors is produced.
 data FactoryUpdateResult k v
   = FactoryUnchanged v
   | FactoryChanged !Bool !(Node k v) v
 
+-- | One entry-level difference between two maps.
 data MapDifference k v
   = EntryAdded k v
   | EntryRemoved k v
   | EntryChanged k v v
   deriving (Eq, Show)
 
+-- | The empty map.
 empty :: (Eq k, Hashable k) => HashMap k v
 empty = emptyWith defaultPolicy
 
+-- | The empty map under the given policy, which it retains.
 emptyWith :: HashPolicy k -> HashMap k v
 emptyWith hashPolicy = HashMap hashPolicy 0 EmptyNode
 
+-- | A map holding one entry.
 singleton :: (Eq k, Hashable k) => k -> v -> HashMap k v
 singleton key value = singletonWith defaultPolicy key value
 
+-- | A map holding one entry, under the given policy.
 singletonWith :: HashPolicy k -> k -> v -> HashMap k v
 singletonWith hashPolicy key value = insert key value (emptyWith hashPolicy)
 
+-- | A map holding a list's entries, built in bulk rather than by repeated insertion.
 fromList :: (Eq k, Hashable k) => [(k, v)] -> HashMap k v
 fromList = fromListWith defaultPolicy
 
+-- | A map holding a list's entries, under the given policy.
 fromListWith :: HashPolicy k -> [(k, v)] -> HashMap k v
 fromListWith hashPolicy = List.foldl' (\m (k, v) -> insert k v m) (emptyWith hashPolicy)
 
+-- | Number of entries in the map.
 size :: HashMap k v -> Int
 size (HashMap _ count _) = count
 
@@ -206,33 +227,41 @@ nextPrefixMask shift
 bitmapSlots :: Word32 -> [Int]
 bitmapSlots bitmap = [slot | slot <- [0 .. 31], bitmap .&. (1 `shiftL` slot) /= 0]
 
+-- | Whether the map holds no entries.
 null :: HashMap k v -> Bool
 null mapValue = size mapValue == 0
 
+-- | The empty map, retaining the same policies.
 clear :: HashMap k v -> HashMap k v
 clear (HashMap hashPolicy _ _) = HashMap hashPolicy 0 EmptyNode
 
+-- | The policy the map retains.
 policy :: HashMap k v -> HashPolicy k
 policy (HashMap hashPolicy _ _) = hashPolicy
 
+-- | Whether the entry is present.
 member :: k -> HashMap k v -> Bool
 member key mapValue =
   case lookup key mapValue of
     Just _ -> True
     Nothing -> False
 
+-- | The value stored for the key, or `Nothing` when absent.
 lookup :: k -> HashMap k v -> Maybe v
 lookup key (HashMap hashPolicy _ root) = lookupNode hashPolicy (hashFor hashPolicy key) key 0 root
 
+-- | The value stored for the key, or the supplied default when absent.
 findWithDefault :: v -> k -> HashMap k v -> v
 findWithDefault defaultValue key mapValue =
   case lookup key mapValue of
     Just value -> value
     Nothing -> defaultValue
 
+-- | The stored key representative, which need not be the key passed in.
 actualKey :: k -> HashMap k v -> Maybe k
 actualKey key (HashMap hashPolicy _ root) = actualKeyNode hashPolicy (hashFor hashPolicy key) key 0 root
 
+-- | A map containing the given entry.
 insert :: k -> v -> HashMap k v -> HashMap k v
 insert key value (HashMap hashPolicy count root) =
   case insertNode hashPolicy False (hashFor hashPolicy key) key value 0 root of
@@ -240,6 +269,7 @@ insert key value (HashMap hashPolicy count root) =
     Replaced root' -> HashMap hashPolicy count root'
     Duplicate -> HashMap hashPolicy count root
 
+-- | A map containing the given entry, unchanged when an equivalent one is present.
 insertNew :: k -> v -> HashMap k v -> Maybe (HashMap k v)
 insertNew key value (HashMap hashPolicy count root) =
   case insertNode hashPolicy True (hashFor hashPolicy key) key value 0 root of
@@ -301,48 +331,61 @@ addOrUpdateEither
 addOrUpdateEither key addFactory updateFactory =
   applyFactoryUpdate valuesEqual key addFactory (Just updateFactory)
 
+-- | A map without that entry.
 delete :: k -> HashMap k v -> HashMap k v
 delete key mapValue =
   case tryRemove key mapValue of
     Just (_, rest) -> rest
     Nothing -> mapValue
 
+-- | A map without that entry, or `Nothing` when it was absent.
 tryRemove :: k -> HashMap k v -> Maybe (v, HashMap k v)
 tryRemove key (HashMap hashPolicy count root) =
   case removeNode hashPolicy (hashFor hashPolicy key) key 0 root of
     Missing -> Nothing
     Removed root' value -> Just (value, HashMap hashPolicy (count - 1) root')
 
+-- | A map with the key's value transformed, unchanged when the key is absent.
 adjust :: (v -> v) -> k -> HashMap k v -> HashMap k v
 adjust updater key mapValue@(HashMap hashPolicy count root) =
   case adjustNode hashPolicy updater (hashFor hashPolicy key) key 0 root of
     NotFound -> mapValue
     Adjusted root' -> HashMap hashPolicy count root'
 
+-- | A map with every value transformed, keeping the keys and their order.
 mapValues :: (v -> w) -> HashMap k v -> HashMap k w
 mapValues mapper (HashMap hashPolicy count root) = HashMap hashPolicy count (mapNode mapper root)
 
+-- | The entries of both maps. Subtrees the operands already share are adopted whole rather than re-
+-- entered.
 union :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
 union = combineMaps CombineUnion
 
+-- | The entries present in both maps.
 intersection :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
 intersection = combineMaps CombineIntersection
 
+-- | This map's entries that are absent from the other.
 difference :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
 difference = combineMaps CombineDifference
 
+-- | The entries present in exactly one of the two maps.
 symmetricDifference :: Eq v => HashMap k v -> HashMap k v -> HashMap k v
 symmetricDifference = combineMaps CombineSymmetricDifference
 
+-- | The entries, in the map's own order.
 toList :: HashMap k v -> [(k, v)]
 toList (HashMap _ _ root) = foldrNode (:) [] root
 
+-- | The keys, in the map's own order.
 keys :: HashMap k v -> [k]
 keys = fmap fst . toList
 
+-- | The values.
 elems :: HashMap k v -> [v]
 elems = fmap snd . toList
 
+-- | Right fold over the entries, with the key available to the step function.
 foldrWithKey :: (k -> v -> b -> b) -> b -> HashMap k v -> b
 foldrWithKey folder seed (HashMap _ _ root) = foldrNode (\(k, v) acc -> folder k v acc) seed root
 
@@ -379,7 +422,7 @@ diff left@(HashMap leftPolicy _ leftRoot) right@(HashMap rightPolicy _ rightRoot
     semanticAdded =
       [EntryAdded key value | (key, value) <- toList right, not (member key left)]
 
--- Compare canonical nodes in lockstep. A positive pointer comparison is enough
+-- | Compare canonical nodes in lockstep. A positive pointer comparison is enough
 -- to prune an immutable descendant without invoking key or value equality; a
 -- negative result is never used as a semantic verdict.
 nodesEqual :: Eq v => HashPolicy k -> Int -> Node k v -> Node k v -> Bool
@@ -490,7 +533,7 @@ nodeOccupiedBitmap (Leaf hashValue _ _) shift = bitFor hashValue shift
 nodeOccupiedBitmap (Collision _ hashValue _) shift = bitFor hashValue shift
 nodeOccupiedBitmap (Branch _ dataMap nodeMap _ _) _ = dataMap .|. nodeMap
 
--- Enumeration visits a branch's inline payload run before its child run. This
+-- | Enumeration visits a branch's inline payload run before its child run. This
 -- slot order lets 'diffNodes' preserve that public traversal-derived ordering.
 nodeTraversalSlots :: Node k v -> Int -> [Int]
 nodeTraversalSlots EmptyNode _ = []
@@ -678,14 +721,14 @@ ptrEq :: a -> a -> Bool
 ptrEq left right = isTrue# (reallyUnsafePtrEquality# left right)
 {-# INLINE ptrEq #-}
 
--- Child lists are lazy, so force both internal nodes to constructor form before
+-- | Child lists are lazy, so force both internal nodes to constructor form before
 -- asking GHC for positive identity. This follows indirections introduced by
 -- evaluation while preserving the non-strict value shortcut in 'valuesEqual'.
 nodePtrEq :: Node k v -> Node k v -> Bool
 nodePtrEq left right = left `seq` right `seq` ptrEq left right
 {-# INLINE nodePtrEq #-}
 
--- A shared record is sufficient but not required: strict projection can copy
+-- | A shared record is sufficient but not required: strict projection can copy
 -- the record while retaining both exact function closures. Positive identity
 -- of both closures is a safe witness that stored hashes and key equivalence
 -- came from one policy implementation. A negative result is never semantic.
@@ -1008,7 +1051,7 @@ removeCollision hashPolicy key ((candidate, value) : rest)
         Nothing -> Nothing
         Just (removed, remaining) -> Just (removed, (candidate, value) : remaining)
 
--- Updates an existing value and rebuilds exactly the visited trie spine.
+-- | Updates an existing value and rebuilds exactly the visited trie spine.
 -- The old lookup-plus-insert implementation traversed the same hash path
 -- twice and repeated the collision-bucket search.
 adjustNode :: HashPolicy k -> (v -> v) -> Word32 -> k -> Int -> Node k v -> AdjustResult k v

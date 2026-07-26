@@ -1,3 +1,4 @@
+-- | Tests for the ordered and query cursors.
 module OrderedSearchCursorTests (run) where
 
 import Data.Word (Word64)
@@ -24,6 +25,7 @@ instance Ord Ranked where
 rankedLabel :: Ranked -> String
 rankedLabel (Ranked _ label) = label
 
+-- | Runs this module's test cases, reporting each result.
 run :: IO ()
 run = do
   testSortedCursors

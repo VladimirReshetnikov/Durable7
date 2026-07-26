@@ -1,6 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
+-- | A persistent priority queue caching the minimum-priority entry as its measure.
+--
+-- Peeking is a cached read and removal is a measure-directed descent. Every operation returns a
+-- new version and leaves its inputs valid, sharing unchanged structure, so an edit copies a path
+-- rather than the whole collection.
 module Durable7.FingerTree.PriorityQueue
   ( PriorityQueue
   , empty
@@ -42,6 +47,8 @@ data Entry p a = Entry !p a
 instance Ord p => FT.Measured (PrioritySummary p) (Entry p a) where
   measure (Entry priority _) = PrioritySummary 1 (Just priority)
 
+-- | A persistent priority queue caching the minimum-priority entry as its measure, so peeking is a
+-- cached read and removal is a measure-directed descent.
 newtype PriorityQueue p a = PriorityQueue (FT.FingerTree (PrioritySummary p) (Entry p a))
   deriving (Show)
 
@@ -52,45 +59,56 @@ instance (Ord p, Eq a) => Eq (PriorityQueue p a) where
 instance (Ord p, Ord a) => Ord (PriorityQueue p a) where
   compare left right = compare (toList left) (toList right)
 
+-- | The empty queue.
 empty :: PriorityQueue p a
 empty = PriorityQueue FT.empty
 
+-- | A queue holding one entry.
 singleton :: Ord p => p -> a -> PriorityQueue p a
 singleton priority value = enqueue priority value empty
 
+-- | A queue holding a list's entries, built in bulk rather than by repeated insertion.
 fromList :: Ord p => [(p, a)] -> PriorityQueue p a
 fromList = List.foldl' (\queue (priority, value) -> enqueue priority value queue) empty
 
+-- | The entries, in the queue's own order.
 toList :: Ord p => PriorityQueue p a -> [(p, a)]
 toList (PriorityQueue tree) = map unwrap (FT.toList tree)
   where
     unwrap (Entry priority value) = (priority, value)
 
+-- | Number of entries in the queue.
 count :: Ord p => PriorityQueue p a -> Int
 count (PriorityQueue tree) =
   case FT.measureTree tree of
     PrioritySummary total _ -> total
 
+-- | Whether the queue holds no entries.
 null :: Ord p => PriorityQueue p a -> Bool
 null queue = count queue == 0
 
+-- | A queue with the entry added.
 enqueue :: Ord p => p -> a -> PriorityQueue p a -> PriorityQueue p a
 enqueue priority value (PriorityQueue tree) = PriorityQueue (FT.snoc tree (Entry priority value))
 
+-- | The queue holding both operands' entries.
 meld :: Ord p => PriorityQueue p a -> PriorityQueue p a -> PriorityQueue p a
 meld (PriorityQueue left) (PriorityQueue right) = PriorityQueue (FT.append left right)
 
+-- | The minimum priority present, or `Nothing` when empty.
 peekPriority :: Ord p => PriorityQueue p a -> Maybe p
 peekPriority (PriorityQueue tree) =
   case FT.measureTree tree of
     PrioritySummary _ minimumPriority -> minimumPriority
 
+-- | The minimum-priority entry, or `Nothing` when empty.
 peek :: Ord p => PriorityQueue p a -> Maybe (a, p)
 peek queue =
   case splitFront queue of
     Just (_, value, priority, _) -> Just (value, priority)
     Nothing -> Nothing
 
+-- | The minimum-priority entry together with the queue remaining, or `Nothing` when empty.
 dequeue :: Ord p => PriorityQueue p a -> Maybe ((a, p), PriorityQueue p a)
 dequeue queue =
   case splitFront queue of

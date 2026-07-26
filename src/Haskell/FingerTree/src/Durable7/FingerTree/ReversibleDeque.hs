@@ -1,3 +1,9 @@
+-- | A persistent deque whose order can be reversed in constant time.
+--
+-- Reversal flips an orientation flag and shares the underlying tree rather than rebuilding it, so
+-- it costs the same whatever the deque's size. Every operation returns a new version and leaves
+-- its inputs valid, sharing unchanged structure, so an edit copies a path rather than the whole
+-- collection.
 module Durable7.FingerTree.ReversibleDeque
   ( ReversibleDeque
   , Cursor
@@ -40,6 +46,8 @@ import Prelude hiding (last, null, reverse)
 
 import qualified Data.List as List
 
+-- | A persistent deque whose order can be reversed in constant time, by flipping an orientation
+-- flag and sharing the underlying tree rather than rebuilding it.
 newtype ReversibleDeque a = ReversibleDeque (Tree a)
   deriving (Show)
 
@@ -66,36 +74,47 @@ data Elem a
   | Node !Bool !Int [Elem a]
   deriving (Eq, Ord, Read, Show)
 
+-- | The empty deque.
 empty :: ReversibleDeque a
 empty = ReversibleDeque Empty
 
+-- | A deque holding one element.
 singleton :: a -> ReversibleDeque a
 singleton value = ReversibleDeque (Single (Leaf value))
 
+-- | A deque holding a list's elements, built in bulk rather than by repeated insertion.
 fromList :: [a] -> ReversibleDeque a
 fromList = List.foldl' snoc empty
 
+-- | The elements, in the deque's own order.
 toList :: ReversibleDeque a -> [a]
 toList (ReversibleDeque tree) = buildTree tree []
 
+-- | Number of elements in the deque.
 count :: ReversibleDeque a -> Int
 count (ReversibleDeque tree) = treeSize tree
 
+-- | Whether the deque holds no elements.
 null :: ReversibleDeque a -> Bool
 null deque = count deque == 0
 
+-- | A deque with the element added at the front.
 cons :: a -> ReversibleDeque a -> ReversibleDeque a
 cons value (ReversibleDeque tree) = ReversibleDeque (treeCons (Leaf value) tree)
 
+-- | A deque with the element added at the back.
 snoc :: ReversibleDeque a -> a -> ReversibleDeque a
 snoc (ReversibleDeque tree) value = ReversibleDeque (treeSnoc tree (Leaf value))
 
+-- | The concatenation of two deques, sharing both operands' unchanged structure.
 append :: ReversibleDeque a -> ReversibleDeque a -> ReversibleDeque a
 append (ReversibleDeque left) (ReversibleDeque right) = ReversibleDeque (treeConcat left right)
 
+-- | The deque in the opposite order.
 reverse :: ReversibleDeque a -> ReversibleDeque a
 reverse (ReversibleDeque tree) = ReversibleDeque (treeMirror tree)
 
+-- | The leftmost element together with the rest, or the empty view.
 viewL :: ReversibleDeque a -> Maybe (a, ReversibleDeque a)
 viewL (ReversibleDeque tree) =
   case treeViewL tree of
@@ -106,6 +125,7 @@ viewL (ReversibleDeque tree) =
         Nothing -> Nothing
     Nothing -> Nothing
 
+-- | The rightmost element together with the rest, or the empty view.
 viewR :: ReversibleDeque a -> Maybe (ReversibleDeque a, a)
 viewR (ReversibleDeque tree) =
   case treeViewR tree of
@@ -116,63 +136,82 @@ viewR (ReversibleDeque tree) =
         Nothing -> Nothing
     Nothing -> Nothing
 
+-- | The first element.
 first :: ReversibleDeque a -> Maybe a
 first deque = fst <$> viewL deque
 
+-- | The last element.
 last :: ReversibleDeque a -> Maybe a
 last deque = snd <$> viewR deque
 
+-- | The element at the given rank.
 index :: Int -> ReversibleDeque a -> Maybe a
 index position (ReversibleDeque tree)
   | position < 0 || position >= treeSize tree = Nothing
   | otherwise = Just (treeGetLeaf tree position)
 
+-- | A cursor before the first element.
 cursor :: ReversibleDeque a -> Cursor a
 cursor deque = Cursor deque 0
 
+-- | The element at the given rank.
 cursorAt :: Int -> ReversibleDeque a -> Maybe (Cursor a)
 cursorAt position deque
   | position < 0 || position > count deque = Nothing
   | otherwise = Just (Cursor deque position)
 
+-- | The cursor's gap position.
 cursorPosition :: Cursor a -> Int
 cursorPosition (Cursor _ position) = position
 
+-- | Number of elements in the deque version the cursor is positioned in.
 cursorCount :: Cursor a -> Int
 cursorCount (Cursor deque _) = count deque
 
+-- | Whether the gap precedes the first element.
 cursorIsAtStart :: Cursor a -> Bool
 cursorIsAtStart value = cursorPosition value == 0
 
+-- | Whether the gap follows the last element.
 cursorIsAtEnd :: Cursor a -> Bool
 cursorIsAtEnd value = cursorPosition value == cursorCount value
 
+-- | The element immediately before the gap, or `Nothing` at the start.
 cursorPeekPrevious :: Cursor a -> Maybe a
 cursorPeekPrevious (Cursor deque position) = index (position - 1) deque
 
+-- | The element immediately after the gap, or `Nothing` at the end.
 cursorPeekNext :: Cursor a -> Maybe a
 cursorPeekNext (Cursor deque position) = index position deque
 
+-- | A cursor one position earlier. The receiver is unchanged.
 cursorMovePrevious :: Cursor a -> Maybe (Cursor a)
 cursorMovePrevious (Cursor deque position) = cursorAt (position - 1) deque
 
+-- | A cursor one position later. The receiver is unchanged.
 cursorMoveNext :: Cursor a -> Maybe (Cursor a)
 cursorMoveNext (Cursor deque position)
   | position == count deque = Nothing
   | otherwise = cursorAt (position + 1) deque
 
+-- | A cursor at the given position within the same deque version.
 cursorSeek :: Int -> Cursor a -> Maybe (Cursor a)
 cursorSeek position (Cursor deque _) = cursorAt position deque
 
+-- | A deque containing the given element.
 cursorInsert :: a -> Cursor a -> Cursor a
 cursorInsert value = cursorInsertList [value]
 
+-- | Inserts a list's elements at the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorInsertList :: [a] -> Cursor a -> Cursor a
 cursorInsertList [] value = value
 cursorInsertList values (Cursor deque position) =
   let (left, right) = List.splitAt position (toList deque)
   in Cursor (fromList (left ++ values ++ right)) (position + length values)
 
+-- | Removes the element before the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeletePrevious :: Cursor a -> Maybe (Cursor a)
 cursorDeletePrevious (Cursor deque position)
   | position == 0 = Nothing
@@ -180,6 +219,8 @@ cursorDeletePrevious (Cursor deque position)
       let values = toList deque
       in Just (Cursor (fromList (take (position - 1) values ++ drop position values)) (position - 1))
 
+-- | Removes the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeleteNext :: Cursor a -> Maybe (Cursor a)
 cursorDeleteNext (Cursor deque position)
   | position == count deque = Nothing
@@ -187,6 +228,8 @@ cursorDeleteNext (Cursor deque position)
       let values = toList deque
       in Just (Cursor (fromList (take position values ++ drop (position + 1) values)) position)
 
+-- | Replaces the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorReplaceNext :: a -> Cursor a -> Maybe (Cursor a)
 cursorReplaceNext value (Cursor deque position)
   | position == count deque = Nothing
@@ -194,9 +237,11 @@ cursorReplaceNext value (Cursor deque position)
       let values = toList deque
       in Just (Cursor (fromList (take position values ++ value : drop (position + 1) values)) position)
 
+-- | The deque in the opposite order.
 cursorReverse :: Cursor a -> Cursor a
 cursorReverse (Cursor deque position) = Cursor (reverse deque) (count deque - position)
 
+-- | The deque version this cursor is positioned in.
 cursorSnapshot :: Cursor a -> ReversibleDeque a
 cursorSnapshot (Cursor deque _) = deque
 

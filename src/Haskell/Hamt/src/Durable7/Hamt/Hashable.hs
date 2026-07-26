@@ -1,5 +1,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 
+-- | The `Hashable` class the persistent hash collections branch on.
+--
+-- Keys that compare equal must hash identically; the collections' equivalence classes depend on
+-- it.
 module Durable7.Hamt.Hashable
   ( Hashable(..)
   , combineHash
@@ -8,12 +12,14 @@ module Durable7.Hamt.Hashable
 import Data.Bits (shiftL, shiftR, xor)
 import Data.Char (ord)
 
+-- | A key type the hash collections can hash. Keys that compare equal must hash identically.
 class Hashable a where
   hashWithSalt :: Int -> a -> Int
 
   hash :: a -> Int
   hash = hashWithSalt 0
 
+-- | Combines two hashes into one, for hashing a compound key.
 combineHash :: Int -> Int -> Int
 combineHash salt value = mix (salt `xor` (value + golden + (salt `shiftL` 6) + (salt `shiftR` 2)))
   where

@@ -1,3 +1,4 @@
+-- | Entry point for the durable7-hamt test suite.
 module Main (main) where
 
 import Prelude hiding (lookup, null)
@@ -70,6 +71,7 @@ data ExplosiveValue = ExplosiveValue !Int
 instance Eq ExplosiveValue where
   _ == _ = error "intentional value-equality failure"
 
+-- | Entry point running this package's test suite.
 main :: IO ()
 main = do
   testMapBasics

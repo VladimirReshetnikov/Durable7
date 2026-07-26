@@ -3,6 +3,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
 
+-- | The measured finger tree: a persistent sequence caching a monoidal measure at every node.
+--
+-- Because each node's measure is readable without descending into it, one generic split answers
+-- any monotone question the measure can express without visiting the elements it skips. Nearly
+-- every other structure in this package is this tree under a different measure. Every operation
+-- returns a new version and leaves its inputs valid, sharing unchanged structure, so an edit
+-- copies a path rather than the whole collection.
 module Durable7.FingerTree.Measured
   ( Measured(..)
   , FingerTree
@@ -53,6 +60,8 @@ import qualified Data.List as List
 class Monoid v => Measured v a where
   measure :: a -> v
 
+-- | A tree end holding one to four elements. Keeping the ends short and cheap to modify is what
+-- makes push and pop amortized constant time.
 data Digit a
   = One a
   | Two a a
@@ -60,11 +69,15 @@ data Digit a
   | Four a a a a
   deriving (Eq, Ord, Read, Show)
 
+-- | An interior node of two or three children, caching their combined measure.
 data Node v a
   = Node2 !v !a !a
   | Node3 !v !a !a !a
   deriving (Eq, Ord, Read, Show)
 
+-- | A persistent sequence caching a monoidal measure at every node. Because each node's measure is
+-- readable without descending into it, one generic split answers any monotone question the
+-- measure can express without visiting the elements it skips.
 data FingerTree v a
   = Empty
   | Single a
@@ -75,6 +88,7 @@ data FingerTree v a
   | Deep !v !(Digit a) (FingerTree v (Node v a)) !(Digit a)
   deriving (Eq, Ord, Read, Show)
 
+-- | The result of viewing a tree from the left: empty, or the first element and the rest.
 data ViewL v a
   = EmptyL
   | a :< FingerTree v a
@@ -82,6 +96,7 @@ data ViewL v a
 
 infixr 5 :<
 
+-- | The result of viewing a tree from the right: empty, or the last element and the rest.
 data ViewR v a
   = EmptyR
   | FingerTree v a :> a
@@ -115,22 +130,26 @@ instance Measured v a => Measured v (Node v a) where
   measure (Node2 value _ _) = value
   measure (Node3 value _ _ _) = value
 
+-- | The empty tree.
 empty :: FingerTree v a
 empty = Empty
 
+-- | A tree holding one element.
 singleton :: a -> FingerTree v a
 singleton = Single
 
+-- | Whether the tree holds no elements.
 null :: FingerTree v a -> Bool
 null Empty = True
 null _ = False
 
+-- | The tree's combined measure.
 measureTree :: Measured v a => FingerTree v a -> v
 measureTree Empty = mempty
 measureTree (Single value) = measure value
 measureTree (Deep value _ _ _) = value
 
--- Deep results extend the cached measure incrementally instead of calling
+-- | Deep results extend the cached measure incrementally instead of calling
 -- deep: deep measures its middle, which would force the suspended overflow
 -- cascade eagerly and defeat the lazy spine documented on the Deep
 -- constructor. A cons puts the new element on the LEFT of every existing
@@ -145,6 +164,7 @@ cons value (Deep v (Four a b c d) middle suffix) =
 cons value (Deep v prefix middle suffix) =
   Deep (measure value <> v) (consDigit value prefix) middle suffix
 
+-- | A tree with the element added at the back.
 snoc :: Measured v a => FingerTree v a -> a -> FingerTree v a
 snoc Empty value = Single value
 snoc (Single old) value = deep (One old) Empty (One value)
@@ -153,18 +173,22 @@ snoc (Deep v prefix middle (Four a b c d)) value =
 snoc (Deep v prefix middle suffix) value =
   Deep (v <> measure value) prefix middle (snocDigit suffix value)
 
+-- | The concatenation of two trees, sharing both operands' unchanged structure.
 append :: Measured v a => FingerTree v a -> FingerTree v a -> FingerTree v a
 append left right = app3 left [] right
 
+-- | A tree holding a list's elements, built in bulk rather than by repeated insertion.
 fromList :: Measured v a => [a] -> FingerTree v a
 fromList = List.foldl' snoc Empty
 
+-- | The elements, in the tree's own order.
 toList :: Measured v a => FingerTree v a -> [a]
 toList tree =
   case viewL tree of
     EmptyL -> []
     value :< rest -> value : toList rest
 
+-- | The leftmost element together with the rest, or the empty view.
 viewL :: Measured v a => FingerTree v a -> ViewL v a
 viewL Empty = EmptyL
 viewL (Single value) = value :< Empty
@@ -175,6 +199,7 @@ viewL (Deep _ prefix middle suffix) =
     Three a b c -> a :< deep (Two b c) middle suffix
     Four a b c d -> a :< deep (Three b c d) middle suffix
 
+-- | The rightmost element together with the rest, or the empty view.
 viewR :: Measured v a => FingerTree v a -> ViewR v a
 viewR Empty = EmptyR
 viewR (Single value) = Empty :> value
@@ -185,92 +210,115 @@ viewR (Deep _ prefix middle suffix) =
     Three a b c -> deep prefix middle (Two a b) :> c
     Four a b c d -> deep prefix middle (Three a b c) :> d
 
+-- | The first element.
 head :: Measured v a => FingerTree v a -> Maybe a
 head tree =
   case viewL tree of
     EmptyL -> Nothing
     value :< _ -> Just value
 
+-- | The last element.
 last :: Measured v a => FingerTree v a -> Maybe a
 last tree =
   case viewR tree of
     EmptyR -> Nothing
     _ :> value -> Just value
 
+-- | Splits at the first point where the accumulated measure satisfies the predicate.
 split :: Measured v a => (v -> Bool) -> FingerTree v a -> Maybe (FingerTree v a, a, FingerTree v a)
 split predicate tree
   | null tree = Nothing
   | not (predicate (measureTree tree)) = Nothing
   | otherwise = Just (splitTree predicate mempty tree)
 
+-- | Where a measured search lands.
 locate :: Measured v a => (v -> Bool) -> FingerTree v a -> Maybe (v, a)
 locate predicate tree =
   case split predicate tree of
     Just (left, value, _) -> Just (measureTree left, value)
     Nothing -> Nothing
 
+-- | A cursor before the first element.
 cursorAtStart :: FingerTree v a -> Cursor v a
 cursorAtStart snapshot = Cursor snapshot Empty snapshot
 
+-- | A cursor after the last element.
 cursorAtEnd :: FingerTree v a -> Cursor v a
 cursorAtEnd snapshot = Cursor snapshot snapshot Empty
 
+-- | A cursor at the first gap where the measure satisfies the predicate.
 cursorByMeasure :: Measured v a => (v -> Bool) -> FingerTree v a -> CursorSearch v a
 cursorByMeasure predicate snapshot =
   case split predicate snapshot of
     Just (left, value, right) -> CursorSearch (Cursor snapshot left (cons value right)) True
     Nothing -> CursorSearch (cursorAtEnd snapshot) False
 
+-- | Whether the gap precedes the first element.
 cursorIsAtStart :: Cursor v a -> Bool
 cursorIsAtStart (Cursor _ left _) = null left
 
+-- | Whether the gap follows the last element.
 cursorIsAtEnd :: Cursor v a -> Bool
 cursorIsAtEnd (Cursor _ _ right) = null right
 
+-- | The combined measure of everything before the gap.
 cursorMeasureBefore :: Measured v a => Cursor v a -> v
 cursorMeasureBefore (Cursor _ left _) = measureTree left
 
+-- | The combined measure of everything after the gap.
 cursorMeasureAfter :: Measured v a => Cursor v a -> v
 cursorMeasureAfter (Cursor _ _ right) = measureTree right
 
+-- | The element immediately before the gap, or `Nothing` at the start.
 cursorPeekPrevious :: Measured v a => Cursor v a -> Maybe a
 cursorPeekPrevious (Cursor _ left _) = last left
 
+-- | The element immediately after the gap, or `Nothing` at the end.
 cursorPeekNext :: Measured v a => Cursor v a -> Maybe a
 cursorPeekNext (Cursor _ _ right) = head right
 
+-- | A cursor one position earlier. The receiver is unchanged.
 cursorMovePrevious :: Measured v a => Cursor v a -> Maybe (Cursor v a)
 cursorMovePrevious (Cursor snapshot left right) =
   case viewR left of
     EmptyR -> Nothing
     remaining :> value -> Just (Cursor snapshot remaining (cons value right))
 
+-- | A cursor one position later. The receiver is unchanged.
 cursorMoveNext :: Measured v a => Cursor v a -> Maybe (Cursor v a)
 cursorMoveNext (Cursor snapshot left right) =
   case viewL right of
     EmptyL -> Nothing
     value :< remaining -> Just (Cursor snapshot (snoc left value) remaining)
 
+-- | A cursor at the first gap where the measure satisfies the predicate.
 cursorSeekByMeasure :: Measured v a => (v -> Bool) -> Cursor v a -> CursorSearch v a
 cursorSeekByMeasure predicate (Cursor snapshot _ _) = cursorByMeasure predicate snapshot
 
+-- | A tree containing the given element.
 cursorInsert :: Measured v a => a -> Cursor v a -> Cursor v a
 cursorInsert value (Cursor _ left right) =
   let left' = snoc left value
   in Cursor (append left' right) left' right
 
+-- | Removes the element before the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeletePrevious :: Measured v a => Cursor v a -> Maybe (Cursor v a)
 cursorDeletePrevious (Cursor _ left right) =
   case viewR left of
     EmptyR -> Nothing
     remaining :> _ -> Just (Cursor (append remaining right) remaining right)
 
+-- | Removes the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeleteNext :: Measured v a => Cursor v a -> Maybe (Cursor v a)
 cursorDeleteNext (Cursor _ left right) =
   case viewL right of
     EmptyL -> Nothing
     _ :< remaining -> Just (Cursor (append left remaining) left remaining)
 
+-- | Replaces the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorReplaceNext :: Measured v a => a -> Cursor v a -> Maybe (Cursor v a)
 cursorReplaceNext value (Cursor _ left right) =
   case viewL right of
@@ -279,6 +327,7 @@ cursorReplaceNext value (Cursor _ left right) =
       let right' = cons value remaining
       in Just (Cursor (append left right') left right')
 
+-- | The tree version this cursor is positioned in.
 cursorSnapshot :: Cursor v a -> FingerTree v a
 cursorSnapshot (Cursor snapshot _ _) = snapshot
 

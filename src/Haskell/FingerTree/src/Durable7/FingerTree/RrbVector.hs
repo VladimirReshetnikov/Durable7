@@ -1,6 +1,12 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MagicHash #-}
 
+-- | A persistent relaxed radix-balanced vector: indexed access with cheap concatenation.
+--
+-- Radix addressing gives effectively constant-time indexing; allowing nodes to be slightly
+-- underfull ('relaxed') is what makes concatenation and splitting logarithmic instead of linear.
+-- Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+-- so an edit copies a path rather than the whole collection.
 module Durable7.FingerTree.RrbVector
   ( RrbVector
   , Cursor
@@ -67,6 +73,9 @@ maximumHeight :: Int
 -- concatenation may legally retain one additional level of slack.
 maximumHeight = (finiteBitSize (0 :: Int) - 1) `div` radixBits + 1
 
+-- | A persistent relaxed radix-balanced vector. Radix addressing gives effectively constant-time
+-- indexing; allowing nodes to be slightly underfull ('relaxed') is what makes concatenation and
+-- splitting logarithmic instead of linear.
 data RrbVector a = RrbVector !(Maybe (Node a))
 
 -- | Immutable root-plus-position gap cursor over an RRB vector.
@@ -77,6 +86,8 @@ data Node a
   = Leaf !(Array Int a)
   | Branch !Int !Int !(Array Int (Node a)) !(Maybe (Array Int Int))
 
+-- | Shape measurements from a structural audit. The regular and relaxed branch counts show how much
+-- of the tree still uses pure radix addressing.
 data RrbStatistics = RrbStatistics
   { statisticsCount :: !Int
   , statisticsHeight :: !Int
@@ -103,33 +114,41 @@ instance Semigroup (RrbVector a) where
 instance Monoid (RrbVector a) where
   mempty = empty
 
+-- | The empty vector.
 empty :: RrbVector a
 empty = RrbVector Nothing
 
+-- | A vector holding one element.
 singleton :: a -> RrbVector a
 singleton value = RrbVector (Just (leafFromList [value]))
 
+-- | A vector holding a list's elements, built in bulk rather than by repeated insertion.
 fromList :: [a] -> RrbVector a
 fromList values =
   case map leafFromList (chunksOf branchFactor values) of
     [] -> empty
     leaves -> RrbVector (Just (buildLevel leaves))
 
+-- | The elements, in the vector's own order.
 toList :: RrbVector a -> [a]
 toList (RrbVector Nothing) = []
 toList (RrbVector (Just root)) = nodeToList root
 
+-- | Number of elements in the vector.
 count :: RrbVector a -> Int
 count (RrbVector Nothing) = 0
 count (RrbVector (Just root)) = nodeCount root
 
+-- | Whether the vector holds no elements.
 null :: RrbVector a -> Bool
 null (RrbVector root) = isNothing root
 
+-- | The structure's height.
 height :: RrbVector a -> Int
 height (RrbVector Nothing) = 0
 height (RrbVector (Just root)) = nodeHeight root
 
+-- | The element at the given rank.
 index :: Int -> RrbVector a -> Maybe a
 index position (RrbVector root)
   | position < 0 = Nothing
@@ -139,6 +158,7 @@ index position (RrbVector root)
         then Nothing
         else Just (indexNode position node)
 
+-- | The element at the given rank.
 setAt :: Eq a => Int -> a -> RrbVector a -> Maybe (RrbVector a)
 setAt position value vector@(RrbVector root)
   | position < 0 = Nothing
@@ -150,12 +170,15 @@ setAt position value vector@(RrbVector root)
           let (updated, changed) = setNode position value node
           in Just (if changed then RrbVector (Just updated) else vector)
 
+-- | A vector with the element added at the front.
 cons :: a -> RrbVector a -> RrbVector a
 cons value vector = append (singleton value) vector
 
+-- | A vector with the element added at the back.
 snoc :: RrbVector a -> a -> RrbVector a
 snoc vector value = append vector (singleton value)
 
+-- | The concatenation of two vectors, sharing both operands' unchanged structure.
 append :: RrbVector a -> RrbVector a -> RrbVector a
 append (RrbVector Nothing) right = right
 append left (RrbVector Nothing) = left
@@ -164,6 +187,7 @@ append (RrbVector (Just left)) (RrbVector (Just right)) =
       roots = concatNodes left right
   in fromRoots roots
 
+-- | Splits into the elements before the position and those from it onward.
 splitAt :: Int -> RrbVector a -> Maybe (RrbVector a, RrbVector a)
 splitAt position vector@(RrbVector root)
   | position < 0 || position > count vector = Nothing
@@ -174,12 +198,14 @@ splitAt position vector@(RrbVector root)
       let (left, right) = splitNode position node
       pure (fromRoot left, fromRoot right)
 
+-- | A vector with a list's elements inserted at the position.
 insertListAt :: Int -> [a] -> RrbVector a -> Maybe (RrbVector a)
 insertListAt position values vector = do
   (left, right) <- splitAt position vector
   let middle = fromList values
   pure (if null middle then vector else append (append left middle) right)
 
+-- | A vector without the elements in the range.
 removeRange :: Int -> Int -> RrbVector a -> Maybe (RrbVector a)
 removeRange position amount vector
   | position < 0 || amount < 0 = Nothing
@@ -190,6 +216,7 @@ removeRange position amount vector
       (_, right) <- splitAt amount tailVector
       pure (append left right)
 
+-- | The vector without its last element, together with that element.
 unsnoc :: RrbVector a -> Maybe (RrbVector a, a)
 unsnoc vector
   | null vector = Nothing
@@ -198,6 +225,7 @@ unsnoc vector
       remaining <- removeRange (count vector - 1) 1 vector
       pure (remaining, value)
 
+-- | Checks the vector's structural invariants. For tests and diagnostics.
 validateStructure :: RrbVector a -> Maybe RrbStatistics
 validateStructure (RrbVector Nothing) = Just (RrbStatistics 0 0 0 0 0 0 0 0 0 0)
 validateStructure (RrbVector (Just root)) = do
@@ -206,6 +234,8 @@ validateStructure (RrbVector (Just root)) = do
     then Nothing
     else Just (finishStatistics actualCount actualHeight accumulator)
 
+-- | Whether both versions reference the same root node. A representation check used to confirm a
+-- no-op avoided copying, not an equality test.
 sharesRootWith :: RrbVector a -> RrbVector a -> IO Bool
 sharesRootWith (RrbVector Nothing) (RrbVector Nothing) = pure True
 sharesRootWith (RrbVector (Just left)) (RrbVector (Just right)) = do
@@ -216,51 +246,67 @@ sharesRootWith (RrbVector (Just left)) (RrbVector (Just right)) = do
   pure (leftName `eqStableName` rightName)
 sharesRootWith _ _ = pure False
 
+-- | A cursor before the first element.
 cursor :: RrbVector a -> Cursor a
 cursor vector = Cursor vector 0
 
+-- | The element at the given rank.
 cursorAt :: Int -> RrbVector a -> Maybe (Cursor a)
 cursorAt position vector
   | position < 0 || position > count vector = Nothing
   | otherwise = Just (Cursor vector position)
 
+-- | The cursor's gap position.
 cursorPosition :: Cursor a -> Int
 cursorPosition (Cursor _ position) = position
 
+-- | Number of elements in the vector version the cursor is positioned in.
 cursorCount :: Cursor a -> Int
 cursorCount (Cursor vector _) = count vector
 
+-- | Whether the gap precedes the first element.
 cursorIsAtStart :: Cursor a -> Bool
 cursorIsAtStart value = cursorPosition value == 0
 
+-- | Whether the gap follows the last element.
 cursorIsAtEnd :: Cursor a -> Bool
 cursorIsAtEnd value = cursorPosition value == cursorCount value
 
+-- | The element immediately before the gap, or `Nothing` at the start.
 cursorPeekPrevious :: Cursor a -> Maybe a
 cursorPeekPrevious (Cursor vector position) = index (position - 1) vector
 
+-- | The element immediately after the gap, or `Nothing` at the end.
 cursorPeekNext :: Cursor a -> Maybe a
 cursorPeekNext (Cursor vector position) = index position vector
 
+-- | A cursor one position earlier. The receiver is unchanged.
 cursorMovePrevious :: Cursor a -> Maybe (Cursor a)
 cursorMovePrevious (Cursor vector position) = cursorAt (position - 1) vector
 
+-- | A cursor one position later. The receiver is unchanged.
 cursorMoveNext :: Cursor a -> Maybe (Cursor a)
 cursorMoveNext (Cursor vector position)
   | position == count vector = Nothing
   | otherwise = cursorAt (position + 1) vector
 
+-- | A cursor at the given position within the same vector version.
 cursorSeek :: Int -> Cursor a -> Maybe (Cursor a)
 cursorSeek position (Cursor vector _) = cursorAt position vector
 
+-- | A vector containing the given element.
 cursorInsert :: a -> Cursor a -> Cursor a
 cursorInsert value = cursorInsertList [value]
 
+-- | Inserts a list's elements at the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorInsertList :: [a] -> Cursor a -> Cursor a
 cursorInsertList [] value = value
 cursorInsertList values (Cursor vector position) =
   Cursor (expectCursorEdit "insert" (insertListAt position values vector)) (checkedAdd position (length values))
 
+-- | Inserts a vector's elements at the gap, producing a new version the returned cursor is
+-- positioned in.
 cursorInsertVector :: RrbVector a -> Cursor a -> Cursor a
 cursorInsertVector inserted value | null inserted = value
 cursorInsertVector inserted (Cursor vector position) =
@@ -268,21 +314,28 @@ cursorInsertVector inserted (Cursor vector position) =
     Just (left, right) -> Cursor (append (append left inserted) right) (checkedAdd position (count inserted))
     Nothing -> error "Durable7.FingerTree.RrbVector.cursorInsertVector: invalid cursor"
 
+-- | Removes the element before the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeletePrevious :: Cursor a -> Maybe (Cursor a)
 cursorDeletePrevious (Cursor vector position)
   | position == 0 = Nothing
   | otherwise = Just (Cursor (expectCursorEdit "delete previous" (removeRange (position - 1) 1 vector)) (position - 1))
 
+-- | Removes the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeleteNext :: Cursor a -> Maybe (Cursor a)
 cursorDeleteNext (Cursor vector position)
   | position == count vector = Nothing
   | otherwise = Just (Cursor (expectCursorEdit "delete next" (removeRange position 1 vector)) position)
 
+-- | Replaces the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorReplaceNext :: Eq a => a -> Cursor a -> Maybe (Cursor a)
 cursorReplaceNext value (Cursor vector position)
   | position == count vector = Nothing
   | otherwise = Just (Cursor (expectCursorEdit "replace next" (setAt position value vector)) position)
 
+-- | The vector version this cursor is positioned in.
 cursorSnapshot :: Cursor a -> RrbVector a
 cursorSnapshot (Cursor vector _) = vector
 

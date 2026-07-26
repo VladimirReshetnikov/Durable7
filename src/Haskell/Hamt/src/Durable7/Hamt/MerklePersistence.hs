@@ -5,6 +5,11 @@
 -- The API is deliberately pure.  A 'MerkleBlockStore' is an immutable snapshot and operations
 -- that publish blocks return a successor store only after every byte, closure, budget, and
 -- destination conflict has been verified.
+-- | Merkle block storage, proofs, verification budgets, and three-way merge.
+--
+-- Everything crossing a trust boundary is verified: a block is checked against the digest it was
+-- fetched by, and every verification is charged against a caller-supplied budget so crafted input
+-- cannot force unbounded work.
 module Durable7.Hamt.MerklePersistence
   ( MerkleBlock(..)
   , MerkleBlockStore
@@ -130,21 +135,27 @@ data MerkleBlock = MerkleBlock
 newtype MerkleBlockStore = MerkleBlockStore (Map MerkleDigest MerkleBlock)
   deriving (Eq, Show)
 
+-- | The empty block store.
 emptyBlockStore :: MerkleBlockStore
 emptyBlockStore = MerkleBlockStore Map.empty
 
+-- | Number of blocks in the store.
 blockStoreSize :: MerkleBlockStore -> Int
 blockStoreSize (MerkleBlockStore blocks) = Map.size blocks
 
+-- | Whether the store holds no blocks.
 blockStoreNull :: MerkleBlockStore -> Bool
 blockStoreNull (MerkleBlockStore blocks) = Map.null blocks
 
+-- | Every stored digest.
 blockStoreDigests :: MerkleBlockStore -> [MerkleDigest]
 blockStoreDigests (MerkleBlockStore blocks) = Map.keys blocks
 
+-- | Whether the block is present.
 blockStoreContains :: MerkleDigest -> MerkleBlockStore -> Bool
 blockStoreContains digest (MerkleBlockStore blocks) = Map.member digest blocks
 
+-- | The value stored for the key, or `Nothing` when absent.
 blockStoreLookup :: MerkleDigest -> MerkleBlockStore -> Maybe MerkleBlock
 blockStoreLookup digest (MerkleBlockStore blocks) = Map.lookup digest blocks
 
@@ -162,11 +173,13 @@ putBlock block store@(MerkleBlockStore blocks) =
           "a digest is already associated with different block bytes"
           (Just (merkleBlockDigest block)))
 
+-- | A store without the block under that digest.
 removeBlock :: MerkleDigest -> MerkleBlockStore -> (Bool, MerkleBlockStore)
 removeBlock digest store@(MerkleBlockStore blocks)
   | Map.member digest blocks = (True, MerkleBlockStore (Map.delete digest blocks))
   | otherwise = (False, store)
 
+-- | The empty store.
 clearBlockStore :: MerkleBlockStore -> MerkleBlockStore
 clearBlockStore store
   | blockStoreNull store = store
@@ -213,6 +226,7 @@ makeMerkleBlockPack algorithm domain root blocks
             "a Merkle pack byte count overflowed" (Just (merkleBlockDigest block))
           Right (Set.insert (merkleBlockDigest block) seen, total')
 
+-- | How many blocks the pack carries.
 packBlockCount :: MerkleBlockPack -> Int
 packBlockCount = length . packBlocks
 
@@ -234,12 +248,14 @@ data MerkleVerificationFailureKind
   | ResourceLimitExceeded
   deriving (Eq, Show)
 
+-- | Why a verification rejected its input.
 data MerkleVerificationError = MerkleVerificationError
   { verificationFailureKind :: !MerkleVerificationFailureKind
   , verificationMessage :: !String
   , verificationBlockDigest :: !(Maybe MerkleDigest)
   } deriving (Eq, Show)
 
+-- | Which budget limit an untrusted input tried to exceed.
 data MerkleBudgetError
   = ZeroVerificationLimit !String
   | BlockByteLimitExceedsTotal
@@ -257,24 +273,31 @@ data MerkleVerificationBudget = MerkleVerificationBudget
   , verificationMaxProofQueryByteCount :: !Int
   } deriving (Eq, Show)
 
+-- | How many blocks a verification may charge before it fails.
 maxBlockCount :: MerkleVerificationBudget -> Int
 maxBlockCount = verificationMaxBlockCount
 
+-- | How many bytes a verification may charge in total.
 maxTotalByteCount :: MerkleVerificationBudget -> Word64
 maxTotalByteCount = verificationMaxTotalByteCount
 
+-- | How large one block may be.
 maxBlockByteCount :: MerkleVerificationBudget -> Int
 maxBlockByteCount = verificationMaxBlockByteCount
 
+-- | How deep a chain the input may force, which is what bounds a crafted tree's descent.
 maxDepth :: MerkleVerificationBudget -> Int
 maxDepth = verificationMaxDepth
 
+-- | How many entries a verification may decode.
 maxEntryCount :: MerkleVerificationBudget -> Word64
 maxEntryCount = verificationMaxEntryCount
 
+-- | How many children one block may reference.
 maxChildReferencesPerBlock :: MerkleVerificationBudget -> Int
 maxChildReferencesPerBlock = verificationMaxChildReferencesPerBlock
 
+-- | How large one proof query may be.
 maxProofQueryByteCount :: MerkleVerificationBudget -> Int
 maxProofQueryByteCount = verificationMaxProofQueryByteCount
 
@@ -305,6 +328,8 @@ makeMerkleVerificationBudget blocks totalBytes blockBytes depth entries children
       | value > 0 = Right ()
       | otherwise = Left (ZeroVerificationLimit name)
 
+-- | Limits suited to ordinary use. The budget is what keeps untrusted input from forcing unbounded
+-- work.
 defaultMerkleVerificationBudget :: MerkleVerificationBudget
 defaultMerkleVerificationBudget = MerkleVerificationBudget
   { verificationMaxBlockCount = 1000000
@@ -316,7 +341,7 @@ defaultMerkleVerificationBudget = MerkleVerificationBudget
   , verificationMaxProofQueryByteCount = 16 * 1024 * 1024
   }
 
--- Avoid importing the whole bit API for one manifest constant.
+-- | Avoid importing the whole bit API for one manifest constant.
 shiftLWord64 :: Word64 -> Int -> Word64
 shiftLWord64 value amount = value * (2 ^ amount)
 
@@ -850,11 +875,13 @@ trustedDecoded tree = Map.fromList
       , decodedValueBytes = Tree.entryValueBytes entry
       }
 
--- Proof and merge declarations are implemented below the wire helpers.
+-- | Proof and merge declarations are implemented below the wire helpers.
 
 data MerkleProofKind = MembershipProof | NonMembershipProof | RangeProof
   deriving (Eq, Show)
 
+-- | One block of a proof's chain, with the children the proof expands rather than takes on their
+-- digests.
 data MerkleProofStep = MerkleProofStep
   { proofStepBlock :: !MerkleBlock
   , proofStepExpandedChildIndexes :: ![Int]
@@ -871,6 +898,7 @@ makeMerkleProofStep block indexes
   where
     sorted = sort indexes
 
+-- | A proof of a key's presence or absence against a root digest.
 data MerkleProof = MerkleProof
   { proofAlgorithmId :: !String
   , proofDomainDigest :: !MerkleDigest
@@ -903,12 +931,14 @@ makeMerkleProof algorithm domain root kind query steps
             "a Merkle proof byte count overflowed" (Just digest)
           Right (Set.insert digest seen, total')
 
+-- | Why a proof could not be built.
 data MerkleProofCreationError
   = ProofCodecError !MerkleCodecError
   | ReversedProofRange
   | ProofSizeOverflow
   deriving (Eq, Show)
 
+-- | The outcome of checking a proof against a root digest and a budget.
 data MerkleProofVerificationResult = MerkleProofVerificationResult
   { proofIsValid :: !Bool
   , proofFailureKind :: !MerkleVerificationFailureKind
@@ -918,9 +948,12 @@ data MerkleProofVerificationResult = MerkleProofVerificationResult
   , proofVerifiedByteCount :: !Word64
   } deriving (Eq, Show)
 
+-- | One side's state for a key during a merge. The explicit absent case keeps a stored null
+-- distinguishable from absence.
 data MerkleMergeValue v = MergeAbsent | MergePresent v
   deriving (Eq, Show)
 
+-- | One key the three sides disagree on, with each side's state.
 data MerkleThreeWayMergeConflict k v = MerkleThreeWayMergeConflict
   { mergeConflictKey :: k
   , mergeConflictBase :: MerkleMergeValue v
@@ -928,6 +961,8 @@ data MerkleThreeWayMergeConflict k v = MerkleThreeWayMergeConflict
   , mergeConflictRight :: MerkleMergeValue v
   } deriving (Eq, Show)
 
+-- | How a resolver settled one conflicting key. Declining fails the whole merge rather than
+-- producing a partly merged tree.
 data MerkleMergeResolution v
   = MergeUnresolved
   | MergeUseBase
@@ -937,13 +972,16 @@ data MerkleMergeResolution v
   | MergeDelete
   deriving (Eq, Show)
 
+-- | The outcome of a three-way merge: the merged tree, or the conflicts left unresolved.
 data MerkleThreeWayMergeResult k v
   = MerkleMergeSucceeded (MerkleSearchTree k v)
   | MerkleMergeConflicted [MerkleThreeWayMergeConflict k v]
 
+-- | A proof of the key's presence or absence against the tree's root digest.
 createProof :: k -> MerkleSearchTree k v -> Either MerkleProofCreationError MerkleProof
 createProof = createPointProof
 
+-- | A proof covering a key range against the tree's root digest.
 createRangeProof :: k -> k -> MerkleSearchTree k v -> Either MerkleProofCreationError MerkleProof
 createRangeProof = createRangeProofInternal
 

@@ -1,3 +1,8 @@
+-- | A persistent map carrying a secondary index derived from its entries, so looking up by the
+-- derived key is a lookup rather than a scan.
+--
+-- Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+-- so an edit copies a path rather than the whole collection.
 module Durable7.Hamt.PersistentIndexedMap
   ( PersistentIndexedMap
   , empty
@@ -34,53 +39,69 @@ import Durable7.Hamt.HashSet (HashSet)
 
 data IndexedEntry v i = IndexedEntry v i
 
+-- | A persistent map carrying a secondary index derived from its entries, so looking up by the
+-- derived key is a lookup rather than a scan.
 data PersistentIndexedMap k v i = PersistentIndexedMap
   !(HashMap k (IndexedEntry v i))
   !(HashMultimap i k)
   !(k -> v -> i)
   !(v -> v -> Bool)
 
+-- | The empty map.
 empty :: (Eq k, Hashable k, Eq v, Eq i, Hashable i) => (k -> v -> i) -> PersistentIndexedMap k v i
 empty selector = emptyWith selector HashMap.defaultPolicy (==) HashMap.defaultPolicy
 
+-- | The empty map under the given policy, which it retains.
 emptyWith :: (k -> v -> i) -> HashPolicy k -> (v -> v -> Bool) -> HashPolicy i -> PersistentIndexedMap k v i
 emptyWith selector keys equalValues indexes =
   PersistentIndexedMap (HashMap.emptyWith keys) (HashMultimap.emptyWith indexes keys) selector equalValues
 
+-- | A map holding a list's entries, built in bulk rather than by repeated insertion.
 fromList :: (Eq k, Hashable k, Eq v, Eq i, Hashable i) => (k -> v -> i) -> [(k, v)] -> PersistentIndexedMap k v i
 fromList selector = List.foldl' (\current (key, value) -> set key value current) (empty selector)
 
+-- | A map holding a list's entries, under the given policy.
 fromListWith :: (k -> v -> i) -> HashPolicy k -> (v -> v -> Bool) -> HashPolicy i -> [(k, v)] -> PersistentIndexedMap k v i
 fromListWith selector keys equalValues indexes =
   List.foldl' (\current (key, value) -> set key value current) (emptyWith selector keys equalValues indexes)
 
+-- | Number of entries in the map.
 size :: PersistentIndexedMap k v i -> Int
 size (PersistentIndexedMap primary _ _ _) = HashMap.size primary
 
+-- | Whether the map holds no entries.
 null :: PersistentIndexedMap k v i -> Bool
 null values = size values == 0
 
+-- | The retained key policy.
 keyPolicy :: PersistentIndexedMap k v i -> HashPolicy k
 keyPolicy (PersistentIndexedMap primary _ _ _) = HashMap.policy primary
 
+-- | The retained policy deriving the index key from an entry.
 indexPolicy :: PersistentIndexedMap k v i -> HashPolicy i
 indexPolicy (PersistentIndexedMap _ secondary _ _) = HashMultimap.keyPolicy secondary
 
+-- | Whether the entry is present.
 member :: k -> PersistentIndexedMap k v i -> Bool
 member key (PersistentIndexedMap primary _ _ _) = HashMap.member key primary
 
+-- | The value stored for the key, or `Nothing` when absent.
 lookup :: k -> PersistentIndexedMap k v i -> Maybe v
 lookup key (PersistentIndexedMap primary _ _ _) = valueOf <$> HashMap.lookup key primary
 
+-- | The stored key representative, which need not be the key passed in.
 actualKey :: k -> PersistentIndexedMap k v i -> Maybe k
 actualKey key (PersistentIndexedMap primary _ _ _) = HashMap.actualKey key primary
 
+-- | The secondary index key derived for a primary key.
 lookupIndexKey :: k -> PersistentIndexedMap k v i -> Maybe i
 lookupIndexKey key (PersistentIndexedMap primary _ _ _) = indexOf <$> HashMap.lookup key primary
 
+-- | Whether the secondary index key is present.
 memberIndex :: i -> PersistentIndexedMap k v i -> Bool
 memberIndex indexKey (PersistentIndexedMap _ secondary _ _) = HashMultimap.memberKey indexKey secondary
 
+-- | The primary keys carrying the given secondary index key.
 lookupKeysByIndex :: i -> PersistentIndexedMap k v i -> Maybe (HashSet k)
 lookupKeysByIndex indexKey (PersistentIndexedMap _ secondary _ _) = HashMultimap.lookupValues indexKey secondary
 
@@ -121,6 +142,7 @@ set key value values@(PersistentIndexedMap primary secondary selector equalValue
                         (HashMap.insert storedKey (IndexedEntry value actualIndex) primary)
                         nextSecondary selector equalValues
 
+-- | A map without that entry.
 delete :: k -> PersistentIndexedMap k v i -> PersistentIndexedMap k v i
 delete key values@(PersistentIndexedMap primary secondary selector equalValues) =
   case HashMap.lookup key primary of
@@ -132,15 +154,18 @@ delete key values@(PersistentIndexedMap primary secondary selector equalValues) 
             (HashMultimap.delete (indexOf current) storedKey secondary)
             selector equalValues
 
+-- | The empty map, retaining the same policies.
 clear :: PersistentIndexedMap k v i -> PersistentIndexedMap k v i
 clear values@(PersistentIndexedMap primary secondary selector equalValues)
   | null values = values
   | otherwise = PersistentIndexedMap (HashMap.clear primary) (HashMultimap.clear secondary) selector equalValues
 
+-- | The entries, in the map's own order.
 toList :: PersistentIndexedMap k v i -> [(k, v)]
 toList (PersistentIndexedMap primary _ _ _) =
   [(key, valueOf entry) | (key, entry) <- HashMap.toList primary]
 
+-- | Whether the map's structural invariants hold. For tests and diagnostics.
 validStructure :: PersistentIndexedMap k v i -> Bool
 validStructure values@(PersistentIndexedMap primary secondary _ _) =
   HashMap.validStructure primary

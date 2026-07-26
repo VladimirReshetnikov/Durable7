@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 
+-- | Tests for the lazily range-updating sequence, including the tag algebra's laws.
 module RangeUpdateSequenceTests (run) where
 
 import Prelude hiding (null, sequence, splitAt)
@@ -57,6 +58,7 @@ applyAffineMeasure tag value amount =
     Just assigned -> (assigned + addition tag) * toInteger amount
     Nothing -> value + addition tag * toInteger amount
 
+-- | Runs this module's test cases, reporting each result.
 run :: IO ()
 run = do
   testAlgebraLaws

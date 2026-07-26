@@ -1,3 +1,4 @@
+-- | Tests for the persistent bidirectional map, including its conflict rules.
 module BiMapTests (runBiMapTests) where
 
 import Control.Concurrent (forkIO, newEmptyMVar, putMVar, takeMVar)
@@ -10,6 +11,7 @@ import qualified Durable7.Hamt.BiMap as BiMap
 import Durable7.Hamt.HashMap (HashPolicy(..))
 import Durable7.Hamt.Hashable (hash)
 
+-- | Runs the bidirectional map test cases.
 runBiMapTests :: IO ()
 runBiMapTests = do
   testStrictConflictsAndReplacement

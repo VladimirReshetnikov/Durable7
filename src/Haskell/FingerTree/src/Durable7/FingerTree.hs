@@ -1,3 +1,9 @@
+-- | The durable7-fingertree package's umbrella module: the measured tree and everything built on
+-- it.
+--
+-- Re-exports the measured finger tree together with the deques, ropes, vectors, sorted
+-- collections, priority queues, interval structures and cursors layered over it, so a consumer
+-- imports one module rather than a dozen.
 module Durable7.FingerTree
   ( Measured.Measured(..)
   , Measured.FingerTree

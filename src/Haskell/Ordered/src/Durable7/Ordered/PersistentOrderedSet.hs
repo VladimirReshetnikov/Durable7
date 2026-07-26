@@ -1,3 +1,9 @@
+-- | A persistent set that remembers insertion order.
+--
+-- A hashed index gives membership tests and a separate order index gives the sequence, so neither
+-- question is answered by scanning for the other. Every operation returns a new version and
+-- leaves its inputs valid, sharing unchanged structure, so an edit copies a path rather than the
+-- whole collection.
 module Durable7.Ordered.PersistentOrderedSet
   ( PersistentOrderedSet
   , empty
@@ -66,7 +72,7 @@ data Entry a = Entry
   , entryItem :: a
   }
 
--- This spacing is a private order-maintenance detail, not a public cadence.
+-- | This spacing is a private order-maintenance detail, not a public cadence.
 stampStride :: Int64
 stampStride = 1048576
 
@@ -87,24 +93,31 @@ fromList = fromListWith HashMap.defaultPolicy
 fromListWith :: HashPolicy a -> [a] -> PersistentOrderedSet a
 fromListWith hashPolicy items = buildFromItems hashPolicy (distinctInOrder hashPolicy items)
 
+-- | Number of elements in the set.
 size :: PersistentOrderedSet a -> Int
 size (PersistentOrderedSet order _) = Deque.count order
 
+-- | Whether the set holds no elements.
 null :: PersistentOrderedSet a -> Bool
 null setValue = size setValue == 0
 
+-- | The policy the set retains.
 policy :: PersistentOrderedSet a -> HashPolicy a
 policy (PersistentOrderedSet _ stamps) = HashMap.policy stamps
 
+-- | The first element.
 first :: PersistentOrderedSet a -> Maybe a
 first (PersistentOrderedSet order _) = entryItem <$> Deque.first order
 
+-- | The last element.
 last :: PersistentOrderedSet a -> Maybe a
 last (PersistentOrderedSet order _) = entryItem <$> Deque.last order
 
+-- | The element at the given rank.
 at :: Int -> PersistentOrderedSet a -> Maybe a
 at index (PersistentOrderedSet order _) = entryItem <$> Deque.index index order
 
+-- | Whether the element is present.
 contains :: a -> PersistentOrderedSet a -> Bool
 contains item (PersistentOrderedSet _ stamps) = HashMap.member item stamps
 
@@ -124,6 +137,7 @@ indexOf item setValue@(PersistentOrderedSet _ stamps) =
 add :: a -> PersistentOrderedSet a -> PersistentOrderedSet a
 add item setValue = insertCore (size setValue) item setValue
 
+-- | A set with the element placed first in insertion order.
 addFirst :: a -> PersistentOrderedSet a -> PersistentOrderedSet a
 addFirst = insertCore 0
 
@@ -134,9 +148,11 @@ insertAt index item setValue
   | index < 0 || index > size setValue = Nothing
   | otherwise = Just (insertCore index item setValue)
 
+-- | A set with the element moved to the front of the insertion order.
 moveToFirst :: a -> PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 moveToFirst = moveExisting 0
 
+-- | A set with the element moved to the end of the insertion order.
 moveToLast :: a -> PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 moveToLast item setValue = moveExisting (size setValue - 1) item setValue
 
@@ -147,9 +163,11 @@ moveTo index item setValue
   | index < 0 || index >= size setValue = Nothing
   | otherwise = moveExisting index item setValue
 
+-- | A set without that element.
 delete :: a -> PersistentOrderedSet a -> PersistentOrderedSet a
 delete item setValue = fromMaybe setValue (tryRemove item setValue)
 
+-- | A set without that element, or `Nothing` when it was absent.
 tryRemove :: a -> PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 tryRemove item setValue@(PersistentOrderedSet order stamps) = do
   (stamp, nextStamps) <- HashMap.tryRemove item stamps
@@ -157,7 +175,7 @@ tryRemove item setValue@(PersistentOrderedSet order stamps) = do
   nextOrder <- Deque.deleteAt index order
   pure (wrap nextOrder nextStamps)
 
--- The positional removal is prepared before the stamp index is consulted, so a
+-- | The positional removal is prepared before the stamp index is consulted, so a
 -- positional deletion is driven by the order index it names rather than by a
 -- content re-lookup that a value not reflexive under the hash policy can miss.
 -- This is the order the sibling ports use.
@@ -170,12 +188,15 @@ deleteAt index (PersistentOrderedSet order stamps) = do
     then invariantFailure
     else pure (wrap nextOrder nextStamps)
 
+-- | A set without its first element.
 removeFirst :: PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 removeFirst = deleteAt 0
 
+-- | A set without its last element.
 removeLast :: PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 removeLast setValue = deleteAt (size setValue - 1) setValue
 
+-- | The empty set, retaining the same policies.
 clear :: PersistentOrderedSet a -> PersistentOrderedSet a
 clear setValue
   | null setValue = setValue
@@ -200,21 +221,25 @@ getRange index count setValue@(PersistentOrderedSet order stamps)
   where
     total = size setValue
 
+-- | The first n elements.
 take :: Int -> PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 take count setValue
   | count < 0 || count > size setValue = Nothing
   | otherwise = getRange 0 count setValue
 
+-- | The elements after the first n.
 drop :: Int -> PersistentOrderedSet a -> Maybe (PersistentOrderedSet a)
 drop count setValue
   | count < 0 || count > size setValue = Nothing
   | otherwise = getRange count (size setValue - count) setValue
 
+-- | The set in the opposite order.
 reverse :: PersistentOrderedSet a -> PersistentOrderedSet a
 reverse setValue
   | size setValue <= 1 = setValue
   | otherwise = buildFromItems (policy setValue) (List.reverse (toList setValue))
 
+-- | The elements in ascending order.
 sort :: Ord a => PersistentOrderedSet a -> PersistentOrderedSet a
 sort = sortBy compare
 
@@ -243,6 +268,7 @@ union other setValue@(PersistentOrderedSet _ stamps) =
     (argumentItems, _) = normalize (policy setValue) other
     additions = filter (\item -> not (HashMap.member item stamps)) argumentItems
 
+-- | The elements present in both sets.
 intersection :: [a] -> PersistentOrderedSet a -> PersistentOrderedSet a
 intersection other setValue
   | length retained == size setValue = setValue
@@ -251,6 +277,7 @@ intersection other setValue
     (_, membership) = normalize (policy setValue) other
     retained = filter (`HashMap.member` membership) (toList setValue)
 
+-- | This set's elements that are absent from the other.
 difference :: [a] -> PersistentOrderedSet a -> PersistentOrderedSet a
 difference other setValue
   | length retained == size setValue = setValue
@@ -259,6 +286,7 @@ difference other setValue
     (_, membership) = normalize (policy setValue) other
     retained = filter (\item -> not (HashMap.member item membership)) (toList setValue)
 
+-- | The elements present in exactly one of the two sets.
 symmetricDifference :: [a] -> PersistentOrderedSet a -> PersistentOrderedSet a
 symmetricDifference other setValue@(PersistentOrderedSet _ stamps)
   | List.null argumentItems = setValue
@@ -268,6 +296,7 @@ symmetricDifference other setValue@(PersistentOrderedSet _ stamps)
     receiverOnly = filter (\item -> not (HashMap.member item membership)) (toList setValue)
     argumentOnly = filter (\item -> not (HashMap.member item stamps)) argumentItems
 
+-- | Whether every element of this set also occurs in the other.
 isSubsetOf :: [a] -> PersistentOrderedSet a -> Bool
 isSubsetOf other setValue =
   size setValue <= length argumentItems
@@ -275,6 +304,7 @@ isSubsetOf other setValue =
   where
     (argumentItems, membership) = normalize (policy setValue) other
 
+-- | Whether this set is a subset of the other and the other holds an element it lacks.
 isProperSubsetOf :: [a] -> PersistentOrderedSet a -> Bool
 isProperSubsetOf other setValue =
   size setValue < length argumentItems
@@ -282,6 +312,7 @@ isProperSubsetOf other setValue =
   where
     (argumentItems, membership) = normalize (policy setValue) other
 
+-- | Whether every element of the other occurs in this set.
 isSupersetOf :: [a] -> PersistentOrderedSet a -> Bool
 isSupersetOf other setValue@(PersistentOrderedSet _ stamps) =
   size setValue >= length argumentItems
@@ -289,6 +320,7 @@ isSupersetOf other setValue@(PersistentOrderedSet _ stamps) =
   where
     (argumentItems, _) = normalize (policy setValue) other
 
+-- | Whether this set is a superset of the other and holds an element the other lacks.
 isProperSupersetOf :: [a] -> PersistentOrderedSet a -> Bool
 isProperSupersetOf other setValue@(PersistentOrderedSet _ stamps) =
   size setValue > length argumentItems
@@ -296,12 +328,14 @@ isProperSupersetOf other setValue@(PersistentOrderedSet _ stamps) =
   where
     (argumentItems, _) = normalize (policy setValue) other
 
+-- | Whether the two sets share at least one element.
 overlaps :: [a] -> PersistentOrderedSet a -> Bool
 overlaps other setValue@(PersistentOrderedSet _ stamps) =
   any (`HashMap.member` stamps) argumentItems
   where
     (argumentItems, _) = normalize (policy setValue) other
 
+-- | Whether both sets hold the same elements.
 setEquals :: [a] -> PersistentOrderedSet a -> Bool
 setEquals other setValue@(PersistentOrderedSet _ stamps) =
   size setValue == length argumentItems
@@ -309,6 +343,7 @@ setEquals other setValue@(PersistentOrderedSet _ stamps) =
   where
     (argumentItems, _) = normalize (policy setValue) other
 
+-- | The elements, in the set's own order.
 toList :: PersistentOrderedSet a -> [a]
 toList (PersistentOrderedSet order _) = map entryItem (Deque.toList order)
 

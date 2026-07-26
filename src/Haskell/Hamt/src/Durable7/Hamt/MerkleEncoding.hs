@@ -374,7 +374,7 @@ decodeWord32 bytes = foldl' (\value byte -> value `shiftL` 8 .|. fromIntegral by
 decodeWord64 :: ByteString -> Word64
 decodeWord64 bytes = foldl' (\value byte -> value `shiftL` 8 .|. fromIntegral byte) 0 (ByteString.unpack bytes)
 
--- A small dependency-free SHA-256 implementation. The schedule uses a lazy boxed array so every
+-- | A small dependency-free SHA-256 implementation. The schedule uses a lazy boxed array so every
 -- word is computed once while retaining the recurrence in its specification form.
 sha256 :: ByteString -> ByteString
 sha256 input = ByteString.concat (map word32BigEndian finalState)

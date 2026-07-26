@@ -4,6 +4,12 @@
 -- | A persistent ordered map whose AVL nodes cache the minimum-priority entry
 -- in their subtree.  Priority ties are resolved by key order, so the minimum
 -- is deterministic and deletion remains a keyed O(log n) operation.
+-- | A persistent priority search queue: ordered by key, searchable by minimum priority.
+--
+-- A pennant tournament tree carries both orders at once, so a key lookup and a minimum-priority
+-- lookup are each a descent rather than a scan of the other order. Every operation returns a new
+-- version and leaves its inputs valid, sharing unchanged structure, so an edit copies a path
+-- rather than the whole collection.
 module Durable7.FingerTree.PrioritySearchQueue
   ( PrioritySearchQueue
   , PrioritySearchEntry(..)
@@ -77,9 +83,11 @@ data PrioritySearchQueueStatistics = PrioritySearchQueueStatistics
   }
   deriving (Eq, Ord, Read, Show)
 
+-- | The empty queue.
 empty :: PrioritySearchQueue k p v
 empty = PrioritySearchQueue Nothing
 
+-- | A queue holding one entry.
 singleton :: k -> p -> v -> PrioritySearchQueue k p v
 singleton key priority value =
   PrioritySearchQueue (Just (leaf (PrioritySearchEntry key priority value)))
@@ -88,22 +96,27 @@ singleton key priority value =
 fromList :: (Ord k, Ord p, Eq v) => [(k, p, v)] -> PrioritySearchQueue k p v
 fromList = List.foldl' (\queue (key, priority, value) -> setItem key priority value queue) empty
 
+-- | Number of entries in the queue.
 count :: PrioritySearchQueue k p v -> Int
 count (PrioritySearchQueue root) = countOf root
 
+-- | The structure's height.
 height :: PrioritySearchQueue k p v -> Int
 height (PrioritySearchQueue root) = heightOf root
 
+-- | Whether the queue holds no entries.
 null :: PrioritySearchQueue k p v -> Bool
 null (PrioritySearchQueue root) = case root of
   Nothing -> True
   Just _ -> False
 
+-- | Whether the entry is present.
 member :: Ord k => k -> PrioritySearchQueue k p v -> Bool
 member key queue = case lookup key queue of
   Nothing -> False
   Just _ -> True
 
+-- | The value stored for the key, or `Nothing` when absent.
 lookup :: Ord k => k -> PrioritySearchQueue k p v -> Maybe (PrioritySearchEntry k p v)
 lookup key (PrioritySearchQueue root) = go root
   where
@@ -127,9 +140,11 @@ insertNew key priority value (PrioritySearchQueue root) =
   let (updated, added, _) = setNode False (PrioritySearchEntry key priority value) root
   in if added then Just (PrioritySearchQueue (Just updated)) else Nothing
 
+-- | A queue without that entry.
 delete :: (Ord k, Ord p) => k -> PrioritySearchQueue k p v -> PrioritySearchQueue k p v
 delete key queue = snd (deleteLookup key queue)
 
+-- | A queue without that entry, together with what was removed.
 deleteLookup :: (Ord k, Ord p) => k -> PrioritySearchQueue k p v -> (Maybe (PrioritySearchEntry k p v), PrioritySearchQueue k p v)
 deleteLookup key queue@(PrioritySearchQueue root) =
   case deleteNode key root of
@@ -150,6 +165,7 @@ minView queue = do
     Just entry -> Just (entry, remaining)
     Nothing -> Nothing
 
+-- | A queue without its minimum-priority entry.
 deleteMinimum :: (Ord k, Ord p) => PrioritySearchQueue k p v -> PrioritySearchQueue k p v
 deleteMinimum queue = case minView queue of
   Nothing -> queue
@@ -177,6 +193,7 @@ enumerateAtMost minimumKey maximumKey maximumPriority (PrioritySearchQueue root)
           | entryPriority entry <= maximumPriority = entry : rest
           | otherwise = rest
 
+-- | The entries in ascending order.
 toAscList :: PrioritySearchQueue k p v -> [PrioritySearchEntry k p v]
 toAscList (PrioritySearchQueue root) = go root []
   where

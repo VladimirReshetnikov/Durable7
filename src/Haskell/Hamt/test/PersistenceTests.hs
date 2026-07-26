@@ -1,3 +1,4 @@
+-- | Tests for Merkle storage, verification, and synchronization.
 module PersistenceTests (runPersistenceTests) where
 
 import qualified Data.ByteString as ByteString
@@ -26,6 +27,7 @@ import qualified Durable7.Hamt.MerkleSearchTree as Tree
 type Value = Maybe String
 type TestTree = Tree.MerkleSearchTree Int32 Value
 
+-- | Runs the Merkle storage, verification, and synchronization test cases.
 runPersistenceTests :: IO ()
 runPersistenceTests = do
   testGoldenAndRoundTrips

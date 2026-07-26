@@ -7,6 +7,14 @@
 -- already transformed the node value and cached measure, but not its child
 -- roots.  Structural descent pushes that tag immutably; read-only descent
 -- instead carries inherited tags without rebuilding the tree.
+-- | A persistent sequence with lazy range updates.
+--
+-- A range update is recorded as a tag at the nodes covering the range rather than applied to each
+-- element, so the cost tracks the tree's height and not the range's length. The tag algebra must
+-- compose associatively and distribute over the measure; those laws are what let a pending tag be
+-- pushed down or folded into a measure on demand. Every operation returns a new version and
+-- leaves its inputs valid, sharing unchanged structure, so an edit copies a path rather than the
+-- whole collection.
 module Durable7.FingerTree.RangeUpdateSequence
   ( RangeUpdateAlgebra(..)
   , RangeUpdateSequence
@@ -319,9 +327,11 @@ sharesRootWith (RangeUpdateSequence _ (Just left)) (RangeUpdateSequence _ (Just 
   pure (leftName `eqStableName` rightName)
 sharesRootWith _ _ = pure False
 
+-- | A cursor before the first element.
 cursor :: RangeUpdateSequence element measureValue tag -> Cursor element measureValue tag
 cursor sequence = Cursor sequence 0
 
+-- | The element at the given rank.
 cursorAt :: Int
          -> RangeUpdateSequence element measureValue tag
          -> Maybe (Cursor element measureValue tag)
@@ -329,63 +339,81 @@ cursorAt position sequence
   | position < 0 || position > count sequence = Nothing
   | otherwise = Just (Cursor sequence position)
 
+-- | The cursor's gap position.
 cursorPosition :: Cursor element measureValue tag -> Int
 cursorPosition (Cursor _ position) = position
 
+-- | Number of elements in the sequence version the cursor is positioned in.
 cursorCount :: Cursor element measureValue tag -> Int
 cursorCount (Cursor sequence _) = count sequence
 
+-- | Whether the gap precedes the first element.
 cursorIsAtStart :: Cursor element measureValue tag -> Bool
 cursorIsAtStart value = cursorPosition value == 0
 
+-- | Whether the gap follows the last element.
 cursorIsAtEnd :: Cursor element measureValue tag -> Bool
 cursorIsAtEnd value = cursorPosition value == cursorCount value
 
+-- | The combined measure of everything before the gap.
 cursorMeasureBefore :: Cursor element measureValue tag -> measureValue
 cursorMeasureBefore (Cursor sequence position) =
   expectCursorEdit "measure before" (measureRange 0 position sequence)
 
+-- | The combined measure of everything after the gap.
 cursorMeasureAfter :: Cursor element measureValue tag -> measureValue
 cursorMeasureAfter (Cursor sequence position) =
   expectCursorEdit "measure after" (measureRange position (count sequence - position) sequence)
 
+-- | The element immediately before the gap, or `Nothing` at the start.
 cursorPeekPrevious :: Cursor element measureValue tag -> Maybe element
 cursorPeekPrevious (Cursor sequence position) = index (position - 1) sequence
 
+-- | The element immediately after the gap, or `Nothing` at the end.
 cursorPeekNext :: Cursor element measureValue tag -> Maybe element
 cursorPeekNext (Cursor sequence position) = index position sequence
 
+-- | A cursor one position earlier. The receiver is unchanged.
 cursorMovePrevious :: Cursor element measureValue tag -> Maybe (Cursor element measureValue tag)
 cursorMovePrevious (Cursor sequence position) = cursorAt (position - 1) sequence
 
+-- | A cursor one position later. The receiver is unchanged.
 cursorMoveNext :: Cursor element measureValue tag -> Maybe (Cursor element measureValue tag)
 cursorMoveNext (Cursor sequence position)
   | position == count sequence = Nothing
   | otherwise = cursorAt (position + 1) sequence
 
+-- | A cursor at the given position within the same sequence version.
 cursorSeek :: Int
            -> Cursor element measureValue tag
            -> Maybe (Cursor element measureValue tag)
 cursorSeek position (Cursor sequence _) = cursorAt position sequence
 
+-- | A sequence containing the given element.
 cursorInsert :: element
              -> Cursor element measureValue tag
              -> Cursor element measureValue tag
 cursorInsert value (Cursor sequence position) =
   Cursor (expectCursorEdit "insert" (insertAt position value sequence)) (checkedAdd position 1)
 
+-- | Removes the element before the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeletePrevious :: Cursor element measureValue tag
                      -> Maybe (Cursor element measureValue tag)
 cursorDeletePrevious (Cursor sequence position)
   | position == 0 = Nothing
   | otherwise = Just (Cursor (expectCursorEdit "delete previous" (deleteAt (position - 1) sequence)) (position - 1))
 
+-- | Removes the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorDeleteNext :: Cursor element measureValue tag
                  -> Maybe (Cursor element measureValue tag)
 cursorDeleteNext (Cursor sequence position)
   | position == count sequence = Nothing
   | otherwise = Just (Cursor (expectCursorEdit "delete next" (deleteAt position sequence)) position)
 
+-- | Replaces the element after the gap, producing a new version the returned cursor is positioned
+-- in.
 cursorReplaceNext :: element
                   -> Cursor element measureValue tag
                   -> Maybe (Cursor element measureValue tag)
@@ -393,6 +421,7 @@ cursorReplaceNext value (Cursor sequence position)
   | position == count sequence = Nothing
   | otherwise = Just (Cursor (expectCursorEdit "replace next" (setAt position value sequence)) position)
 
+-- | The measure of the element immediately before the gap.
 cursorMeasurePrevious :: Int
                       -> Cursor element measureValue tag
                       -> Maybe measureValue
@@ -400,6 +429,7 @@ cursorMeasurePrevious amount (Cursor sequence position)
   | amount < 0 || amount > position = Nothing
   | otherwise = measureRange (position - amount) amount sequence
 
+-- | The measure of the element immediately after the gap.
 cursorMeasureNext :: Int
                   -> Cursor element measureValue tag
                   -> Maybe measureValue
@@ -407,6 +437,7 @@ cursorMeasureNext amount (Cursor sequence position)
   | amount < 0 || amount > count sequence - position = Nothing
   | otherwise = measureRange position amount sequence
 
+-- | Applies the pending tags covering the element before the gap.
 cursorApplyPrevious :: Int
                     -> tag
                     -> Cursor element measureValue tag
@@ -415,6 +446,7 @@ cursorApplyPrevious amount tag (Cursor sequence position)
   | amount < 0 || amount > position = Nothing
   | otherwise = Cursor <$> applyRange (position - amount) amount tag sequence <*> pure position
 
+-- | Applies the pending tags covering the element after the gap.
 cursorApplyNext :: Int
                 -> tag
                 -> Cursor element measureValue tag
@@ -423,6 +455,7 @@ cursorApplyNext amount tag (Cursor sequence position)
   | amount < 0 || amount > count sequence - position = Nothing
   | otherwise = Cursor <$> applyRange position amount tag sequence <*> pure position
 
+-- | The sequence version this cursor is positioned in.
 cursorSnapshot :: Cursor element measureValue tag
                -> RangeUpdateSequence element measureValue tag
 cursorSnapshot (Cursor sequence _) = sequence

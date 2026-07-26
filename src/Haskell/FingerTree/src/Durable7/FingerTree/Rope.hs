@@ -1,6 +1,11 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
+-- | A persistent rope: a sequence storing elements in chunked leaves.
+--
+-- Chunking keeps the node count proportional to the size divided by the chunk size rather than to
+-- the size. Every operation returns a new version and leaves its inputs valid, sharing unchanged
+-- structure, so an edit copies a path rather than the whole collection.
 module Durable7.FingerTree.Rope
   ( Rope
   , RopeCursor
@@ -54,6 +59,8 @@ import qualified Durable7.FingerTree.Measured as FT
 import Durable7.FingerTree.Measured (ViewL(..), ViewR(..))
 import Durable7.FingerTree.Measures (Size(..))
 
+-- | A run of elements stored as one leaf. Chunking keeps the node count proportional to the size
+-- divided by the chunk size rather than to the size.
 data Chunk a = Chunk
   { chunkLength :: !Int
   , chunkItems :: [a]
@@ -63,6 +70,7 @@ data Chunk a = Chunk
 instance FT.Measured Size (Chunk a) where
   measure = Size . chunkLength
 
+-- | A persistent sequence storing elements in chunked leaves.
 newtype Rope a = Rope (FT.FingerTree Size (Chunk a))
   deriving (Show)
 
@@ -80,19 +88,23 @@ instance Eq a => Eq (Rope a) where
 instance Ord a => Ord (Rope a) where
   compare left right = compare (toList left) (toList right)
 
+-- | The largest number of elements one chunk holds.
 maxChunkSize :: Int
 maxChunkSize = 64
 
+-- | The empty rope.
 empty :: Rope a
 empty = Rope FT.empty
 
+-- | A rope holding one element.
 singleton :: a -> Rope a
 singleton value = Rope (FT.singleton (Chunk 1 [value]))
 
+-- | A rope holding a list's elements, built in bulk rather than by repeated insertion.
 fromList :: [a] -> Rope a
 fromList values = fromChunks [values]
 
--- Every imported chunk is normalized to the public maximum. The resulting
+-- | Every imported chunk is normalized to the public maximum. The resulting
 -- finger tree is measured by element count, not by chunk count.
 fromChunks :: [[a]] -> Rope a
 fromChunks sourceChunks = Rope (List.foldl' appendOwnedChunk FT.empty ownedChunks)
@@ -105,23 +117,28 @@ fromChunks sourceChunks = Rope (List.foldl' appendOwnedChunk FT.empty ownedChunk
     appendOwnedChunk tree chunk =
       checkedAdd (treeCount tree) (chunkLength chunk) `seq` FT.snoc tree chunk
 
+-- | The rope's chunks, in order.
 chunks :: Rope a -> [[a]]
 chunks (Rope tree) = map chunkItems (FT.toList tree)
 
+-- | The elements, in the rope's own order.
 toList :: Rope a -> [a]
 toList = concat . chunks
 
+-- | Number of elements in the rope.
 count :: Rope a -> Int
 count (Rope tree) = getSize (FT.measureTree tree)
 
+-- | Whether the rope holds no elements.
 null :: Rope a -> Bool
 null (Rope tree) = FT.null tree
 
+-- | The concatenation of two ropes, sharing both operands' unchanged structure.
 append :: Rope a -> Rope a -> Rope a
 append leftRope@(Rope left) rightRope@(Rope right) =
   checkedAdd (count leftRope) (count rightRope) `seq` Rope (FT.append left right)
 
--- Endpoint edits touch only the boundary chunk. Overflow adds one new chunk;
+-- | Endpoint edits touch only the boundary chunk. Overflow adds one new chunk;
 -- the untouched middle spine is retained.
 cons :: a -> Rope a -> Rope a
 cons value rope@(Rope tree) =
@@ -132,6 +149,7 @@ cons value rope@(Rope tree) =
       | lengthValue < maxChunkSize -> Rope (FT.cons (Chunk (lengthValue + 1) (value : values)) rest)
       | otherwise -> Rope (FT.cons (Chunk 1 [value]) (FT.cons chunk rest))
 
+-- | A rope with the element added at the back.
 snoc :: Rope a -> a -> Rope a
 snoc rope@(Rope tree) value =
   checkedAdd (count rope) 1 `seq`
@@ -141,6 +159,7 @@ snoc rope@(Rope tree) value =
       | lengthValue < maxChunkSize -> Rope (FT.snoc rest (Chunk (lengthValue + 1) (values ++ [value])))
       | otherwise -> Rope (FT.snoc (FT.snoc rest chunk) (Chunk 1 [value]))
 
+-- | The element at the given rank.
 index :: Int -> Rope a -> Maybe a
 index position rope@(Rope tree)
   | position < 0 || position >= count rope = Nothing
@@ -148,6 +167,7 @@ index position rope@(Rope tree)
       (left, chunk, _) <- FT.split (past position) tree
       listIndex (position - treeCount left) (chunkItems chunk)
 
+-- | The element at the given rank.
 setAt :: Int -> a -> Rope a -> Maybe (Rope a)
 setAt position value rope@(Rope tree)
   | position < 0 || position >= count rope = Nothing
@@ -157,6 +177,7 @@ setAt position value rope@(Rope tree)
           updated = chunk { chunkItems = replaceAt local value (chunkItems chunk) }
       pure (Rope (joinWithChunks left [updated] right))
 
+-- | A rope with the element inserted at the position.
 insertAt :: Int -> a -> Rope a -> Maybe (Rope a)
 insertAt position value rope@(Rope tree)
   | position < 0 || position > count rope = Nothing
@@ -179,6 +200,7 @@ insertRangeAt position values rope
   | position < 0 || position > count rope = Nothing
   | otherwise = insertRopeAt position (fromList values) rope
 
+-- | A rope without the element at the position.
 deleteAt :: Int -> Rope a -> Maybe (Rope a)
 deleteAt position rope@(Rope tree)
   | position < 0 || position >= count rope = Nothing
@@ -189,6 +211,7 @@ deleteAt position rope@(Rope tree)
           replacements = chunksFromValues (before ++ drop 1 after)
       pure (Rope (joinWithChunks left replacements right))
 
+-- | Splits into the elements before the position and those from it onward.
 splitAt :: Int -> Rope a -> Maybe (Rope a, Rope a)
 splitAt position rope@(Rope tree)
   | position < 0 || position > count rope = Nothing
@@ -202,6 +225,7 @@ splitAt position rope@(Rope tree)
           rightTree = prependChunks (chunksFromValues after) right
       pure (Rope leftTree, Rope rightTree)
 
+-- | The elements in the given range.
 slice :: Int -> Int -> Rope a -> Maybe (Rope a)
 slice position lengthValue rope
   | not (isValidRange position lengthValue (count rope)) = Nothing
@@ -209,6 +233,7 @@ slice position lengthValue rope
       (_, suffix) <- splitAt position rope
       fst <$> splitAt lengthValue suffix
 
+-- | A rope without the elements in the range.
 removeRange :: Int -> Int -> Rope a -> Maybe (Rope a)
 removeRange position lengthValue rope
   | not (isValidRange position lengthValue (count rope)) = Nothing
@@ -217,6 +242,7 @@ removeRange position lengthValue rope
       (_, tailValue) <- splitAt lengthValue suffix
       pure (append prefix tailValue)
 
+-- | Rebuilds the rope with full chunks, dropping the fragmentation repeated edits leave behind.
 compact :: Rope a -> Rope a
 compact = fromList . toList
 

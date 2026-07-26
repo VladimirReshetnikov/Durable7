@@ -8,6 +8,13 @@
 -- in 'IO': besides obtaining entropy for random policies, this allocates an
 -- opaque identity used to gate canonical algebra honestly in a language where
 -- functions and ordinary immutable records do not have observable identity.
+-- | A persistent sorted set whose shape depends only on its contents, not on its edit history.
+--
+-- Each element's rank is derived from the element itself under the policy's seed, so two sets
+-- holding the same elements are the same tree however they were built. That makes shapes
+-- comparable across independent parties, which a history-dependent balance scheme cannot offer.
+-- Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+-- so an edit copies a path rather than the whole collection.
 module Durable7.FingerTree.CanonicalSortedSet
   ( ZipTreeRankPolicy
   , ZipTreeRank(..)
@@ -139,7 +146,7 @@ data CanonicalNodeShape a = CanonicalNodeShape
   }
   deriving (Eq, Show)
 
--- The constructor stays private so callers cannot forge policy-family identity
+-- | The constructor stays private so callers cannot forge policy-family identity
 -- or inspect retained secret key bytes.
 data ZipTreeRankPolicy a = ZipTreeRankPolicy
   { policyCompare :: a -> a -> Ordering
@@ -149,6 +156,9 @@ data ZipTreeRankPolicy a = ZipTreeRankPolicy
   , policyIdentity :: !Unique
   }
 
+-- | A persistent sorted set whose shape depends only on its contents, not on its edit history. Each
+-- element's rank is derived from the element itself under the policy's seed, so two sets holding
+-- the same elements are the same tree however they were built.
 data CanonicalSortedSet a = CanonicalSortedSet
   { setPolicy :: !(ZipTreeRankPolicy a)
   , setRoot :: !(Maybe (Node a))

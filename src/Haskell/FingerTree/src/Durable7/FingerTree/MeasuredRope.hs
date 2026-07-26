@@ -1,6 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
+-- | A chunked persistent sequence that also caches a monoidal measure, so a measured query descends
+-- without visiting the elements it skips.
 module Durable7.FingerTree.MeasuredRope
   ( MeasuredRope
   , MeasuredRopeCursor
@@ -71,7 +73,7 @@ data MeasuredChunk v a = MeasuredChunk !Int !v [a]
 instance Monoid v => FT.Measured (RopeMeasure v) (MeasuredChunk v a) where
   measure (MeasuredChunk lengthValue value _) = RopeMeasure lengthValue value
 
--- The function is retained for editing boundary chunks. Cached chunk
+-- | The function is retained for editing boundary chunks. Cached chunk
 -- measures let splits, concatenation, prefix queries, and measure-guided
 -- location reuse the persistent finger-tree spine.
 data MeasuredRope v a = MeasuredRope (a -> v) !(FT.FingerTree (RopeMeasure v) (MeasuredChunk v a))
@@ -88,29 +90,37 @@ data MeasuredRopeCursorSearch v a = MeasuredRopeCursorSearch
   , searchCursor :: !(MeasuredRopeCursor v a)
   }
 
+-- | The empty rope under the given policy, which it retains.
 emptyWith :: Monoid v => (a -> v) -> MeasuredRope v a
 emptyWith elementMeasure = MeasuredRope elementMeasure FT.empty
 
+-- | A rope holding one element, under the given policy.
 singletonWith :: Monoid v => (a -> v) -> a -> MeasuredRope v a
 singletonWith elementMeasure value =
   MeasuredRope elementMeasure (FT.singleton (measuredChunk elementMeasure [value]))
 
+-- | A rope holding a list's elements, under the given policy.
 fromListWith :: Monoid v => (a -> v) -> [a] -> MeasuredRope v a
 fromListWith elementMeasure values =
   MeasuredRope elementMeasure (FT.fromList (map (measuredChunk elementMeasure) (chunkify values)))
 
+-- | The elements, in the rope's own order.
 toList :: Monoid v => MeasuredRope v a -> [a]
 toList (MeasuredRope _ tree) = concatMap measuredChunkItems (FT.toList tree)
 
+-- | Number of elements in the rope.
 count :: Monoid v => MeasuredRope v a -> Int
 count (MeasuredRope _ tree) = measureCount (FT.measureTree tree)
 
+-- | Whether the rope holds no elements.
 null :: Monoid v => MeasuredRope v a -> Bool
 null (MeasuredRope _ tree) = FT.null tree
 
+-- | The combined measure of every element, read from the cached root measure.
 measure :: Monoid v => MeasuredRope v a -> v
 measure (MeasuredRope _ tree) = measureValue (FT.measureTree tree)
 
+-- | The combined measure of the elements before the position.
 prefixMeasure :: Monoid v => Int -> MeasuredRope v a -> Maybe v
 prefixMeasure lengthValue measured@(MeasuredRope elementMeasure tree)
   | lengthValue < 0 || lengthValue > count measured = Nothing
@@ -120,7 +130,7 @@ prefixMeasure lengthValue measured@(MeasuredRope elementMeasure tree)
       let local = lengthValue - treeCount left
       pure (treeValue left <> foldMap elementMeasure (take local values))
 
--- Both operands must have extensionally identical element-measure functions.
+-- | Both operands must have extensionally identical element-measure functions.
 -- Haskell functions have no decidable equality, so this is the same policy
 -- precondition that callers already observe when constructing related ropes.
 append :: Monoid v => MeasuredRope v a -> MeasuredRope v a -> MeasuredRope v a
@@ -132,6 +142,7 @@ append left@(MeasuredRope elementMeasure leftTree) right@(MeasuredRope _ rightTr
         then left
         else MeasuredRope elementMeasure (FT.append leftTree rightTree)
 
+-- | The element at the given rank.
 index :: Monoid v => Int -> MeasuredRope v a -> Maybe a
 index position measured@(MeasuredRope _ tree)
   | position < 0 || position >= count measured = Nothing
@@ -139,6 +150,7 @@ index position measured@(MeasuredRope _ tree)
       (left, MeasuredChunk _ _ values, _) <- FT.split (past position) tree
       listIndex (position - treeCount left) values
 
+-- | The element at the given rank.
 setAt :: Monoid v => Int -> a -> MeasuredRope v a -> Maybe (MeasuredRope v a)
 setAt position value measured@(MeasuredRope elementMeasure tree)
   | position < 0 || position >= count measured = Nothing
@@ -148,6 +160,7 @@ setAt position value measured@(MeasuredRope elementMeasure tree)
           updated = measuredChunk elementMeasure (replaceAt local value values)
       pure (MeasuredRope elementMeasure (joinWithChunks left [updated] right))
 
+-- | A rope with the element inserted at the position.
 insertAt :: Monoid v => Int -> a -> MeasuredRope v a -> Maybe (MeasuredRope v a)
 insertAt position value measured@(MeasuredRope elementMeasure tree)
   | position < 0 || position > count measured = Nothing
@@ -173,6 +186,7 @@ insertRangeAt position values measured
       let !added = checkedRangeLength (count measured) values
        in insertRangeAtKnown position values added measured
 
+-- | A rope without the element at the position.
 deleteAt :: Monoid v => Int -> MeasuredRope v a -> Maybe (MeasuredRope v a)
 deleteAt position measured@(MeasuredRope elementMeasure tree)
   | position < 0 || position >= count measured = Nothing
@@ -183,6 +197,7 @@ deleteAt position measured@(MeasuredRope elementMeasure tree)
           replacements = measuredChunks elementMeasure (before ++ drop 1 after)
       pure (MeasuredRope elementMeasure (joinWithChunks left replacements right))
 
+-- | Splits into the elements before the position and those from it onward.
 splitAt :: Monoid v => Int -> MeasuredRope v a -> Maybe (MeasuredRope v a, MeasuredRope v a)
 splitAt position measured@(MeasuredRope elementMeasure tree)
   | position < 0 || position > count measured = Nothing
@@ -196,6 +211,7 @@ splitAt position measured@(MeasuredRope elementMeasure tree)
           rightTree = prependChunks (measuredChunks elementMeasure after) right
       pure (MeasuredRope elementMeasure leftTree, MeasuredRope elementMeasure rightTree)
 
+-- | The elements in the given range.
 slice :: Monoid v => Int -> Int -> MeasuredRope v a -> Maybe (MeasuredRope v a)
 slice position lengthValue measured
   | not (isValidRange position lengthValue (count measured)) = Nothing
@@ -203,6 +219,7 @@ slice position lengthValue measured
       (_, suffix) <- splitAt position measured
       fst <$> splitAt lengthValue suffix
 
+-- | The first position where the accumulated measure satisfies the predicate.
 locateByMeasure :: Monoid v => (v -> Bool) -> MeasuredRope v a -> Maybe (Int, v, a)
 locateByMeasure predicate (MeasuredRope elementMeasure tree) = do
   (left, MeasuredChunk _ _ values, _) <- FT.split (predicate . measureValue) tree
@@ -210,6 +227,8 @@ locateByMeasure predicate (MeasuredRope elementMeasure tree) = do
       beforeChunk = treeValue left
   locateInChunk elementMeasure predicate start beforeChunk values
 
+-- | Splits at the first point where the accumulated measure satisfies the predicate, descending by
+-- cached measures rather than scanning.
 splitByMeasure :: Monoid v => (v -> Bool) -> MeasuredRope v a -> Maybe (MeasuredRope v a, a, MeasuredRope v a)
 splitByMeasure predicate measured = do
   (position, _, value) <- locateByMeasure predicate measured

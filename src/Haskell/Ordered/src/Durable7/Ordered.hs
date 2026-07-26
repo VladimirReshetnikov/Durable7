@@ -1,3 +1,5 @@
+-- | The durable7-ordered package's umbrella module: the insertion-ordered collections and their
+-- cursors.
 module Durable7.Ordered
   ( module Durable7.Ordered.PersistentOrderedSet
   , module Durable7.Ordered.Cursor

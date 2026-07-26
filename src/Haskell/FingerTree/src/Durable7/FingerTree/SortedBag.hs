@@ -1,5 +1,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
+-- | A persistent sorted multiset with rank and select.
+--
+-- Every operation returns a new version and leaves its inputs valid, sharing unchanged structure,
+-- so an edit copies a path rather than the whole collection.
 module Durable7.FingerTree.SortedBag
   ( SortedBag
   , empty
@@ -31,7 +35,7 @@ import qualified Data.List as List
 import qualified Data.Sequence as Seq
 import qualified Durable7.FingerTree.Measured as Measured
 
--- The measure combines positional weight with the last key in each prefix.
+-- | The measure combines positional weight with the last key in each prefix.
 -- Key predicates are monotone because buckets are stored in ascending order.
 data BagMeasure a = BagMeasure !Int !Int !(Maybe a)
   deriving (Eq, Ord, Read, Show)
@@ -48,7 +52,7 @@ instance Semigroup (BagMeasure a) where
 instance Monoid (BagMeasure a) where
   mempty = BagMeasure 0 0 Nothing
 
--- Buckets retain every comparer-equal instance in insertion order. Sequence
+-- | Buckets retain every comparer-equal instance in insertion order. Sequence
 -- gives logarithmic rank access even when every bag element has one key.
 data Bucket a = Bucket !a !(Seq.Seq a)
   deriving (Eq, Ord, Read, Show)
@@ -56,6 +60,8 @@ data Bucket a = Bucket !a !(Seq.Seq a)
 instance Measured.Measured (BagMeasure a) (Bucket a) where
   measure (Bucket key values) = BagMeasure (Seq.length values) 1 (Just key)
 
+-- | A persistent sorted multiset with rank and select. The cached element counts are what make
+-- those a descent rather than a scan.
 newtype SortedBag a = SortedBag (Measured.FingerTree (BagMeasure a) (Bucket a))
   deriving (Read, Show)
 
@@ -65,35 +71,45 @@ instance Eq a => Eq (SortedBag a) where
 instance Ord a => Ord (SortedBag a) where
   compare left right = compare (toList left) (toList right)
 
+-- | The empty bag.
 empty :: SortedBag a
 empty = SortedBag Measured.empty
 
+-- | A bag holding one element.
 singleton :: a -> SortedBag a
 singleton value = SortedBag (Measured.singleton (singletonBucket value))
 
+-- | A bag holding a list's elements, built in bulk rather than by repeated insertion.
 fromList :: Ord a => [a] -> SortedBag a
 fromList = List.foldl' (flip insert) empty
 
+-- | The elements, in the bag's own order.
 toList :: SortedBag a -> [a]
 toList (SortedBag buckets) = concatMap bucketValues (Measured.toList buckets)
 
+-- | The distinct elements paired with their multiplicities.
 toCounts :: SortedBag a -> [(a, Int)]
 toCounts (SortedBag buckets) = map summarize (Measured.toList buckets)
   where
     summarize (Bucket key values) = (key, Seq.length values)
 
+-- | Number of elements in the bag.
 count :: SortedBag a -> Int
 count (SortedBag buckets) = measureCount (Measured.measureTree buckets)
 
+-- | Whether the bag holds no elements.
 null :: SortedBag a -> Bool
 null (SortedBag buckets) = Measured.null buckets
 
+-- | How many distinct elements are present, ignoring multiplicity.
 distinctCount :: SortedBag a -> Int
 distinctCount (SortedBag buckets) = measureDistinct (Measured.measureTree buckets)
 
+-- | Whether the element is present.
 member :: Ord a => a -> SortedBag a -> Bool
 member value bag = countOf value bag > 0
 
+-- | How many times the element occurs.
 countOf :: Ord a => a -> SortedBag a -> Int
 countOf value (SortedBag buckets) =
   case locateAtLeast value buckets of
@@ -101,7 +117,7 @@ countOf value (SortedBag buckets) =
       | bucketKey bucket == value -> bucketLength bucket
     _ -> 0
 
--- The first stored equal instance remains the bucket key and toCounts
+-- | The first stored equal instance remains the bucket key and toCounts
 -- representative. New instances append after existing ones.
 insert :: Ord a => a -> SortedBag a -> SortedBag a
 insert value (SortedBag buckets) =
@@ -116,6 +132,7 @@ insert value (SortedBag buckets) =
               (Measured.snoc left (singletonBucket value))
               (Measured.cons bucket right))
 
+-- | A bag with one occurrence of the element removed, leaving any duplicates.
 deleteOne :: Ord a => a -> SortedBag a -> SortedBag a
 deleteOne value bag@(SortedBag buckets) =
   case splitAtLeast value buckets of
@@ -128,6 +145,7 @@ deleteOne value bag@(SortedBag buckets) =
               | otherwise -> SortedBag (joinWithBucket left (rekeyedBucket rest) right)
     _ -> bag
 
+-- | A bag without any occurrence of the element.
 deleteAll :: Ord a => a -> SortedBag a -> SortedBag a
 deleteAll value bag@(SortedBag buckets) =
   case splitAtLeast value buckets of
@@ -135,20 +153,25 @@ deleteAll value bag@(SortedBag buckets) =
       | bucketKey bucket == value -> SortedBag (Measured.append left right)
     _ -> bag
 
+-- | The smallest element.
 minValue :: SortedBag a -> Maybe a
 minValue (SortedBag buckets) = firstBucketValue =<< Measured.head buckets
 
+-- | The largest element.
 maxValue :: SortedBag a -> Maybe a
 maxValue (SortedBag buckets) = lastBucketValue =<< Measured.last buckets
 
+-- | How many elements order before the probe.
 countLessThan :: Ord a => a -> SortedBag a -> Int
 countLessThan value (SortedBag buckets) =
   measureBeforeCount (locateAtLeast value buckets) (Measured.measureTree buckets)
 
+-- | How many elements order at or before the probe.
 countAtMost :: Ord a => a -> SortedBag a -> Int
 countAtMost value (SortedBag buckets) =
   measureBeforeCount (locateAbove value buckets) (Measured.measureTree buckets)
 
+-- | The element at the given rank.
 index :: Int -> SortedBag a -> Maybe a
 index position bag@(SortedBag buckets)
   | position < 0 || position >= count bag = Nothing
@@ -157,6 +180,7 @@ index position bag@(SortedBag buckets)
         Measured.locate (\measureValue -> measureCount measureValue > position) buckets
       Seq.lookup (position - before) (bucketSequence bucket)
 
+-- | A bag without the element at the position.
 deleteAt :: Int -> SortedBag a -> Maybe (SortedBag a)
 deleteAt position bag@(SortedBag buckets)
   | position < 0 || position >= count bag = Nothing
@@ -165,6 +189,7 @@ deleteAt position bag@(SortedBag buckets)
           (_, right) = splitAtRank 1 selected
        in Just (SortedBag (Measured.append left right))
 
+-- | The elements in the given range.
 slice :: Ord a => Int -> Int -> SortedBag a -> Maybe (SortedBag a)
 slice position lengthValue bag@(SortedBag buckets)
   | not (isValidRange position lengthValue (count bag)) = Nothing
@@ -191,7 +216,7 @@ bucketLength = Seq.length . bucketSequence
 appendBucket :: a -> Bucket a -> Bucket a
 appendBucket value (Bucket key values) = Bucket key (values Seq.|> value)
 
--- Re-keys a bucket from the first surviving instance after front instances
+-- | Re-keys a bucket from the first surviving instance after front instances
 -- were removed, so the bucket key (and thus the toCounts representative) is
 -- always a value the bag actually contains. Callers guard against empty
 -- sequences.

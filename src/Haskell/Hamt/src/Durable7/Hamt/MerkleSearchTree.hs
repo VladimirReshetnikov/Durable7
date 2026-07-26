@@ -1,6 +1,12 @@
 {-# LANGUAGE BangPatterns #-}
 
 -- | A canonical immutable B=16 Merkle search tree with exact @MST2@ block bytes.
+-- | A Merkle search tree: a persistent ordered map whose structure is fixed by its contents.
+--
+-- Each block's digest covers its entries and its children's digests, so equal digests mean equal
+-- contents. Because the shape is derived from the data rather than from the edit history, two
+-- parties who inserted the same entries in different orders hold identical trees, and
+-- synchronizing them costs only what actually differs.
 module Durable7.Hamt.MerkleSearchTree
   ( MerkleSearchTree
   , MerkleEntry
@@ -284,21 +290,27 @@ cursorAtKey key tree =
   let (position, found) = lowerBoundRank key tree
    in MerkleCursorSearch found (MerkleCursor tree position)
 
+-- | Whether the search found an exact match.
 cursorSearchFound :: MerkleCursorSearch k v -> Bool
 cursorSearchFound (MerkleCursorSearch found _) = found
 
+-- | The cursor the search landed on.
 cursorSearchCursor :: MerkleCursorSearch k v -> MerkleCursor k v
 cursorSearchCursor (MerkleCursorSearch _ cursorValue) = cursorValue
 
+-- | Number of entries in the tree version the cursor is positioned in.
 cursorCount :: MerkleCursor k v -> Int
 cursorCount (MerkleCursor tree _) = size tree
 
+-- | The cursor's gap position.
 cursorPosition :: MerkleCursor k v -> Int
 cursorPosition (MerkleCursor _ position) = position
 
+-- | Whether the gap precedes the first entry.
 cursorIsAtStart :: MerkleCursor k v -> Bool
 cursorIsAtStart cursorValue = cursorPosition cursorValue == 0
 
+-- | Whether the gap follows the last entry.
 cursorIsAtEnd :: MerkleCursor k v -> Bool
 cursorIsAtEnd cursorValue = cursorPosition cursorValue == cursorCount cursorValue
 
@@ -312,16 +324,19 @@ cursorPeekPrevious cursorValue@(MerkleCursor tree position)
 cursorPeekNext :: MerkleCursor k v -> Maybe (MerkleEntry k v)
 cursorPeekNext (MerkleCursor tree position) = entryAtRank position tree
 
+-- | A cursor one position earlier. The receiver is unchanged.
 cursorMovePrevious :: MerkleCursor k v -> Maybe (MerkleCursor k v)
 cursorMovePrevious cursorValue@(MerkleCursor tree position)
   | cursorIsAtStart cursorValue = Nothing
   | otherwise = Just (MerkleCursor tree (position - 1))
 
+-- | A cursor one position later. The receiver is unchanged.
 cursorMoveNext :: MerkleCursor k v -> Maybe (MerkleCursor k v)
 cursorMoveNext cursorValue@(MerkleCursor tree position)
   | cursorIsAtEnd cursorValue = Nothing
   | otherwise = Just (MerkleCursor tree (position + 1))
 
+-- | A cursor at the given position within the same tree version.
 cursorSeek :: Int -> MerkleCursor k v -> Maybe (MerkleCursor k v)
 cursorSeek position cursorValue@(MerkleCursor tree _)
   | position < 0 || position > size tree = Nothing

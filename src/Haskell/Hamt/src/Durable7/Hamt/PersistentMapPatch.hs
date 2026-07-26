@@ -1,3 +1,8 @@
+-- | A persistent, invertible record of changes between two map versions.
+--
+-- Each change records both the state it expects and the state it produces. That is what lets a
+-- patch be inverted, composed with another, and applied against a target that may have drifted,
+-- rather than only replayed forward onto its original source.
 module Durable7.Hamt.PersistentMapPatch
   ( MapPatchEntry(..)
   , PersistentMapPatch
@@ -37,17 +42,24 @@ data MapPatchEntry k v = MapPatchEntry
   }
   deriving (Eq, Show)
 
+-- | A persistent, invertible record of changes between two map versions. Each change records both
+-- the state it expects and the state it produces, which is what lets a patch be inverted,
+-- composed, and applied against a target that may have drifted.
 data PersistentMapPatch k v = PersistentMapPatch !(HashMap k (Maybe v, Maybe v))
 
+-- | The empty patch.
 empty :: (Eq k, Hashable k) => PersistentMapPatch k v
 empty = emptyWith HashMap.defaultPolicy
 
+-- | The empty patch under the given policy, which it retains.
 emptyWith :: HashPolicy k -> PersistentMapPatch k v
 emptyWith keys = PersistentMapPatch (HashMap.emptyWith keys)
 
+-- | A patch holding a list's changes, built in bulk rather than by repeated insertion.
 fromList :: (Eq k, Hashable k, Eq v) => [MapPatchEntry k v] -> Maybe (PersistentMapPatch k v)
 fromList = fromListWith HashMap.defaultPolicy
 
+-- | A patch holding a list's changes, under the given policy.
 fromListWith :: Eq v => HashPolicy k -> [MapPatchEntry k v] -> Maybe (PersistentMapPatch k v)
 fromListWith keys = foldM (flip insert) (emptyWith keys)
 
@@ -61,15 +73,19 @@ between source target =
       EntryRemoved key value -> HashMap.insert key (Just value, Nothing) changes
       EntryChanged key oldValue newValue -> HashMap.insert key (Just oldValue, Just newValue) changes
 
+-- | Number of changes in the patch.
 size :: PersistentMapPatch k v -> Int
 size (PersistentMapPatch changes) = HashMap.size changes
 
+-- | Whether the patch holds no changes.
 null :: PersistentMapPatch k v -> Bool
 null patch = size patch == 0
 
+-- | The policy the patch retains.
 policy :: PersistentMapPatch k v -> HashPolicy k
 policy (PersistentMapPatch changes) = HashMap.policy changes
 
+-- | The value stored for the key, or `Nothing` when absent.
 lookup :: k -> PersistentMapPatch k v -> Maybe (MapPatchEntry k v)
 lookup key (PersistentMapPatch changes) = do
   actual <- HashMap.actualKey key changes
@@ -86,6 +102,7 @@ insert entry patch@(PersistentMapPatch changes)
   where
     states = (beforeValue entry, afterValue entry)
 
+-- | A patch without that change.
 delete :: k -> PersistentMapPatch k v -> PersistentMapPatch k v
 delete key patch@(PersistentMapPatch changes)
   | not (HashMap.member key changes) = patch
@@ -102,6 +119,8 @@ apply patch source = case List.find conflicts (toList patch) of
       Nothing -> HashMap.delete (entryKey entry) current
       Just value -> HashMap.insert (entryKey entry) value current
 
+-- | The patch undoing this one. Each change records both its prior and its resulting state, which
+-- is what makes inversion possible.
 invert :: PersistentMapPatch k v -> PersistentMapPatch k v
 invert patch =
   PersistentMapPatch
@@ -126,10 +145,12 @@ compose first next = foldM composeEntry first (toList next)
               let PersistentMapPatch changes = current
                in Right (PersistentMapPatch (HashMap.insert (entryKey prior) (beforeValue prior, afterValue entry) changes))
 
+-- | The changes, in the patch's own order.
 toList :: PersistentMapPatch k v -> [MapPatchEntry k v]
 toList (PersistentMapPatch changes) =
   [MapPatchEntry key before after | (key, (before, after)) <- HashMap.toList changes]
 
+-- | Whether the patch's structural invariants hold. For tests and diagnostics.
 validStructure :: Eq v => PersistentMapPatch k v -> Bool
 validStructure patch@(PersistentMapPatch changes) =
   HashMap.validStructure changes
