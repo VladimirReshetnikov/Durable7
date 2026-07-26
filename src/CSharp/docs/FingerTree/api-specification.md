@@ -840,6 +840,43 @@ preserve instance identity, and no caller-owned mutable arrays are retained. The
 dedicated persistent tail buffer: repeated immutable `AddLast` remains a boundary-spine operation;
 use the builder when append throughput is the dominant construction workload.
 
+## Experimental Ancestral Slice Queue
+
+`AncestralSliceQueue<T>` is an immutable `IReadOnlyList<T>` facade over a mutable, monotone
+`IIncrementalAncestorArena<T>`. A handle stores an arena-owned tail node, the absolute depth of its
+first visible value, and its count. Its denotation is the contiguous ancestor-depth interval from
+that first depth through the tail. An empty result retains the node immediately before its window as
+an anchor; appending to any empty slice consequently produces exactly the appended value.
+
+The restricted public algebra is `AddLast`, endpoint reads and removals, indexed lookup, `Take`,
+`Drop`, `Slice`, `SplitAt`, and enumeration. Every producing operation leaves all old handles valid,
+and every result remains appendable. Prepend, point replacement, arbitrary middle edits, unrelated
+concatenation, and cross-arena operations are deliberately unsupported.
+
+Let `U(M)` be `AddLeaf` time and `Q(M)` be level-ancestor-query time after M nodes have been
+published in one arena. Parent, depth, and value reads are O(1). These are sequential bounds and do
+not include lock waiting or caller payload work. The facade has these bounds:
+
+| Operation | Time |
+| --- | --- |
+| `AddLast` | `U(M)` |
+| `Count`, `IsEmpty`, `Last`, `RemoveFirst`, `RemoveLast`, `Drop` | O(1) |
+| `First`, indexer, `Take`, `Slice`, nontrivial `SplitAt` | `Q(M)` |
+| `TryRemoveFirst` / `TryRemoveLast` | `Q(M)` / O(1) |
+| enumerate n visible values | Theta(n) |
+
+The shipped `MyersIncrementalAncestorArena<T>` uses one parent and one coalesced jump per immutable
+node. Its leaf insertion does O(1) link work and is O(1) amortized including odd-block allocation;
+ancestor queries are O(log M) worst case; and total manager storage is O(M). All its reads and writes
+are serialized by one private lock. An Alstrup--Holm incremental level-ancestor backend supplies
+`U(M) = Q(M) = O(1)` worst case with linear manager space, giving the facade O(1) worst-case scalar
+operations, but no such backend is included in this prototype.
+
+Space is charged to history, not a single handle: the arena retains every successful append and its
+payload until the arena becomes unreachable. The complete invariant, preservation proof, allocator
+arithmetic, prior-art audit, and precise shipped/theoretical distinction are normative in the
+[research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md).
+
 ## DABA Lite Sliding-Window Aggregator
 
 `DabaLite<T, TMonoid>` is a mutable FIFO sliding-window aggregator over the existing static

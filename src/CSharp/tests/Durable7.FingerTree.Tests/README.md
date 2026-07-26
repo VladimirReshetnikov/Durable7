@@ -65,6 +65,10 @@ reasonable oracle.
   radix-indexed regular nodes, relaxed size-table invariants, exact-boundary leaf reuse, adversarial
   split/concat density and height, builder snapshot isolation, endpoint contracts, and randomized
   persistent edit histories with retained versions.
+- `AncestralSliceQueueTests.cs` covers exhaustive slice/split boundaries, appendable anchored empties,
+  retained and randomized branching histories, direct Myers ancestor-oracle parity, odd-block square
+  seams and capacity arithmetic, traversal-hop and operation-routing guardrails, explicit/custom
+  factory validation, enumeration, and synchronized concurrent branches/readers.
 - `DabaLiteTests.cs` covers noncommutative FIFO order, a 100,000-operation randomized variable
   window model, empty/clear contracts, and the three/two/at-most-one worst-case `Combine` limits.
   `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a
@@ -129,6 +133,16 @@ Filter a class while developing a focused change:
 ```powershell
 .\test.ps1 -Filter FullyQualifiedName~RopePropertyTests
 ```
+
+The experimental ancestral-slice queue lane is:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~AncestralSliceQueue
+```
+
+On 2026-07-25, this lane passed 15/15 tests in Debug and Release. The complete FingerTree project
+passed 739/739, and the serialized full C# solution passed 1,545/1,545, in both configurations with
+zero build warnings or errors. No benchmark result is part of this experimental gate.
 
 The range-update integration lane uses the same serialized launcher:
 

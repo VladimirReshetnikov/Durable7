@@ -616,6 +616,33 @@ nodes use radix indexing without size tables; split/concat introduces size table
 spans become irregular. The immutable type has no dedicated tail buffer, so prefer its builder over
 an `AddLast` loop for bulk append construction.
 
+## Experimental Ancestral Slice Queue
+
+Use `AncestralSliceQueue<T>` when versions form branching append histories and every retained
+contiguous slice must remain appendable. It is intentionally narrower than a general persistent
+sequence: it has no prepend, point update, middle insertion, or concatenation of unrelated histories.
+
+```csharp
+var source = AncestralSliceQueue<int>.CreateRange(Enumerable.Range(0, 100));
+var window = source.Slice(25, 50);
+
+var leftBranch = window.AddLast(1000);
+var rightBranch = window.RemoveFirst().AddLast(2000);
+var (prefix, suffix) = window.SplitAt(20);
+
+int item = suffix[5];
+// source, window, prefix, and both branches remain unchanged and appendable.
+```
+
+Every handle shares an append-only arena. The shipped Myers arena makes `AddLast` O(1) amortized;
+`RemoveFirst`, `RemoveLast`, and `Drop` are O(1) worst case; and `First`, indexing, `Take`, `Slice`,
+and nontrivial `SplitAt` are O(log M) worst case for M historical appends in that arena. The arena
+retains every appended payload until the arena itself is collectible. An optimal dynamic
+level-ancestor backend would make all scalar operations O(1) worst case, but that backend is a
+theoretical instantiation rather than shipped code. See the
+[research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md) for the invariant,
+proof, scoped novelty claim, and comparison table.
+
 ## Range-Update Sequence
 
 Use `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` when a persistent indexed sequence must
@@ -693,6 +720,7 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | Chunked persistent positional sequence | `Rope<T>` |
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
+| Branching append history with appendable persistent slices | `AncestralSliceQueue<T>` (experimental) |
 | Persistent indexed sequence with logarithmic range actions and aggregate queries | `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` |
 | Sparse nonnegative integer set with population rank/select | `PersistentChunkedBitSet` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
