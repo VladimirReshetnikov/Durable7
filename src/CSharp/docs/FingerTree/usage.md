@@ -111,6 +111,35 @@ var restored = reversed.Reverse();
 Endpoint, index, split, and concat operations respect the current logical orientation. Use
 `FingerTreeDeque<T>` when reversal is not part of the contract and the tuned deque is enough.
 
+## Experimental Bilateral Ancestral Deque
+
+Use `BilateralAncestralDeque<T>` only for the restricted workload where versions branch through
+both-end pushes, reverse, index, and contiguous slicing, but never need unrelated concat or middle
+edits. Every handle belongs to an append-only ancestry arena:
+
+```csharp
+var history = BilateralAncestralDeque<int>.CreateMyers()
+    .AddLast(10)
+    .AddLast(20)
+    .AddFirst(5);                       // [5, 10, 20]
+
+var window = history.Slice(1, 2);       // [10, 20]
+var branch = window.Reverse()
+    .AddFirst(99)
+    .AddLast(7);                        // [99, 20, 10, 7]
+
+// Retained values are unchanged.
+var original = history.ToArray();       // [5, 10, 20]
+```
+
+The deque makes at most two level-ancestor queries for any scalar operation. With an optimal
+incremental-level-ancestor arena this gives O(1) worst-case pushes, pops, index, reverse, slice, and
+split. `CreateMyers()` is deliberately only a reference backend: its pushes are O(1) amortized and
+its ancestor-dependent operations are O(log M) after M historical pushes. A manager retains every
+published payload and serializes reference-backend reads until that manager is collected. See the
+[scoped research proposal](../../../../docs/proposals/bilateral-ancestral-deque-2026-07-25.md) before
+selecting this experimental surface.
+
 ## Sorted Collections
 
 Use the sorted wrappers when order is an invariant owned by the collection.
@@ -681,6 +710,7 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | --- | --- |
 | Persistent indexed sequence with endpoint edits | `FingerTreeDeque<T>` |
 | O(1) logical reverse over a persistent sequence | `ReversibleDeque<T>` |
+| Restricted branching deque with constant-call index/slice over an ancestry backend | `BilateralAncestralDeque<T>` (experimental) |
 | Custom monoid measure, measure-guided locate, or split | `FingerTree<TElement, TMeasure, TMeasureOps>` |
 | Sorted values with duplicates | `SortedBag<T>` |
 | Unique sorted values and set algebra | `SortedSet<T>` |

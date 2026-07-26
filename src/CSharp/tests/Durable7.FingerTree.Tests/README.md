@@ -28,6 +28,10 @@ reasonable oracle.
   `PriorityQueueTests.cs`, `IntervalTreeTests.cs`, `ReversibleDequeTests.cs`, and
   `DerivedCollectionPersistenceTests.cs` cover derived collection facades and mutable sorted builders against
   BCL or brute-force model behavior.
+- `BilateralAncestralDequeTests.cs` covers the experimental two-oriented-ancestry-interval deque and
+  Myers reference arena: endpoint contracts, reverse/slice closure, exhaustive and randomized
+  retained branches, exact ancestor-query ceilings, irregular-tree ancestry oracles, square block
+  seams, enumeration routing, and concurrent branching/reads.
 - `PersistentIntervalMapTests.cs` covers strict and replacing updates, lexicographic interval-key
   order, configured payload equality, first interval representatives, reversed-endpoint rejection,
   point and overlap queries against a brute-force model, removal, policy-preserving clear,
@@ -129,6 +133,16 @@ Filter a class while developing a focused change:
 ```powershell
 .\test.ps1 -Filter FullyQualifiedName~RopePropertyTests
 ```
+
+The bilateral ancestral deque research lane is:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~BilateralAncestralDequeTests
+```
+
+On 2026-07-25 UTC, that lane passed 15/15 tests in Debug and Release. The complete FingerTree
+project passed 739/739 and the full C# solution passed 1,545/1,545 in both configurations, with zero
+build warnings or errors.
 
 The range-update integration lane uses the same serialized launcher:
 

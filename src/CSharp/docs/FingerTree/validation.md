@@ -101,6 +101,22 @@ For the sparse chunked bit set, run:
 The focused lane currently passes 8/8 tests covering domain boundaries, word seams, rank/select,
 algebra, receiver identity, retained branches, randomized model parity, and measured invariants.
 
+For the experimental bilateral ancestral deque and its Myers reference arena, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~BilateralAncestralDequeTests
+```
+
+This lane is required to cover the two-arm invariant, all slice/split boundaries, retained branching
+models, exact level-ancestor call ceilings, direct irregular-tree arena oracles, odd-block seams, and
+concurrent reads. The optimal Alstrup--Holm instantiation remains a proved backend reduction rather
+than a shipped implementation, so tests must report Myers bounds separately.
+
+On 2026-07-25 UTC, the bilateral lane passed 15/15 tests in Debug and Release. The serialized full
+gates then passed 739/739 FingerTree tests and 1,545/1,545 total C# tests in both configurations,
+with zero build warnings or errors. The totals are 319 Numerics + 354 HAMT + 739 FingerTree + 81
+Ordered + 52 Tungsten. Benchmarks were not run and are not evidence for the asymptotic theorem.
+
 The suite covers:
 
 - `FingerTreeDeque<T>` endpoint, indexing, splitting, concatenation, sorted-search, enumeration, invariant,
@@ -110,6 +126,9 @@ The suite covers:
 - derived sorted bag/set/dictionary, sorted mutable builders, priority queue, interval tree,
   persistent interval map, persistent chunked bit set, and reversible deque
   behavior against BCL or brute-force models where appropriate;
+- `BilateralAncestralDeque<T>` empty/end/reverse/index/slice/split behavior, exhaustive and randomized
+  retained-version models, query-routing ceilings, Myers branch ancestry, allocation seams, and
+  lock-safe concurrent use;
 - `Rope<T>`, its public immutable `RopeCursor<T>` gap editor, `MeasuredRope<T, TMeasure, TMeasureOps>`,
   text helpers, editor-grade Unicode/newline helpers, `RopeBuilder`, and nested append-only rope builders;
 - `RopeCursorTests.cs` locks default-value rejection, gap and edit semantics, no-op/version/context/snapshot
