@@ -1,8 +1,14 @@
+// The shared Patricia trie the integer maps and sets are built on.
+
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 
 namespace Durable7.Hamt.Internal;
 
+/// <summary>
+/// The operations a Patricia trie needs from its integer key type: its width, and the bit tests
+/// that decide which branch a key takes.
+/// </summary>
 internal interface IPatriciaKey<TKey>
 {
     static abstract ulong Encode(TKey key);
@@ -10,6 +16,7 @@ internal interface IPatriciaKey<TKey>
     static abstract TKey Decode(ulong bits);
 }
 
+/// <summary>The Patricia key operations for signed 32-bit keys.</summary>
 internal readonly struct Int32PatriciaKey : IPatriciaKey<int>
 {
     public static ulong Encode(int key) => (uint)key ^ 0x80000000u;
@@ -17,6 +24,7 @@ internal readonly struct Int32PatriciaKey : IPatriciaKey<int>
     public static int Decode(ulong bits) => unchecked((int)((uint)bits ^ 0x80000000u));
 }
 
+/// <summary>The Patricia key operations for signed 64-bit keys.</summary>
 internal readonly struct Int64PatriciaKey : IPatriciaKey<long>
 {
     public static ulong Encode(long key) => (ulong)key ^ 0x8000000000000000UL;
@@ -24,6 +32,11 @@ internal readonly struct Int64PatriciaKey : IPatriciaKey<long>
     public static long Decode(ulong bits) => unchecked((long)(bits ^ 0x8000000000000000UL));
 }
 
+/// <summary>
+/// The shared Patricia trie the integer maps and sets are built on. Branch nodes store a common
+/// prefix and a discriminating bit, so a lookup is bounded by the key width rather than by the
+/// entry count.
+/// </summary>
 internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
     where TKeyPolicy : struct, IPatriciaKey<TKey>
 {

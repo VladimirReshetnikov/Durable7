@@ -1,3 +1,6 @@
+// An immutable, persistent interval tree: a collection of closed <see cref="Interval{T}"/> values
+// kept ordered by low endpoint, supporting logarithmic insertion and stabbing/overlap queries.
+
 using System.Collections;
 
 namespace Durable7.FingerTree;

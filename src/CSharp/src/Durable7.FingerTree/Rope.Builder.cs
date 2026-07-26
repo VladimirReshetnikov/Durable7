@@ -1,3 +1,5 @@
+// The bulk builder for the rope.
+
 using System.Collections;
 
 namespace Durable7.FingerTree;

@@ -1,3 +1,6 @@
+// The middle subtree of a measured deep node: either an already-computed tree of grouping nodes or
+// a shared memoized suspension of a pending spine repair.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

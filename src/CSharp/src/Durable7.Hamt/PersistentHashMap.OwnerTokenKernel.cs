@@ -1,3 +1,6 @@
+// The owner-token kernel behind the persistent hash map's transient sessions, which decides when an
+// edit may reuse a node in place instead of copying it.
+
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -1952,6 +1955,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     }
 }
 
+/// <summary>Evidence that the map's shape is a function of its contents.</summary>
 internal readonly record struct PersistentHashMapCanonicalityDiagnostics(
     int EntryCount,
     int RecursiveEntryCount,

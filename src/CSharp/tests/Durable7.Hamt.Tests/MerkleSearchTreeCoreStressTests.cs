@@ -1,3 +1,5 @@
+// Tests for the merkle search tree core stress.
+
 using System.Buffers.Binary;
 using System.Reflection;
 using Xunit;

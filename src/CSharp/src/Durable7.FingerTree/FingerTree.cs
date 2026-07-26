@@ -1,3 +1,8 @@
+// An immutable, persistent, general <em>measured</em> finger tree: a sequence of <typeparamref
+// name="TElement"/> annotated by a monoidal <typeparamref name="TMeasure"/> supplied through
+// <typeparamref name="TMeasureOps"/>, supporting the full Hinze–Paterson operation set
+// parameterized by that measure.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 

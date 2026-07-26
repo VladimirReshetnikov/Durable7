@@ -1,3 +1,6 @@
+// The guided tour itself: each collection demonstrated in turn, with older versions kept readable
+// to show that an edit leaves its input valid.
+
 using Durable7.FingerTree;
 using TextCursor = Durable7.FingerTree.MeasuredRopeCursor<char, int, Durable7.FingerTree.NewlineMeasure>;
 using TextRope = Durable7.FingerTree.MeasuredRope<char, int, Durable7.FingerTree.NewlineMeasure>;

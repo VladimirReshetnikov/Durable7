@@ -1,3 +1,5 @@
+// Mutable staging for transferring exact-length chunks into immutable ropes.
+
 namespace Durable7.FingerTree;
 
 using System.Runtime.CompilerServices;

@@ -1,3 +1,5 @@
+// Tests for the concurrent hash trie linearizability.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

@@ -1,3 +1,5 @@
+// Tests for the enumerator copy divergence.
+
 using Durable7.FingerTree;
 using Xunit;
 

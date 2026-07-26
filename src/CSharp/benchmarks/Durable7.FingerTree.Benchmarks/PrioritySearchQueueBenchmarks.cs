@@ -1,9 +1,12 @@
+// Benchmarks for the priority search queue.
+
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using Durable7.FingerTree;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the persistent priority search queue.</summary>
 [MemoryDiagnoser]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 public class PrioritySearchQueueBenchmarks

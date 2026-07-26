@@ -1,3 +1,7 @@
+// A monotone predicate over a measure, supplied as a value type so a measured-tree read (<see
+// cref="FingerTree{TElement, TMeasure, TMeasureOps}.TryLocate{TPredicate}(TPredicate, out TMeasure,
+// out TElement)"/>) can descend to a boundary element without allocating a closure.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

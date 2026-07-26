@@ -1,3 +1,5 @@
+// Benchmarks for the rope cursor.
+
 using System.Text;
 using BenchmarkDotNet.Attributes;
 
@@ -324,6 +326,10 @@ public class RopeCursorGateBenchmarks
         RopeCursorBenchmarkWorkload.RunStringBuilder(_text, _positions, SnapshotCadence);
 }
 
+/// <summary>
+/// A generated editing workload for the rope cursor, built from a fixed seed so a run is
+/// reproducible.
+/// </summary>
 internal static class RopeCursorBenchmarkWorkload
 {
     internal static int[] CreatePositions(int size, int localityWindow, int count)

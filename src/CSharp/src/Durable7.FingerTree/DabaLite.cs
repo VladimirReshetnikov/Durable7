@@ -1,3 +1,5 @@
+// Maintains a FIFO sliding-window aggregate with worst-case constant work per operation.
+
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 

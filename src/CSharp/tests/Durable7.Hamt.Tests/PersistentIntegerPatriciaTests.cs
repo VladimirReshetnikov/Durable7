@@ -1,3 +1,5 @@
+// Tests for the persistent integer patricia.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

@@ -1,3 +1,5 @@
+// Tests for the finger tree deque complexity guard.
+
 using Durable7.FingerTree;
 using Xunit;
 

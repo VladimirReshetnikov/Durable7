@@ -1,3 +1,6 @@
+// A run of measured rope elements stored as one leaf, carrying both its length and the combined
+// measure of its elements.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

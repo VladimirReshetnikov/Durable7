@@ -1,3 +1,5 @@
+// Shared support for the packed frozen map prototype benchmarks.
+
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -223,6 +225,10 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
     }
 }
 
+/// <summary>
+/// Shape and probe counts from the packed frozen map prototype, for comparing it against the
+/// persistent map.
+/// </summary>
 internal readonly record struct PackedFrozenMapPrototypeDiagnostics(
     int EntryCount,
     int SlotCount,

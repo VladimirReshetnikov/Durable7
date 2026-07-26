@@ -1,3 +1,7 @@
+// An immutable, persistent, <em>meldable</em> minimum-priority queue backed by a measured finger
+// tree: the entry with the least priority is dequeued first, with O(1) amortized enqueue and
+// O(log(min(n, m))) melding of two queues.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 

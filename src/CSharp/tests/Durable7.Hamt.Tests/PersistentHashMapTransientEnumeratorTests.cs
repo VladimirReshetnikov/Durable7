@@ -1,3 +1,5 @@
+// Tests for the persistent hash map transient enumerator.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

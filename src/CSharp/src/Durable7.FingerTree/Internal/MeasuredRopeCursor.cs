@@ -1,3 +1,6 @@
+// MeasuredCursorBuffer, MeasuredCursorPreparedFragment, MeasuredCursorFragmentCache,
+// MeasuredRopeZipperContext, and 4 more.
+
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
@@ -425,6 +428,9 @@ internal sealed class MeasuredCursorFragmentCache<T, TMeasure, TMeasureOps>
         _fragments.TryAdd(chunk.Chunk.Data, prepared);
 }
 
+/// <summary>
+/// The path from the root down to the cursor's chunk, so a local edit rebuilds only that path.
+/// </summary>
 internal readonly record struct MeasuredRopeZipperContext<T, TMeasure, TMeasureOps>(
     FingerTree<MeasuredChunk<T, TMeasure, TMeasureOps>, MeasurePair<int, TMeasure>, MeasuredChunkMeasure<T, TMeasure, TMeasureOps>> LeftTree,
     MeasuredCursorBuffer<T, TMeasure, TMeasureOps> LeftCarry,
@@ -443,6 +449,10 @@ internal readonly record struct MeasuredRopeZipperContext<T, TMeasure, TMeasureO
     int DeferredGap)
     where TMeasureOps : IMeasure<T, TMeasure>;
 
+/// <summary>
+/// The rope version a cursor is positioned in, together with the cached path into it. Held per
+/// version so a cursor never observes a version it did not name.
+/// </summary>
 internal sealed class MeasuredCursorVersionState<T, TMeasure, TMeasureOps>
     where TMeasureOps : IMeasure<T, TMeasure>
 {
@@ -495,11 +505,18 @@ internal sealed class MeasuredCursorVersionState<T, TMeasure, TMeasureOps>
     }
 }
 
+/// <summary>
+/// One recorded cursor edit, for the diagnostics that check a cursor reused its path rather than
+/// re-descending.
+/// </summary>
 internal readonly record struct MeasuredRopeCursorEdit<T, TMeasure, TMeasureOps>(
     MeasuredCursorVersionState<T, TMeasure, TMeasureOps> Version,
     MeasuredRopeZipperContext<T, TMeasure, TMeasureOps> Context)
     where TMeasureOps : IMeasure<T, TMeasure>;
 
+/// <summary>
+/// What the cursor's cached state looked like at one point, for tests about path reuse.
+/// </summary>
 internal readonly record struct MeasuredRopeCursorStateDiagnostics<TMeasure>(
     int Count,
     int Position,
@@ -515,6 +532,10 @@ internal readonly record struct MeasuredRopeCursorStateDiagnostics<TMeasure>(
     TMeasure MeasureBefore,
     TMeasure MeasureAfter);
 
+/// <summary>
+/// The shared cursor mechanics behind the measured rope's public cursor: positioning, movement, and
+/// path-local editing.
+/// </summary>
 internal static class MeasuredRopeCursorEngine<T, TMeasure, TMeasureOps>
     where TMeasureOps : IMeasure<T, TMeasure>
 {

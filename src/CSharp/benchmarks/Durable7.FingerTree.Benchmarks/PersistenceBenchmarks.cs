@@ -1,3 +1,5 @@
+// Benchmarks for the persistence.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 

@@ -1,3 +1,6 @@
+// A numeric sum measure: each element measures itself and measures add, so a tree's measure is the
+// running total of its elements.
+
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 

@@ -1,3 +1,5 @@
+// Represents an immutable unordered dictionary backed by a hash-array mapped trie.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -2109,6 +2111,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
     }
 }
 
+/// <summary>The debugger's view of a map: its entries, rather than its trie nodes.</summary>
 internal sealed class PersistentHashMapDebugView<TKey, TValue>(PersistentHashMap<TKey, TValue> map)
 {
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]

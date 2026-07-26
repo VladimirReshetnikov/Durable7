@@ -1,3 +1,5 @@
+// Tests for the rope cursor prototype contract.
+
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

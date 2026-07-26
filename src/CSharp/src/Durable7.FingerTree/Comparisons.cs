@@ -1,3 +1,6 @@
+// Ordering policies. Orderings are expressed through a single comparison so a caller need only
+// supply a strict weak ordering.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

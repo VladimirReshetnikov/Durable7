@@ -1,3 +1,5 @@
+// Tests for the measured rope cursor model.
+
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

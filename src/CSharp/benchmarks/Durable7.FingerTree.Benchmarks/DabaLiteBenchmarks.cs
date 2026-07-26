@@ -1,8 +1,11 @@
+// Benchmarks for the DABA Lite lite.
+
 using BenchmarkDotNet.Attributes;
 using Durable7.FingerTree;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the DABA Lite sliding-window aggregate.</summary>
 [MemoryDiagnoser]
 public class DabaLiteBenchmarks
 {

@@ -1,3 +1,5 @@
+// Tests for the DABA Lite lite adversarial.
+
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Xunit;

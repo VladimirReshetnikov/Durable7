@@ -1,3 +1,5 @@
+// Tests for the measured rope.
+
 using Durable7.FingerTree;
 using Xunit;
 

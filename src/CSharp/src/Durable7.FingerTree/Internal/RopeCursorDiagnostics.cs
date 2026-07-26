@@ -1,7 +1,14 @@
+// Counters the rope cursor records, for tests that a local edit reused the cached path rather than
+// re-descending.
+
 using System.Runtime.CompilerServices;
 
 namespace Durable7.FingerTree;
 
+/// <summary>
+/// Counters the rope cursor records, for tests that a local edit reused the cached path rather than
+/// re-descending.
+/// </summary>
 internal static class RopeCursorDiagnostics
 {
     [ThreadStatic]
@@ -56,6 +63,9 @@ internal static class RopeCursorDiagnostics
     }
 }
 
+/// <summary>
+/// A scope over which rope cursor counters are collected; disposing it restores the previous state.
+/// </summary>
 internal sealed class RopeCursorDiagnosticSession : IDisposable
 {
     private readonly RopeCursorDiagnosticSession? _previous;
@@ -123,6 +133,7 @@ internal sealed class RopeCursorDiagnosticSession : IDisposable
     }
 }
 
+/// <summary>The counts one rope cursor operation produced.</summary>
 internal readonly record struct RopeCursorOperationDiagnostics(
     long NodeVisits,
     long SpineAllocations,

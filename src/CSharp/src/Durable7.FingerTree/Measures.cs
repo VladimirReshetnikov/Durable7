@@ -1,3 +1,7 @@
+// The monoid and measure contracts every measured structure is parameterized on. A measure must be
+// associative with a two-sided identity, because the tree combines cached measures in whatever
+// grouping its shape happens to have.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

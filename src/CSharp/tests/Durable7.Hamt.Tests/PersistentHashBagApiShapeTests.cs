@@ -1,3 +1,5 @@
+// Tests for the persistent hash bag api shape.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Reflection;

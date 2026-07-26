@@ -1,3 +1,5 @@
+// Benchmarks for the frozen lookup.
+
 using System.Collections.Frozen;
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;

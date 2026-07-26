@@ -1,3 +1,7 @@
+// An immutable, persistent sorted set (no duplicates) backed by an order-statistic measured finger
+// tree: logarithmic add/remove/search, navigable neighbor queries, ranking and order-statistic
+// indexing, range extraction, and linear-merge set algebra, with constant-time count and endpoints.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

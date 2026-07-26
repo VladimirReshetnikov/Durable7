@@ -1,3 +1,6 @@
+// A middle-tree element holding two or three children one level closer to the leaves, with cached
+// leaf-count and rightmost-leaf measures.
+
 using System.Diagnostics;
 
 namespace Durable7.FingerTree;

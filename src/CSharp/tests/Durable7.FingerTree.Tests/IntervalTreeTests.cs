@@ -1,3 +1,5 @@
+// Tests for the interval tree.
+
 using Durable7.FingerTree;
 using Xunit;
 

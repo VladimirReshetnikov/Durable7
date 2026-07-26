@@ -1,3 +1,5 @@
+// Benchmarks for the measured rope cursor.
+
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using TextCursor = Durable7.FingerTree.MeasuredRopeCursor<char, int, Durable7.FingerTree.NewlineMeasure>;
@@ -488,6 +490,10 @@ public class MeasuredRopeCursorDirtyQueryBenchmarks
             : int.MinValue;
 }
 
+/// <summary>
+/// A generated editing workload for the measured rope cursor, built from a fixed seed so a run is
+/// reproducible.
+/// </summary>
 internal static class MeasuredRopeCursorBenchmarkWorkload
 {
     internal static char[] CreateText(int length, MeasuredTextNewlineDensity density)
@@ -689,8 +695,12 @@ internal static class MeasuredRopeCursorBenchmarkWorkload
         index + 1 == count || (index + 1) % cadence == 0;
 }
 
+/// <summary>
+/// How many times the measure policy was invoked, which is what a cursor is supposed to reduce.
+/// </summary>
 internal readonly record struct MeasureCallbackCounts(long MeasureCalls, long CombineCalls);
 
+/// <summary>The measure-callback and structural counts one benchmark run observed.</summary>
 internal readonly record struct MeasuredRopeCursorDiagnosticReport(
     int EditCount,
     int SnapshotCadence,
@@ -708,11 +718,19 @@ internal readonly record struct MeasuredRopeCursorDiagnosticReport(
             $"AXIS2_C2_CALLBACK_V1 scope={scope} document_size={documentSize} newline_density={newlineDensity.ToString().ToLowerInvariant()} locality_window={localityWindow} edit_count={EditCount} snapshot_cadence={SnapshotCadence} indexed_measure={IndexedEditCallbacks.MeasureCalls} indexed_combine={IndexedEditCallbacks.CombineCalls} cursor_measure={CursorEditCallbacks.MeasureCalls} cursor_combine={CursorEditCallbacks.CombineCalls} snapshot_measure={CursorSnapshotCallbacks.MeasureCalls} snapshot_combine={CursorSnapshotCallbacks.CombineCalls} source_seek_measure={SourceMeasureSeekCallbacks.MeasureCalls} source_seek_combine={SourceMeasureSeekCallbacks.CombineCalls} prepared_seek_measure={PreparedMeasureSeekCallbacks.MeasureCalls} prepared_seek_combine={PreparedMeasureSeekCallbacks.CombineCalls}");
 }
 
+/// <summary>
+/// Matches once the accumulated measure reaches the threshold, expressing a positional seek as a
+/// measured one.
+/// </summary>
 internal readonly struct MeasureAtLeastPredicate(int target) : IMeasurePredicate<int>
 {
     public bool Invoke(int measure) => measure >= target;
 }
 
+/// <summary>
+/// The newline measure with invocation counting, so a benchmark can attribute work to the measure
+/// policy.
+/// </summary>
 internal readonly struct CountingNewlineMeasure : IMeasure<char, int>
 {
     private static long s_measureCalls;

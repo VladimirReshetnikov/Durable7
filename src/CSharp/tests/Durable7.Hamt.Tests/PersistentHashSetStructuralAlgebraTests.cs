@@ -1,3 +1,5 @@
+// Tests for the persistent hash set structural algebra.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;
@@ -156,6 +158,9 @@ public sealed class PersistentHashSetStructuralAlgebraTests
     }
 }
 
+/// <summary>
+/// Helpers turning the persistent set into a plain model the algebra tests can compare against.
+/// </summary>
 internal static class SetModelExtensions
 {
     internal static HashSet<T> SymmetricExceptModel<T>(this HashSet<T> left, HashSet<T> right)

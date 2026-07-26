@@ -1,3 +1,9 @@
+// Named operations over <see cref="FingerTree{TElement, TMeasure, TMeasureOps}"/> instances built
+// with the ready-made measures (<see cref="MaxMeasure{T}"/>, <see cref="MinMeasure{T}"/>, <see
+// cref="KeyMeasure{T}"/>, <see cref="OrderStatisticMeasure{T}"/>), so callers express priority-
+// queue, ordered-set, and order-statistic intent directly instead of building split predicates by
+// hand.
+
 using System.Diagnostics.CodeAnalysis;
 
 namespace Durable7.FingerTree;

@@ -1,3 +1,6 @@
+// Represents an immutable measured sequence whose contiguous ranges can be transformed by lazily
+// composed algebraic tags.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Runtime.InteropServices;

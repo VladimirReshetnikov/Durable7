@@ -1,3 +1,5 @@
+// Tests for the concurrent hash trie.
+
 using System.Collections.Concurrent;
 using Xunit;
 

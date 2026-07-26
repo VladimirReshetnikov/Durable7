@@ -1,3 +1,6 @@
+// The structural diagnostics for the persistent hash map, used by the tests to assert on shape and
+// sharing.
+
 using System.Runtime.CompilerServices;
 
 namespace Durable7.Hamt;
@@ -372,6 +375,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     }
 }
 
+/// <summary>Node and entry measurements from a structural audit.</summary>
 internal readonly record struct PersistentHashMapStructureDiagnostics(
     int EntryCount,
     int NodeCount,
@@ -390,6 +394,9 @@ internal readonly record struct PersistentHashMapStructureDiagnostics(
     long EstimatedOwnerTokenBytes,
     long EstimatedRetainedBytes);
 
+/// <summary>
+/// How many nodes an edit copied versus reused, which is what structural sharing is measured by.
+/// </summary>
 internal readonly record struct PersistentHashMapMutationDiagnostics(
     int NodeVisits,
     int CopiedNodeCount,

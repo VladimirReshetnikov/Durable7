@@ -1,3 +1,5 @@
+// Tests for the persistent ordered set algebra and relation.
+
 using Xunit;
 
 namespace Durable7.Ordered.Tests;

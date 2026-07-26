@@ -1,8 +1,14 @@
+// The reference-shaped prototype cursor: immutable, each movement producing a new cursor.
+
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Durable7.FingerTree;
 
+/// <summary>
+/// How a prototype cursor is configured, so the alternatives can be compared under identical
+/// settings.
+/// </summary>
 internal readonly record struct RopeCursorPrototypeConfiguration(int FocusCapacity, int FlushChunkSize)
 {
     internal static RopeCursorPrototypeConfiguration Create(int focusCapacity, int flushChunkSize)
@@ -17,6 +23,9 @@ internal readonly record struct RopeCursorPrototypeConfiguration(int FocusCapaci
     }
 }
 
+/// <summary>
+/// The path from the root down to the cursor's chunk, so a local edit rebuilds only that path.
+/// </summary>
 internal readonly record struct RopeZipperContext<T>(
     FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> LeftTree,
     T[] LeftCarry,
@@ -27,6 +36,9 @@ internal readonly record struct RopeZipperContext<T>(
     int Position,
     RopeCursorPrototypeConfiguration Configuration);
 
+/// <summary>
+/// The rope version a prototype cursor is positioned in, together with the cached path into it.
+/// </summary>
 internal sealed class CursorVersionState<T>
 {
     private readonly RopeZipperContext<T> _snapshotSeed;
@@ -57,10 +69,15 @@ internal sealed class CursorVersionState<T>
     }
 }
 
+/// <summary>One recorded prototype cursor edit.</summary>
 internal readonly record struct RopeCursorPrototypeEdit<T>(
     CursorVersionState<T> Version,
     RopeZipperContext<T> Context);
 
+/// <summary>
+/// The shared mechanics the prototype cursors are built on, so the immutable, struct and mutable
+/// shapes differ only in their surface.
+/// </summary>
 internal static class RopeCursorPrototypeEngine<T>
 {
     internal static RopeCursorPrototypeEdit<T> Create(
@@ -621,6 +638,9 @@ internal static class RopeCursorPrototypeEngine<T>
     }
 }
 
+/// <summary>
+/// The reference-shaped prototype cursor: immutable, each movement producing a new cursor.
+/// </summary>
 internal sealed class RopeCursorPrototype<T>
 {
     private readonly CursorVersionState<T> _version;
@@ -698,6 +718,9 @@ internal sealed class RopeCursorPrototype<T>
         new(edit.Version, edit.Context);
 }
 
+/// <summary>
+/// The value-typed prototype cursor, kept for comparison against the reference-shaped one.
+/// </summary>
 internal readonly struct RopeCursorStructPrototype<T>
 {
     private readonly CursorVersionState<T>? _version;
@@ -788,6 +811,10 @@ internal readonly struct RopeCursorStructPrototype<T>
         _version ?? throw new InvalidOperationException("The default cursor prototype is not initialized.");
 }
 
+/// <summary>
+/// The mutable prototype cursor, kept for comparison. Deliberately not a snapshot: movement mutates
+/// it in place.
+/// </summary>
 internal sealed class RopeMutableCursorPrototype<T>
 {
     private CursorVersionState<T> _version;
@@ -860,6 +887,7 @@ internal sealed class RopeMutableCursorPrototype<T>
     }
 }
 
+/// <summary>What a prototype cursor's cached state looked like at one point.</summary>
 internal readonly record struct RopeCursorPrototypeStateDiagnostics(
     int Count,
     int Position,

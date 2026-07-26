@@ -1,3 +1,5 @@
+// Tests for the rope text.
+
 using Durable7.FingerTree;
 using Xunit;
 

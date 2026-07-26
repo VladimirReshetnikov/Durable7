@@ -1,3 +1,5 @@
+// Represents an immutable bootstrapped skew-binomial min-heap.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

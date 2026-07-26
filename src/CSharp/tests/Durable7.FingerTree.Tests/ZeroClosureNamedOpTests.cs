@@ -1,3 +1,5 @@
+// Tests for the zero closure named op.
+
 using Durable7.FingerTree;
 using Xunit;
 

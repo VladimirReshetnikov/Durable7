@@ -1,3 +1,5 @@
+// Tests for the persistent hash bag enumerator.
+
 using System.Collections;
 using Xunit;
 

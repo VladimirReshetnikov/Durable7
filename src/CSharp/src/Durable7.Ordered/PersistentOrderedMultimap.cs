@@ -1,3 +1,6 @@
+// Represents an immutable key-grouped multimap that preserves insertion order for both key groups
+// and the distinct values within each group.
+
 using System.Collections;
 using System.Diagnostics;
 

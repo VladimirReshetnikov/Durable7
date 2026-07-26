@@ -1,3 +1,6 @@
+// Defines an ordered sequence measure together with a monoid of lazy range-update tags acting on
+// both individual elements and cached subtree measures.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

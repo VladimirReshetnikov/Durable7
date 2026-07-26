@@ -1,3 +1,5 @@
+// Represents an immutable relaxed radix-balanced vector with 32-way branching.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -734,6 +736,10 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
     }
 }
 
+/// <summary>
+/// Shape measurements from a structural audit. The regular and relaxed branch counts show how much
+/// of the tree still uses pure radix addressing.
+/// </summary>
 internal readonly record struct RrbVectorStatistics(
     int Count,
     int Height,

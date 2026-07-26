@@ -1,3 +1,5 @@
+// Shared support for the frozen map layout prototypes benchmarks.
+
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;

@@ -1,3 +1,8 @@
+// An immutable, persistent sorted multiset (duplicates allowed) backed by an order-statistic
+// measured finger tree: it keeps elements in comparer order and supports logarithmic
+// add/remove/search, ranking, range extraction, and order-statistic indexing, with constant-time
+// count and endpoints.
+
 using System.Collections;
 
 namespace Durable7.FingerTree;

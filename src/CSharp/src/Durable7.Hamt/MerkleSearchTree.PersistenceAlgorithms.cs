@@ -1,3 +1,5 @@
+// The persistence algorithms of the merkle search tree.
+
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 

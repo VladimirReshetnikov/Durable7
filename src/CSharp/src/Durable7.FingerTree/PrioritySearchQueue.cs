@@ -1,3 +1,5 @@
+// Stores one value/priority per ordered key with both search-tree and priority-queue queries.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

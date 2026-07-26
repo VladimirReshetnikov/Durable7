@@ -1,3 +1,5 @@
+// The core representation and operations of the range update sequence.
+
 using System.Diagnostics;
 
 namespace Durable7.FingerTree;

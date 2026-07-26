@@ -1,3 +1,5 @@
+// Tests for the persistent hash-array mapped trie structure.
+
 using Xunit;
 using IntSet = Durable7.Hamt.PersistentHashSet<int>;
 

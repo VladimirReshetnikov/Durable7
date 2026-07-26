@@ -1,3 +1,5 @@
+// The bulk builder for the measured rope.
+
 using System.Collections;
 
 namespace Durable7.FingerTree;

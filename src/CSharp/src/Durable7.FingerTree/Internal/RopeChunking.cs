@@ -1,3 +1,5 @@
+// Shared chunk-size policy for the rope family.
+
 namespace Durable7.FingerTree;
 
 /// <summary>Shared chunk-size policy for the rope family.</summary>

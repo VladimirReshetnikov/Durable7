@@ -1,3 +1,5 @@
+// Describes one key-level difference between two persistent maps.
+
 namespace Durable7.Hamt;
 
 /// <summary>Identifies how a key differs between two persistent maps.</summary>

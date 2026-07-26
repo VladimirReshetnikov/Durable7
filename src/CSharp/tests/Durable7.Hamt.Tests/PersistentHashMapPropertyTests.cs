@@ -1,3 +1,5 @@
+// Tests for the persistent hash map property.
+
 using CsCheck;
 using Xunit;
 using IntMap = Durable7.Hamt.PersistentHashMap<int, int>;

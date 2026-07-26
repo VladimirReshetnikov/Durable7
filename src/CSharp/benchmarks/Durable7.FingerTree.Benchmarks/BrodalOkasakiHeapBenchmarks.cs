@@ -1,9 +1,12 @@
+// Benchmarks for the brodal okasaki heap.
+
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using Durable7.FingerTree;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the persistent Brodal-Okasaki heap.</summary>
 [MemoryDiagnoser]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 public class BrodalOkasakiHeapBenchmarks

@@ -1,3 +1,5 @@
+// Tests for the measured rope cursor api shape.
+
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Xunit;

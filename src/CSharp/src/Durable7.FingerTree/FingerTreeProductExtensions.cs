@@ -1,3 +1,8 @@
+// Operations over product-measured trees (<see cref="ProductMeasure{TElement, TFirst, TSecond,
+// TFirstOps, TSecondOps}"/>): the component-projecting splits that work for any pairing, plus named
+// operations for the headline size + sum, size + max, and size + min compositions so callers
+// express positional, cumulative-weight, and priority-queue intent directly.
+
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 

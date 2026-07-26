@@ -1,3 +1,5 @@
+// Tests for the rope property.
+
 using CsCheck;
 using Durable7.FingerTree;
 using Xunit;

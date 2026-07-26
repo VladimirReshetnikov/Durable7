@@ -1,9 +1,12 @@
+// Benchmarks for the patricia map.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 using Durable7.Hamt;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the persistent Patricia maps and sets.</summary>
 [MemoryDiagnoser]
 public class PatriciaMapBenchmarks
 {

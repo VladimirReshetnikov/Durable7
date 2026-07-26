@@ -1,3 +1,5 @@
+// The measured tree's three cases: empty, single, and deep with a prefix, a middle and a suffix.
+
 namespace Durable7.FingerTree;
 
 /// <summary>The empty level of a measured finger tree.</summary>

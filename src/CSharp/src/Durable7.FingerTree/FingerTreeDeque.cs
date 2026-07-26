@@ -1,3 +1,5 @@
+// Represents an immutable persistent catenable deque backed by a finger tree.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 

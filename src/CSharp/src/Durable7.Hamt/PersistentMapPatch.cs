@@ -1,3 +1,6 @@
+// Represents an immutable, invertible set of strict changes between compatible persistent hash
+// maps.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

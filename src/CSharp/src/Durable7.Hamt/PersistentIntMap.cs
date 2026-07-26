@@ -1,3 +1,5 @@
+// Represents an immutable map from signed 32-bit integer keys using a big-endian Patricia trie.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using Durable7.Hamt.Internal;

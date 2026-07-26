@@ -1,3 +1,5 @@
+// Tests for the sample smoke.
+
 using Durable7.FingerTree.Editor;
 using Durable7.FingerTree.Showcase;
 using Durable7.FingerTree.Tour;

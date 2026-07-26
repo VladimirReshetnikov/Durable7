@@ -1,3 +1,6 @@
+// Represents an immutable primary hash map with one automatically maintained nonunique secondary
+// index.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

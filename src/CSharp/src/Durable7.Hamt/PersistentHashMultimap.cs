@@ -1,3 +1,6 @@
+// Represents an immutable unordered set-valued hash multimap backed by nested persistent CHAMP
+// collections.
+
 using System.Collections;
 using System.Diagnostics;
 

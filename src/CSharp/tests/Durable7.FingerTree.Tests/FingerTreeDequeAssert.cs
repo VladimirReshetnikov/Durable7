@@ -1,8 +1,13 @@
+// Assertions about the finger tree deque, shared by its tests.
+
 using Durable7.FingerTree;
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;
 
+/// <summary>
+/// Assertions about a deque's contents and structure, shared by the deque tests.
+/// </summary>
 internal static class FingerTreeDequeAssert
 {
     public static void SequenceEqual<T>(IReadOnlyList<T> expected, FingerTreeDeque<T> actual)

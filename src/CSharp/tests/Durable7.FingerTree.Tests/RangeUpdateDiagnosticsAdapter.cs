@@ -1,3 +1,5 @@
+// Shared support for the range update diagnostics adapter tests.
+
 using Durable7.FingerTree;
 
 namespace Durable7.FingerTree.Tests;

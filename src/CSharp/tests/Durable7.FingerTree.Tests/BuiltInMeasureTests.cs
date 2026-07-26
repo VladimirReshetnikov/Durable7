@@ -1,3 +1,5 @@
+// Tests for the built in measure.
+
 using Durable7.FingerTree;
 using Xunit;
 

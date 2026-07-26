@@ -1,3 +1,6 @@
+// Text-oriented conveniences over the general ropes: <see cref="string"/> interop, line/column
+// navigation, and a <see cref="TextReader"/> adapter.
+
 using System.Text;
 
 namespace Durable7.FingerTree;

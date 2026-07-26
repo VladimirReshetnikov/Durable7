@@ -1,8 +1,13 @@
+// Benchmarks for the merkle search tree.
+
 using BenchmarkDotNet.Attributes;
 using Durable7.Hamt;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>
+/// Benchmarks for the Merkle search tree, including synchronization and proofs.
+/// </summary>
 [MemoryDiagnoser]
 public class MerkleSearchTreeBenchmarks
 {

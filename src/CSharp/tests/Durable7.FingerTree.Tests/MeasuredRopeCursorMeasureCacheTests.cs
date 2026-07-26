@@ -1,3 +1,5 @@
+// Tests for the measured rope cursor measure cache.
+
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

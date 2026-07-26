@@ -1,3 +1,6 @@
+// Represents an immutable insertion-ordered set with comparer-defined hashed membership and
+// explicit positional reordering.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;

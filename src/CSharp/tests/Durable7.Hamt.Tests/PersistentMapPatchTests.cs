@@ -1,3 +1,5 @@
+// Tests for the persistent map patch.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

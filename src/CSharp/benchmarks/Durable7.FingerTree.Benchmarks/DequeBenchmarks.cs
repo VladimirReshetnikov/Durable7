@@ -1,3 +1,5 @@
+// Benchmarks for the deque.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 

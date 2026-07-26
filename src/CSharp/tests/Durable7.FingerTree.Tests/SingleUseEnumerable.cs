@@ -1,7 +1,13 @@
+// Shared support for the single use enumerable tests.
+
 using System.Collections;
 
 namespace Durable7.FingerTree.Tests;
 
+/// <summary>
+/// A sequence that can be enumerated only once, so a test can prove an operation does not enumerate
+/// its input twice.
+/// </summary>
 internal sealed class SingleUseEnumerable<T>(IReadOnlyList<T> items) : IEnumerable<T>
 {
     public int EnumerationCount { get; private set; }

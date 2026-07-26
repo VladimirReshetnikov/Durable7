@@ -1,3 +1,5 @@
+// The single pass updates of the persistent hash map.
+
 namespace Durable7.Hamt;
 
 public sealed partial class PersistentHashMap<TKey, TValue>

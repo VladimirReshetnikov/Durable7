@@ -1,5 +1,11 @@
+// Shared support for the axis2 benchmark policy benchmarks.
+
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>
+/// The constants the Axis 2 benchmarks are gated on. Every value here was fixed before any result
+/// was collected, so the gates cannot be tuned in response to the numbers they judge.
+/// </summary>
 internal static class Axis2BenchmarkPolicy
 {
     internal const int Seed = 0x5EED_2026;
@@ -283,6 +289,10 @@ internal static class Axis2BenchmarkPolicy
     }
 }
 
+/// <summary>
+/// Which hash distribution a generated key set uses, so a benchmark can separate well-spread keys
+/// from clustered and fully colliding ones.
+/// </summary>
 internal enum Axis2HashShape
 {
     Uniform,
@@ -290,8 +300,14 @@ internal enum Axis2HashShape
     FullCollision,
 }
 
+/// <summary>
+/// A generated benchmark key whose hash is dictated by the chosen shape rather than by its value.
+/// </summary>
 public readonly record struct Axis2HashKey(int Value, int Hash);
 
+/// <summary>
+/// Equality and hashing for the generated keys, honouring the shape's dictated hash.
+/// </summary>
 internal sealed class Axis2HashKeyComparer : IEqualityComparer<Axis2HashKey>
 {
     internal static Axis2HashKeyComparer Instance { get; } = new();
@@ -305,6 +321,10 @@ internal sealed class Axis2HashKeyComparer : IEqualityComparer<Axis2HashKey>
     public int GetHashCode(Axis2HashKey value) => value.Hash;
 }
 
+/// <summary>
+/// The key comparer with call counting, so a benchmark can report how often the collection
+/// consulted the policy.
+/// </summary>
 internal sealed class Axis2CountingHashKeyComparer : IEqualityComparer<Axis2HashKey>
 {
     internal long HashCallbackCount { get; private set; }
@@ -330,17 +350,20 @@ internal sealed class Axis2CountingHashKeyComparer : IEqualityComparer<Axis2Hash
     }
 }
 
+/// <summary>One generated key set together with the edits to replay against it.</summary>
 internal sealed record Axis2TransientDataset(
     KeyValuePair<Axis2HashKey, int>[] BaseEntries,
     Axis2HashEdit[] Edits,
     int CollisionBucketSize);
 
+/// <summary>Which kind of edit a generated workload step performs.</summary>
 internal enum Axis2HashEditKind
 {
     Set,
     Remove,
 }
 
+/// <summary>One generated edit: what to do and which key to do it to.</summary>
 internal readonly record struct Axis2HashEdit(
     Axis2HashEditKind Kind,
     Axis2HashKey Key,
@@ -353,11 +376,18 @@ internal readonly record struct Axis2HashEdit(
         new(Axis2HashEditKind.Remove, key, default);
 }
 
+/// <summary>
+/// A generated edit sequence with the history and publication cadence it is replayed under.
+/// </summary>
 public readonly record struct Axis2TransientWorkload(int BaseCount, int EditCount)
 {
     public override string ToString() => $"N{BaseCount}_E{EditCount}";
 }
 
+/// <summary>
+/// How the versions a workload edits were themselves built, which decides how much structure is
+/// already shared.
+/// </summary>
 public enum Axis2EditHistory
 {
     RepeatedKey,
@@ -368,6 +398,10 @@ public enum Axis2EditHistory
     Mixed,
 }
 
+/// <summary>
+/// How often a transient session publishes a version, which is what the transient's benefit is
+/// measured against.
+/// </summary>
 public enum Axis2PublicationCadence
 {
     EveryEdit = 1,

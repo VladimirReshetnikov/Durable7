@@ -1,3 +1,5 @@
+// A fluent builder for character ropes.
+
 using System.Buffers;
 using System.Text;
 

@@ -1,3 +1,5 @@
+// Gap cursors over the RRB vector.
+
 using System.Diagnostics.CodeAnalysis;
 
 namespace Durable7.FingerTree;

@@ -1,3 +1,5 @@
+// Benchmarks for the rope builder.
+
 using System.Collections.Immutable;
 using System.Text;
 using BenchmarkDotNet.Attributes;

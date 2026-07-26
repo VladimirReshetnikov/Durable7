@@ -1,3 +1,5 @@
+// Tests for the priority queue.
+
 using Durable7.FingerTree;
 using Xunit;
 using BclPriorityQueue = System.Collections.Generic.PriorityQueue<string, int>;

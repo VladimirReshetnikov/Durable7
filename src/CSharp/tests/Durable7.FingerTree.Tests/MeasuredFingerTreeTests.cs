@@ -1,3 +1,5 @@
+// Tests for the measured finger tree.
+
 using Durable7.FingerTree;
 using Xunit;
 

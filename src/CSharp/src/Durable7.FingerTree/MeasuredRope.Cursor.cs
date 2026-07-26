@@ -1,3 +1,5 @@
+// Gap cursors over the measured rope.
+
 using System.Diagnostics.CodeAnalysis;
 
 namespace Durable7.FingerTree;

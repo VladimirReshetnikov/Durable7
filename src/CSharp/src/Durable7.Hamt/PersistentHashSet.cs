@@ -1,3 +1,5 @@
+// Represents an immutable unordered set backed by a persistent hash-array mapped trie.
+
 using System.Collections;
 using System.Diagnostics;
 
@@ -618,6 +620,7 @@ public sealed partial class PersistentHashSet<T> : IReadOnlySet<T>
     }
 }
 
+/// <summary>The debugger's view of a set: its elements, rather than its trie nodes.</summary>
 internal sealed class PersistentHashSetDebugView<T>(PersistentHashSet<T> set)
 {
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]

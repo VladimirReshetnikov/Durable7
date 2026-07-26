@@ -1,9 +1,12 @@
+// Benchmarks for the canonical sorted set.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 using Durable7.FingerTree;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the canonical sorted set.</summary>
 [MemoryDiagnoser]
 public class CanonicalSortedSetBenchmarks
 {

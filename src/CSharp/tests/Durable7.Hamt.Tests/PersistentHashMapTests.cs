@@ -1,3 +1,5 @@
+// Tests for the persistent hash map.
+
 using System.Collections.Concurrent;
 using Xunit;
 using Map = Durable7.Hamt.PersistentHashMap<int, string>;

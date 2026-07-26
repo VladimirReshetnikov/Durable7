@@ -1,3 +1,5 @@
+// Optional, MaxMeasure, MinMeasure, KeyMeasure, and 4 more.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

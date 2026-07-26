@@ -1,3 +1,5 @@
+// Tests for the rope boundary coverage.
+
 using System.Reflection;
 using Xunit;
 

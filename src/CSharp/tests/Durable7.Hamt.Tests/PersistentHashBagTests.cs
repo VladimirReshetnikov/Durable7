@@ -1,3 +1,5 @@
+// Tests for the persistent hash bag.
+
 using System.Reflection;
 using Xunit;
 

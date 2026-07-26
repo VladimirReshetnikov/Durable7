@@ -1,3 +1,5 @@
+// Tests for the transient api shape.
+
 using System.Reflection;
 using System.Diagnostics.CodeAnalysis;
 using Xunit;

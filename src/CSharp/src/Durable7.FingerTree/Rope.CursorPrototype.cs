@@ -1,3 +1,5 @@
+// The cursor prototype of the rope.
+
 namespace Durable7.FingerTree;
 
 public sealed partial class Rope<T>

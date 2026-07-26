@@ -1,3 +1,5 @@
+// Tests for the headless test process.
+
 using Durable7.Tests.Infrastructure;
 using Xunit;
 

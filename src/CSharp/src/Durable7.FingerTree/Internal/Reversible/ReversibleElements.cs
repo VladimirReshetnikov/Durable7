@@ -1,3 +1,6 @@
+// The reversible tree's elements, read through the orientation flag that makes reversal a constant-
+// time operation.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

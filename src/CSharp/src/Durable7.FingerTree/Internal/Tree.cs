@@ -1,3 +1,7 @@
+// One level of the simplified finger tree: empty, a single element, or a deep node with one-
+// through-three element digits at both ends and a suspended middle tree of <see cref="Node{T,
+// TChild}"/> elements.
+
 using System.Diagnostics;
 
 namespace Durable7.FingerTree;

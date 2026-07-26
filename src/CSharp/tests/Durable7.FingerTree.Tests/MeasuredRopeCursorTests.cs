@@ -1,3 +1,5 @@
+// Tests for the measured rope cursor.
+
 using System.Text;
 using Xunit;
 

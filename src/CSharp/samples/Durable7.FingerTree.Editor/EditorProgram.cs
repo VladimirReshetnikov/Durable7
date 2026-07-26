@@ -1,3 +1,5 @@
+// The editor program sample.
+
 using System.Text;
 using Durable7.FingerTree;
 

@@ -1,3 +1,5 @@
+// Gap cursors over the finger tree deque.
+
 using System.Diagnostics.CodeAnalysis;
 
 namespace Durable7.FingerTree;

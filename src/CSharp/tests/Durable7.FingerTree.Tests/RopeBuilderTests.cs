@@ -1,3 +1,5 @@
+// Tests for the rope builder.
+
 using System.Text;
 using Durable7.FingerTree;
 using Xunit;

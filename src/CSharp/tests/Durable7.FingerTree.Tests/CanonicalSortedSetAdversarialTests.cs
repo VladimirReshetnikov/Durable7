@@ -1,3 +1,5 @@
+// Tests for the canonical sorted set adversarial.
+
 using System.Numerics;
 using System.Reflection;
 using Xunit;

@@ -1,3 +1,5 @@
+// Gap cursors over the persistent ordered map.
+
 namespace Durable7.Ordered;
 
 public sealed partial class PersistentOrderedMap<TKey, TValue>

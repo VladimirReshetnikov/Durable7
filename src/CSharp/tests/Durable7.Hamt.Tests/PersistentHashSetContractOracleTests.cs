@@ -1,3 +1,5 @@
+// Tests for the persistent hash set contract oracle.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

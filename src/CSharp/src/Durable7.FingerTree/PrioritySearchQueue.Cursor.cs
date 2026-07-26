@@ -1,3 +1,5 @@
+// Gap cursors over the priority search queue.
+
 namespace Durable7.FingerTree;
 
 public sealed partial class PrioritySearchQueue<TKey, TPriority, TValue>

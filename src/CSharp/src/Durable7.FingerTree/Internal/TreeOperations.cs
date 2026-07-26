@@ -1,3 +1,6 @@
+// Level-spanning finger-tree operations: digit-to-tree conversion, the smart deep constructors used
+// by removal and split, and concatenation.
+
 using System.Diagnostics;
 
 namespace Durable7.FingerTree;

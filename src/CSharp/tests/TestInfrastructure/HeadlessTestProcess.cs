@@ -1,8 +1,14 @@
+// Shared support for the headless test process tests.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Durable7.Tests.Infrastructure;
 
+/// <summary>
+/// Runs a test executable with the console and any dialogs suppressed, so a failing assertion
+/// cannot block an unattended run.
+/// </summary>
 internal static class HeadlessTestProcess
 {
     internal const uint SuppressedErrorModeMask = 0x0000_8003;

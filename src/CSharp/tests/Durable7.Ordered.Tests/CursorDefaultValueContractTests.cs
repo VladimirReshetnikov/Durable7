@@ -1,3 +1,5 @@
+// Tests for the cursor default value contract.
+
 using Xunit;
 
 namespace Durable7.Ordered.Tests;

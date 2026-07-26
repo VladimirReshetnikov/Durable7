@@ -1,3 +1,5 @@
+// An immutable, persistent, general-purpose <em>chunked</em> sequence — a rope.
+
 using System.Collections;
 
 namespace Durable7.FingerTree;

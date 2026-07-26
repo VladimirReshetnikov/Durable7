@@ -1,3 +1,5 @@
+// Shared support for the axis2 frozen correctness verifier benchmarks.
+
 using Durable7.Hamt;
 
 namespace Durable7.FingerTree.Benchmarks;

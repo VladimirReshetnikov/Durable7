@@ -1,3 +1,5 @@
+// Tests for the persistent hash set.
+
 using CsCheck;
 using Xunit;
 using IntSet = Durable7.Hamt.PersistentHashSet<int>;

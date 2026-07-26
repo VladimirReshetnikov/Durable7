@@ -1,3 +1,5 @@
+// Benchmarks for the transient lifecycle.
+
 using System.Globalization;
 using BenchmarkDotNet.Attributes;
 using Durable7.Hamt;
@@ -376,6 +378,10 @@ public readonly record struct Axis2HistoryResult(
     PersistentHashMap<Axis2HashKey, int> Map,
     long PublicationChecksum);
 
+/// <summary>
+/// How many edits could have reused an owned node versus how many actually did, which is what
+/// decides whether a transient is paying off.
+/// </summary>
 internal readonly record struct Axis2TransientOpportunityCounters(
     int BaseCount,
     int RequestedEditCount,
@@ -417,6 +423,10 @@ internal readonly record struct Axis2TransientOpportunityCounters(
         $"equality_callbacks={EqualityCallbackCount.ToString(CultureInfo.InvariantCulture)}");
 }
 
+/// <summary>
+/// The owner-token evidence one benchmark run collected, showing which nodes were owned and reused
+/// in place.
+/// </summary>
 internal readonly record struct Axis2OwnerTokenKernelEvidence(
     string Layout,
     int BaseCount,

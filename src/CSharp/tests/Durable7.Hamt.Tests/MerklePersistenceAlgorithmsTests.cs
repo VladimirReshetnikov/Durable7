@@ -1,3 +1,5 @@
+// Tests for the merkle persistence algorithms.
+
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using Xunit;

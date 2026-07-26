@@ -1,3 +1,6 @@
+// The structural diagnostics for the persistent ordered set, used by the tests to assert on shape
+// and sharing.
+
 using System.Diagnostics;
 
 namespace Durable7.Ordered;
@@ -46,6 +49,10 @@ public sealed partial class PersistentOrderedSet<T>
             : ReferenceEquals(left, right);
 }
 
+/// <summary>
+/// The debugger's view of an insertion-ordered set: its elements in order, rather than its two
+/// indexes.
+/// </summary>
 internal sealed class PersistentOrderedSetDebugView<T>(PersistentOrderedSet<T> set)
 {
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]

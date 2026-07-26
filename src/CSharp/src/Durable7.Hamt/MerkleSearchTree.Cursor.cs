@@ -1,3 +1,5 @@
+// Gap cursors over the merkle search tree.
+
 namespace Durable7.Hamt;
 
 public sealed partial class MerkleSearchTree<TKey, TValue>
@@ -231,6 +233,10 @@ public readonly struct MerkleSearchTreeCursor<TKey, TValue>
     }
 }
 
+/// <summary>
+/// Guards a Merkle cursor against use after its version is gone, so a stale cursor fails loudly
+/// rather than reading a tree it does not own.
+/// </summary>
 internal static class MerkleCursorGuard
 {
     internal static void ValidatePosition(int position, int count)

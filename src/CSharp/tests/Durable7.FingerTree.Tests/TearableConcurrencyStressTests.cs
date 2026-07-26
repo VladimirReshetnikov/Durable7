@@ -1,3 +1,5 @@
+// Tests for the tearable concurrency stress.
+
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;

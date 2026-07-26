@@ -1,3 +1,5 @@
+// Gap cursors over the sorted dictionary.
+
 namespace Durable7.FingerTree;
 
 public sealed partial class SortedDictionary<TKey, TValue>

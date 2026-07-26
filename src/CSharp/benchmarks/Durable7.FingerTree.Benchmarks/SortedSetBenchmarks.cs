@@ -1,3 +1,5 @@
+// Benchmarks for the sorted set.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 using FtSortedSet = Durable7.FingerTree.SortedSet<int>;

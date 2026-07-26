@@ -1,3 +1,5 @@
+// Defines ordering and deterministic pseudorandom ranks for a canonical zip-zip set.
+
 using System.Buffers.Binary;
 using System.Numerics;
 using System.Security.Cryptography;

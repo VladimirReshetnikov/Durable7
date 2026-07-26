@@ -1,17 +1,29 @@
+// Represents an immutable map from comparer-distinct closed intervals to payload values, with
+// logarithmic exact-key and overlap queries.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Durable7.FingerTree;
 
+/// <summary>One interval key and its payload.</summary>
 internal readonly record struct IntervalMapEntry<TEndpoint, TValue>(
     Interval<TEndpoint> Interval,
     TValue Value);
 
+/// <summary>
+/// The cached aggregate over a subtree of interval entries: its count, its last key, and the
+/// largest high endpoint below it.
+/// </summary>
 internal readonly record struct IntervalMapAnnotation<TEndpoint>(
     int Count,
     Optional<Interval<TEndpoint>> LastInterval,
     Optional<TEndpoint> MaxHigh);
 
+/// <summary>
+/// Measures interval entries so a query can skip a subtree whose cached maximum high endpoint falls
+/// short of the probe.
+/// </summary>
 internal readonly struct IntervalMapMeasure<TEndpoint, TValue> :
     IMeasure<IntervalMapEntry<TEndpoint, TValue>, IntervalMapAnnotation<TEndpoint>>
 {
@@ -414,6 +426,9 @@ public sealed partial class PersistentIntervalMap<TEndpoint, TValue> :
         tree.IsEmpty ? Create(valueComparer) : new(tree, valueComparer);
 }
 
+/// <summary>
+/// Matches once the accumulated last key reaches the probe, giving a lower-bound search.
+/// </summary>
 internal readonly struct IntervalMapLastKeyAtLeast<TEndpoint>(Interval<TEndpoint> target) :
     IMeasurePredicate<IntervalMapAnnotation<TEndpoint>>
 {
@@ -427,6 +442,7 @@ internal readonly struct IntervalMapLastKeyAtLeast<TEndpoint>(Interval<TEndpoint
     }
 }
 
+/// <summary>Matches once the accumulated last low endpoint passes the probe.</summary>
 internal readonly struct IntervalMapLastLowAbove<TEndpoint>(TEndpoint high) :
     IMeasurePredicate<IntervalMapAnnotation<TEndpoint>>
 {
@@ -435,6 +451,10 @@ internal readonly struct IntervalMapLastLowAbove<TEndpoint>(TEndpoint high) :
         && Comparer<TEndpoint>.Default.Compare(measure.LastInterval.Value.Low, high) > 0;
 }
 
+/// <summary>
+/// Matches once a subtree's cached maximum high endpoint reaches the probe. A subtree that fails
+/// this cannot contain an overlap and is skipped whole.
+/// </summary>
 internal readonly struct IntervalMapMaxHighAtLeast<TEndpoint>(TEndpoint low) :
     IMeasurePredicate<IntervalMapAnnotation<TEndpoint>>
 {

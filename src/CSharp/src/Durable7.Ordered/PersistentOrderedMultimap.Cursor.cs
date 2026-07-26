@@ -1,3 +1,5 @@
+// Gap cursors over the persistent ordered multimap.
+
 namespace Durable7.Ordered;
 
 public sealed partial class PersistentOrderedMultimap<TKey, TValue>

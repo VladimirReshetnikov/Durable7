@@ -1,3 +1,5 @@
+// Tests for the finger tree deque enumeration and copy.
+
 using System.Collections;
 using Durable7.FingerTree;
 using Xunit;

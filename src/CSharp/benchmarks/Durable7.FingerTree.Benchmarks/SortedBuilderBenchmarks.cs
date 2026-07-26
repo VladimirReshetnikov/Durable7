@@ -1,3 +1,5 @@
+// Benchmarks for the sorted builder.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;

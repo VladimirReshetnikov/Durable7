@@ -1,3 +1,7 @@
+// An immutable, persistent chunked sequence — like <see cref="Rope{T}"/> — that additionally tracks
+// an arbitrary monoidal <typeparamref name="TMeasure"/> over its elements, so it supports O(log n)
+// navigation by that measure as well as by position.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 

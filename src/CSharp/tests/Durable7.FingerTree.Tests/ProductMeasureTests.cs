@@ -1,3 +1,5 @@
+// Tests for the product measure.
+
 using System.Numerics;
 using Durable7.FingerTree;
 using Xunit;

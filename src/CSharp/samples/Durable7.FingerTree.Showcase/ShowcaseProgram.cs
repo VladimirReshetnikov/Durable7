@@ -1,3 +1,5 @@
+// The showcase program sample.
+
 using Durable7.FingerTree;
 
 namespace Durable7.FingerTree.Showcase;

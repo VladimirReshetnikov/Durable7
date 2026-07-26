@@ -1,3 +1,5 @@
+// Tests for the persistent hash map bulk builder.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

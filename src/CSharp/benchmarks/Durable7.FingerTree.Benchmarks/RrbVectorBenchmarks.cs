@@ -1,9 +1,12 @@
+// Benchmarks for the RRB vector.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 using Durable7.FingerTree;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the relaxed radix-balanced vector.</summary>
 [MemoryDiagnoser]
 public class RrbVectorBenchmarks
 {

@@ -1,3 +1,5 @@
+// Tests for the persistent hash map enumerator.
+
 using Xunit;
 using Map = Durable7.Hamt.PersistentHashMap<int, string>;
 

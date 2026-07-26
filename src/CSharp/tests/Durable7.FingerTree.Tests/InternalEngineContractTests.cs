@@ -1,3 +1,5 @@
+// Tests for the internal engine contract.
+
 using Durable7.FingerTree;
 using Xunit;
 

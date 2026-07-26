@@ -1,3 +1,5 @@
+// Shared support for the axis2 C 0 evidence collector benchmarks.
+
 using System.Text.Json;
 
 namespace Durable7.FingerTree.Benchmarks;

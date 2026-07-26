@@ -1,3 +1,5 @@
+// Tests for the finger tree deque sorted search edge.
+
 using Durable7.FingerTree;
 using Xunit;
 

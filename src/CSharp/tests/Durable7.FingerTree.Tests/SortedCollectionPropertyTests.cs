@@ -1,3 +1,5 @@
+// Tests for the sorted collection property.
+
 using CsCheck;
 using Xunit;
 using FtSortedSet = Durable7.FingerTree.SortedSet<int>;

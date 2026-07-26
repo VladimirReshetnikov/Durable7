@@ -1,3 +1,5 @@
+// Represents a lock-free mutable hash trie with constant-time immutable snapshots.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

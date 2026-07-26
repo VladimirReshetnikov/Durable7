@@ -1,3 +1,5 @@
+// Benchmarks for the measured rope.
+
 using BenchmarkDotNet.Attributes;
 
 namespace Durable7.FingerTree.Benchmarks;

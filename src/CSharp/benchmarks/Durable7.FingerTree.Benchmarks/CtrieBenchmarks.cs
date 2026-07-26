@@ -1,3 +1,5 @@
+// Benchmarks for the concurrent hash trie.
+
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
@@ -5,6 +7,7 @@ using Durable7.Hamt;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the concurrent hash trie.</summary>
 [MemoryDiagnoser]
 public class CtrieBenchmarks
 {

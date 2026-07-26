@@ -1,3 +1,5 @@
+// Tests for the rope append builder.
+
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

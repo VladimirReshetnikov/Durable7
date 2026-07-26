@@ -1,3 +1,5 @@
+// Gap cursors over the range update sequence.
+
 using System.Diagnostics.CodeAnalysis;
 
 namespace Durable7.FingerTree;

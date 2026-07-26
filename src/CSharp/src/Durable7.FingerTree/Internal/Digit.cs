@@ -1,3 +1,6 @@
+// A bounded buffer of one through three elements forming the prefix or suffix of a <see
+// cref="DeepTree{T, TChild}"/> level, following the simplified finger-tree paper.
+
 using System.Diagnostics;
 
 namespace Durable7.FingerTree;

@@ -1,3 +1,5 @@
+// Tests for the count overflow guard.
+
 using Durable7.FingerTree;
 using Xunit;
 

@@ -1,3 +1,6 @@
+// Represents an immutable ordered content-addressed map using canonical wide Merkle-search-tree
+// blocks.
+
 using System.Buffers.Binary;
 using System.Collections;
 using System.Diagnostics;

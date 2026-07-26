@@ -1,3 +1,5 @@
+// Gap cursors over the persistent patricia.
+
 namespace Durable7.Hamt;
 
 public sealed partial class PersistentIntMap<TValue>
@@ -657,6 +659,7 @@ public readonly struct PersistentLongSetCursor
     }
 }
 
+/// <summary>Guards a Patricia cursor against use after its version is gone.</summary>
 internal static class PatriciaCursorGuard
 {
     internal static void ValidatePosition(int position, int count)

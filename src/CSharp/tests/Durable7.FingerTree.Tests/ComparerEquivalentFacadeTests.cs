@@ -1,3 +1,5 @@
+// Tests for the comparer equivalent facade.
+
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

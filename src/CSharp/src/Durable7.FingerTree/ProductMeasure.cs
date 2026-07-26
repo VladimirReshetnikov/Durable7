@@ -1,3 +1,6 @@
+// Combines two independent monoidal measures into one, so a single <see cref="FingerTree{TElement,
+// TMeasure, TMeasureOps}"/> can be split by either component without re-measuring.
+
 using System.Numerics;
 
 namespace Durable7.FingerTree;

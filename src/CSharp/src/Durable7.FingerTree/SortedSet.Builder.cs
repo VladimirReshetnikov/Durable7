@@ -1,3 +1,5 @@
+// The bulk builder for the sorted set.
+
 using System.Collections;
 
 namespace Durable7.FingerTree;

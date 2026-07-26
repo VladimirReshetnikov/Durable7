@@ -1,3 +1,5 @@
+// Tests for the rope contract oracle.
+
 using Durable7.FingerTree;
 using Xunit;
 

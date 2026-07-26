@@ -1,11 +1,17 @@
+// Gap cursors over the persistent interval map.
+
 namespace Durable7.FingerTree;
 
+/// <summary>Matches once the accumulated entry count passes the threshold.</summary>
 internal readonly struct IntervalMapCountAboveCursorPredicate<TEndpoint>(int rank) :
     IMeasurePredicate<IntervalMapAnnotation<TEndpoint>>
 {
     public bool Invoke(IntervalMapAnnotation<TEndpoint> measure) => measure.Count > rank;
 }
 
+/// <summary>
+/// Matches once the accumulated last interval key passes the probe, giving an upper-bound seek.
+/// </summary>
 internal readonly struct IntervalMapLastKeyAboveCursorPredicate<TEndpoint>(Interval<TEndpoint> target) :
     IMeasurePredicate<IntervalMapAnnotation<TEndpoint>>
 {

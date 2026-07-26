@@ -1,3 +1,5 @@
+// The bulk builder for the sorted dictionary.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 

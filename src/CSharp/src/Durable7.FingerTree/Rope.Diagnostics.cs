@@ -1,3 +1,5 @@
+// The structural diagnostics for the rope, used by the tests to assert on shape and sharing.
+
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -147,6 +149,7 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
     }
 }
 
+/// <summary>Chunk and length measurements from a structural audit.</summary>
 internal readonly record struct RopeStructureDiagnostics(
     int ElementCount,
     int ChunkCount,

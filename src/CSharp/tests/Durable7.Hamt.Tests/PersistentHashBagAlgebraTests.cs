@@ -1,3 +1,5 @@
+// Tests for the persistent hash bag algebra.
+
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

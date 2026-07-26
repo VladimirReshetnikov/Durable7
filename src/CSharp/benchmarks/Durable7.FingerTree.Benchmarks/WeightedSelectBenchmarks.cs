@@ -1,3 +1,5 @@
+// Benchmarks for the weighted select.
+
 using BenchmarkDotNet.Attributes;
 
 namespace Durable7.FingerTree.Benchmarks;

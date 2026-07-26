@@ -1,3 +1,5 @@
+// Tests for the rope cursor prototype boundary.
+
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

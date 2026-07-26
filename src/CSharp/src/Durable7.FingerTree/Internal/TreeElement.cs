@@ -1,3 +1,5 @@
+// Shared helpers over <see cref="ITreeElement{T, TSelf}"/> values.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

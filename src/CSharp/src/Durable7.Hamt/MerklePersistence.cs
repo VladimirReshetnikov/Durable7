@@ -1,3 +1,5 @@
+// MerkleBlock, IMerkleBlockStore, InMemoryMerkleBlockStore, MerkleBlockPack, and 14 more.
+
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;

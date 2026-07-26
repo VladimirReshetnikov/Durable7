@@ -1,3 +1,5 @@
+// Gap cursors over the canonical sorted set.
+
 using System.Diagnostics.CodeAnalysis;
 
 namespace Durable7.FingerTree;

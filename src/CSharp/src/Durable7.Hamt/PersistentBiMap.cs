@@ -1,3 +1,6 @@
+// Represents an immutable one-to-one mapping backed by a pair of persistent hash-array mapped
+// tries.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

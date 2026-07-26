@@ -1,7 +1,14 @@
+// Counters the range-update sequence records, for tests that a pending tag was pushed down only
+// when a read needed to see through it.
+
 using System.Runtime.CompilerServices;
 
 namespace Durable7.FingerTree;
 
+/// <summary>
+/// Counters the range-update sequence records, for tests that a pending tag was pushed down only
+/// when a read needed to see through it.
+/// </summary>
 internal static class RangeUpdateSequenceDiagnostics
 {
     [ThreadStatic]
@@ -70,6 +77,10 @@ internal static class RangeUpdateSequenceDiagnostics
     }
 }
 
+/// <summary>
+/// A scope over which range-update counters are collected; disposing it restores the previous
+/// state.
+/// </summary>
 internal sealed class RangeUpdateSequenceDiagnosticSession : IDisposable
 {
     private readonly RangeUpdateSequenceDiagnosticSession? _previous;
@@ -144,6 +155,7 @@ internal sealed class RangeUpdateSequenceDiagnosticSession : IDisposable
     }
 }
 
+/// <summary>The counts one range-update operation produced.</summary>
 internal readonly record struct RangeUpdateSequenceOperationDiagnostics(
     long NodeVisits,
     long NodeAllocations,

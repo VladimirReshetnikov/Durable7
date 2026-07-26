@@ -1,3 +1,5 @@
+// Represents an immutable policy-canonical sorted set backed by a zip-zip-inspired tree.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Numerics;

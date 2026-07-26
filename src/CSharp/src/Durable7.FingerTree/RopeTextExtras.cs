@@ -1,3 +1,6 @@
+// Editor-grade text conveniences over the character ropes: Unicode scalar-value (code point) and
+// grapheme-cluster addressing, and carriage-return-aware line handling.
+
 using System.Globalization;
 using System.Text;
 

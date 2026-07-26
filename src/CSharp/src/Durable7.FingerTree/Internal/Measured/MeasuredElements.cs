@@ -1,3 +1,6 @@
+// The measured tree's elements: leaves holding values and nodes caching their children's combined
+// measure.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

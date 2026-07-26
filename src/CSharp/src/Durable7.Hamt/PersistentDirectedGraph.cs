@@ -1,3 +1,6 @@
+// Represents an immutable simple directed graph with explicit vertices and degree-local adjacency
+// indexes.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Threading;

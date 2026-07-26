@@ -1,7 +1,13 @@
+// Shared support for the ordered set tests.
+
 using Xunit;
 
 namespace Durable7.Ordered.Tests;
 
+/// <summary>
+/// A test value whose identity is distinguishable from its equality, so a test can tell which of
+/// two equal values a collection actually stored.
+/// </summary>
 internal sealed class Representative(int equivalenceClass, string name)
 {
     internal int EquivalenceClass { get; } = equivalenceClass;
@@ -11,6 +17,9 @@ internal sealed class Representative(int equivalenceClass, string name)
     public override string ToString() => $"{Name}:{EquivalenceClass}";
 }
 
+/// <summary>
+/// Equality over test representatives by their comparison key, ignoring their identity.
+/// </summary>
 internal class RepresentativeComparer(int hashBuckets = 1) : IEqualityComparer<Representative?>
 {
     private readonly int _hashBuckets = hashBuckets > 0
@@ -43,6 +52,10 @@ internal class RepresentativeComparer(int hashBuckets = 1) : IEqualityComparer<R
     }
 }
 
+/// <summary>
+/// A representative comparer whose behaviour can be changed mid-test, so a test can check what a
+/// collection does when its policy stops agreeing with itself.
+/// </summary>
 internal sealed class SwitchableRepresentativeComparer(int hashBuckets = 1)
     : RepresentativeComparer(hashBuckets)
 {
@@ -69,6 +82,10 @@ internal sealed class SwitchableRepresentativeComparer(int hashBuckets = 1)
     }
 }
 
+/// <summary>
+/// Equality over test representatives by reference, so a test can assert which instance was
+/// retained.
+/// </summary>
 internal sealed class ReferenceRepresentativeComparer : IEqualityComparer<Representative?>
 {
     internal ComparerCallbackException Failure { get; } = new();
@@ -92,18 +109,33 @@ internal sealed class ReferenceRepresentativeComparer : IEqualityComparer<Repres
     }
 }
 
+/// <summary>
+/// Thrown from a test comparer on demand, to check that a failing comparison leaves the collection
+/// unchanged.
+/// </summary>
 internal sealed class ComparerCallbackException : Exception
 {
 }
 
+/// <summary>
+/// Thrown from a test enumerator on demand, to check that a failing enumeration leaves the
+/// collection unchanged.
+/// </summary>
 internal sealed class EnumerationCallbackException : Exception
 {
 }
 
+/// <summary>
+/// Thrown from a test ordering callback on demand, to check that a failing ordering leaves the
+/// collection unchanged.
+/// </summary>
 internal sealed class OrderingCallbackException : Exception
 {
 }
 
+/// <summary>
+/// Assertions about an insertion-ordered set's contents, order, and retained representatives.
+/// </summary>
 internal static class OrderedSetAssert
 {
     internal static void Matches<T>(IReadOnlyList<T> expected, PersistentOrderedSet<T> actual)
@@ -155,6 +187,10 @@ internal static class OrderedSetAssert
     }
 }
 
+/// <summary>
+/// A plain list model the insertion-ordered set is compared against. Deliberately naive: it is
+/// right by inspection, which is what makes a disagreement evidence against the real structure.
+/// </summary>
 internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
 {
     private readonly List<T> _items = [];

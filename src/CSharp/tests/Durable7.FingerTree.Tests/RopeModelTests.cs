@@ -1,3 +1,5 @@
+// Tests for the rope model.
+
 using Durable7.FingerTree;
 using Xunit;
 

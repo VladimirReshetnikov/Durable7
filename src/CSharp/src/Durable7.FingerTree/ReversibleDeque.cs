@@ -1,3 +1,6 @@
+// An immutable, persistent catenable deque that additionally supports <see cref="Reverse"/> in
+// O(1), backed by a size-measured finger tree whose nodes carry a reversal bit.
+
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 

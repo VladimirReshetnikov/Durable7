@@ -1,9 +1,12 @@
+// Benchmarks for the CHAMP trie.
+
 using System.Collections.Immutable;
 using BenchmarkDotNet.Attributes;
 using Durable7.Hamt;
 
 namespace Durable7.FingerTree.Benchmarks;
 
+/// <summary>Benchmarks for the CHAMP-backed persistent hash map and set.</summary>
 [MemoryDiagnoser]
 public class ChampBenchmarks
 {

@@ -1,3 +1,5 @@
+// The transient session over the persistent hash map.
+
 using System.Collections;
 
 namespace Durable7.Hamt;

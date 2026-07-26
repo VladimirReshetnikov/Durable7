@@ -1,5 +1,11 @@
+// Gap cursors over the interval tree.
+
 namespace Durable7.FingerTree;
 
+/// <summary>
+/// Matches once the accumulated interval count passes the threshold, which is how a positional
+/// cursor seek is expressed as a measured one.
+/// </summary>
 internal readonly struct IntervalCountAboveCursorPredicate<T>(int rank) :
     IMeasurePredicate<IntervalAnnotation<T>>
 {

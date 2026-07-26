@@ -1,3 +1,5 @@
+// Benchmarks for the priority queue.
+
 using BenchmarkDotNet.Attributes;
 using FtPriorityQueue = Durable7.FingerTree.PriorityQueue<int, int>;
 using BclPriorityQueue = System.Collections.Generic.PriorityQueue<int, int>;

@@ -1,3 +1,6 @@
+// Represents an immutable insertion-ordered map with comparer-defined keyed lookup and explicit
+// positional reordering.
+
 using System.Collections;
 using System.Diagnostics;
 using Durable7.FingerTree;

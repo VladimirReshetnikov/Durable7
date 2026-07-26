@@ -1,3 +1,6 @@
+// The structural diagnostics for the range update sequence, used by the tests to assert on shape
+// and sharing.
+
 namespace Durable7.FingerTree;
 
 public sealed partial class RangeUpdateSequence<TElement, TMeasure, TTag, TOps>
@@ -205,6 +208,7 @@ public sealed partial class RangeUpdateSequence<TElement, TMeasure, TTag, TOps>
     private readonly record struct ValidationResult(int Count, int Height);
 }
 
+/// <summary>Shape and pending-tag measurements from a structural audit.</summary>
 internal readonly record struct RangeUpdateSequenceStructureDiagnostics(
     int Count,
     int NodeCount,

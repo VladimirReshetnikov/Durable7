@@ -1,3 +1,7 @@
+// One level of a strict, general measured finger tree: empty, a single element, or a deep node with
+// a one-through-four element prefix, a middle tree of grouping nodes, and a one-through-four
+// element suffix.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

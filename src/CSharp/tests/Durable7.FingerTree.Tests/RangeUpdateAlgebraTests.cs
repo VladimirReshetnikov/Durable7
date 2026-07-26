@@ -1,3 +1,5 @@
+// Tests for the range update algebra.
+
 using Durable7.FingerTree;
 using Xunit;
 

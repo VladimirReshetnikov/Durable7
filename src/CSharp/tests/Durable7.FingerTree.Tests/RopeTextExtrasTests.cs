@@ -1,3 +1,5 @@
+// Tests for the rope text extras.
+
 using System.Text;
 using CsCheck;
 using Durable7.FingerTree;

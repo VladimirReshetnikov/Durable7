@@ -1,3 +1,5 @@
+// Tests for the merkle encoding wire.
+
 using System.Security.Cryptography;
 using System.Text;
 using Xunit;

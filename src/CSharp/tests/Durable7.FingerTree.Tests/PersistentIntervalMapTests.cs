@@ -1,3 +1,5 @@
+// Tests for the persistent interval map.
+
 using Durable7.FingerTree;
 using Xunit;
 

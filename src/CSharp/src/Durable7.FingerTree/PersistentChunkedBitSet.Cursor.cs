@@ -1,3 +1,5 @@
+// Gap cursors over the persistent chunked bit set.
+
 namespace Durable7.FingerTree;
 
 public sealed partial class PersistentChunkedBitSet

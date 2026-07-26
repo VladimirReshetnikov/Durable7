@@ -1,3 +1,5 @@
+// Tests for the priority search queue adversarial.
+
 using System.Reflection;
 using Xunit;
 

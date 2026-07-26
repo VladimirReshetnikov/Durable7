@@ -1,3 +1,5 @@
+// Shared support for the program benchmarks.
+
 using System.Reflection;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Jobs;

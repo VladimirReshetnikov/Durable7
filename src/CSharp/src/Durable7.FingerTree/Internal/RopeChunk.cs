@@ -1,3 +1,6 @@
+// A run of rope elements stored as one leaf, with the measure and predicate that keep the rope
+// indexable while storing elements in runs.
+
 namespace Durable7.FingerTree;
 
 /// <summary>

@@ -1,3 +1,5 @@
+// The set algebra over the persistent ordered set.
+
 using Durable7.Hamt;
 
 namespace Durable7.Ordered;

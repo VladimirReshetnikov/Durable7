@@ -1,3 +1,8 @@
+// An immutable, persistent sorted dictionary (unique keys, ordered by key) backed by an order-
+// statistic measured finger tree: logarithmic lookup/insert/replace/remove and key-neighbor
+// queries, order-statistic access by rank, key-range extraction, and constant-time count and
+// endpoints.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;

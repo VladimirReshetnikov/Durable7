@@ -1,3 +1,5 @@
+// Tests for the sequence cursor.
+
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

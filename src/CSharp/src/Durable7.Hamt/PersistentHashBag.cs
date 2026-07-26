@@ -1,3 +1,5 @@
+// Represents an immutable unordered multiset backed by a persistent hash-array mapped trie.
+
 using System.Collections;
 using System.Diagnostics;
 
@@ -613,11 +615,19 @@ public sealed class PersistentHashBag<T> : IEnumerable<T>
     }
 }
 
+/// <summary>
+/// Evidence that the bag's shape is a function of its contents, for tests that different edit
+/// histories converge on one structure.
+/// </summary>
 internal readonly record struct PersistentHashBagCanonicalityDiagnostics(
     int DistinctCount,
     long TotalCount,
     int NodeCount);
 
+/// <summary>
+/// The debugger's view of a bag: its distinct elements with their multiplicities, rather than its
+/// trie nodes.
+/// </summary>
 internal sealed class PersistentHashBagDebugView<T>(PersistentHashBag<T> bag)
 {
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]

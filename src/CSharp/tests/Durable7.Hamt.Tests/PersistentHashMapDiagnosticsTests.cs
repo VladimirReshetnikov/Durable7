@@ -1,3 +1,5 @@
+// Tests for the persistent hash map diagnostics.
+
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;

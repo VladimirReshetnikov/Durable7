@@ -1,3 +1,5 @@
+// The separate transient nodes of the persistent hash map.
+
 using System.Diagnostics;
 
 namespace Durable7.Hamt;

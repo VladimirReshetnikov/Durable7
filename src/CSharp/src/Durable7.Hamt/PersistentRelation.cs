@@ -1,3 +1,6 @@
+// Represents an immutable many-to-many relation backed by mutually inverse persistent hash
+// multimaps.
+
 using System.Collections;
 using System.Threading;
 

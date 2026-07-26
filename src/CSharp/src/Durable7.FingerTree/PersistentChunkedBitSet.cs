@@ -1,16 +1,31 @@
+// Represents an immutable sparse bit set stored as ordered nonzero 64-bit chunks with cached
+// population counts.
+
 using System.Collections;
 using System.Diagnostics;
 using System.Numerics;
 
 namespace Durable7.FingerTree;
 
+/// <summary>
+/// One 64-bit word of the bit set together with the index it covers. Absent words are not
+/// represented, so runs of zeros cost nothing.
+/// </summary>
 internal readonly record struct BitSetChunk(int WordIndex, ulong Bits);
 
+/// <summary>
+/// The cached aggregate over a subtree of chunks: how many chunks it holds, how many bits are set
+/// below it, and the last index it covers.
+/// </summary>
 internal readonly record struct BitSetAnnotation(
     int ChunkCount,
     long PopCount,
     Optional<int> LastWordIndex);
 
+/// <summary>
+/// Measures bit set chunks by their population counts, which is what turns rank and select into a
+/// descent rather than a scan.
+/// </summary>
 internal readonly struct BitSetMeasure : IMeasure<BitSetChunk, BitSetAnnotation>
 {
     public static BitSetAnnotation Empty => new(0, 0, Optional<int>.None);

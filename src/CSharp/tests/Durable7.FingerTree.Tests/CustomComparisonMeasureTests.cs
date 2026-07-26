@@ -1,3 +1,5 @@
+// Tests for the custom comparison measure.
+
 using Durable7.FingerTree;
 using Xunit;
 

@@ -1,3 +1,5 @@
+// Represents an immutable set of signed 32-bit integers using a big-endian Patricia trie.
+
 using System.Collections;
 
 namespace Durable7.Hamt;
