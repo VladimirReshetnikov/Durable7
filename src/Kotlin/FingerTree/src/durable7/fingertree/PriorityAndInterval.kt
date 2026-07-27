@@ -52,22 +52,42 @@ public class PriorityQueue<T, P> private constructor(
     private val comparator: Comparator<in P>,
 ) : Iterable<PriorityEntry<T, P>> {
     public companion object {
+        /**
+         * An empty queue ordered by the natural order of priorities. The comparator is the standard library's
+         * shared singleton, so two queues built this way can be melded.
+         */
         public fun <T, P : Comparable<P>> empty(): PriorityQueue<T, P> =
             empty(naturalComparator())
 
+        /**
+         * An empty queue ordered by [comparator], which the queue retains by identity. Only queues carrying the
+         * same comparator can be melded.
+         */
         public fun <T, P> empty(comparator: Comparator<in P>): PriorityQueue<T, P> =
             PriorityQueue(PersistentMeasuredTree.empty(PriorityMeasurePolicy(comparator)), comparator)
     }
 
+    /** Number of entries. O(1), from the cached measure at the root. */
     public val size: Int
         get() = entries.size
 
+    /** Whether the queue holds no entries. */
     public val isEmpty: Boolean
         get() = entries.isEmpty
 
+    /**
+     * A queue with [value] enqueued at [priority]. Amortized O(1): the entry is appended and the cached
+     * best-priority summary is updated along the spine, rather than the entry being sifted into place.
+     */
     public fun enqueue(value: T, priority: P): PriorityQueue<T, P> =
         PriorityQueue(entries.append(PriorityEntry(value, priority)), comparator)
 
+    /**
+     * A queue holding every entry of both.
+     *
+     * @throws IllegalArgumentException if the two queues do not carry the same comparator, since merging entries
+     * ordered by different comparators would produce a queue whose best-priority summary is meaningless.
+     */
     public fun meld(other: PriorityQueue<T, P>): PriorityQueue<T, P> {
         require(comparator === other.comparator || comparator == other.comparator) {
             "Cannot meld priority queues with different comparators."
@@ -79,12 +99,20 @@ public class PriorityQueue<T, P> private constructor(
         }
     }
 
+    /** The entry with the best priority, or `null` when empty. O(1), read from the cached root summary. */
     public fun peekEntry(): PriorityEntry<T, P>? = entries.measure().best
 
+    /** The best-priority value and its priority, or `null` when empty. */
     public fun peek(): Pair<T, P>? = peekEntry()?.let { it.value to it.priority }
 
+    /** The best priority, or `null` when empty. */
     public fun peekPriority(): P? = peekEntry()?.priority
 
+    /**
+     * The best-priority entry together with the queue that remains, or `null` when empty. Ties are broken by the
+     * entry the cached summary selected, which is stable for a given queue but is not a documented ordering between
+     * equal priorities.
+     */
     public fun dequeue(): PriorityDequeue<T, P>? {
         val entry = peekEntry() ?: return null
         val located = entries.locate { it.best === entry }
@@ -92,8 +120,13 @@ public class PriorityQueue<T, P> private constructor(
         return PriorityDequeue(entry, PriorityQueue(entries.removeAt(located.index)!!, comparator))
     }
 
+    /** The entries in storage order, which is enqueue order rather than priority order. */
     public fun toList(): List<PriorityEntry<T, P>> = entries.toList()
 
+    /**
+     * Whether this queue and [other] share storage, meaning one was derived from the other and the two retain nodes
+     * in common.
+     */
     public fun sharesStorageWith(other: PriorityQueue<T, P>): Boolean = entries.sharesStructureWith(other.entries)
 
     internal fun debugIsBalanced(): Boolean = entries.isBalanced()
@@ -114,9 +147,14 @@ public data class Interval<T : Comparable<T>>(
         require(low <= high) { "Interval low endpoint must not exceed high endpoint." }
     }
 
+    /**
+     * Whether the two intervals share at least one point. Endpoints are inclusive, so `[1, 2]` and `[2, 3]`
+     * overlap.
+     */
     public fun overlaps(other: Interval<T>): Boolean =
         low <= other.high && other.low <= high
 
+    /** Whether [point] lies in the interval. Endpoints are inclusive. */
     public fun containsPoint(point: T): Boolean =
         low <= point && point <= high
 }
@@ -160,9 +198,14 @@ public class IntervalTree<T : Comparable<T>> private constructor(
     private val intervals: PersistentMeasuredTree<Interval<T>, IntervalSummary<T>>,
 ) : Iterable<Interval<T>> {
     public companion object {
+        /** An empty tree. */
         public fun <T : Comparable<T>> empty(): IntervalTree<T> =
             IntervalTree(PersistentMeasuredTree.empty(IntervalMeasurePolicy()))
 
+        /**
+         * A tree holding every interval, inserted in order. Duplicates are kept: an interval tree is a multiset of
+         * intervals.
+         */
         public fun <T : Comparable<T>> from(values: Iterable<Interval<T>>): IntervalTree<T> {
             var result = empty<T>()
             for (interval in values) {
@@ -173,12 +216,18 @@ public class IntervalTree<T : Comparable<T>> private constructor(
         }
     }
 
+    /** Number of stored intervals. O(1). */
     public val size: Int
         get() = intervals.size
 
+    /** Whether the tree holds no intervals. */
     public val isEmpty: Boolean
         get() = intervals.isEmpty
 
+    /**
+     * A tree with [interval] added. Intervals are ordered by low endpoint alone, and a new interval is placed
+     * before every stored interval with an equal low endpoint, matching the C# reference.
+     */
     public fun insert(interval: Interval<T>): IntervalTree<T> {
         // Matches the C# reference: intervals are ordered by low endpoint
         // only, and a new interval goes before every existing equal-low one.
@@ -186,10 +235,18 @@ public class IntervalTree<T : Comparable<T>> private constructor(
         return IntervalTree(intervals.insertAt(index, interval)!!)
     }
 
+    /** Whether an interval equal to [interval] - matching on both endpoints - is stored. */
     public fun contains(interval: Interval<T>): Boolean = indexOf(interval) >= 0
 
+    /**
+     * A tree with one interval equal to [interval] removed. Returns the receiver unchanged when none is stored.
+     */
     public fun remove(interval: Interval<T>): IntervalTree<T> = tryRemove(interval)?.tree ?: this
 
+    /**
+     * Remove one interval equal to [interval], returning the resulting tree together with the interval that was
+     * removed, or `null` when none is stored.
+     */
     public fun tryRemove(interval: Interval<T>): IntervalRemoveResult<T>? {
         val index = indexOf(interval)
         if (index < 0) {
@@ -227,10 +284,22 @@ public class IntervalTree<T : Comparable<T>> private constructor(
         return -1
     }
 
+    /**
+     * Some stored interval overlapping [probe], or `null` when none does. Which one is returned is unspecified when
+     * several overlap; use [findOverlaps] to see them all.
+     */
     public fun findOverlap(probe: Interval<T>): Interval<T>? = nextOverlap(probe, intervals)?.first
 
+    /**
+     * Some stored interval containing [point], or `null` when none does. Equivalent to an overlap query against the
+     * degenerate interval `[point, point]`.
+     */
     public fun findContaining(point: T): Interval<T>? = findOverlap(Interval(point, point))
 
+    /**
+     * Every stored interval overlapping [probe], in low-endpoint order. Costs O(k log n) for k results: the cached
+     * maximum high endpoint lets the descent skip subtrees that cannot overlap.
+     */
     public fun findOverlaps(probe: Interval<T>): List<Interval<T>> {
         val result = ArrayList<Interval<T>>()
         var remaining = intervals
@@ -242,9 +311,14 @@ public class IntervalTree<T : Comparable<T>> private constructor(
         return result
     }
 
+    /** How many stored intervals overlap [probe]. Enumerates them, so it costs the same as [findOverlaps]. */
     public fun countOverlaps(probe: Interval<T>): Int =
         findOverlaps(probe).size
 
+    /**
+     * A tree whose overlapping and adjacent intervals have been merged into maximal runs. Returns the receiver when
+     * there is nothing to merge.
+     */
     public fun coalesce(): IntervalTree<T> {
         if (intervals.size < 2) {
             return this
@@ -268,8 +342,13 @@ public class IntervalTree<T : Comparable<T>> private constructor(
         return from(result)
     }
 
+    /** The intervals in low-endpoint order. */
     public fun toList(): List<Interval<T>> = intervals.toList()
 
+    /**
+     * Whether this tree and [other] share storage, meaning one was derived from the other and the two retain nodes
+     * in common.
+     */
     public fun sharesStorageWith(other: IntervalTree<T>): Boolean = intervals.sharesStructureWith(other.intervals)
 
     internal fun debugIsBalanced(): Boolean = intervals.isBalanced()

@@ -63,6 +63,7 @@ public class BrodalOkasakiHeap<T> private constructor(
         }
     }
 
+    /** Whether the heap holds no elements. */
     public val isEmpty: Boolean
         get() = root == null
 

@@ -90,12 +90,15 @@ public class PrioritySearchQueue<K, P, V> private constructor(
         }
     }
 
+    /** Number of entries. O(1). */
     public val count: Int
         get() = root?.count ?: 0
 
+    /** Number of entries; an alias for [count] matching the naming used by the other collections. */
     public val size: Int
         get() = count
 
+    /** Whether the queue holds no entries. */
     public val isEmpty: Boolean
         get() = root == null
 
@@ -107,8 +110,13 @@ public class PrioritySearchQueue<K, P, V> private constructor(
     public val minimum: PrioritySearchEntry<K, P, V>
         get() = root?.winner ?: throw NoSuchElementException("The priority search queue is empty.")
 
+    /**
+     * The entry with the best priority, or `null` when empty. O(1), read from the cached winner rather than
+     * searched for - which is what distinguishes this structure from a sorted map.
+     */
     public fun minimumOrNull(): PrioritySearchEntry<K, P, V>? = root?.winner
 
+    /** Whether an entry keyed by [key] is present. Logarithmic in the key order. */
     public fun containsKey(key: K): Boolean = findNode(key) != null
 
     /** Returns the stored entry and therefore the first retained key representative. */

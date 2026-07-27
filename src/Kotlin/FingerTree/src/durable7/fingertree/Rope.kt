@@ -17,19 +17,31 @@ public class Rope<T> private constructor(
     private val items: PersistentDeque<T>,
 ) : Iterable<T> {
     public companion object {
+        /** An empty rope. */
         public fun <T> empty(): Rope<T> = Rope(PersistentDeque.empty())
 
+        /** A rope holding every value, in iteration order. */
         public fun <T> from(values: Iterable<T>): Rope<T> = Rope(PersistentDeque.from(values))
 
+        /**
+         * A rope holding the elements of every chunk, concatenated in order. The chunks are copied into rope-owned
+         * storage, so a caller may keep mutating the collections it passed.
+         */
         public fun <T> fromChunks(chunks: Iterable<Iterable<T>>): Rope<T> =
             Rope(PersistentDeque.from(chunks.flatten()))
 
+        /**
+         * A rope of the string's UTF-16 code units. Surrogate pairs are two elements here; use [TextRope] when line
+         * and column positions matter.
+         */
         public fun fromText(text: String): Rope<Char> = from(text.asIterable())
     }
 
+    /** Number of elements. O(1), from the cached measure at the root. */
     public val size: Int
         get() = items.size
 
+    /** Whether the rope holds no elements. */
     public val isEmpty: Boolean
         get() = items.isEmpty
 
@@ -40,12 +52,19 @@ public class Rope<T> private constructor(
     public fun cursorAt(position: Int): RopeCursor<T>? =
         if (position < 0 || position > size) null else RopeCursor.create(this, position)
 
+    /** The first element, or `null` when empty. */
     public fun front(): T? = items.front()
 
+    /** The last element, or `null` when empty. */
     public fun back(): T? = items.back()
 
+    /** The element at [index], or `null` when the index is out of range. */
     public operator fun get(index: Int): T? = items[index]
 
+    /**
+     * Copy `destination.size` elements starting at [index] into [destination], reporting whether the range was
+     * valid. Returns `false` and copies nothing when it is not, so a partial copy is never left behind.
+     */
     public fun copyTo(index: Int, destination: MutableList<in T>): Boolean {
         if (!isValidRange(index, destination.size, size)) {
             return false
@@ -81,6 +100,7 @@ public class Rope<T> private constructor(
         return Rope(items.append(value))
     }
 
+    /** A rope with the element at [index] replaced, or `null` when the index is out of range. */
     public fun setItem(index: Int, value: T): Rope<T>? {
         if (index < 0 || index >= size) {
             return null
@@ -127,6 +147,7 @@ public class Rope<T> private constructor(
         return Rope(split.left.concat(middle).concat(split.right))
     }
 
+    /** A rope without the element at [index], or `null` when the index is out of range. */
     public fun removeAt(index: Int): Rope<T>? {
         if (index < 0 || index >= size) {
             return null
@@ -135,6 +156,10 @@ public class Rope<T> private constructor(
         return Rope(items.removeAt(index)!!)
     }
 
+    /**
+     * A rope without the [count] elements starting at [index], or `null` when that range does not lie inside the
+     * rope.
+     */
     public fun removeRange(index: Int, count: Int): Rope<T>? {
         if (!isValidRange(index, count, size)) {
             return null
@@ -145,6 +170,10 @@ public class Rope<T> private constructor(
         return Rope(first.left.concat(second.right))
     }
 
+    /**
+     * The [count] elements starting at [index], as a rope, or `null` when that range does not lie inside the rope.
+     * The slice shares storage with the receiver rather than copying.
+     */
     public fun slice(index: Int, count: Int): Rope<T>? {
         if (!isValidRange(index, count, size)) {
             return null
@@ -154,6 +183,10 @@ public class Rope<T> private constructor(
         return Rope(suffix.splitAt(count)!!.left)
     }
 
+    /**
+     * The elements before [index] and those from [index] on, or `null` when the index lies outside `0..size`. Both
+     * halves share storage with the receiver.
+     */
     public fun splitAt(index: Int): Pair<Rope<T>, Rope<T>>? {
         if (index < 0 || index > size) {
             return null
@@ -178,10 +211,19 @@ public class Rope<T> private constructor(
             }
         }
 
+    /**
+     * Returns the receiver. This port stores elements individually rather than in chunks, so there is no
+     * fragmentation to compact; the member exists for parity with the ports that do chunk, where it is meaningful.
+     */
     public fun compact(): Rope<T> = this
 
+    /** The elements in order. */
     public fun toList(): List<T> = items.toList()
 
+    /**
+     * Whether this rope and [other] share storage, meaning one was derived from the other and the two retain nodes
+     * in common. A diagnostic for confirming structural sharing, not a substitute for equality.
+     */
     public fun sharesStorageWith(other: Rope<T>): Boolean = items.sharesStorageWith(other.items)
 
     internal fun itemAt(index: Int): T = items.itemAt(index)
@@ -376,21 +418,32 @@ public class MeasuredRope<T, M> private constructor(
     public val policy: MeasurePolicy<T, M>,
 ) : Iterable<T> {
     public companion object {
+        /**
+         * An empty rope measured by [policy], which the rope retains. Operations between two ropes require the same
+         * policy.
+         */
         public fun <T, M> empty(policy: MeasurePolicy<T, M>): MeasuredRope<T, M> =
             MeasuredRope(PersistentMeasuredTree.empty(policy), policy)
 
+        /** A rope holding every value, measured by [policy]. */
         public fun <T, M> from(values: Iterable<T>, policy: MeasurePolicy<T, M>): MeasuredRope<T, M> =
             MeasuredRope(PersistentMeasuredTree.from(values, policy), policy)
 
+        /**
+         * A rope holding the elements of every chunk, concatenated in order and measured by [policy]. The chunks
+         * are copied into rope-owned storage.
+         */
         public fun <T, M> fromChunks(
             chunks: Iterable<Iterable<T>>,
             policy: MeasurePolicy<T, M>,
         ): MeasuredRope<T, M> = MeasuredRope(PersistentMeasuredTree.from(chunks.flatten(), policy), policy)
     }
 
+    /** Number of elements. O(1). */
     public val size: Int
         get() = items.size
 
+    /** Whether the rope holds no elements. */
     public val isEmpty: Boolean
         get() = items.isEmpty
 
@@ -414,12 +467,16 @@ public class MeasuredRope<T, M> private constructor(
         )
     }
 
+    /** The measure of the whole rope, read from the cached root measure rather than recomputed. O(1). */
     public fun measure(): M = items.measure()
 
+    /** The first element, or `null` when empty. */
     public fun front(): T? = items.front()
 
+    /** The last element, or `null` when empty. */
     public fun back(): T? = items.back()
 
+    /** The element at [index], or `null` when the index is out of range. */
     public operator fun get(index: Int): T? = items[index]
 
     /**
@@ -435,6 +492,10 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRopePrefix(items.measurePrefix(count))
     }
 
+    /**
+     * Copy `destination.size` elements starting at [index] into [destination], reporting whether the range was
+     * valid. Returns `false` and copies nothing when it is not.
+     */
     public fun copyTo(index: Int, destination: MutableList<in T>): Boolean {
         if (!isValidRange(index, destination.size, size)) {
             return false
@@ -470,6 +531,10 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRope(items.append(value), policy)
     }
 
+    /**
+     * A rope with the element at [index] replaced, or `null` when the index is out of range. Measures on the path
+     * to the element are recomputed; the rest are reused.
+     */
     public fun setItem(index: Int, value: T): MeasuredRope<T, M>? {
         if (index < 0 || index >= size) {
             return null
@@ -480,6 +545,9 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRope(items.setItem(index, value)!!, policy)
     }
 
+    /**
+     * A rope with [value] inserted so that it ends up at [index], or `null` when the index lies outside `0..size`.
+     */
     public fun insertAt(index: Int, value: T): MeasuredRope<T, M>? {
         if (index < 0 || index > size) {
             return null
@@ -489,6 +557,10 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRope(items.insertAt(index, value)!!, policy)
     }
 
+    /**
+     * A rope with every element of [values] inserted at [index], in order, or `null` when the index lies outside
+     * `0..size`. Splits and joins once regardless of how many are inserted.
+     */
     public fun insertRange(index: Int, values: Iterable<T>): MeasuredRope<T, M>? {
         if (index < 0 || index > size) {
             return null
@@ -505,6 +577,7 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRope(split.first.concat(middle).concat(split.second), policy)
     }
 
+    /** A rope without the element at [index], or `null` when the index is out of range. */
     public fun removeAt(index: Int): MeasuredRope<T, M>? {
         if (index < 0 || index >= size) {
             return null
@@ -513,6 +586,10 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRope(items.removeAt(index)!!, policy)
     }
 
+    /**
+     * A rope without the [count] elements starting at [index], or `null` when that range does not lie inside the
+     * rope.
+     */
     public fun removeRange(index: Int, count: Int): MeasuredRope<T, M>? {
         if (!isValidRange(index, count, size)) {
             return null
@@ -523,6 +600,10 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRope(first.first.concat(second.second), policy)
     }
 
+    /**
+     * The [count] elements starting at [index], as a rope, or `null` when that range does not lie inside the rope.
+     * The slice shares storage with the receiver.
+     */
     public fun slice(index: Int, count: Int): MeasuredRope<T, M>? {
         if (!isValidRange(index, count, size)) {
             return null
@@ -532,6 +613,7 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRope(suffix.splitAt(count)!!.first, policy)
     }
 
+    /** The elements before [index] and those from [index] on, or `null` when the index lies outside `0..size`. */
     public fun splitAt(index: Int): MeasuredRopeSplit<T, M>? {
         if (index < 0 || index > size) {
             return null
@@ -541,16 +623,35 @@ public class MeasuredRope<T, M> private constructor(
         return MeasuredRopeSplit(MeasuredRope(split.first, policy), MeasuredRope(split.second, policy))
     }
 
+    /**
+     * Split at the first point where the accumulated prefix measure satisfies [predicate].
+     *
+     * The predicate must be monotone - once true it stays true as more elements are accumulated - because the
+     * descent commits to a branch on each node's cached measure without visiting the elements it skips.
+     */
     public fun splitByMeasure(predicate: (M) -> Boolean): MeasuredRopeSplit<T, M> {
         val split = items.splitByMeasure(predicate)
         return MeasuredRopeSplit(MeasuredRope(split.first, policy), MeasuredRope(split.second, policy))
     }
 
+    /**
+     * The first index at which [predicate] becomes true, with the measure accumulated before it and the element
+     * there. Reports `found = false` and the end position when no prefix satisfies the predicate, so a miss stays
+     * distinct from a hit at the end.
+     */
     public fun locateByMeasure(predicate: (M) -> Boolean): MeasuredRopeLocate<T, M> {
         val located = items.locate(predicate)
         return MeasuredRopeLocate(located.index, located.measureBefore, located.value, located.found)
     }
 
+    /**
+     * A rope holding this one's elements followed by [other]'s.
+     *
+     * @throws IllegalArgumentException if the two ropes do not carry the same measure policy, since combining
+     * measures computed under different policies would leave the cached measures meaningless.
+     *
+     * @throws ArithmeticException if the combined length overflows [Int].
+     */
     public fun concat(other: MeasuredRope<T, M>): MeasuredRope<T, M> {
         Math.addExact(size, other.size)
         require(policy === other.policy || policy == other.policy) { "Cannot concatenate ropes with different measure policies." }
@@ -561,10 +662,19 @@ public class MeasuredRope<T, M> private constructor(
         }
     }
 
+    /**
+     * Returns the receiver. This port stores elements individually rather than in chunks, so there is no
+     * fragmentation to compact; the member exists for parity with the ports that do chunk.
+     */
     public fun compact(): MeasuredRope<T, M> = this
 
+    /** The elements in order. */
     public fun toList(): List<T> = items.toList()
 
+    /**
+     * Whether this rope and [other] share storage, meaning one was derived from the other and the two retain nodes
+     * in common. A diagnostic for confirming structural sharing, not a substitute for equality.
+     */
     public fun sharesStorageWith(other: MeasuredRope<T, M>): Boolean = items.sharesStructureWith(other.items)
 
     @Suppress("UNCHECKED_CAST")
@@ -602,7 +712,12 @@ public class TextRope private constructor(
     private val characters: MeasuredRope<Char, Int>,
 ) {
     public companion object {
+        /** An empty text rope. */
         public fun empty(): TextRope = TextRope(MeasuredRope.empty(NewlineMeasure))
+        /**
+         * A text rope holding [text]. Positions are UTF-16 code-unit offsets, matching Kotlin's own [String]
+         * indexing.
+         */
         public fun fromText(text: String): TextRope = TextRope(MeasuredRope.from(text.asIterable(), NewlineMeasure))
 
         internal fun fromMeasured(characters: MeasuredRope<Char, Int>): TextRope {
@@ -611,9 +726,11 @@ public class TextRope private constructor(
         }
     }
 
+    /** Number of UTF-16 code units. O(1). */
     public val size: Int
         get() = characters.size
 
+    /** Whether the rope holds no characters. */
     public val isEmpty: Boolean
         get() = characters.isEmpty
 
@@ -630,6 +747,10 @@ public class TextRope private constructor(
         return TextRopeCursorSearch(TextRopeCursor.create(this, located.cursor), located.found)
     }
 
+    /**
+     * The whole text as a [String]. O(n) and allocates the entire result; prefer [getLine] or [slice] on the
+     * underlying rope when only part is needed.
+     */
     public fun asString(): String = characters.toList().joinToString("")
 
     /**
@@ -641,6 +762,10 @@ public class TextRope private constructor(
      */
     public fun lineCount(): Int = Math.addExact(characters.measure(), 1)
 
+    /**
+     * The zero-based line containing [offset], or `null` when the offset lies outside `0..size`. Logarithmic: the
+     * cached newline counts locate the line without scanning.
+     */
     public fun lineOfOffset(offset: Int): Int? {
         if (offset < 0 || offset > size) {
             return null
@@ -649,6 +774,7 @@ public class TextRope private constructor(
         return characters.prefixMeasure(offset)?.measure
     }
 
+    /** The offset at which the zero-based [line] starts, or `null` when the line does not exist. */
     public fun lineStartOffset(line: Int): Int? {
         if (line < 0 || line >= lineCount()) {
             return null
@@ -664,12 +790,17 @@ public class TextRope private constructor(
         return if (!newline.found) null else newline.index + 1
     }
 
+    /** The zero-based line and column of [offset], or `null` when the offset lies outside `0..size`. */
     public fun lineColumnOf(offset: Int): LineColumn? {
         val line = lineOfOffset(offset) ?: return null
         val start = lineStartOffset(line) ?: return null
         return LineColumn(line, offset - start)
     }
 
+    /**
+     * The offset of the zero-based [line] and [column], or `null` when that position does not exist. A column past
+     * the end of its line is a miss rather than a clamp.
+     */
     public fun offsetOf(line: Int, column: Int): Int? {
         if (column < 0) {
             return null
@@ -683,6 +814,9 @@ public class TextRope private constructor(
         return if (offset <= end) offset.toInt() else null
     }
 
+    /**
+     * The text of the zero-based [line], excluding its terminating newline, or `null` when the line does not exist.
+     */
     public fun getLine(line: Int): String? {
         val start = lineStartOffset(line) ?: return null
         val end = lineEndOffset(line) ?: return null
@@ -690,10 +824,18 @@ public class TextRope private constructor(
         return suffix.splitAt(end - start)!!.left.toList().joinToString("")
     }
 
+    /**
+     * Every line, excluding terminating newlines. A rope ending in a newline therefore yields a final empty line,
+     * since [lineCount] counts one more line than there are newlines.
+     */
     public fun lines(): List<String> = (0 until lineCount()).mapNotNull { getLine(it) }
 
+    /**
+     * The characters as a plain [Rope], dropping the newline measure. Cheap: the elements are shared, not copied.
+     */
     public fun toCharRope(): Rope<Char> = Rope.from(characters)
 
+    /** The underlying newline-measured rope, for callers that want the measure directly. */
     public fun toMeasuredRope(): MeasuredRope<Char, Int> = characters
 
     override fun toString(): String = asString()

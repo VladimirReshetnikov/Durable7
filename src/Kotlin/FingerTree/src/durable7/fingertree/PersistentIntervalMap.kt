@@ -28,9 +28,11 @@ public class PersistentIntervalMap<T : Comparable<T>, V> private constructor(
     private val values: SortedMap<Interval<T>, V>,
 ) : Iterable<IntervalMapEntry<T, V>> {
     public companion object {
+        /** An empty map. */
         public fun <T : Comparable<T>, V> empty(): PersistentIntervalMap<T, V> =
             PersistentIntervalMap(IntervalTree.empty(), SortedMap.empty(intervalComparator()))
 
+        /** A map holding every entry. Later entries overwrite earlier ones with an equal interval key. */
         public fun <T : Comparable<T>, V> from(
             entries: Iterable<Pair<Interval<T>, V>>,
         ): PersistentIntervalMap<T, V> {
@@ -46,33 +48,61 @@ public class PersistentIntervalMap<T : Comparable<T>, V> private constructor(
             }
     }
 
+    /** Number of entries. O(1). */
     public val size: Int get() = values.size
+    /** Whether the map holds no entries. */
     public val isEmpty: Boolean get() = values.isEmpty
 
+    /**
+     * Whether an entry keyed by exactly [interval] - matching on both endpoints - is present. This is key identity,
+     * not overlap.
+     */
     public fun containsKey(interval: Interval<T>): Boolean = values.containsKey(interval)
+    /**
+     * The value stored for exactly [interval], or `null` when absent. This is a key lookup, not an overlap query;
+     * use [findOverlaps] for the latter.
+     */
     public operator fun get(interval: Interval<T>): V? = values[interval]
 
+    /**
+     * The entry at [index] in interval-key order.
+     *
+     * @throws IndexOutOfBoundsException if [index] does not identify a stored interval.
+     */
     public fun entryAt(index: Int): IntervalMapEntry<T, V> {
         val entry = values.entryAt(index) ?: throw IndexOutOfBoundsException("Index must identify an interval.")
         return IntervalMapEntry(entry.key, entry.value)
     }
 
+    /**
+     * A map with the entry added.
+     *
+     * @throws IllegalArgumentException if an equal interval key is already present; use [tryAdd] to detect that
+     * without an exception, or [set] to overwrite.
+     */
     public fun add(interval: Interval<T>, value: V): PersistentIntervalMap<T, V> {
         if (containsKey(interval)) throw IllegalArgumentException("An equivalent interval is already present.")
         return PersistentIntervalMap(intervals.insert(interval), values.insert(interval, value))
     }
 
+    /**
+     * Add the entry only when its interval key is absent, reporting whether it was added. On a collision the result
+     * carries the receiver unchanged.
+     */
     public fun tryAdd(interval: Interval<T>, value: V): IntervalMapAddResult<T, V> =
         if (containsKey(interval)) IntervalMapAddResult(this, false) else IntervalMapAddResult(add(interval, value), true)
 
+    /** A map binding [interval] to [value], adding or replacing as needed. */
     public fun set(interval: Interval<T>, value: V): PersistentIntervalMap<T, V> =
         if (containsKey(interval)) PersistentIntervalMap(intervals, values.setItem(interval, value))
         else PersistentIntervalMap(intervals.insert(interval), values.setItem(interval, value))
 
+    /** A map without the entry keyed by exactly [interval]. Returns the receiver unchanged when absent. */
     public fun remove(interval: Interval<T>): PersistentIntervalMap<T, V> =
         if (!containsKey(interval)) this
         else PersistentIntervalMap(intervals.remove(interval), values.remove(interval))
 
+    /** An empty map. Returns the receiver when it is already empty. */
     public fun clear(): PersistentIntervalMap<T, V> = if (isEmpty) this else empty()
 
     /**
@@ -105,13 +135,20 @@ public class PersistentIntervalMap<T : Comparable<T>, V> private constructor(
             .sorted()
             .map { rank -> entryAt(rank) }
 
+    /** How many stored intervals overlap [probe]. */
     public fun countOverlaps(probe: Interval<T>): Int = intervals.countOverlaps(probe)
 
+    /** The entries in interval-key order. */
     public fun toList(): List<IntervalMapEntry<T, V>> = values.map { IntervalMapEntry(it.key, it.value) }
 
+    /**
+     * Whether this map and [other] share their interval index. The two indexes are tracked separately because an
+     * edit that changes only a value leaves the interval index shared.
+     */
     public fun sharesIntervalStorageWith(other: PersistentIntervalMap<T, V>): Boolean =
         intervals.sharesStorageWith(other.intervals)
 
+    /** Whether this map and [other] share their value index. */
     public fun sharesValueStorageWith(other: PersistentIntervalMap<T, V>): Boolean =
         values.sharesStorageWith(other.values)
 

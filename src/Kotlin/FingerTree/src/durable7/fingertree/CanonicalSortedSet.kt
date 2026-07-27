@@ -448,6 +448,7 @@ public class CanonicalSortedSet<T> private constructor(
     public val count: Int
         get() = size
 
+    /** Whether the set holds no elements. */
     public val isEmpty: Boolean
         get() = root == null
 
@@ -462,6 +463,7 @@ public class CanonicalSortedSet<T> private constructor(
     public val contentHash: Long
         get() = root?.digest() ?: 0L
 
+    /** Whether an element equivalent to [value] under the policy's comparator is present. */
     public operator fun contains(value: T): Boolean = findNode(value) != null
 
     /** Recovers the stored representative for a comparator-equivalent [value]. */
@@ -558,23 +560,28 @@ public class CanonicalSortedSet<T> private constructor(
         return semanticSetEquals(values)
     }
 
+    /** Whether every element of the receiver appears in [values], compared under the receiver's policy. */
     public fun isSubsetOf(values: Iterable<T>): Boolean {
         val other = semanticProbe(values)
         return all { other.contains(it) }
     }
 
+    /** [isSubsetOf] and the two are not equal as sets. */
     public fun isProperSubsetOf(values: Iterable<T>): Boolean {
         val other = semanticProbe(values)
         return size < other.size && all { other.contains(it) }
     }
 
+    /** Whether every element of [values] appears in the receiver. */
     public fun isSupersetOf(values: Iterable<T>): Boolean = values.all { it in this }
 
+    /** [isSupersetOf] and the two are not equal as sets. */
     public fun isProperSupersetOf(values: Iterable<T>): Boolean {
         val other = semanticProbe(values)
         return size > other.size && other.all { it in this }
     }
 
+    /** Whether the receiver and [values] share at least one element. */
     public fun overlaps(values: Iterable<T>): Boolean = values.any { it in this }
 
     /** Reports whether the two values retain at least one node by identity. */

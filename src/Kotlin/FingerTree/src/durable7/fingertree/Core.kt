@@ -172,15 +172,19 @@ public class PersistentDeque<T> private constructor(
     private val items: PersistentMeasuredTree<T, Int>,
 ) : Iterable<T> {
     public companion object {
+        /** An empty deque. */
         public fun <T> empty(): PersistentDeque<T> = PersistentDeque(PersistentMeasuredTree.empty(SizeMeasure()))
 
+        /** A deque holding every value, in iteration order. */
         public fun <T> from(values: Iterable<T>): PersistentDeque<T> =
             PersistentDeque(PersistentMeasuredTree.from(values, SizeMeasure()))
     }
 
+    /** Number of elements. O(1), from the cached measure at the root. */
     public val size: Int
         get() = items.size
 
+    /** Whether the deque holds no elements. */
     public val isEmpty: Boolean
         get() = items.isEmpty
 
@@ -191,16 +195,26 @@ public class PersistentDeque<T> private constructor(
     public fun cursorAt(position: Int): PersistentDequeCursor<T>? =
         if (position < 0 || position > size) null else PersistentDequeCursor.create(this, position)
 
+    /** The first element, or `null` when empty. */
     public fun front(): T? = items.front()
 
+    /** The last element, or `null` when empty. */
     public fun back(): T? = items.back()
 
+    /** The element at [index], or `null` when the index is out of range. */
     public operator fun get(index: Int): T? = items[index]
 
+    /** A deque with [value] added at the front. Amortized O(1); the receiver is unchanged. */
     public fun prepend(value: T): PersistentDeque<T> = PersistentDeque(items.prepend(value))
 
+    /** A deque with [value] added at the back. Amortized O(1); the receiver is unchanged. */
     public fun append(value: T): PersistentDeque<T> = PersistentDeque(items.append(value))
 
+    /**
+     * A deque holding this one's elements followed by [other]'s. O(log(min(m, n))): the two spines are joined
+     * rather than one sequence being copied into the other, which is what makes this a catenable deque rather than
+     * a list.
+     */
     public fun concat(other: PersistentDeque<T>): PersistentDeque<T> =
         when {
             isEmpty -> other
@@ -208,6 +222,10 @@ public class PersistentDeque<T> private constructor(
             else -> PersistentDeque(items.concat(other.items))
         }
 
+    /**
+     * The elements before [index] and those from [index] on, or `null` when the index lies outside `0..size`. Both
+     * halves share structure with the receiver.
+     */
     public fun splitAt(index: Int): DequeSplit<T>? {
         if (index < 0 || index > size) {
             return null
@@ -217,6 +235,10 @@ public class PersistentDeque<T> private constructor(
         return DequeSplit(PersistentDeque(split.first), PersistentDeque(split.second))
     }
 
+    /**
+     * The elements before [index], the element at it, and those after, or `null` when the index lies outside
+     * `0..size-1`.
+     */
     public fun splitItemAt(index: Int): DequeItemSplit<T>? {
         if (index < 0 || index >= size) {
             return null
@@ -229,6 +251,10 @@ public class PersistentDeque<T> private constructor(
         )
     }
 
+    /**
+     * The elements before [start], the [count] from there, and those after, or `null` when that range does not lie
+     * inside the deque.
+     */
     public fun splitRange(start: Int, count: Int): DequeRangeSplit<T>? {
         if (!isValidRange(start, count, size)) {
             return null
@@ -239,6 +265,9 @@ public class PersistentDeque<T> private constructor(
         return DequeRangeSplit(PersistentDeque(first.first), PersistentDeque(second.first), PersistentDeque(second.second))
     }
 
+    /**
+     * A deque with [value] inserted so that it ends up at [index], or `null` when the index lies outside `0..size`.
+     */
     public fun insertAt(index: Int, value: T): PersistentDeque<T>? {
         if (index < 0 || index > size) {
             return null
@@ -247,6 +276,7 @@ public class PersistentDeque<T> private constructor(
         return PersistentDeque(items.insertAt(index, value)!!)
     }
 
+    /** A deque with the element at [index] replaced, or `null` when the index is out of range. */
     public fun setItem(index: Int, value: T): PersistentDeque<T>? {
         if (index < 0 || index >= size) {
             return null
@@ -257,22 +287,37 @@ public class PersistentDeque<T> private constructor(
         return PersistentDeque(items.setItem(index, value)!!)
     }
 
+    /** A deque without the element at [index], or `null` when the index is out of range. */
     public fun removeAt(index: Int): PersistentDeque<T>? {
         val split = splitItemAt(index) ?: return null
         return split.left.concat(split.right)
     }
 
+    /**
+     * The first element together with the deque that remains, or `null` when empty. The nonfailing pair form, for
+     * callers that would otherwise call [front] and then drop it.
+     */
     public fun tryViewLeft(): DequePop<T>? =
         if (isEmpty) null else DequePop(itemAt(0), splitAt(1)!!.right)
 
+    /** The last element together with the deque that remains, or `null` when empty. */
     public fun tryViewRight(): DequePop<T>? =
         if (isEmpty) null else DequePop(itemAt(size - 1), splitAt(size - 1)!!.left)
 
+    /**
+     * A deque with the elements in the opposite order. O(n): this rebuilds. Use [ReversibleDeque] when reversal
+     * needs to be cheap.
+     */
     public fun reverse(): PersistentDeque<T> =
         if (size <= 1) this else from(toList().asReversed())
 
+    /** The elements in order. */
     public fun toList(): List<T> = items.toList()
 
+    /**
+     * Whether this deque and [other] share storage, meaning one was derived from the other and the two retain nodes
+     * in common. A diagnostic for confirming structural sharing, not a substitute for equality.
+     */
     public fun sharesStorageWith(other: PersistentDeque<T>): Boolean = items.sharesStructureWith(other.items)
 
     internal fun debugIsBalanced(): Boolean = items.isBalanced()
@@ -668,15 +713,19 @@ public class ReversibleDeque<T> private constructor(
     private val root: ReversibleDequeNode<T>,
 ) : Iterable<T> {
     public companion object {
+        /** An empty deque. */
         public fun <T> empty(): ReversibleDeque<T> = ReversibleDeque(emptyReversibleDequeNode())
 
+        /** A deque holding every value, in iteration order. */
         public fun <T> from(values: Iterable<T>): ReversibleDeque<T> =
             ReversibleDeque(reversibleNodeFromValues(values))
     }
 
+    /** Number of elements. O(1). */
     public val size: Int
         get() = root.size
 
+    /** Whether the deque holds no elements. */
     public val isEmpty: Boolean
         get() = root.isEmpty
 
@@ -687,24 +736,44 @@ public class ReversibleDeque<T> private constructor(
     public fun cursorAt(position: Int): ReversibleDequeCursor<T>? =
         if (position < 0 || position > size) null else ReversibleDequeCursor.create(this, position)
 
+    /** The first element in the current logical order, or `null` when empty. */
     public fun front(): T? = root.front()
 
+    /** The last element in the current logical order, or `null` when empty. */
     public fun back(): T? = root.back()
 
+    /** The element at [index] in the current logical order, or `null` when the index is out of range. */
     public operator fun get(index: Int): T? =
         if (index < 0 || index >= size) null else root.get(index)
 
+    /**
+     * A deque with the logical order reversed. O(1): this flips an orientation flag and shares the underlying tree
+     * rather than rebuilding, which is the whole reason this type exists alongside [PersistentDeque].
+     */
     public fun reverse(): ReversibleDeque<T> = ReversibleDeque(root.reverse())
 
+    /**
+     * A deque with [value] added at the logical front. Which physical end that is depends on the current
+     * orientation.
+     */
     public fun prepend(value: T): ReversibleDeque<T> =
         ReversibleDeque(concatReversibleDequeNodes(reversibleNodeFromSmallList(listOf(value)), root))
 
+    /** A deque with [value] added at the logical back. */
     public fun append(value: T): ReversibleDeque<T> =
         ReversibleDeque(concatReversibleDequeNodes(root, reversibleNodeFromSmallList(listOf(value))))
 
+    /**
+     * A deque holding this one's elements followed by [other]'s, in logical order. Each operand keeps its own
+     * orientation; neither is rebuilt to match the other.
+     */
     public fun concat(other: ReversibleDeque<T>): ReversibleDeque<T> =
         ReversibleDeque(concatReversibleDequeNodes(root, other.root))
 
+    /**
+     * The elements before [index] and those from [index] on, in logical order, or `null` when the index lies
+     * outside `0..size`.
+     */
     public fun splitAt(index: Int): Pair<ReversibleDeque<T>, ReversibleDeque<T>>? {
         if (index < 0 || index > size) {
             return null
@@ -714,6 +783,7 @@ public class ReversibleDeque<T> private constructor(
         return ReversibleDeque(split.first) to ReversibleDeque(split.second)
     }
 
+    /** The first element in logical order together with the deque that remains, or `null` when empty. */
     public fun tryViewLeft(): Pair<T, ReversibleDeque<T>>? {
         if (isEmpty) {
             return null
@@ -723,6 +793,7 @@ public class ReversibleDeque<T> private constructor(
         return root.get(0) to ReversibleDeque(split.second)
     }
 
+    /** The last element in logical order together with the deque that remains, or `null` when empty. */
     public fun tryViewRight(): Pair<T, ReversibleDeque<T>>? {
         if (isEmpty) {
             return null
@@ -732,12 +803,17 @@ public class ReversibleDeque<T> private constructor(
         return root.get(size - 1) to ReversibleDeque(split.first)
     }
 
+    /** The elements in the current logical order. */
     public fun toList(): List<T> {
         val values = ArrayList<T>(size)
         root.appendTo(values)
         return values
     }
 
+    /**
+     * Whether this deque and [other] share storage, meaning one was derived from the other and the two retain nodes
+     * in common. Two deques can share storage while presenting opposite orders.
+     */
     public fun sharesStorageWith(other: ReversibleDeque<T>): Boolean =
         root.storageToken === other.root.storageToken
 
@@ -781,16 +857,23 @@ public class FingerTree<T, M> private constructor(
     public val policy: MeasurePolicy<T, M>,
 ) : Iterable<T> {
     public companion object {
+        /**
+         * An empty tree measured by [policy], which the tree retains. Operations between two trees require the same
+         * policy.
+         */
         public fun <T, M> empty(policy: MeasurePolicy<T, M>): FingerTree<T, M> =
             FingerTree(PersistentMeasuredTree.empty(policy), policy)
 
+        /** A tree holding every value, measured by [policy]. */
         public fun <T, M> from(values: Iterable<T>, policy: MeasurePolicy<T, M>): FingerTree<T, M> =
             FingerTree(PersistentMeasuredTree.from(values, policy), policy)
     }
 
+    /** Number of elements. O(1). */
     public val size: Int
         get() = items.size
 
+    /** Whether the tree holds no elements. */
     public val isEmpty: Boolean
         get() = items.isEmpty
 
@@ -809,18 +892,31 @@ public class FingerTree<T, M> private constructor(
         )
     }
 
+    /** The measure of the whole tree, read from the cached root measure rather than recomputed. O(1). */
     public fun measure(): M = items.measure()
 
+    /** The first element, or `null` when empty. */
     public fun front(): T? = items.front()
 
+    /** The last element, or `null` when empty. */
     public fun back(): T? = items.back()
 
+    /** The element at [index], or `null` when the index is out of range. */
     public operator fun get(index: Int): T? = items[index]
 
+    /** A tree with [value] added at the front. Amortized O(1). */
     public fun prepend(value: T): FingerTree<T, M> = FingerTree(items.prepend(value), policy)
 
+    /** A tree with [value] added at the back. Amortized O(1). */
     public fun append(value: T): FingerTree<T, M> = FingerTree(items.append(value), policy)
 
+    /**
+     * A tree holding this one's elements followed by [other]'s.
+     *
+     * @throws IllegalArgumentException if the two trees do not carry the same measure policy. Combining measures
+     * computed under different policies would silently produce a tree whose cached measures mean nothing, so this
+     * is rejected rather than coerced.
+     */
     public fun concat(other: FingerTree<T, M>): FingerTree<T, M> {
         require(policy === other.policy || policy == other.policy) { "Cannot concatenate trees with different measure policies." }
         return when {
@@ -830,11 +926,19 @@ public class FingerTree<T, M> private constructor(
         }
     }
 
+    /**
+     * Split at the first point where the accumulated prefix measure satisfies [predicate].
+     *
+     * The predicate must be monotone - once true it stays true as more elements are accumulated - because the
+     * descent commits to a branch on each node's cached measure without visiting the elements it skips. A predicate
+     * that is not monotone yields an unspecified split rather than an error.
+     */
     public fun split(predicate: (M) -> Boolean): MeasuredSplit<T, M> {
         val split = items.splitByMeasure(predicate)
         return MeasuredSplit(FingerTree(split.first, policy), FingerTree(split.second, policy))
     }
 
+    /** The elements before [index] and those from [index] on, or `null` when the index lies outside `0..size`. */
     public fun splitAtIndex(index: Int): MeasuredSplit<T, M>? {
         if (index < 0 || index > size) {
             return null
@@ -844,6 +948,10 @@ public class FingerTree<T, M> private constructor(
         return MeasuredSplit(FingerTree(split.first, policy), FingerTree(split.second, policy))
     }
 
+    /**
+     * Split around the first element at which [predicate] becomes true, or `null` when no prefix satisfies it.
+     * Unlike [split], this isolates the element that crossed the threshold.
+     */
     public fun trySplitFind(predicate: (M) -> Boolean): MeasuredItemSplit<T, M>? {
         val located = items.locate(predicate)
         if (!located.found) {
@@ -856,6 +964,10 @@ public class FingerTree<T, M> private constructor(
         return MeasuredItemSplit(FingerTree(first.first, policy), item, FingerTree(second.second, policy))
     }
 
+    /**
+     * The measure of the first [count] elements, or `null` when [count] lies outside `0..size`. A single descent;
+     * nothing is rebuilt.
+     */
     public fun prefixMeasure(count: Int): M? {
         if (count < 0 || count > size) {
             return null
@@ -864,11 +976,20 @@ public class FingerTree<T, M> private constructor(
         return items.prefixMeasure(count)
     }
 
+    /**
+     * The first index at which [predicate] becomes true, with the measure accumulated before it and the element
+     * there. Reports `found = false` and the end position when no prefix satisfies the predicate, so a miss stays
+     * distinct from a hit at the end.
+     */
     public fun tryLocate(predicate: (M) -> Boolean): LocateResult<T, M> {
         val located = items.locate(predicate)
         return LocateResult(located.index, located.measureBefore, located.value, located.found)
     }
 
+    /**
+     * A tree with the element at [index] replaced, or `null` when the index is out of range. Measures on the path
+     * to the element are recomputed; the rest are reused.
+     */
     public fun setItem(index: Int, value: T): FingerTree<T, M>? {
         if (index < 0 || index >= size) {
             return null
@@ -879,6 +1000,9 @@ public class FingerTree<T, M> private constructor(
         return FingerTree(items.setItem(index, value)!!, policy)
     }
 
+    /**
+     * A tree with [value] inserted so that it ends up at [index], or `null` when the index lies outside `0..size`.
+     */
     public fun insertAt(index: Int, value: T): FingerTree<T, M>? {
         if (index < 0 || index > size) {
             return null
@@ -887,6 +1011,7 @@ public class FingerTree<T, M> private constructor(
         return FingerTree(items.insertAt(index, value)!!, policy)
     }
 
+    /** A tree without the element at [index], or `null` when the index is out of range. */
     public fun removeAt(index: Int): FingerTree<T, M>? {
         if (index < 0 || index >= size) {
             return null
@@ -895,14 +1020,21 @@ public class FingerTree<T, M> private constructor(
         return FingerTree(items.removeAt(index)!!, policy)
     }
 
+    /** The first element together with the tree that remains, or `null` when empty. */
     public fun tryViewLeft(): Pair<T, FingerTree<T, M>>? =
         if (isEmpty) null else itemAt(0) to splitAtIndex(1)!!.right
 
+    /** The last element together with the tree that remains, or `null` when empty. */
     public fun tryViewRight(): Pair<T, FingerTree<T, M>>? =
         if (isEmpty) null else itemAt(size - 1) to splitAtIndex(size - 1)!!.left
 
+    /** The elements in order. */
     public fun toList(): List<T> = items.toList()
 
+    /**
+     * Whether this tree and [other] share storage, meaning one was derived from the other and the two retain nodes
+     * in common. A diagnostic for confirming structural sharing, not a substitute for equality.
+     */
     public fun sharesStorageWith(other: FingerTree<T, M>): Boolean = items.sharesStructureWith(other.items)
 
     internal fun debugIsBalanced(): Boolean = items.isBalanced()
