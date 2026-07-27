@@ -20,7 +20,7 @@ spelled in each of the nine ports.
 
 ## What it covers
 
-- **Part I** — persistence, path copying, the version DAG, the branching-amortisation
+- **Part I** — persistence, path copying, the version DAG, the branching-amortization
   hazard, and the shared cross-port contract (policies, representatives, no-op
   identity, failure atomicity, ordering).
 - **Part II** — CHAMP and the composition-first families built on it, Patricia
@@ -29,7 +29,7 @@ spelled in each of the nine ports.
   the range-update sequence, the reversible deque, and DABA Lite.
 - **Part IV** — sorted collections, canonical zip-zip sets, the insertion-ordered
   family, the three priority structures, and interval trees and maps.
-- **Part V** — Merkle search trees, blocks, packs, proofs, synchronisation, and
+- **Part V** — Merkle search trees, blocks, packs, proofs, synchronization, and
   three-way merge.
 - **Part VI** — cursors.
 - **Reference** — a complexity table for the whole library, a nine-language name
@@ -40,7 +40,7 @@ spelled in each of the nine ports.
 
 This guide is a companion to, not a replacement for, the workspace API
 specifications and public headers. Those remain the normative source for
-contracts, complexity, allocation behaviour, and validation evidence. Where this
+contracts, complexity, allocation behavior, and validation evidence. Where this
 guide and a workspace specification disagree, the specification wins and the
 guide has a bug.
 

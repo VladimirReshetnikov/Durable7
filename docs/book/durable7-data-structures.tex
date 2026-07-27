@@ -30,7 +30,7 @@
   headsep=16pt, footskip=30pt
 ]{geometry}
 
-% --- Graphics, colour, boxes ----------------------------------------------
+% --- Graphics, color, boxes ----------------------------------------------
 \usepackage[table]{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds,shapes.geometric,
@@ -342,7 +342,7 @@
 \vspace*{0.10\textheight}
 
 \begin{tikzpicture}[scale=1]
-  % A stylised "version DAG": one root, three shared branches.
+  % A stylized "version DAG": one root, three shared branches.
   \definecolor{c}{HTML}{16243C}
   \foreach \x/\y/\r in {0/0/3.4, -1.5/-1.2/2.6, 1.5/-1.2/2.6,
                         -2.6/-2.4/2.0, -0.4/-2.4/2.0, 2.6/-2.4/2.0}
@@ -394,13 +394,13 @@
 This document describes the collections implemented in the Durable7 repository.
 It is a companion to --- not a replacement for --- the workspace API
 specifications and public headers, which remain the normative source for
-contracts, complexity, allocation behaviour, and validation evidence.
+contracts, complexity, allocation behavior, and validation evidence.
 Where this guide and a workspace specification disagree, the specification
 wins and this guide has a bug.\\[10pt]
 The repository ports every family to \textbf{C}, \textbf{C\texttt{++}},
 \textbf{C\#}, \textbf{Haskell}, \textbf{Kotlin}, \textbf{OCaml},
 \textbf{Python}, \textbf{Rust}, and \textbf{TypeScript}. Code samples are drawn
-from whichever port makes the point most clearly; every behaviour described in
+from whichever port makes the point most clearly; every behavior described in
 the shared-contract sections holds in all nine unless the text says
 otherwise.\\[10pt]
 Set in Libertinus with Inconsolata for code; diagrams drawn in \textsc{Ti\emph{k}Z};
@@ -455,14 +455,14 @@ ports. The subject index at the back covers both concepts and identifiers.
 \noindent\textbf{\sffamily\color{d7ink}Three kinds of panel appear throughout.}
 
 \begin{contractbox}[The contract]
-Normative behaviour that every port upholds. If a port cannot honour one of
+Normative behavior that every port upholds. If a port cannot honor one of
 these, it says so explicitly in its own API notes rather than quietly differing.
 \end{contractbox}
 
 \begin{caveatbox}[Caveat]
 The place where a claim stops being true. These are the paragraphs worth reading
 twice --- most production surprises with persistent structures live exactly at
-the edge of an amortisation argument or a policy assumption.
+the edge of an amortization argument or a policy assumption.
 \end{caveatbox}
 
 \begin{asidebox}[Aside]
@@ -511,7 +511,7 @@ can hand \code{v1} to another thread while a third thread builds \code{v4} from
 \code{v3}, and no lock is involved anywhere, because nothing that either thread
 can see is ever written to again.
 
-The obvious way to get that behaviour is to copy the map on every update, and
+The obvious way to get that behavior is to copy the map on every update, and
 the obvious problem with the obvious way is that it costs \bigoh{n} time and
 \bigoh{n} space per edit. A library of persistent collections is, in essence, a
 long and inventive answer to the question: \emph{how little can we copy and
@@ -563,11 +563,11 @@ would guess and vastly cheaper than a hundred deep copies. This is what makes
 undo stacks, audit trails, and time-travel debugging practical rather than
 aspirational.
 
-\textbf{Readers need no synchronisation.} Every node reachable from a published
+\textbf{Readers need no synchronization.} Every node reachable from a published
 root is immutable, so a reader that has captured a root is reading a frozen
 world. There is no torn read, no lock, no volatile fence in the read path, and
 no window during which a concurrent writer can make a traversal observe half of
-two different states. The synchronisation problem does not get solved; it gets
+two different states. The synchronization problem does not get solved; it gets
 deleted.
 
 \section{The version DAG}
@@ -601,18 +601,18 @@ the picture is a live, complete collection.}
 That freedom has a price, and it is the single most important caveat in this
 book.
 
-\begin{caveatbox}[Amortisation does not survive branching]
-Amortised bounds are proved by a potential argument over \emph{one linear
+\begin{caveatbox}[Amortization does not survive branching]
+Amortized bounds are proved by a potential argument over \emph{one linear
 history}: an expensive operation is paid for by cheap operations that preceded
-it.\index{amortisation!under branching} Branching breaks the argument. If a version sits just before an expensive
+it.\index{amortization!under branching} Branching breaks the argument. If a version sits just before an expensive
 rebalance, and you branch from it $b$ times, each branch can trigger that same
 rebalance, and the accumulated credit pays for exactly one of them. Potential
 consumed by one child cannot pay for a sibling.
 
 Durable7 therefore classifies every adaptive scheme before believing its
-amortised claim. Constant-size promotion thresholds are safe --- re-branching
+amortized claim. Constant-size promotion thresholds are safe --- re-branching
 re-pays only \bigoh{1}. Schemes that do \bigoh{n} work at a threshold ---
-relabelling, compaction, wholesale redistribution --- are not, and the library
+relabeling, compaction, wholesale redistribution --- are not, and the library
 either avoids them or states the worst case per produced version. Where a bound
 holds only along a linear lineage, this guide says ``linear lineage''
 explicitly.
@@ -631,10 +631,10 @@ editing-session tier (Chapter~\ref{ch:lifecycle}).
 \item \textbf{Indirection on reads.} A 32-way trie lookup is a handful of
 pointer hops with good branch prediction, but it is still pointer hops. A flat
 open-addressed table wins on a hot small map, every time.
-\item \textbf{Cache behaviour.} Node-based structures scatter. The library's
+\item \textbf{Cache behavior.} Node-based structures scatter. The library's
 answer is chunking --- ropes hold runs of elements in contiguous leaves, RRB
 vectors hold 32-element arrays, chunked bit sets hold 64-bit words --- so that
-scans get array speed even though edits get tree behaviour.
+scans get array speed even though edits get tree behavior.
 \item \textbf{Small collections lose.} The regime in which a persistent map
 looks worst is the one most programs spend most of their time in: maps with
 three entries. The library records a size-tiered representation as a strong idea
@@ -645,7 +645,7 @@ with benchmarks (Appendix~\ref{app:roads}).
 \section{Where mutation is allowed}
 
 A library that is honest about persistence has to be equally honest about its
-exceptions. Durable7 confines mutation to four clearly labelled places, and
+exceptions. Durable7 confines mutation to four clearly labeled places, and
 every one of them is documented as mutable wherever it appears:
 
 \begin{description}
@@ -679,7 +679,7 @@ Idioms are local. Semantics are not.
 Nine simultaneous implementations of a subtle algorithm would normally mean nine
 opportunities to quietly claim a bound nobody proved. Durable7's device for
 avoiding that is the \term{checkpoint port}: a port that preserves the
-observable API semantics and passes the same behavioural tests, while
+observable API semantics and passes the same behavioral tests, while
 documenting exactly which representation or asymptotic property it does
 \emph{not} yet have.\index{checkpoint port} OCaml's range-update sequence is a checkpoint --- same
 algebra, same persistence, no implicit-AVL logarithmic lazy-update claim. Most
@@ -706,7 +706,7 @@ of something defined here.
 Persistent value & An operation that looks like an update returns a new value or
 handle and preserves every retained old version. \\
 One-way editing session & A single-owner edit-then-publish lifecycle. It is
-unsynchronised, consumed by publication, and is \emph{not} a reusable staging
+unsynchronized, consumed by publication, and is \emph{not} a reusable staging
 builder. \\
 Structural sharing & Versions reuse immutable substructure; no-op updates often
 preserve the same root or instance where the API exposes that diagnostic. \\
@@ -717,7 +717,7 @@ Policy preservation & Hash, equality, comparison, measure, allocator, ownership,
 and callback policies flow into derived versions unless an API explicitly
 creates a new policy. \\
 Stable but unspecified order & Enumeration is deterministic for an unchanged
-version, but is not sorted, not insertion order, and not a serialisation
+version, but is not sorted, not insertion order, and not a serialization
 contract. \\
 Insertion / explicit-position order & Enumeration follows first insertion plus
 unmistakable positional operations. Equality decides membership; it does not
@@ -749,10 +749,10 @@ result is an empty map with the same comparer, not a default one.
 Two rules follow that catch people out.
 
 \textbf{The receiver's policy wins.} When you union two sets, the result uses the
-receiver's equality policy. The argument is normalised under that policy first
+receiver's equality policy. The argument is normalized under that policy first
 --- eagerly and completely, before any shortcut is applied --- so that a policy
 or enumeration failure in the argument is visible rather than hidden behind an
-optimisation that happened to skip it.
+optimization that happened to skip it.
 
 \textbf{Policy identity gates structural shortcuts.} Several structures can
 compare or merge in lockstep, interpreting stored hashes structurally instead of
@@ -772,7 +772,7 @@ Construction and duplicate insertion retain the \emph{first} stored key
 representative. Replacing the value for an equivalent key preserves the
 originally stored key object and installs the new value --- so a map is
 ``first key wins, last value wins''. Set algebra preserves receiver
-representatives for surviving receiver classes, and the first normalised
+representatives for surviving receiver classes, and the first normalized
 argument representative for argument-only classes.
 \end{contractbox}
 
@@ -789,7 +789,7 @@ value with one that compares equal, applying an identity tag, seeking to the
 position you are already at: all of these hand back the same instance, and where
 a language has reference identity, the same reference.
 
-This is more than an optimisation. It is an observable, tested property that
+This is more than an optimization. It is an observable, tested property that
 downstream code uses to short-circuit change propagation --- a UI that re-renders
 when the model reference changes, an incremental compiler that skips a
 subtree whose table did not move. Because it is observable, the library treats it
@@ -827,7 +827,7 @@ the most common way to write code that breaks on an unrelated change.\index{orde
 \midrule
 Stable but unspecified & CHAMP maps, sets, bags, bimaps, multimaps, relations.
 Deterministic for an unchanged version; \emph{not} sorted, \emph{not} insertion
-order, and never a serialisation format. Tests exist specifically to stop
+order, and never a serialization format. Tests exist specifically to stop
 consumers depending on the current trie order. \\
 Insertion / explicit position & The neutral Ordered family. First insertion
 plus explicit moves, ranges, reversal, and one-shot stable sort. Equality decides
@@ -848,19 +848,19 @@ translation key for the rest of the book.
 \thead{Language} & \thead{Ownership model, and what its docs must pin down} \\
 \midrule
 C\#         & GC references, immutable collection values, single-owner transient
-sessions. Exceptions, nullable/miss behaviour, structural sharing, builder
+sessions. Exceptions, nullable/miss behavior, structural sharing, builder
 publication versus one-way transient consumption. \\
 C           & Opaque handles with explicit copy/destroy, callback policy tables,
 injected allocators. Status codes, allocation failure, retained versus borrowed
 values, alias-wide consumption, callback lifetime. \\
 C\texttt{++} & RAII values over shared immutable nodes; move-only sessions.
-Move/copy cost, exception behaviour including throwing policy moves, policy
+Move/copy cost, exception behavior including throwing policy moves, policy
 object lifetime. \\
 Haskell     & Pure immutable values plus explicitly scoped \code{IO} sessions.
 Total versus \code{Maybe} operations, session consumption, package-local classes,
 strictness. \\
 Kotlin      & Immutable JVM values, runtime policies, dynamically consumed
-sessions. Null/result/exception shape, version-bound views, comparator behaviour. \\
+sessions. Null/result/exception shape, version-bound views, comparator behavior. \\
 OCaml       & Immutable algebraic values, runtime policy records, dynamically
 consumed sessions. \code{option}/\code{result} boundaries, policy identity,
 Unicode-scalar text positions, mutex-coordinated facades. \\
@@ -894,7 +894,7 @@ different facts.
 \part{The Unordered World}
 \label{part:hash}
 
-\chapter{CHAMP: The Hash Trie at the Centre}
+\chapter{CHAMP: The Hash Trie at the Center}
 \label{ch:champ}
 
 \motto{Every third structure in this library is a hash trie wearing a
@@ -983,7 +983,7 @@ entry stays a sub-node, so the tree's shape encodes its update history: two maps
 with identical contents can have different skeletons depending on what was
 inserted and removed along the way.
 
-CHAMP normalises on the way out. When a sub-node shrinks to a single payload, it
+CHAMP normalizes on the way out. When a sub-node shrinks to a single payload, it
 is collapsed into its parent's data region; when a wrapper node ends up holding
 nothing but a single child, the wrapper is removed (Figure~\ref{fig:champdelete}).
 Bitmap topology is therefore determined by the hashes that remain, not by the
@@ -1010,7 +1010,7 @@ promoted into its parent, so shape depends on contents rather than on history.}
 \label{fig:champdelete}
 \end{figure}
 
-That canonicalisation is what makes the interesting operations possible.
+That canonicalization is what makes the interesting operations possible.
 
 \section{Equality and diff without a lookup pass}
 
@@ -1105,7 +1105,7 @@ leaves the source unchanged and publishes nothing.
 \code{PersistentHashSet} is the same trie with payloads that carry no value. Its
 distinctive surface is set algebra and the six set relations --- subset, proper
 subset, superset, proper superset, overlap, and set equality --- all of which
-preserve the receiver's policy and normalise the argument under it first.
+preserve the receiver's policy and normalize the argument under it first.
 
 Set algebra benefits from the same reference pruning as map equality: unioning a
 set with a descendant of itself skips every shared subtrie. Unioning two
@@ -1115,7 +1115,7 @@ unrelated sets does not, and the API notes say so.
 
 Every port ships canonical split-bitmap CHAMP nodes, collision buckets,
 persistent path copying, retained hash policies, and stored representatives.
-Where they differ is in the optimisation tier layered on top:
+Where they differ is in the optimization tier layered on top:
 
 \begin{d7table}{0.15}
 \toprule
@@ -1143,7 +1143,7 @@ TypeScript & Canonical CHAMP with reusable public bulk builders; retains the
 structural reference-pruning checkpoint. \\
 Python   & Canonical CHAMP with the same public semantics, but deliberately
 performs semantic lookup-based equality and diff (with exact-policy fast paths)
-rather than claiming the lockstep descendant-pruning optimisation. \\
+rather than claiming the lockstep descendant-pruning optimization. \\
 OCaml    & Immutable 32-way CHAMP with the same public semantics;
 descendant-pruning is implementation-specific and not claimed. \\
 \bottomrule
@@ -1202,7 +1202,7 @@ Python an unbounded \code{int}, OCaml a checked native \code{int}, and the nativ
 ports their corresponding bounded wide integer.
 
 Bag algebra is where the receiver-policy rule earns its keep. A
-reference-different argument comparer is normalised eagerly under the receiver's
+reference-different argument comparer is normalized eagerly under the receiver's
 policy \emph{before} any operation-specific shortcut, and collapsed argument
 multiplicities are checked for overflow and use the first representative
 observed in that argument version's trie order. Expanded enumeration repeats each
@@ -1419,7 +1419,7 @@ Raw trie order is unsigned, which puts $-1$ after $2^{31}-1$. Every port applies
 a sign-bit transform so that public enumeration is in ascending \emph{signed}
 order, and every port ships both an explicit 32-bit and an explicit 64-bit
 surface rather than a platform-sized one. Python holds arbitrary-precision
-integers at runtime but validates and normalises keys to the named fixed-width
+integers at runtime but validates and normalizes keys to the named fixed-width
 domain at the public boundary; Haskell exposes \code{Int32}/\code{Int64} aliases
 so the width contract does not depend on a platform \code{Int}.
 \end{contractbox}
@@ -1433,7 +1433,7 @@ Union, intersection, and difference align compressed prefixes and descend both
 tries together. Where the two prefixes are disjoint, the answer is known without
 looking inside either subtree. Where the two subtrees are reference-equal, the
 answer is one of them, and the recursion short-circuits. Work is proportional to
-the visited non-shared prefix regions plus the materialised result, and a no-op
+the visited non-shared prefix regions plus the materialized result, and a no-op
 merge preserves reference identity outright.
 
 That is a categorically different cost profile from merging two hash maps, which
@@ -1459,7 +1459,7 @@ foreach (var key in merged.Keys)
 The combining-function overloads are what make structural merge \emph{useful}
 rather than merely fast. Without them, a union has to pick a side and discard
 information; with them, a merge can reconcile. The vocabulary is deliberately
-modelled on \code{Data.IntMap}'s \code{unionWith}/\code{intersectionWith},
+modeled on \code{Data.IntMap}'s \code{unionWith}/\code{intersectionWith},
 because that is the shape that has proven itself in practice.
 
 \begin{caveatbox}[Sharing lowers the constant, not the bound]
@@ -1492,7 +1492,7 @@ If your workload is a hot shared cache --- hundreds of thousands of writes a
 second from many threads --- a persistent map is the wrong tool, because every
 write allocates a path and every writer contends on publishing a new root. But
 if that same cache periodically has to hand a \emph{consistent view} to a
-reporting thread, a checkpointer, or a serialiser, then a plain concurrent hash
+reporting thread, a checkpointer, or a serializer, then a plain concurrent hash
 map is also the wrong tool, because taking a consistent view means locking
 everybody out or copying everything.
 
@@ -1574,7 +1574,7 @@ the porting guide says so out loud rather than leaving a hole in a matrix.
 
 OCaml, TypeScript, and Python ship something honest but different: a facade with
 the same consumer-level vocabulary --- a mutable map, \bigoh{1} immutable
-snapshots --- implemented by serialising operations (an \code{RLock} in Python, a
+snapshots --- implemented by serializing operations (an \code{RLock} in Python, a
 mutex in OCaml, isolate-locality in TypeScript) and swapping immutable CHAMP
 roots. The names preserve the \emph{use case}. They do not claim GCAS, RDCSS,
 generation renewal, tomb cleanup, or a lock-free progress guarantee, and their
@@ -1663,7 +1663,7 @@ receiver-policy set-relation semantics.
 
 Publication is \emph{one-way}: it consumes the logical session, and the language
 either rejects later access dynamically or makes it unavailable through
-ownership. A session is unsynchronised and has one logical owner, even where the
+ownership. A session is unsynchronized and has one logical owner, even where the
 language permits explicit handle aliases or moves.
 
 Logical no-ops preserve the current root and do not invalidate a version-bound
@@ -1671,7 +1671,7 @@ view. A clean adopted session therefore republishes the exact source instance.
 A failed edit never installs a partial successor.
 \end{contractbox}
 
-\subsection{One optimised kernel, eight semantic siblings}
+\subsection{One optimized kernel, eight semantic siblings}
 
 This is the sharpest example in the library of the reference-versus-checkpoint
 distinction, and it is worth being precise about.
@@ -1726,7 +1726,7 @@ changes or publication. \\
 
 \section{The frozen tier, and why it has not shipped}
 
-The third lifecycle --- \bigoh{n} conversion to a read-optimised layout with no
+The third lifecycle --- \bigoh{n} conversion to a read-optimized layout with no
 update-shaped API --- is designed, prototyped, and deliberately unshipped.\index{frozen collection tier}
 
 Its intended contract is already written down: separate \code{FrozenHashMap} and
@@ -1734,17 +1734,17 @@ Its intended contract is already written down: separate \code{FrozenHashMap} and
 and key type, preserved comparer identity and stored representatives, preserved
 source traversal sequence, no library-controlled allocation on point lookup, and
 enumeration that is stable for an unchanged instance but otherwise unspecified
---- never insertion, sorted, canonical, or serialisation order. Freezing an
+--- never insertion, sorted, canonical, or serialization order. Freezing an
 already-frozen value is identity; converting back is visibly \bigoh{n}.
 
 What is missing is evidence. The track is staged: a faithful packed-index signal
 first, fixed layouts compared only once a credible read-heavy regime appears, and
-a public type authorised only behind lookup, enumeration, memory, and realistic
+a public type authorized only behind lookup, enumeration, memory, and realistic
 construction break-even numbers. The benchmark-local candidates already cover the
 low-risk half --- rebuilding canonical CHAMP from a packed source-order entry
 sequence through the existing bulk builder, with an untimed verifier locking
 comparer identity, traversal sequence, representative rules, null and collision
-behaviour, and round-trip reconstruction.
+behavior, and round-trip reconstruction.
 
 \begin{asidebox}[Deliberate non-adaptivity]
 Tiny flat layouts, string prefix and length dispatch, integer-key routing,
@@ -1752,7 +1752,7 @@ binary-fuse and ribbon filters, Eytzinger and PGM sorted layouts, and
 count-derived representation selectors are all postponed --- not rejected,
 postponed. The stated reason is methodological: the value of the \emph{temporal}
 lifecycle (transient, persistent, frozen) is being isolated before it is
-combined with size or key specialisation, so that a later benchmark can tell
+combined with size or key specialization, so that a later benchmark can tell
 which of the two produced a gain. Benchmarks may contain tiny and string
 datasets; that is a workload, not permission to select a representation.
 \end{asidebox}
@@ -1773,7 +1773,7 @@ ends are always within reach.}
 \index{FingerTreeDeque@\texttt{FingerTreeDeque}}\index{FingerTree@\texttt{FingerTree}}%
 \spec{Purpose}{A persistent indexed sequence with cheap endpoints and cheap concatenation (\code{FingerTreeDeque}), and a general monoid-measured tree used directly and as the engine beneath a dozen facades (\code{FingerTree}).}
 \spec{Core}{Hinze and Paterson's 2-3 finger tree: digits at each end, a recursively nested spine of nodes in the middle.}
-\spec{Endpoints}{\bigoh{1} amortised push and pop at either end.}
+\spec{Endpoints}{\bigoh{1} amortized push and pop at either end.}
 \spec{Concat}{\bigoh{\log \min(n,m)} --- proportional to the \emph{smaller} operand.}
 \spec{Index / split}{\bigoh{\log d}, where $d$ is the distance from the nearer end. The measured U-shape.}
 \spec{Ports}{All nine: \code{FingerTreeDeque}/\code{PersistentDeque}/\code{persistent\_deque}/\code{Deque}, plus the measured tree under each language's local name.}
@@ -1807,14 +1807,14 @@ balanced structure into the middle, where a recursively nested spine holds
   \draw[d7edge] (R-30) -- (0,-42);
 \end{tikzpicture}
 \caption{The finger-tree shape. Both ends sit at depth zero and stay there; only
-the middle gets deeper. This is why endpoint operations are constant-amortised
+the middle gets deeper. This is why endpoint operations are constant-amortized
 while indexing costs a logarithm of the distance to the nearer end.}
 \label{fig:fingertree}
 \end{figure}
 
 That asymmetry is the whole design. Pushing onto an end usually just grows a
 digit, which is \bigoh{1}; occasionally a digit overflows and a node is pushed
-one level down, and the amortised analysis --- with memoised lazy suspensions
+one level down, and the amortized analysis --- with memoized lazy suspensions
 spreading the debt across later forces --- keeps the average constant.
 Concatenation is proportional to the logarithm of the \emph{smaller} operand,
 because the two spines only have to be zipped together as deep as the shorter
@@ -1872,7 +1872,7 @@ depend on a documented predicate boundary over prefix measures, and any new
 measure or predicate helper must document the ordering assumptions it needs.
 Product and sum measures preserve component order and component-specific
 predicate mapping. Lazy middle publication and cached measures must never expose
-partially initialised data to a reader.
+partially initialized data to a reader.
 \end{contractbox}
 
 \begin{caveatbox}[Checkpoint ports and the lazy spine]
@@ -2032,7 +2032,7 @@ along the seam; everything away from the seam stays regular and stays fast.
   \node[d7label,anchor=north,align=center] at (24,-31)
     {index by short scan of the size array};
 \end{tikzpicture}
-\caption{RRB nodes come in two flavours. Only nodes disturbed by concatenation
+\caption{RRB nodes come in two flavors. Only nodes disturbed by concatenation
 pay for a size table; the rest keep the radix trie's pure bit-arithmetic
 indexing.}
 \label{fig:rrb}
@@ -2067,8 +2067,8 @@ declines to pretend one of them wins.
 \toprule
 \thead{Workload} & \thead{Finger-tree deque} & \thead{Rope \hfill / \hfill RRB vector} \\
 \midrule
-Endpoint push/pop & \bigoh{1} amortised --- best & \bigoh{\log n}, staged
-amortised \bigoh{1} \hfill / \hfill \bigoh{\log_{32} n}, no persistent tail \\
+Endpoint push/pop & \bigoh{1} amortized --- best & \bigoh{\log n}, staged
+amortized \bigoh{1} \hfill / \hfill \bigoh{\log_{32} n}, no persistent tail \\
 Random index, middle & \bigoh{\log n}, U-shaped & \bigoh{\log n} chunked
 \hfill / \hfill \bigoh{\log_{32} n}, small constant --- best \\
 Concatenation & \bigoh{\log \min} --- best & \bigoh{\log \min}
@@ -2098,7 +2098,7 @@ with two existing sequence families.
 
 \begin{specimen}[Specimen --- \code{Rope}, \code{MeasuredRope}, \code{TextRope}]
 \index{Rope@\texttt{Rope}}\index{MeasuredRope@\texttt{MeasuredRope}}\index{TextRope@\texttt{TextRope}}%
-\spec{Purpose}{Persistent chunked sequences (\code{Rope}), the same with a custom split/locate measure (\code{MeasuredRope}), and a newline-aware text specialisation (\code{TextRope}).}
+\spec{Purpose}{Persistent chunked sequences (\code{Rope}), the same with a custom split/locate measure (\code{MeasuredRope}), and a newline-aware text specialization (\code{TextRope}).}
 \spec{Core}{Runs of elements held contiguously in immutable leaf chunks at the leaves of a measured tree.}
 \spec{Edits}{\bigoh{\log n} plus bounded chunk work.}
 \spec{Concat / split}{\bigoh{\log \min} / \bigoh{\log n}.}
@@ -2109,7 +2109,7 @@ with two existing sequence families.
 \noindent
 The rope's insight is that the atoms of a sequence do not have to be its
 elements.\index{rope} Put a run of elements in one contiguous immutable leaf, and you get
-tree behaviour for edits with array behaviour for scans --- which is exactly the
+tree behavior for edits with array behavior for scans --- which is exactly the
 trade a text editor wants, since editing is local and rendering is sequential.
 
 \section{Three layers, one machine}
@@ -2121,12 +2121,12 @@ logical element offsets.
 \item[\code{MeasuredRope<T, M>}] replaces the count measure with a caller's
 monoid, so split and locate can be driven by anything associative. It inherits
 the measure-law requirements of Chapter~\ref{ch:measures} wholesale.
-\item[\code{TextRope}] is the measured rope specialised to a newline measure,
+\item[\code{TextRope}] is the measured rope specialized to a newline measure,
 plus the helpers that make text navigation pleasant: line and column
 conversion, line extraction, newline-style handling.\index{text rope}
 \end{description}
 
-Because \code{TextRope} is a specialisation rather than a separate core, its
+Because \code{TextRope} is a specialization rather than a separate core, its
 line index is not a side table that can drift out of sync --- it is the measure,
 maintained by the same code path that maintains everything else.
 
@@ -2251,7 +2251,7 @@ element;
 left and right counts --- tested with a non-commutative measure;
 \item applying any tag to the empty measure at count zero yields the empty
 measure; and
-\item every tag that \code{IsIdentity} recognises --- including a value-distinct
+\item every tag that \code{IsIdentity} recognizes --- including a value-distinct
 representation of identity --- obeys the full identity equations.
 \end{itemize}
 
@@ -2283,10 +2283,10 @@ or \code{AssignRange} method on the generic core, because those verbs belong to
 a particular tag algebra rather than to the sequence. The core knows about tags;
 it does not know what they mean.
 
-\begin{contractbox}[Behavioural obligations]
+\begin{contractbox}[Behavioral obligations]
 Retained versions stay immutable and share unaffected interiors. Range
 validation precedes tag callbacks; empty ranges preserve the receiver and the
-empty measure without invoking the policy at all; recognised identity updates
+empty measure without invoking the policy at all; recognized identity updates
 preserve the receiver. Direct insert, replace, and remove push old tags before
 installing new content, so a prior range tag never leaks onto newly inserted
 elements. Any policy exception publishes no successor.
@@ -2297,7 +2297,7 @@ The concrete enumerator is a mutable struct that is deliberately \emph{not}
 safe to copy mid-traversal: copies share traversal state and the stale copy
 fails fast once the other advances. Independently created enumerators are fully
 independent and safe for concurrent reads. This is the standard trade for a
-non-allocating enumerator, and the fail-fast behaviour exists so that the
+non-allocating enumerator, and the fail-fast behavior exists so that the
 mistake surfaces immediately rather than as silent misreads.
 \end{caveatbox}
 
@@ -2311,8 +2311,8 @@ are.}
 \index{ReversibleDeque@\texttt{ReversibleDeque}}%
 \spec{Purpose}{A persistent sequence for which logical reversal is a primary operation.}
 \spec{Core}{Persistent deque storage plus an orientation bit or mirrored root.}
-\spec{Reverse}{\bigoh{1} --- a new view over shared storage, not a materialised sequence.}
-\spec{Everything else}{Endpoint operations, indexing, splitting, concatenation, traversal, and materialisation all observe the current logical orientation.}
+\spec{Reverse}{\bigoh{1} --- a new view over shared storage, not a materialized sequence.}
+\spec{Everything else}{Endpoint operations, indexing, splitting, concatenation, traversal, and materialization all observe the current logical orientation.}
 \spec{Ports}{All nine.}
 \end{specimen}
 
@@ -2331,16 +2331,16 @@ var restored = reversed.Reverse(); // shares storage with deque
 
 \begin{contractbox}[Orientation obligations]
 Reversal returns a new value and preserves the original. Every operation ---
-endpoints, indexing, splitting, concatenation, traversal, materialisation ---
+endpoints, indexing, splitting, concatenation, traversal, materialization ---
 observes the logical orientation. Mixed-orientation concatenation must not
 silently reinterpret one operand in physical order. An \bigoh{1} reversal claim
 belongs only where the implementation genuinely uses an orientation bit,
-mirrored root, or equivalent view rather than materialising a new sequence.
+mirrored root, or equivalent view rather than materializing a new sequence.
 \end{contractbox}
 
 That last clause is the interesting one. It would be easy for a port to
 implement \code{Reverse} by building a reversed copy, keep every observable
-behaviour identical, and quietly break the one promise anybody chose the type
+behavior identical, and quietly break the one promise anybody chose the type
 for. The repository maintains a dedicated complexity audit for exactly this
 family, and it is the required reading before touching any orientation-aware
 implementation.
@@ -2353,10 +2353,10 @@ implementation.
 \begin{specimen}[Specimen --- \code{DabaLite}]
 \index{DabaLite@\texttt{DabaLite}}%
 \spec{Purpose}{Maintain the aggregate of a FIFO sliding window under any associative monoid --- no commutativity, no inverse required.}
-\spec{Core}{The De-Amortised Banker's Aggregator (Lite), over a linked queue of 64-slot chunks with six ordered cursors.}
+\spec{Core}{The De-Amortized Banker's Aggregator (Lite), over a linked queue of 64-slot chunks with six ordered cursors.}
 \spec{Callback ceilings}{Insert invokes \code{Combine} at most three times; evict at most twice; query at most once; an empty query, none. Unconditional.}
 \spec{Operations}{Worst-case \bigoh{1} structural work, given \bigoh{1} monoid callbacks.}
-\spec{Mutability}{\textbf{Mutable and unsynchronised.} This is the one collection in the book that is not persistent.}
+\spec{Mutability}{\textbf{Mutable and unsynchronized.} This is the one collection in the book that is not persistent.}
 \spec{Ports}{All nine.}
 \end{specimen}
 
@@ -2393,13 +2393,13 @@ live in queue slots.
     {\node[d7label,below=3pt] at ({(\a+\b)/2},-3) {\t};}
   \node[d7label,anchor=north west,align=left,text width=104mm] at (2,-13)
     {Every insertion or eviction performs exactly \emph{one} bounded fixup:
-     front exhaustion collapses the cursor state, $L = B$ initialises the next
+     front exhaustion collapses the cursor state, $L = B$ initializes the next
      flip, $L = R$ advances the three work cursors, and otherwise one left and
      one right partial aggregate are rewritten. There is no unbounded reversal
-     loop --- that is the ``de-amortised'' in the name.};
+     loop --- that is the ``de-amortized'' in the name.};
 \end{tikzpicture}
 \caption{The DABA Lite cursor state. The schedule is what makes the operation
-bounds worst-case rather than amortised.}
+bounds worst-case rather than amortized.}
 \label{fig:daba}
 \end{figure}
 
@@ -2427,7 +2427,7 @@ but unreachable cyclic backing may be reclaimed later by the collector, so it
 does not claim the native ports' prompt deterministic destruction.
 \end{caveatbox}
 
-Failure behaviour is similarly runtime-shaped but semantically uniform: a
+Failure behavior is similarly runtime-shaped but semantically uniform: a
 throwing monoid callback leaves the published window unchanged for every
 mutating operation. C\texttt{++} achieves this by building a private fixup plan
 under a nothrow-move value constraint and committing without throwing; Rust
@@ -2438,11 +2438,11 @@ ownership by byte move.
 
 \section{What it will not do}
 
-\begin{caveatbox}[No oldest-value access, no enumeration, no synchronisation]
+\begin{caveatbox}[No oldest-value access, no enumeration, no synchronization]
 The Lite schedule intentionally overwrites raw values with partial aggregates,
 so there is no API to read the oldest value or enumerate the window --- the
-information is genuinely gone. There is no synchronisation either; callers must
-not overlap access to one instance without external serialisation. And the type
+information is genuinely gone. There is no synchronization either; callers must
+not overlap access to one instance without external serialization. And the type
 is \emph{ephemeral}: it is a fit for transient streaming state, not a persistent
 replacement for a deque.
 \end{caveatbox}
@@ -2461,7 +2461,7 @@ equations, and the chunk/slack bound --- and returns a statistics record with th
 count, five region lengths, active block count, allocated capacity, and slack.
 It cannot check that the aggregate is \emph{correct}, because the original values
 may already have been overwritten; correctness is tested against an external FIFO
-model instead. That division of labour is a small model of the whole repository's
+model instead. That division of labor is a small model of the whole repository's
 approach to validation.
 
 % ===========================================================================
@@ -2488,7 +2488,7 @@ else is presentation.}
 
 \noindent
 These are the collections most people reach for first, and in this library they
-are facades: put a measure that summarises ``the largest key in this subtree''
+are facades: put a measure that summarizes ``the largest key in this subtree''
 on a measured tree, and splitting at ``prefix maximum $\geq k$'' \emph{is} a
 sorted lower bound.\index{sorted collections} Add a count to the measure --- a product measure --- and the
 same tree also supports rank and select. The sorted collections are that
@@ -2503,7 +2503,7 @@ three.
 Sorted bag enumeration includes duplicates in sorted order. Sorted set
 enumeration contains one representative per comparison-equivalent value. Sorted
 map lookup, rank, and boundary queries use key comparison, never hash equality.
-Rank and index APIs must define zero- versus one-based indexing, miss behaviour,
+Rank and index APIs must define zero- versus one-based indexing, miss behavior,
 and duplicate handling. Builders must document when they stop sharing with
 immutable snapshots and when snapshots are published.
 \end{contractbox}
@@ -2525,11 +2525,11 @@ separate and never derives one from the other.
 
 \begin{specimen}[Specimen --- \code{CanonicalSortedSet} and \code{ZipTreeRankPolicy}]
 \index{CanonicalSortedSet@\texttt{CanonicalSortedSet}}\index{ZipTreeRankPolicy@\texttt{ZipTreeRankPolicy}}%
-\spec{Purpose}{A sorted set whose \emph{shape} is determined by its contents under a retained rank policy, so equal sets converge on equal topology and inequality is usually rejected in \bigoh{1} by a memoised digest.}
-\spec{Core}{Zip-zip tree: a randomised-rank binary search tree where insertion and deletion are single root-to-position \term{unzip} and \term{zip} passes --- no rotations.}
+\spec{Purpose}{A sorted set whose \emph{shape} is determined by its contents under a retained rank policy, so equal sets converge on equal topology and inequality is usually rejected in \bigoh{1} by a memoized digest.}
+\spec{Core}{Zip-zip tree: a randomized-rank binary search tree where insertion and deletion are single root-to-position \term{unzip} and \term{zip} passes --- no rotations.}
 \spec{Ranks}{A geometric primary coordinate and a fixed 64-bit secondary coordinate, both derived from HMAC-SHA-256 over the equivalence class.}
 \spec{Policy modes}{An unexposed random key, a public reproducibility seed, or a caller-retained secret key.}
-\spec{Equality}{Memoised root digest rejects most inequality in \bigoh{1}; shared nodes prune the rest; independently built equal sets still cost \bigoh{n}.}
+\spec{Equality}{Memoized root digest rejects most inequality in \bigoh{1}; shared nodes prune the rest; independently built equal sets still cost \bigoh{n}.}
 \spec{Ports}{All nine.}
 \end{specimen}
 
@@ -2575,8 +2575,8 @@ under a given policy.}
 \end{figure}
 
 Canonical shape is worth having when a collection is compared far more often
-than it is modified: memoisation keys, configuration fingerprints, cache
-validity stamps. A memoised root digest rejects most inequality in constant
+than it is modified: memoization keys, configuration fingerprints, cache
+validity stamps. A memoized root digest rejects most inequality in constant
 time; shared node identity prunes the equal case; and independently built equal
 sets fall back to an honest \bigoh{n} comparison.
 
@@ -2624,7 +2624,7 @@ Windows and OpenSSL elsewhere for C and C\texttt{++}, RustCrypto HMAC/SHA-256
 with \code{getrandom} for Rust, \code{crypton} for Haskell, \code{hashlib} and
 \code{hmac} for Python. Rust and Python both pin stable rank hashes explicitly
 rather than trusting a default hasher, because \code{DefaultHasher} and
-randomised \code{str} hashing are exactly the failure this structure cannot
+randomized \code{str} hashing are exactly the failure this structure cannot
 tolerate.
 
 \chapter{Insertion Order as a First-Class Property}
@@ -2670,9 +2670,9 @@ supplied destination as the final result index.
 Union appends argument-only classes after receiver order; intersection and
 difference retain receiver order; symmetric difference emits receiver-only then
 argument-only classes. All algebra and all six relations eagerly enumerate and
-normalise the complete argument under the receiver policy \emph{before} applying
+normalize the complete argument under the receiver policy \emph{before} applying
 any shortcut, so a late enumeration or policy failure is visible rather than
-optimised away.
+optimized away.
 
 Documented logical no-ops return the receiver; failures publish nothing; private
 sparse position labels are not API, and a relabel rebuild leaves retained
@@ -2693,10 +2693,10 @@ Enumeration is grouped, and an empty group is never stored.
 \begin{asidebox}[On sparse labels and branching]
 Insertion-ordered structures are usually implemented with sparse integer
 position labels and midpoint insertion, which occasionally require a wholesale
-relabel. That relabel is an \bigoh{n}-at-threshold amortisation --- precisely
+relabel. That relabel is an \bigoh{n}-at-threshold amortization --- precisely
 the kind that Chapter~\ref{ch:persistence} warns does not survive branching.
 The library's response is to treat the labels as strictly private, to state the
-worst case per produced version rather than the amortised one, and to guarantee
+worst case per produced version rather than the amortized one, and to guarantee
 that a relabel rebuild leaves retained versions untouched. The related
 general-purpose \code{OrderMaintenanceList} --- the Dietz--Sleator structure that
 answers ``does $A$ precede $B$?'' --- remains unbuilt for want of a named
@@ -2718,7 +2718,7 @@ redundant --- each exists because the other two are wrong for a specific need.
 \index{PriorityQueue@\texttt{PriorityQueue}}%
 \spec{Purpose}{The general persistent minimum-priority queue.}
 \spec{Core}{A minimum-priority measure over the measured tree.}
-\spec{Bounds}{Amortised: \bigoh{1} peek, \bigoh{\log n} enqueue and dequeue, \bigoh{\log \min} meld.}
+\spec{Bounds}{Amortized: \bigoh{1} peek, \bigoh{\log n} enqueue and dequeue, \bigoh{\log \min} meld.}
 \spec{Ties}{Equal priorities drain in insertion order.}
 \spec{Ports}{All nine.}
 \end{specimen}
@@ -2742,7 +2742,7 @@ if (queue.TryPeek(out var element, out var priority))
 
 \begin{specimen}[Specimen --- \code{BrodalOkasakiHeap}]
 \index{BrodalOkasakiHeap@\texttt{BrodalOkasakiHeap}}%
-\spec{Purpose}{Worst-case rather than amortised latency for insert, meld, and minimum.}
+\spec{Purpose}{Worst-case rather than amortized latency for insert, meld, and minimum.}
 \spec{Core}{Bootstrapped skew-binomial queues (Brodal and Okasaki, JFP 1996).}
 \spec{Bounds}{\bigoh{1} \emph{worst-case} insert, meld, and find-minimum; \bigoh{\log n} worst-case delete-minimum.}
 \spec{Meld}{Requires comparer object identity --- even when one operand is empty.}
@@ -2750,9 +2750,9 @@ if (queue.TryPeek(out var element, out var priority))
 \spec{Ports}{All nine.}
 \end{specimen}
 
-The measured queue has the same bounds \emph{amortised}.\index{Brodal--Okasaki heap} This heap's entire
+The measured queue has the same bounds \emph{amortized}.\index{Brodal--Okasaki heap} This heap's entire
 reason for existing is the word ``worst-case'': if a latency budget is a hard
-requirement rather than an average, an amortisation spike is a bug. The
+requirement rather than an average, an amortization spike is a bug. The
 implementation is a direct port of the fused bootstrapped skew-binomial
 representation, with comparison-count tests that assert the operation bounds
 rather than merely believing them.
@@ -2842,9 +2842,9 @@ without looking at a single interval inside it.\index{interval tree}
 
 \begin{contractbox}[Interval obligations]
 Interval construction must define whether empty or inverted intervals are
-rejected, normalised, or accepted. Endpoint comparison policy defines ordering,
+rejected, normalized, or accepted. Endpoint comparison policy defines ordering,
 equality, overlap, and containment. Query APIs must document endpoint
-inclusivity and behaviour when several overlaps exist. Removal must state whether
+inclusivity and behavior when several overlaps exist. Removal must state whether
 it removes one match, all matches, or a comparison-equivalent representative.
 \end{contractbox}
 
@@ -2903,7 +2903,7 @@ Auvolat and Taïani's Merkle search trees (SRDS 2019) fix the shape by deriving
 it from the data. Hash each key; count its leading zero nibbles; that count is
 the key's \term{layer}.\index{Merkle search tree!layers} Since each additional zero nibble is a 1-in-16 event,
 layers follow a geometric distribution with $B = 16$, which is exactly the
-branching behaviour a B-tree wants --- but assigned by the hash function rather
+branching behavior a B-tree wants --- but assigned by the hash function rather
 than by insertion history (Figure~\ref{fig:mst}).
 
 \begin{figure}[htbp]
@@ -2953,7 +2953,7 @@ The repository treats content addressing as a capability that must be
 any future content-addressed family.
 
 \begin{contractbox}[Prerequisite 1 --- pinned deterministic hashing]
-Default string hashing on .NET is randomised per process. That is a fine defence
+Default string hashing on .NET is randomized per process. That is a fine defense
 against hash-flooding and completely fatal for cross-process addressing. A
 Merkle policy therefore binds a \emph{versioned semantic id}, canonical codecs,
 comparer semantics, and a SHA-256 domain digest. The policy id versions the
@@ -2961,15 +2961,15 @@ application's comparer semantics: if you change what ``equal'' means, you change
 the id, and old digests stop colliding with new ones by construction.
 \end{contractbox}
 
-\begin{contractbox}[Prerequisite 2 --- canonical serialisation]
+\begin{contractbox}[Prerequisite 2 --- canonical serialization]
 A digest is only as canonical as the bytes it hashes. A strict versioned codec
 must \emph{encode and decode}, and its decoder must accept exactly one canonical
 encoding while rejecting malformed, non-canonical, and trailing input. Codec ids
 end in \code{-v} followed by decimal digits. The built-ins cover integers,
 nullable strings, nullable byte arrays, and GUIDs.
 
-Do not use a codec whose output depends on process-randomised hashes, culture,
-object identity, ambient serialisation settings, or mutable state. Every one of
+Do not use a codec whose output depends on process-randomized hashes, culture,
+object identity, ambient serialization settings, or mutable state. Every one of
 those turns a content address into a lie.
 \end{contractbox}
 
@@ -3002,11 +3002,11 @@ that. But a topology-changing edit can move a block separator, and when it does,
 the implementation honestly falls back to ordered subtree comparison rather than
 pretending the digest pruning still applies. The shipped API therefore does
 \emph{not} promise \bigoh{\text{key divergence}} for every diff. Block
-synchronisation --- Chapter~\ref{ch:merkleops} --- is the divergence-oriented
+synchronization --- Chapter~\ref{ch:merkleops} --- is the divergence-oriented
 path, and it is the right tool when the two trees live in different processes.
 \end{caveatbox}
 
-\chapter{Blocks, Proofs, Synchronisation, and Merge}
+\chapter{Blocks, Proofs, Synchronization, and Merge}
 \label{ch:merkleops}
 
 \motto{The tree is the easy half. Not trusting the network is the other half.}
@@ -3017,14 +3017,14 @@ This chapter covers the tier that lets it: storing blocks, moving them,
 verifying them without trust, proving individual claims about them, and merging
 two divergent descendants of a common ancestor.
 
-Everything here ships in all nine languages with byte-identical wire behaviour.
+Everything here ships in all nine languages with byte-identical wire behavior.
 
 \section{Blocks and stores}
 
 A \term{block} is one immutable node's canonical bytes, addressed by its digest.\index{block}
 A \term{store} is a mapping from digest to block --- the persistence boundary.
 The library's in-memory implementations are concurrent (an \code{RLock} in
-Python, a shared mutex in C\texttt{++}, a synchronised three-state store in C),
+Python, a shared mutex in C\texttt{++}, a synchronized three-state store in C),
 and every store operation is atomic with respect to publication.
 
 \begin{lstlisting}[language={[Sharp]C}]
@@ -3083,7 +3083,7 @@ the ordering of checks is itself part of the contract: query and proof-shape
 limits run \emph{before} verifier allocation, hashing, or codec work. A malformed
 request is rejected before it can cost anything.
 
-Local proof and synchronisation construction consumes a read-only trusted
+Local proof and synchronization construction consumes a read-only trusted
 topology view rather than applying network budgets or re-decoding values that are
 already retained. The budgets exist for the trust boundary, and they are applied
 at the trust boundary.
@@ -3110,10 +3110,10 @@ or codec work runs, and tampering with any part of a proof --- the claimed value
 a sibling digest, the envelope --- produces a rejection rather than a wrong
 answer. The test suites verify this adversarially rather than by inspection.
 
-\section{Synchronisation}
+\section{Synchronization}
 
-Synchronisation answers: \emph{I have root $A$, you have root $B$, send me what I
-am missing.} The mechanism is a frontier walk.\index{synchronisation} Compare digests from the root
+Synchronization answers: \emph{I have root $A$, you have root $B$, send me what I
+am missing.} The mechanism is a frontier walk.\index{synchronization} Compare digests from the root
 down; wherever they agree, an entire region is already shared and the walk stops;
 wherever they differ, descend. The blocks the destination lacks form the
 frontier, and the resulting sync pack is closure-pruned so that nothing already
@@ -3151,7 +3151,7 @@ proof of its own correctness. The only safe design is to not produce it.
 An earlier design sketch in the repository proposed a \code{MerkleHamt}: content
 addressing over the \emph{unordered} hash trie. It remains deferred. The Merkle
 search tree is its ordered sibling and subsumes most of its uses while adding
-range queries and range synchronisation --- neither of which an unordered trie
+range queries and range synchronization --- neither of which an unordered trie
 can offer. Should \code{MerkleHamt} ever be revived, it must reuse equally
 explicit hashing, encoding, verification-budget, and trust-boundary contracts;
 the prerequisites are not negotiable per family.
@@ -3180,7 +3180,7 @@ navigation and editing are cheap and which can be retained and branched like any
 other persistent value.\index{cursor}
 
 \begin{contractbox}[What a cursor is, and is not]
-Every initialised cursor owns or retains one immutable logical version and a
+Every initialized cursor owns or retains one immutable logical version and a
 valid gap, rank, or measure boundary. Navigation returns a cursor over the
 \emph{same} version. Editing returns a cursor over \emph{one new} version and
 never changes the receiver, a retained ancestor, or a sibling branch. Snapshot
@@ -3232,7 +3232,7 @@ collection promises.
 \section{Which families have one}
 
 Not every collection has a meaningful ``next''. The library's rule is that a
-cursor requires a stable \emph{semantic} neighbour axis, and hash traversal order
+cursor requires a stable \emph{semantic} neighbor axis, and hash traversal order
 is not one.
 
 \begin{d7table}{0.30}
@@ -3256,7 +3256,7 @@ CHAMP maps, sets, and their derived facades & \emph{No public cursor.} The
 lookup and edit path is private, because hash enumeration is not semantic order. \\
 Ctrie live views, graphs, heaps without a stable order, builders, sessions,
 stores, proofs, packs, \code{DabaLite} & \emph{No persistent cursor.} No stable
-neighbour axis, or not a persistent aggregate at all. \\
+neighbor axis, or not a persistent aggregate at all. \\
 \bottomrule
 \end{d7table}
 
@@ -3283,18 +3283,18 @@ packing plus a canonical tree join, and publishes one winner through an
 interlocked compare-exchange --- racing callers all receive that same rope
 reference. A failed candidate publishes nothing, so the cursor stays reusable.
 Later snapshots from any navigation cursor over the same logical version are
-\bigoh{1} and reference-identical. Initialised cursor values are immutable and
+\bigoh{1} and reference-identical. Initialized cursor values are immutable and
 safe for concurrent reads, including concurrent first snapshots.
 \end{contractbox}
 
 \begin{caveatbox}[The proven complexity scope is a \emph{lineage}, not a DAG]
 Creation and arbitrary seek are \bigoh{\log n}. Focus-local peeks, movement, and
-single-element edits are \bigoh{1} amortised \emph{along one linear version
+single-element edits are \bigoh{1} amortized \emph{along one linear version
 lineage}, with \bigoh{\log n} worst-case boundary repair. Range insertion of $m$
-elements is \bigoh{m + \log n} amortised. A dirty snapshot is bounded packing
+elements is \bigoh{m + \log n} amortized. A dirty snapshot is bounded packing
 plus an \bigoh{\log n} join; clean repeated snapshots are \bigoh{1}.
 
-There is no arbitrary-version-DAG amortised bound. Editing $b$ independently
+There is no arbitrary-version-DAG amortized bound. Editing $b$ independently
 retained cursors at a carry, chunk, or lazy-spine boundary carries the
 conservative \bigoh{b \log n} aggregate bound plus bounded per-branch copying,
 because potential consumed by one child cannot pay for a sibling. This is
@@ -3307,11 +3307,11 @@ already-canonical retained collection plus a validated position, delegating edit
 to ordinary persistent operations.\index{cursor!snapshot-plus-gap} Creation, navigation, positional seek, and
 snapshot are \bigoh{1}; measures, peeks, point edits, and search are
 \bigoh{\log n} plus bounded chunk work; range insertion is \bigoh{m + \log n}.
-They preserve every observable behaviour --- gap semantics, branching,
+They preserve every observable behavior --- gap semantics, branching,
 unconditional replacement, retained snapshots, presence-safe peeks, ordered
 before/after measures, absolute prefix search --- and they claim no focused
 representation, no snapshot memo, no allocation or callback ceiling, no
-amortised locality, and no benchmark parity. Their API notes say so in those
+amortized locality, and no benchmark parity. Their API notes say so in those
 words.
 
 \begin{contractbox}[Measured cursor result semantics, everywhere]
@@ -3344,7 +3344,7 @@ both the allocation-free read contract and thread-safe sharing of versions.
 
 Second, \textbf{shared versions have contradictory access patterns}. Two
 consumers holding the same version would each want it shaped for \emph{their}
-access sequence, and the amortised potential argument assumes one linear
+access sequence, and the amortized potential argument assumes one linear
 history --- the same failure mode as the branching caveat above.
 
 The cursor is the substitute: per-consumer locality, held by the consumer,
@@ -3393,7 +3393,7 @@ case \\
  & no-op merge & reference identity preserved \\
 \midrule
 \multicolumn{3}{@{}l}{\textit{\color{d7slate}Sequences}}\\
-\code{FingerTreeDeque} & push / pop at either end & \bigoh{1} amortised \\
+\code{FingerTreeDeque} & push / pop at either end & \bigoh{1} amortized \\
  & index, split at position & \bigoh{\log d} \\
  & concat & \bigoh{\log \min(n,m)} \\
 \code{RrbVector} & index & \bigoh{\log_{32} n}, uniform \\
@@ -3421,9 +3421,9 @@ combines \\
 \code{PersistentOrderedSet} / \code{Map} & membership, append & \bigoh{\log_{32}
 n} $+$ sequence cost \\
  & positional read, move & \bigoh{\log n} \\
-\code{PriorityQueue} & peek & \bigoh{1} amortised \\
- & enqueue, dequeue & \bigoh{\log n} amortised \\
- & meld & \bigoh{\log \min} amortised \\
+\code{PriorityQueue} & peek & \bigoh{1} amortized \\
+ & enqueue, dequeue & \bigoh{\log n} amortized \\
+ & meld & \bigoh{\log \min} amortized \\
 \code{BrodalOkasakiHeap} & minimum, insert, meld & \bigoh{1} \textbf{worst case} \\
  & delete-minimum & \bigoh{\log n} worst case \\
 \code{PrioritySearchQueue} & minimum & \bigoh{1} \\
@@ -3437,14 +3437,14 @@ lookup & \bigoh{\log n} \\
 \code{MerkleSearchTree} & lookup, insert, remove & \bigoh{\log_{16} n} \\
  & root digest & \bigoh{1} cached \\
  & \code{Save} / \code{Load} & \bigoh{\text{blocks}}, fully re-verified \\
- & synchronise & frontier blocks only \\
+ & synchronize & frontier blocks only \\
 \midrule
 \multicolumn{3}{@{}l}{\textit{\color{d7slate}Lifecycle and navigation}}\\
 Bulk builder & per entry & unpublished in-place node mutation \\
 Editing session & adopt, publish & \bigoh{1} trie work \\
  & per edit (C\# owner-token) & owned-node mutation, no path copy \\
  & per edit (sibling ports) & ordinary persistent path copy \\
-Cursor (focused, C\# rope) & local move, single edit & \bigoh{1} amortised, one
+Cursor (focused, C\# rope) & local move, single edit & \bigoh{1} amortized, one
 lineage \\
  & arbitrary seek & \bigoh{\log n} \\
  & $b$ retained branches at a boundary & \bigoh{b \log n} aggregate \\
@@ -3587,9 +3587,9 @@ that would have to change for the answer to change.
 \item[Self-adjusting structures.] Splay trees, move-to-front lists, and their
 relatives fight persistence twice over: adapting on read means path-copying on
 read, destroying the allocation-free read contract; and two consumers sharing a
-version want it shaped for two different access sequences, so the amortised
+version want it shaped for two different access sequences, so the amortized
 potential argument has no single history to be proved over. The substitutes are
-cursors and the planned frozen read-phase optimisation.
+cursors and the planned frozen read-phase optimization.
 
 \item[Strict Fibonacci and hollow heaps.] Both achieve optimal decrease-key
 bounds through aggressive pointer mutation, which is precisely the surgery
@@ -3597,7 +3597,7 @@ persistent path copying destroys.
 
 \item[Kaplan--Tarjan real-time deques.] Their \bigoh{1} \emph{worst-case}
 endpoints and catenation are genuinely attractive, but the shipped deque's
-amortisation spikes are already rare and logarithmic --- memoised suspensions
+amortization spikes are already rare and logarithmic --- memoized suspensions
 spread the debt --- and the implementation is notoriously intricate (redundant
 counting systems, multiple bootstrapping layers) with constants that typically
 lose on real workloads. The useful deliverable instead is to \emph{measure and
@@ -3625,7 +3625,7 @@ contracts and can therefore guarantee representation-blindness; and a
 enumeration, memory, and realistic construction break-even evidence
 (Chapter~\ref{ch:lifecycle}).
 
-\item[Key-type-specialised map construction.] A factory that routes integer keys
+\item[Key-type-specialized map construction.] A factory that routes integer keys
 to the Patricia trie, byte-comparable keys to an adaptive radix tree, and
 everything else to the hash trie. The honest counterpoint is that one facade
 unifying three cores costs either virtual dispatch or a fat discriminated union
@@ -3635,16 +3635,16 @@ core itself is a real project, gated on a consumer with genuine prefix-query or
 byte-ordered-key needs.
 
 \item[The order-maintenance list.] The Dietz--Sleator structure that answers
-``does $A$ precede $B$?'' in \bigoh{1} with amortised \bigoh{1} insertion, via
-two-level integer labels and local relabelling. Plausible, and waiting for a
+``does $A$ precede $B$?'' in \bigoh{1} with amortized \bigoh{1} insertion, via
+two-level integer labels and local relabeling. Plausible, and waiting for a
 named general consumer --- dependency graphs, document anchors, CRDT position
-identifiers. The honest caveat is already written: relabelling amortisation is a
+identifiers. The honest caveat is already written: relabeling amortization is a
 linear-history argument, so a version branched before a relabel can re-pay it,
 and the public type would have to state its worst case per produced version.
 
 \item[\code{MerkleHamt}.] Content addressing over the unordered hash trie. The
 ordered Merkle search tree subsumes most of its uses and adds range queries and
-range synchronisation; if revived, it must reuse equally explicit hashing,
+range synchronization; if revived, it must reuse equally explicit hashing,
 encoding, verification-budget, and trust-boundary contracts.
 \end{description}
 

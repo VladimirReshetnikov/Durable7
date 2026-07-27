@@ -74,7 +74,7 @@ to reach for it — read the field guide below.
 It covers CHAMP and the nine families composed over it, Patricia integer tries, the concurrent trie,
 finger trees and the measure framework that turns one tree into a dozen collections, RRB vectors,
 ropes and text, the range-update sequence, zip-zip canonical sets, the three priority structures,
-interval trees, Merkle search trees with their proofs and synchronisation, and cursors — plus a
+interval trees, Merkle search trees with their proofs and synchronization, and cursors — plus a
 complexity table for the whole library, a nine-language name index, and the design decisions the
 project deliberately declined.
 
