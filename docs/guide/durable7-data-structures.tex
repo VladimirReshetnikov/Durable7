@@ -2824,6 +2824,308 @@ and count. Replacing a payload preserves the stored interval representative and
 neither duplicates nor moves the key; stabbing and overlap queries return entries
 in the local deterministic interval order.
 
+% ===========================================================================
+%  PART V -- AUTHENTICATED
+% ===========================================================================
+\part{Authenticated Collections}
+\label{part:authenticated}
+
+\chapter{The Merkle Search Tree}
+\label{ch:mst}
+
+\motto{Structural sharing works across versions. Content addressing works across
+machines.}
+
+\begin{specimen}[Specimen --- \code{MerkleSearchTree}]
+\spec{Purpose}{An ordered, content-addressed persistent map whose root digest names the entire collection, so two processes that agree on a digest agree on every entry.}
+\spec{Core}{A $B=16$ wide tree in which each key's layer is derived from the count of leading zero nibbles of its SHA-256 digest --- a geometric distribution --- so the shape is independent of insertion order.}
+\spec{Identity}{Policy \code{mst-sha256-b16-v2}: a versioned semantic id, comparer semantics, canonical per-type codecs, and a SHA-256 domain digest.}
+\spec{Wire}{The canonical \code{MST2} block format --- byte-identical across all nine ports.}
+\spec{Order}{Policy comparer order, with range enumeration.}
+\spec{Ports}{All nine, wire-compatible.}
+\end{specimen}
+
+\noindent
+Everything up to this point exploits sharing \emph{within a process}. Two
+versions of a persistent map diff cheaply because they share pointers, and
+pointers do not survive a network. If the two collections you want to compare
+live in different processes --- or on different machines, or were built a week
+apart by unrelated code --- pointer identity tells you nothing and you are back
+to comparing everything.
+
+Content addressing fixes this by making the \emph{name} of a subtree a function
+of its contents. Give every node a digest of what it holds, including the digests
+of its children, and equal digests prove equal subtrees no matter who built them
+or when. That is the Merkle idea, and applying it to an ordered map gives
+the structure behind AT Protocol repositories (Bluesky) and Dolt's versioned SQL
+tables.
+
+\section{Shape from hashes, not from history}
+
+A Merkle tree is only useful if equal contents produce equal digests, and that
+requires equal contents to produce the \emph{same shape}. An ordinary B-tree
+fails this immediately: insert the same entries in a different order and you get
+a different --- equally valid --- tree.
+
+Auvolat and Taïani's Merkle search trees (SRDS 2019) fix the shape by deriving
+it from the data. Hash each key; count its leading zero nibbles; that count is
+the key's \term{layer}. Since each additional zero nibble is a 1-in-16 event,
+layers follow a geometric distribution with $B = 16$, which is exactly the
+branching behaviour a B-tree wants --- but assigned by the hash function rather
+than by insertion history (Figure~\ref{fig:mst}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7label,anchor=east] at (-4,10) {layer 2};
+  \node[d7newnode] (top) at (34,10) {block: $\;k_{\mathsf{0x00a\ldots}}\;$};
+  \node[d7label,anchor=east] at (-4,-10) {layer 1};
+  \node[d7node] (m1) at (8,-10)  {block: $k_{\mathsf{0x0c\ldots}}$};
+  \node[d7node] (m2) at (62,-10) {block: $k_{\mathsf{0x0f\ldots}}$};
+  \node[d7label,anchor=east] at (-4,-30) {layer 0};
+  \node[d7leafnode] (l1) at (-8,-30) {\scriptsize run};
+  \node[d7leafnode] (l2) at (24,-30) {\scriptsize run};
+  \node[d7leafnode] (l3) at (50,-30) {\scriptsize run};
+  \node[d7leafnode] (l4) at (78,-30) {\scriptsize run};
+  \draw[d7edge] (top) -- (m1); \draw[d7edge] (top) -- (m2);
+  \draw[d7edge] (m1) -- (l1);  \draw[d7edge] (m1) -- (l2);
+  \draw[d7edge] (m2) -- (l3);  \draw[d7edge] (m2) -- (l4);
+  \node[d7label,anchor=west,text width=44mm,align=left] at (94,-10)
+    {A key's layer is the number of leading zero nibbles of its SHA-256 digest.
+     One block holds each consecutive same-layer run, and its digest covers the
+     policy domain, its entries, its subtree count, and its child digests.};
+\end{tikzpicture}
+\caption{Layer assignment in a Merkle search tree. Because the shape comes from
+the hashes, two processes that insert the same entries in different orders build
+the same tree and compute the same root digest.}
+\label{fig:mst}
+\end{figure}
+
+One block holds each consecutive run of same-layer keys, and each block's
+\code{MST2} bytes cover the policy domain, its entries, its subtree count, and
+its child digests. The root digest therefore names the whole collection.
+
+\begin{asidebox}[Prolly trees, the convergent cousin]
+Probabilistic B-trees --- ``prolly trees'', from Noms around 2016 and now Dolt
+--- reach the same destination by a different route: instead of hashing each key
+to a layer, they run a rolling hash over the entry stream and place a node
+boundary wherever it crosses a threshold. This is \term{content-defined
+chunking}, the same technique that powers \code{rsync}-style deduplication.
+Both designs produce uniquely represented, content-addressed, history-independent
+search trees; Durable7 implements the Merkle search tree variant.
+\end{asidebox}
+
+\section{Two prerequisites, taken seriously}
+
+The repository treats content addressing as a capability that must be
+\emph{earned} by satisfying two conditions, and records them as mandatory for
+any future content-addressed family.
+
+\begin{contractbox}[Prerequisite 1 --- pinned deterministic hashing]
+Default string hashing on .NET is randomised per process. That is a fine defence
+against hash-flooding and completely fatal for cross-process addressing. A
+Merkle policy therefore binds a \emph{versioned semantic id}, canonical codecs,
+comparer semantics, and a SHA-256 domain digest. The policy id versions the
+application's comparer semantics: if you change what ``equal'' means, you change
+the id, and old digests stop colliding with new ones by construction.
+\end{contractbox}
+
+\begin{contractbox}[Prerequisite 2 --- canonical serialisation]
+A digest is only as canonical as the bytes it hashes. A strict versioned codec
+must \emph{encode and decode}, and its decoder must accept exactly one canonical
+encoding while rejecting malformed, non-canonical, and trailing input. Codec ids
+end in \code{-v} followed by decimal digits. The built-ins cover integers,
+nullable strings, nullable byte arrays, and GUIDs.
+
+Do not use a codec whose output depends on process-randomised hashes, culture,
+object identity, ambient serialisation settings, or mutable state. Every one of
+those turns a content address into a lie.
+\end{contractbox}
+
+\begin{lstlisting}[language={[Sharp]C}]
+var policy = MerkleSearchTreePolicy<int, string?>.Create(
+    "document-index-v1",
+    Comparer<int>.Default,
+    MerkleCodecs.Int32,
+    MerkleCodecs.Utf8String);
+
+var baseline = MerkleSearchTree<int, string?>.Create(policy)
+    .SetItem(10, "ten").SetItem(20, "twenty");
+var updated  = baseline.SetItem(20, "TWENTY").SetItem(30, "thirty");
+
+MerkleDigest address = updated.RootHash;
+
+foreach (var (key, value) in updated.EnumerateRange(15, 30))
+    Console.WriteLine($"{key}: {value}");
+\end{lstlisting}
+
+Recreate the same policy id, comparer semantics, codec ids, and logical entries
+in any other language, and you get the same block graph and the same root
+address. That is not an aspiration in this repository --- golden wire vectors are
+shared test data, and a tree built in Rust verifies against a proof produced in
+TypeScript.
+
+\begin{caveatbox}[Diff is not free just because digests exist]
+Equal block digests prune whole regions, and in-process \code{Diff} exploits
+that. But a topology-changing edit can move a block separator, and when it does,
+the implementation honestly falls back to ordered subtree comparison rather than
+pretending the digest pruning still applies. The shipped API therefore does
+\emph{not} promise \bigoh{\text{key divergence}} for every diff. Block
+synchronisation --- Chapter~\ref{ch:merkleops} --- is the divergence-oriented
+path, and it is the right tool when the two trees live in different processes.
+\end{caveatbox}
+
+\chapter{Blocks, Proofs, Synchronisation, and Merge}
+\label{ch:merkleops}
+
+\motto{The tree is the easy half. Not trusting the network is the other half.}
+
+\noindent
+A content-addressed collection is only interesting if it can leave the process.
+This chapter covers the tier that lets it: storing blocks, moving them,
+verifying them without trust, proving individual claims about them, and merging
+two divergent descendants of a common ancestor.
+
+Everything here ships in all nine languages with byte-identical wire behaviour.
+
+\section{Blocks and stores}
+
+A \term{block} is one immutable node's canonical bytes, addressed by its digest.
+A \term{store} is a mapping from digest to block --- the persistence boundary.
+The library's in-memory implementations are concurrent (an \code{RLock} in
+Python, a shared mutex in C\texttt{++}, a synchronised three-state store in C),
+and every store operation is atomic with respect to publication.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var store = new InMemoryMerkleBlockStore();
+int blocksAdded = updated.Save(store);
+
+var loaded = MerkleSearchTree<int, string?>.Load(
+    updated.RootHash, policy, store);
+\end{lstlisting}
+
+The critical property of \code{Load} is what it refuses to assume.
+
+\begin{contractbox}[Load never trusts the store]
+Loading recomputes every block digest, strictly decodes \emph{and re-encodes}
+every entry to confirm canonicity, follows and validates every child reference,
+checks the result against the expected root, and applies a finite verification
+budget throughout. A store that returns tampered, malformed, non-canonical, or
+merely inconsistent blocks produces an error, not a tree.
+
+The re-encode step is the one people skip. Decoding alone proves the bytes are
+\emph{parseable}; re-encoding and comparing proves they are \emph{canonical},
+which is what the digest actually claims.
+\end{contractbox}
+
+\section{Packs, and the transport boundary}
+
+A \term{pack} is a set of blocks prepared for transport. A \emph{complete} pack
+is self-contained. A \emph{partial} pack can be completed from blocks the
+destination already holds --- which is the common case, since two replicas of a
+slowly changing tree share almost everything.
+
+\begin{lstlisting}[language={[Sharp]C}]
+MerkleBlockPack outbound = updated.ExportPack();
+
+var replica = MerkleSearchTree<int, string?>.Import(
+    outbound, policy, replicaStore);
+
+Console.WriteLine(replica.RootHash == updated.RootHash);  // True
+\end{lstlisting}
+
+\code{Import} verifies every supplied block \emph{and} the requested root closure
+before it performs destination conflict preflight, and it commits nothing until
+all of that succeeds. A rejected import leaves the destination store exactly as
+it was.
+
+\section{Seven budgets}
+
+Verification of untrusted input is where authenticated data structures go wrong,
+and the failure mode is rarely a wrong answer --- it is resource exhaustion. A
+malicious pack can be a decompression bomb, a cycle, a pathologically deep
+closure, or a codec that allocates a gigabyte from four bytes.
+
+\begin{contractbox}[Bounded verification]
+Every port enforces \emph{seven} positive finite budgets during verification, and
+the ordering of checks is itself part of the contract: query and proof-shape
+limits run \emph{before} verifier allocation, hashing, or codec work. A malformed
+request is rejected before it can cost anything.
+
+Local proof and synchronisation construction consumes a read-only trusted
+topology view rather than applying network budgets or re-decoding values that are
+already retained. The budgets exist for the trust boundary, and they are applied
+at the trust boundary.
+\end{contractbox}
+
+\section{Proofs}
+
+A proof lets a party who does \emph{not} have the tree verify a claim about it,
+given only the root digest. The canonical \code{MSP2} format carries three kinds:
+
+\begin{description}
+\item[Membership] --- this key maps to this value in the tree named by this
+digest.
+\item[Non-membership] --- this key is \emph{absent} from that tree. This is the
+harder and more valuable direction, and it works because the tree is ordered: the
+proof exhibits the adjacent entries that would bracket the key, and the structure
+guarantees nothing can hide between them.
+\item[Range] --- these are exactly the entries between these bounds, with
+nothing omitted.
+\end{description}
+
+Proof verification fixes query, shape, and envelope precedence before any decoder
+or codec work runs, and tampering with any part of a proof --- the claimed value,
+a sibling digest, the envelope --- produces a rejection rather than a wrong
+answer. The test suites verify this adversarially rather than by inspection.
+
+\section{Synchronisation}
+
+Synchronisation answers: \emph{I have root $A$, you have root $B$, send me what I
+am missing.} The mechanism is a frontier walk. Compare digests from the root
+down; wherever they agree, an entire region is already shared and the walk stops;
+wherever they differ, descend. The blocks the destination lacks form the
+frontier, and the resulting sync pack is closure-pruned so that nothing already
+present is retransmitted.
+
+The walk is iterative rather than recursive --- a hostile tree should not be able
+to overflow a stack --- and repair is likewise iterative, so a partially
+populated store converges over successive rounds rather than requiring a
+complete restart.
+
+\section{Three-way merge}
+
+The final operation is the one that turns an authenticated map into a version
+control system: given a common ancestor and two descendants, produce a merged
+tree.
+
+\begin{contractbox}[Merge obligations]
+The merge is typed and \emph{present-null aware}: a key that was deleted in one
+branch and a key whose merged value is present-and-null are different outcomes,
+and the API distinguishes them rather than collapsing both into ``no value''.
+
+A merged tree with unresolved conflicts is never published. Conflict detection
+completes before any publication, so a caller either receives a complete merged
+tree or receives the conflicts --- never a tree that is silently missing the
+contested keys.
+\end{contractbox}
+
+That refusal to publish partial results is the same failure-atomicity rule from
+Chapter~\ref{ch:contract}, applied where the stakes are highest. A partially
+merged authenticated tree would still have a valid root digest, which means it
+would be indistinguishable from a correct one --- a wrong answer that carries a
+proof of its own correctness. The only safe design is to not produce it.
+
+\begin{asidebox}[What this replaced]
+An earlier design sketch in the repository proposed a \code{MerkleHamt}: content
+addressing over the \emph{unordered} hash trie. It remains deferred. The Merkle
+search tree is its ordered sibling and subsumes most of its uses while adding
+range queries and range synchronisation --- neither of which an unordered trie
+can offer. Should \code{MerkleHamt} ever be revived, it must reuse equally
+explicit hashing, encoding, verification-budget, and trust-boundary contracts;
+the prerequisites are not negotiable per family.
+\end{asidebox}
+
 %%APPEND-HERE%%
 
 \end{document}
