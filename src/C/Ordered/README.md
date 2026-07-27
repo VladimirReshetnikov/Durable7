@@ -7,7 +7,8 @@
 - Scope: `src/C/Ordered`
 
 This workspace owns the C17 port of the neutral persistent ordered-set and ordered-map family. It
-combines the public C CHAMP map with the public C FingerTree deque and has no source, link, API,
+combines the public C CHAMP map with the public C FingerTree deque and has no source, link, API, or
+test-oracle dependency on anything else in the repository; see [Dependency boundary](#dependency-boundary).
 
 ## Surface
 

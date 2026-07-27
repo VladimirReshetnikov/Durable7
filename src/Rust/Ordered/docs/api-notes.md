@@ -238,4 +238,6 @@ without turning Rust facade values into identity-bearing objects. `validate_stru
 agreement, strict stamps, bidirectional index coverage, stamp agreement, and representative
 equivalence, returning `PersistentOrderedSetStatistics` or a typed invariant error.
 
-The implementation uses safe Rust only. It references the public HAMT and FingerTree crates and
+The implementation uses safe Rust only. It references the public `durable7_hamt` and
+`durable7_fingertree` crates and nothing else outside the standard library, and it declares no
+`unsafe` block.

@@ -10,8 +10,10 @@ It uses immutable OCaml values for published snapshots, runtime policy records w
 families retain hashing or comparison behavior, and separately identified mutable builders,
 editing sessions, cursors, and streaming cores.
 
-The general-purpose modules under `lib/hamt`, `lib/finger_tree`, and `lib/ordered`
-general libraries only in that direction.
+The general-purpose modules under `lib/hamt`, `lib/finger_tree`, and `lib/ordered` layer in exactly
+one direction: `lib/common` supplies the shared hashing and comparison policies, `lib/hamt` and
+`lib/finger_tree` build on it independently of each other, and `lib/ordered` composes both. No
+module in a lower layer refers to a higher one.
 
 ## Layout
 
@@ -109,12 +111,7 @@ lookups and replacements. The facades own insertion, final-index movement, posit
 reversal, stable one-shot sorting, receiver-policy set algebra, independent key/value policies, and
 nested value movement. These modules depend only on general repository code.
 
-`Persistent_association` with its kernel-specific ordering rules. Association replacement retains
-the stored key and position; append/prepend deliberately move an existing class and adopt the
-caller representative; indexed insertion adjusts its target after removing an earlier occurrence.
-Join, key selection, ranges, reversal, and stable key/value sorting follow the same sibling contract.
-No general module imports this leaf namespace.
-
 All repository-owned collection families now have OCaml modules and focused tests in
-this workspace. Repository-level navigation and validation documents identify any language-local
-implementation distinctions and the exact commands used to validate the port.
+this workspace. The [API notes](docs/api-notes.md) record the public module inventory and every
+language-local implementation distinction; the [validation guide](docs/validation.md) records the
+exact one-worker commands used to validate the port and what each one proves.

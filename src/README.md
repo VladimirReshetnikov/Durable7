@@ -11,11 +11,27 @@ library-family directories directly under the language root; C# is a single mana
 projects grouped by role under `src/CSharp/src`, `tests`, `samples`, and `benchmarks`, while Python,
 OCaml, and TypeScript package all families into one language-local distribution.
 
-| Language root | Toolchain model | Workspaces |
-| --- | --- | --- |
-| [OCaml](OCaml/README.md) | opam/Dune package with strict warnings, ocamlformat, odoc, Alcotest, and QCheck | [HAMT, FingerTree + Range, and Ordered](OCaml/docs/api-notes.md#public-families) |
-| [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, and Ordered](Python/README.md) |
-| [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, and Ordered](TypeScript/README.md#public-families) |
+| Language root | Toolchain model | Workspaces | Validation entry point |
+| --- | --- | --- | --- |
+| [C](C/README.md) | Serialized MSVC/GCC/Clang builds through `build.ps1` and CMake/CTest presets | [Hamt](C/Hamt/README.md), [FingerTree + Range](C/FingerTree/README.md), [Ordered](C/Ordered/README.md) | `.\build.ps1 -Workspace <name> -RunTests` |
+| [Cpp](Cpp/README.md) | Serialized MSVC/GCC/Clang builds through `build.ps1` and CMake/CTest presets | [Hamt](Cpp/Hamt/README.md), [FingerTree + Range](Cpp/FingerTree/README.md), [Ordered](Cpp/Ordered/README.md) | `.\build.ps1 -Workspace <name> -RunTests` |
+| [CSharp](CSharp/README.md) | One .NET 10 solution with xUnit/CsCheck validation | [HAMT](CSharp/docs/Hamt/overview.md), [FingerTree and Range-update sequence](CSharp/docs/FingerTree/overview.md), [Ordered](CSharp/docs/Ordered/overview.md) | `.\test.ps1` |
+| [Haskell](Haskell/README.md) | GHC/cabal packages with dependency-light executable tests | [Hamt](Haskell/Hamt/README.md), [FingerTree + Range](Haskell/FingerTree/README.md), [Ordered](Haskell/Ordered/README.md) | `.\test.ps1` |
+| [Kotlin](Kotlin/README.md) | Kotlin/JVM command-line compiler with dependency-free executable tests bootstrapped by `build.ps1` | [Hamt](Kotlin/Hamt/README.md), [FingerTree + Range](Kotlin/FingerTree/README.md), [Ordered](Kotlin/Ordered/README.md) | `.\build.ps1` |
+| [OCaml](OCaml/README.md) | opam/Dune package with strict warnings, ocamlformat, odoc, Alcotest, and QCheck | [HAMT, FingerTree + Range, and Ordered](OCaml/docs/api-notes.md#public-families) | `.\test.ps1` |
+| [Python](Python/README.md) | Typed Python 3.11+ package with Ruff, strict Mypy, pytest/Hypothesis, and wheel validation | [HAMT, FingerTree, and Ordered](Python/README.md#package-families) | `.\test.ps1` |
+| [Rust](Rust/README.md) | Cargo workspace with safe Rust crates and integration tests | [Hamt](Rust/Hamt/README.md), [FingerTree](Rust/FingerTree/README.md), [Ordered](Rust/Ordered/README.md), [RangeUpdate](Rust/RangeUpdate/README.md) | `.\test.ps1` |
+| [TypeScript](TypeScript/README.md) | Strict TypeScript/ESM npm package with Vitest and fast-check validation | [HAMT, FingerTree, and Ordered](TypeScript/README.md#public-families) | `npm ci && npm run validate` |
+
+Every port implements the same three families, so the `Hamt` / `FingerTree` / `Ordered` split is the
+reliable way to navigate across languages even though the build unit differs. Rust is the one
+exception to the three-way split: `RangeUpdate` is a separate crate there because it owns a distinct
+implicit-AVL representation instead of composing the finger tree, whereas the other ports keep the
+equivalent type inside their FingerTree unit.
+
+All `.ps1` entry points in the table run single-worker by construction; the
+[build and validation guide](../docs/guides/build-and-validation.md) explains why and lists the
+prerequisites for each toolchain.
 
 The benchmark-independent rollouts now ship one-descent persistent HAMT updates,
 `PersistentHashBag`, strict `PersistentBiMap`, neutral `PersistentOrderedSet` and `PersistentOrderedMap`, set-valued

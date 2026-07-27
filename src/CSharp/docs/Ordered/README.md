@@ -8,9 +8,9 @@
 
 `Durable7.Ordered` is the neutral owner of `PersistentOrderedMap<TKey, TValue>`,
 `PersistentOrderedSet<T>`, and `PersistentOrderedMultimap<TKey, TValue>`, immutable
-insertion-ordered collections composed from the public C#
-HAMT and FingerTree libraries. It is a general
-collection project: neither its production contract nor its tests depend on the application-specific
+insertion-ordered collections composed from the public C# HAMT and FingerTree libraries. It is a
+general collection project: its production contract and its tests are defined against the semantics
+documented here, not derived from any single application's collection.
 
 | Document | Use it for |
 | --- | --- |
@@ -33,4 +33,9 @@ Primary code and tests:
 
 The authoritative execution rationale is the repository-level
 [benchmark-independent structures proposal](../../../../docs/proposals/benchmark-independent-next-structures-2026-07-14.md).
-The normative ownership rule is the
+The normative cross-language behavior obligations are the
+[insertion-ordered set](../../../../docs/reference/semantic-contracts.md#insertion-ordered-persistent-set)
+and [insertion-ordered map](../../../../docs/reference/semantic-contracts.md#insertion-ordered-persistent-map)
+sections of the semantic contracts reference; the eight sibling ports listed in the
+[data-structure catalog](../../../../docs/reference/data-structure-catalog.md) implement the same
+contract in their own languages.

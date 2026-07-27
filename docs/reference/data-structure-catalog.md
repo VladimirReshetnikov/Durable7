@@ -92,7 +92,7 @@ force-put mode. The honest storage cost is approximately two map entries per log
 | Kotlin | `PersistentBiMap<K, V>` | [API notes](../../src/Kotlin/Hamt/docs/api-notes.md#persistent-bidirectional-map), [validation](../../src/Kotlin/Hamt/docs/validation.md) |
 | Rust | `PersistentBiMap<K, V, SK, SV>` | [API notes](../../src/Rust/Hamt/docs/api-notes.md#persistent-bidirectional-map), [validation](../../src/Rust/Hamt/docs/validation.md) |
 | OCaml | `Persistent_bi_map` | [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/hamt/persistent_bi_map.mli), [tests](../../src/OCaml/tests/README.md) |
-| TypeScript | `PersistentBiMap<K, V>` | [API notes](../../src/TypeScript/docs/api-notes.md#hamt-maps-bags-bimaps-builders-and-sessions), [validation](../../src/TypeScript/docs/validation.md) |
+| TypeScript | `PersistentBiMap<K, V>` | [API notes](../../src/TypeScript/docs/api-notes.md#hamt-maps-bags-multimaps-relations-bimaps-derived-facades-builders-and-sessions), [validation](../../src/TypeScript/docs/validation.md) |
 | Python | `PersistentBiMap[K, V]` | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md) |
 
 ## Derived Persistent Maps, Relations, And Sparse Bit Sets

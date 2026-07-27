@@ -49,7 +49,9 @@ collapse, representative lookup, receiver-side algebra normalization, and relati
 Hash-compatible equality remains the caller's obligation. Policy accessors return `const Hash&`
 and `const KeyEqual&` from the retained CHAMP index.
 
-The neutral Ordered target includes only public HAMT and FingerTree headers. It does not include,
+The neutral Ordered target includes only public HAMT and FingerTree headers plus the standard
+library. It reaches into no `detail` namespace of either substrate, so both can change their
+internal representations without breaking this workspace.
 
 ## Construction And Lookup
 

@@ -18,12 +18,10 @@ under `benchmarks/`, and family-specific documentation under `docs/<Family>/`.
 | [FingerTree](docs/FingerTree/overview.md) | Persistent sequence and aggregation family: finger trees, RRB vector, DABA Lite, sorted/priority/interval facades, ropes/text, and the independent implicit-AVL `RangeUpdateSequence` with a law-gated lazy tag action | [project](src/Durable7.FingerTree/Durable7.FingerTree.csproj), [usage](docs/FingerTree/usage.md), [API spec](docs/FingerTree/api-specification.md), [Range contract](docs/FingerTree/range-update-sequence.md), [validation](docs/FingerTree/validation.md) | `.\test.ps1`; see [tests](tests/Durable7.FingerTree.Tests/README.md), [samples](samples/README.md), and [benchmark project](benchmarks/Durable7.FingerTree.Benchmarks/README.md) |
 | [Ordered](docs/Ordered/overview.md) | Independently owned general-purpose `PersistentOrderedSet<T>` over the public HAMT and FingerTree substrates, with comparer-defined membership, insertion/explicit-position order, first-representative retention, positional ranges, stable one-shot sorting, receiver-comparer algebra, and a dual CHAMP/FingerTree index | [project](src/Durable7.Ordered/Durable7.Ordered.csproj), [usage](docs/Ordered/usage.md), [API spec](docs/Ordered/api-specification.md), [validation](docs/Ordered/validation.md) | `.\test.ps1 -Project .\tests\Durable7.Ordered.Tests\Durable7.Ordered.Tests.csproj`; see [tests](tests/Durable7.Ordered.Tests/README.md) |
 
-contract. Reusable mechanics must be forked into an independently owned project with its own API,
-tests, documentation, and evolution policy; see the normative
-application-leaf boundary.
-
-`Durable7.Ordered` is such an independent general owner: it references only the public
-HAMT and FingerTree projects.
+The project graph is acyclic and shallow. `Durable7.Hamt` and `Durable7.FingerTree` are independent
+of each other and of everything else in the solution; `Durable7.Ordered` references only those two
+public projects. Nothing in the solution reaches into another project's internals, so a
+representation change inside HAMT or FingerTree cannot break a sibling library.
 
 ## Non-Interactive Test Runs
 

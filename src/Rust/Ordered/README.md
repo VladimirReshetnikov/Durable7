@@ -8,7 +8,9 @@
 `durable7-ordered` provides the safe-Rust port of the repository's neutral persistent
 insertion-ordered collections. `PersistentOrderedSet<T, S = RandomState>` combines the public CHAMP
 `PersistentHashMap<T, i64, S>` membership index with the public FingerTree `PersistentDeque`
-positional sequence. It is independently owned general-purpose code: the crate has no dependency on
+positional sequence. It is independently owned general-purpose code: `durable7-ordered` depends only
+on `durable7-hamt` and `durable7-fingertree`, and its contract is defined here rather than inherited
+from any consumer.
 
 `PersistentOrderedMap<K, V, S = RandomState>` uses the same sparse-stamp design. Its CHAMP stores
 key-to-stamp navigation while the positional deque owns key/value entries, so arbitrary payloads

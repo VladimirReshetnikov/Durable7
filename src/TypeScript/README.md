@@ -5,9 +5,9 @@
 - Runtime: Node.js 24 or newer
 - Package: `durable7`
 
-This workspace is the strict TypeScript/ESM port of the repository-owned persistent collections,
-and streaming structures. It targets modern JavaScript
-runtimes without native addons and publishes declaration files alongside ES modules.
+This workspace is the strict TypeScript/ESM port of the repository-owned persistent, authenticated,
+and streaming collections. It targets modern JavaScript runtimes without native addons and publishes
+declaration files alongside ES modules.
 
 ## Public families
 
@@ -17,7 +17,9 @@ runtimes without native addons and publishes declaration files alongside ES modu
 | `durable7/finger-tree` | `PersistentDeque`, general measured `FingerTree`, payload-bearing `PersistentIntervalMap`, `PersistentChunkedBitSet`, lazy algebraic `RangeUpdateSequence`, `ReversibleDeque`, `RrbVector`, sorted bag/set/map, canonical zip-zip set, measured and Brodal–Okasaki priority queues, priority-search queue, interval tree, rope/measured-rope/text cursors, and `DabaLite` |
 | `durable7/ordered` | independent insertion-ordered `PersistentOrderedSet`, `PersistentOrderedMap`, and grouped `PersistentOrderedMultimap` with positional movement/ranges, stable one-shot sorting, sparse labels, and first-representative retention |
 
-The root import re-exports all five families. See [API and semantic notes](docs/api-notes.md), the
+The root `durable7` import re-exports all three subpaths, so `import { … } from "durable7"` reaches
+every public type; the subpath imports exist for consumers who want a narrower dependency surface.
+See [API and semantic notes](docs/api-notes.md), the
 [range-update sequence notes](docs/range-update-sequence.md), and the
 [ordered-set notes](docs/ordered.md) for language-specific mappings and deliberately different
 performance claims.

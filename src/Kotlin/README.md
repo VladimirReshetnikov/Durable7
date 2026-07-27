@@ -32,8 +32,8 @@ On Windows, the script enables inherited non-interactive OS error handling befor
 and starts every test JVM with `-Djava.awt.headless=true`. Assertion, exception, loader, and crash failures therefore
 remain console diagnostics with nonzero exits instead of opening modal UI.
 
-The Ordered workspace compiles against the public source roots of both Hamt and FingerTree. It does
-Its `PersistentOrderedSet<T>` retains the caller's runtime `HashPolicy<T>`, keeps the first stored
+The Ordered workspace compiles against the public source roots of both Hamt and FingerTree and adds
+no other dependency. Its `PersistentOrderedSet<T>` retains the caller's runtime `HashPolicy<T>`, keeps the first stored
 representative of each equality class (including nullable representatives), and maintains an
 independently owned sparse-`Long` order index with deterministic relabel fallback.
 

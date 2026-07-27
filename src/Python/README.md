@@ -34,8 +34,8 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
   grouped `PersistentOrderedMultimap`,
   independently composed from the HAMT and persistent deque. They retain first representatives,
   receiver `HashPolicy` identity, insertion order, explicit positional movement, sparse labels,
-  ranges, and stable one-shot sorting; the set also provides receiver-ordered algebra. Neither
-  `PersistentAssociation`; general-purpose package code never depends on it.
+  ranges, and stable one-shot sorting; the set also provides receiver-ordered algebra. The subpackage
+  builds entirely on the public `hamt` and `finger_tree` surfaces and adds no runtime dependency.
 
 The root namespace re-exports every public family member:
 
