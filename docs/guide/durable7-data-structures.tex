@@ -2129,6 +2129,317 @@ The contract that matters is publication isolation: later builder changes cannot
 affect a previously produced rope. As with the trie builders, mutation is
 confined to nodes nobody can see.
 
+\chapter{The Range-Update Sequence}
+\label{ch:range}
+
+\motto{Lazy propagation, but you are allowed to keep the old version.}
+
+\begin{specimen}[Specimen --- \code{RangeUpdateSequence}]
+\spec{Purpose}{An immutable indexed sequence that can apply one algebraic transformation to a contiguous range, and query that range's aggregate, without visiting the covered elements.}
+\spec{Core}{A separately owned path-copied implicit AVL --- \emph{not} a tagged modification of either finger-tree engine.}
+\spec{Whole-sequence update}{\bigoh{1}: one new root.}
+\spec{Subrange update / query}{\bigoh{\log n} boundary work.}
+\spec{Point edit, split, concat}{\bigoh{\log n}.}
+\spec{Policy}{A tag monoid acting lawfully on elements and on cached ordered measures, with an explicit composition direction.}
+\spec{Ports}{All nine. OCaml ships an immutable-array checkpoint with the same public algebra and persistence semantics and makes no implicit-AVL lazy-update claim.}
+\end{specimen}
+
+\noindent
+Competitive programmers know the ephemeral version of this structure as a
+segment tree with lazy propagation, and it is one of the great practical
+algorithms: ``add 7 to every element between positions 200 and 9{,}000'' in
+logarithmic time, by writing a pending instruction on a handful of internal
+nodes instead of touching nine thousand elements.
+
+Making it persistent is harder than it sounds, because the classic
+implementation \emph{pushes} pending tags down as it descends --- and pushing is
+mutation. In a persistent structure a read must not mutate anything, because
+another version is looking at those same nodes.
+
+\section{The invariant that makes it work}
+
+The library resolves this with a carefully chosen convention
+(Figure~\ref{fig:rangetag}):
+
+\begin{contractbox}[The node invariant]
+A node's stored value and cached measure \emph{already include} that node's own
+pending tag. Its children do \emph{not}.
+
+Structural descent and rotations push a pending tag down before rearranging
+nodes. Read-only indexing, range measurement, and enumeration instead carry the
+inherited tag down the path and compose it after the node's older tag --- never
+writing to shared storage.
+\end{contractbox}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7newnode,align=center] (n) at (0,0)
+    {node\\[-1pt]{\scriptsize value, measure, count, height}\\[-1pt]
+     {\scriptsize\color{d7copper}pending tag $t$ --- \emph{already applied above}}};
+  \node[d7node,align=center] (l) at (-30,-24) {left child\\[-1pt]{\scriptsize $t$ not yet applied}};
+  \node[d7node,align=center] (r) at ( 30,-24) {right child\\[-1pt]{\scriptsize $t$ not yet applied}};
+  \draw[d7edge] (n) -- (l);
+  \draw[d7edge] (n) -- (r);
+  \node[d7label,anchor=west,align=left,text width=62mm] at (-40,-40)
+    {\textbf{Reads} carry $t$ downward in an accumulator and compose it with each
+     child's own tag. Nothing is written.\\[2pt]
+     \textbf{Structural writes} push $t$ into both children first, then rotate or
+     rebuild --- on freshly copied nodes.};
+\end{tikzpicture}
+\caption{The pending-tag convention. Because a node's own summary already
+reflects its tag, a whole-subtree transformation is a single-node path copy, and
+cached measures stay queryable without ever visiting an element.}
+\label{fig:rangetag}
+\end{figure}
+
+The payoff is direct. Applying a non-identity tag to the entire sequence
+allocates exactly one new root --- \bigoh{1}, regardless of length. A proper
+subrange decomposes into \bigoh{\log n} maximal covered subtrees plus two
+boundary paths, so it is logarithmic. And because a node's cached measure is
+already tag-inclusive, range aggregate queries are logarithmic too, with no
+element visits at all.
+
+\section{The algebra, and its laws}
+
+The policy --- \code{IRangeUpdateAlgebra<TElement, TMeasure, TTag>} in C\#, with
+local spellings elsewhere --- extends the ordinary measure monoid with a tag
+monoid and two actions. The single most important detail is the composition
+direction, and it is stated everywhere it appears:
+
+\begin{center}
+\fbox{\parbox{0.86\linewidth}{\centering\vspace{2pt}
+\code{Compose(newer, older)} means: apply \emph{older} first, \emph{newer}
+second.\vspace{2pt}}}
+\end{center}
+
+The executable law gate covers the following, and a policy that violates them is
+outside the collection's logical contract --- the structure cannot repair an
+unlawful action and does not pretend to:
+
+\begin{itemize}
+\item the measure has an identity and an associative ordered combine;
+\item tags have an identity and an associative composition in that direction;
+\item the tag action on an element composes in the same order;
+\item the tag action on a cached measure composes in the same order \emph{and
+receives the represented element count};
+\item applying a tag to a singleton measure agrees with measuring the tagged
+element;
+\item the action distributes over ordered measure combination with the correct
+left and right counts --- tested with a non-commutative measure;
+\item applying any tag to the empty measure at count zero yields the empty
+measure; and
+\item every tag that \code{IsIdentity} recognises --- including a value-distinct
+representation of identity --- obeys the full identity equations.
+\end{itemize}
+
+\section{In use}
+
+The canonical example is an affine algebra whose tags either assign a value or
+add to it, over a sum measure:
+
+\begin{lstlisting}[language={[Sharp]C}]
+using Sequence = Durable7.FingerTree.RangeUpdateSequence<
+    long, long, AffineTag, AffineSumAlgebra>;
+
+var source   = Sequence.Create([1, 2, 3, 4]);
+var added    = source.ApplyRange(1, 2, AffineTag.Add(10));
+// [1, 12, 13, 4], Measure == 30
+
+var assigned = added.ApplyRange(2, 2, AffineTag.Assign(7));
+// [1, 12, 7, 7], Measure == 27
+
+long middleSum = assigned.MeasureRange(1, 2);   // 19
+var (prefix, suffix) = assigned.SplitAt(2);
+var reconstructed = prefix.Concat(suffix);
+
+// source is still [1, 2, 3, 4].
+\end{lstlisting}
+
+Note what the API deliberately does \emph{not} have: there is no \code{AddRange}
+or \code{AssignRange} method on the generic core, because those verbs belong to
+a particular tag algebra rather than to the sequence. The core knows about tags;
+it does not know what they mean.
+
+\begin{contractbox}[Behavioural obligations]
+Retained versions stay immutable and share unaffected interiors. Range
+validation precedes tag callbacks; empty ranges preserve the receiver and the
+empty measure without invoking the policy at all; recognised identity updates
+preserve the receiver. Direct insert, replace, and remove push old tags before
+installing new content, so a prior range tag never leaks onto newly inserted
+elements. Any policy exception publishes no successor.
+\end{contractbox}
+
+\begin{caveatbox}[Enumerator copying]
+The concrete enumerator is a mutable struct that is deliberately \emph{not}
+safe to copy mid-traversal: copies share traversal state and the stale copy
+fails fast once the other advances. Independently created enumerators are fully
+independent and safe for concurrent reads. This is the standard trade for a
+non-allocating enumerator, and the fail-fast behaviour exists so that the
+mistake surfaces immediately rather than as silent misreads.
+\end{caveatbox}
+
+\chapter{The Reversible Deque}
+\label{ch:revdeque}
+
+\motto{Reversal as a fact about how you are looking, not about where things
+are.}
+
+\begin{specimen}[Specimen --- \code{ReversibleDeque}]
+\spec{Purpose}{A persistent sequence for which logical reversal is a primary operation.}
+\spec{Core}{Persistent deque storage plus an orientation bit or mirrored root.}
+\spec{Reverse}{\bigoh{1} --- a new view over shared storage, not a materialised sequence.}
+\spec{Everything else}{Endpoint operations, indexing, splitting, concatenation, traversal, and materialisation all observe the current logical orientation.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+This is the smallest structure in the book and it makes a point worth more than
+its size: a great many ``operations'' are really changes of perspective, and
+a persistent library is in an unusually good position to represent them as such.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var deque    = ReversibleDeque<int>.Create(1, 2, 3);
+var reversed = deque.Reverse();
+
+var first    = reversed[0];        // 3
+var restored = reversed.Reverse(); // shares storage with deque
+\end{lstlisting}
+
+\begin{contractbox}[Orientation obligations]
+Reversal returns a new value and preserves the original. Every operation ---
+endpoints, indexing, splitting, concatenation, traversal, materialisation ---
+observes the logical orientation. Mixed-orientation concatenation must not
+silently reinterpret one operand in physical order. An \bigoh{1} reversal claim
+belongs only where the implementation genuinely uses an orientation bit,
+mirrored root, or equivalent view rather than materialising a new sequence.
+\end{contractbox}
+
+That last clause is the interesting one. It would be easy for a port to
+implement \code{Reverse} by building a reversed copy, keep every observable
+behaviour identical, and quietly break the one promise anybody chose the type
+for. The repository maintains a dedicated complexity audit for exactly this
+family, and it is the required reading before touching any orientation-aware
+implementation.
+
+\chapter{DABA Lite: The Deliberate Outlier}
+\label{ch:daba}
+
+\motto{Not persistent, not sorry.}
+
+\begin{specimen}[Specimen --- \code{DabaLite}]
+\spec{Purpose}{Maintain the aggregate of a FIFO sliding window under any associative monoid --- no commutativity, no inverse required.}
+\spec{Core}{The De-Amortised Banker's Aggregator (Lite), over a linked queue of 64-slot chunks with six ordered cursors.}
+\spec{Callback ceilings}{Insert invokes \code{Combine} at most three times; evict at most twice; query at most once; an empty query, none. Unconditional.}
+\spec{Operations}{Worst-case \bigoh{1} structural work, given \bigoh{1} monoid callbacks.}
+\spec{Mutability}{\textbf{Mutable and unsynchronised.} This is the one collection in the book that is not persistent.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+Every other structure in this book preserves its old versions. This one
+overwrites them on purpose, and it belongs here anyway for two reasons: it is the
+measure framework's first consumer outside the trees, and it answers a question
+the trees answer worse.
+
+The question is: what is the sum --- or max, or concatenation, or any associative
+combination --- of the last $k$ items in a stream, updated as items arrive and
+depart? A finger tree answers it in \bigoh{\log n}. Tangwongsan, Hirzel, and
+Schneider's aggregator (DEBS 2017, with the Lite representation in the 2021
+journal article) removes the logarithm entirely for this deliberately mutable
+special case.
+
+\section{Six cursors and a bounded fixup}
+
+The window is a queue of partial aggregates, overlaid with six cursors that
+always satisfy $F \leq L \leq R \leq A \leq B \leq E$
+(Figure~\ref{fig:daba}). Between them they delimit the front, left, right,
+accumulator, and back regions; two extra fields carry the products that do not
+live in queue slots.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \draw[d7slate,thin] (0,0) -- (108,0);
+  \foreach \x/\n in {0/F, 22/L, 44/R, 66/A, 88/B, 108/E}
+    {\draw[d7copper,thick] (\x,-2.4) -- (\x,2.4);
+     \node[d7label,above=1pt,text=d7copper] at (\x,2.4) {$\n$};}
+  \foreach \a/\b/\t in {0/22/{front}, 22/44/{left}, 44/66/{right},
+                        66/88/{accum.}, 88/108/{back}}
+    {\node[d7label,below=3pt] at ({(\a+\b)/2},-3) {\t};}
+  \node[d7label,anchor=west,align=left,text width=94mm] at (0,-16)
+    {Every insertion or eviction performs exactly \emph{one} bounded fixup:
+     front exhaustion collapses the cursor state, $L = B$ initialises the next
+     flip, $L = R$ advances the three work cursors, and otherwise one left and
+     one right partial aggregate are rewritten. There is no unbounded reversal
+     loop --- that is the ``de-amortised'' in the name.};
+\end{tikzpicture}
+\caption{The DABA Lite cursor state. The schedule is what makes the operation
+bounds worst-case rather than amortised.}
+\label{fig:daba}
+\end{figure}
+
+The invocation ceilings --- three, two, one --- are unconditional and tested
+directly by counting callbacks. What is \emph{not} unconditional is the wall
+clock: the complete operations are worst-case \bigoh{1} only when the monoid's
+\code{Combine} and identity are themselves \bigoh{1}. The library states the
+ceiling and the condition separately, which is the honest way to do it.
+
+\section{The parts that differ by runtime}
+
+\begin{caveatbox}[Clear is not \bigoh{1} everywhere]
+On the tracing runtimes --- C\#, Kotlin/JVM, TypeScript, Python --- \code{Clear}
+swaps in one fresh empty chunk in \bigoh{1} and invokes \code{Combine} zero
+times.
+
+In C, C\texttt{++}, and Rust it is deliberately \bigoh{n + c} for $n$ values
+across $c$ chunks, because deterministic destruction has to actually release
+$n$ generic owned values. All three break the chain iteratively, neither leaking
+nor deferring an unbounded retired representation. Insert, eviction, and query
+keep their worst-case \bigoh{1} structural and callback work in every port.
+
+Python is a third case: it clears by replacing the active chain in \bigoh{1},
+but unreachable cyclic backing may be reclaimed later by the collector, so it
+does not claim the native ports' prompt deterministic destruction.
+\end{caveatbox}
+
+Failure behaviour is similarly runtime-shaped but semantically uniform: a
+throwing monoid callback leaves the published window unchanged for every
+mutating operation. C\texttt{++} achieves this by building a private fixup plan
+under a nothrow-move value constraint and committing without throwing; Rust
+plans candidate aggregates, slot rewrites, and a possible successor chunk before
+publication so a panic cannot expose a partial mutation; C stages
+callback-produced values in seven fixed aligned temporaries and transfers
+ownership by byte move.
+
+\section{What it will not do}
+
+\begin{caveatbox}[No oldest-value access, no enumeration, no synchronisation]
+The Lite schedule intentionally overwrites raw values with partial aggregates,
+so there is no API to read the oldest value or enumerate the window --- the
+information is genuinely gone. There is no synchronisation either; callers must
+not overlap access to one instance without external serialisation. And the type
+is \emph{ephemeral}: it is a fit for transient streaming state, not a persistent
+replacement for a deque.
+\end{caveatbox}
+
+\section{Space, and a validator that knows nothing}
+
+The paper's logical accounting is $n + 2$ values: $n$ queue partial aggregates
+plus the two aggregate fields. The chunked implementations instead allocate
+capacity for $n$ live positions plus 1 to 127 slack slots, and an empty instance
+retains one 64-slot block.
+
+\code{ValidateStructure} is deliberately callback-free and content-blind. In
+\bigoh{c} time and space for $c$ active chunks it checks links, cursor
+reachability and order, the count and distance equations, the DABA region-size
+equations, and the chunk/slack bound --- and returns a statistics record with the
+count, five region lengths, active block count, allocated capacity, and slack.
+It cannot check that the aggregate is \emph{correct}, because the original values
+may already have been overwritten; correctness is tested against an external FIFO
+model instead. That division of labour is a small model of the whole repository's
+approach to validation.
+
 %%APPEND-HERE%%
 
 \end{document}
