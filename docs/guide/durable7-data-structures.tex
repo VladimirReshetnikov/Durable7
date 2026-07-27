@@ -1343,6 +1343,403 @@ and the workload is set algebra. Reach for the third only when rank/select or
 word-wise algebra is the reason you are here.
 \end{caveatbox}
 
+\chapter{Patricia: When the Key Is Its Own Hash}
+\label{ch:patricia}
+
+\motto{A hash trie hashes the key. If the key is already a number, that step is
+pure ceremony.}
+
+\begin{specimen}[Specimen --- Patricia integer maps and sets]
+\spec{Purpose}{Persistent maps and sets over signed 32- or 64-bit integer keys, with ascending key order and structural merge.}
+\spec{Core}{Big-endian path-compressed binary trie: each internal node stores a common prefix and the single bit on which its two subtrees differ.}
+\spec{Point ops}{\bigoh{\min(n, W)} for key width $W$ --- in practice a few node hops.}
+\spec{Algebra}{Prefix-aligned union, intersection, difference, with combining-function overloads. Work follows visited non-shared prefix regions; \bigoh{n+m} worst case.}
+\spec{Order}{Ascending \emph{signed} order, via a sign-bit transform.}
+\spec{Ports}{All nine, at both widths: \code{PersistentIntMap}/\code{Set} and \code{PersistentLongMap}/\code{Set} and their local spellings.}
+\end{specimen}
+
+\noindent
+The hash trie is a fine general answer, and integer keys are the case where it
+is least differentiated: hashing an \code{int} to route it through a trie is a
+detour, because the key already \emph{is} a well-distributed bit string. Okasaki
+and Gill's 1998 paper on mergeable integer maps supplies the structure that
+takes the shortcut, and Haskell's \code{Data.IntMap} has been the proof of its
+practicality for two decades.
+
+\section{Path compression and the branching bit}
+
+A binary trie over the bits of an integer key would be $W$ levels deep and
+mostly empty. Patricia collapses the empty stretches: each internal node stores
+the prefix its subtree shares, together with the single bit position at which
+its two children diverge. Descent is then a prefix test and a bit test ---
+no comparisons, no rebalancing, and no rotations, ever.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7node] (r)  at (0,0)      {prefix \code{-----}, branch bit $16$};
+  \node[d7node] (l)  at (-22,-15)  {prefix \code{0----}, branch bit $4$};
+  \node[d7leafnode] (k20) at (24,-15) {$20 = \mathtt{10100}$};
+  \node[d7leafnode] (k1)  at (-36,-30) {$1 = \mathtt{00001}$};
+  \node[d7leafnode] (k5)  at (-8,-30)  {$5 = \mathtt{00101}$};
+  \draw[d7edge] (r) -- node[d7label,above left=-2pt] {0} (l);
+  \draw[d7edge] (r) -- node[d7label,above right=-2pt] {1} (k20);
+  \draw[d7edge] (l) -- node[d7label,above left=-2pt] {0} (k1);
+  \draw[d7edge] (l) -- node[d7label,above right=-2pt] {1} (k5);
+\end{tikzpicture}
+\caption{A Patricia trie holding $\{1, 5, 20\}$. Keys 1 and 5 agree on every bit
+above position 4, so the intervening levels are compressed away and the node
+records only the prefix and the branching bit.}
+\label{fig:patricia}
+\end{figure}
+
+Two pleasant properties fall out immediately. There are no collision buckets,
+because distinct keys are distinct bit strings --- the structure is strictly
+simpler than the hash trie. And enumeration is in unsigned key order for free,
+since the trie is ordered by construction.
+
+\begin{contractbox}[Signed order, by transform]
+Raw trie order is unsigned, which puts $-1$ after $2^{31}-1$. Every port applies
+a sign-bit transform so that public enumeration is in ascending \emph{signed}
+order, and every port ships both an explicit 32-bit and an explicit 64-bit
+surface rather than a platform-sized one. Python holds arbitrary-precision
+integers at runtime but validates and normalises keys to the named fixed-width
+domain at the public boundary; Haskell exposes \code{Int32}/\code{Int64} aliases
+so the width contract does not depend on a platform \code{Int}.
+\end{contractbox}
+
+\section{The reason it exists: structural merge}
+
+Point operations are not the interesting part. The differentiator --- the thing
+the hash trie genuinely cannot match --- is \term{structural merge}.
+
+Union, intersection, and difference align compressed prefixes and descend both
+tries together. Where the two prefixes are disjoint, the answer is known without
+looking inside either subtree. Where the two subtrees are reference-equal, the
+answer is one of them, and the recursion short-circuits. Work is proportional to
+the visited non-shared prefix regions plus the materialised result, and a no-op
+merge preserves reference identity outright.
+
+That is a categorically different cost profile from merging two hash maps, which
+must enumerate one and look up each key in the other. Merge-heavy workloads ---
+version-set algebra, sparse indices, identifier-set reconciliation, permission
+masks --- stop paying a per-key hash-and-descend and start paying only for
+where the two operands actually differ.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var baseline = PersistentIntMap<string>.CreateRange(
+    new[] { KeyValuePair.Create(-1, "old"), KeyValuePair.Create(10, "ten") });
+var delta = PersistentIntMap<string>.CreateRange(
+    new[] { KeyValuePair.Create(-1, "new"), KeyValuePair.Create(20, "twenty") });
+
+var merged   = baseline.Union(delta);                    // right-biased
+var combined = baseline.Union(delta,
+                   (key, left, right) => $"{key}:{left}+{right}");
+
+foreach (var key in merged.Keys)
+    Console.WriteLine(key);   // -1, 10, 20 -- ascending signed order
+\end{lstlisting}
+
+The combining-function overloads are what make structural merge \emph{useful}
+rather than merely fast. Without them, a union has to pick a side and discard
+information; with them, a merge can reconcile. The vocabulary is deliberately
+modelled on \code{Data.IntMap}'s \code{unionWith}/\code{intersectionWith},
+because that is the shape that has proven itself in practice.
+
+\begin{caveatbox}[Sharing lowers the constant, not the bound]
+Retained sharing reduces the number of visited regions; it does not define a
+separate asymptotic class. The honest worst case remains \bigoh{n+m}, and two
+independently constructed tries with identical contents will be walked in full.
+As always in this library, the good case is documented as a good case rather
+than promoted to a promise.
+\end{caveatbox}
+
+\chapter{Ctrie: Snapshots Without Stopping the World}
+\label{ch:ctrie}
+
+\motto{A mutable map you can photograph in constant time.}
+
+\begin{specimen}[Specimen --- \code{ConcurrentHashTrie}]
+\spec{Purpose}{A lock-free \emph{mutable} concurrent hash map whose \code{Snapshot()} is \bigoh{1} and yields an immutable view.}
+\spec{Core}{Bitmap C-nodes, singleton leaves, equal-hash collision nodes, and tomb nodes, with generation-stamped indirection nodes.}
+\spec{Mechanism}{Node-local GCAS for safe indirection replacement; root/main RDCSS for the snapshot transition; lazy generation renewal on later writes; tomb promotion on deletion.}
+\spec{Snapshot order}{Canonical CHAMP order --- data run before node run at every level --- so conversion preserves the captured sequence exactly.}
+\spec{Ports}{Full lock-free protocol: C\# and Kotlin/JVM. Synchronous or lock-coordinated snapshot facades: OCaml, TypeScript, Python. Deliberately absent elsewhere.}
+\end{specimen}
+
+\noindent
+Every other structure in this book is immutable. This one is not, and it earns
+its place by solving a problem the immutable structures create.
+
+If your workload is a hot shared cache --- hundreds of thousands of writes a
+second from many threads --- a persistent map is the wrong tool, because every
+write allocates a path and every writer contends on publishing a new root. But
+if that same cache periodically has to hand a \emph{consistent view} to a
+reporting thread, a checkpointer, or a serialiser, then a plain concurrent hash
+map is also the wrong tool, because taking a consistent view means locking
+everybody out or copying everything.
+
+Prokopec, Bronson, Bagwell, and Odersky's concurrent trie (PPoPP 2012) sits
+exactly in that gap: mutable-map throughput with \bigoh{1} snapshots.
+
+\section{How a constant-time snapshot is possible}
+
+The trick is generation stamping. Every indirection node carries the generation
+in which it was created. \code{Snapshot()} does not copy anything; it atomically
+installs a new root with a bumped generation. From that moment, any writer that
+wants to modify a node belonging to an older generation must first
+\emph{renew} it --- copy it into the current generation --- before writing.
+Readers holding the old root keep seeing old-generation nodes, which nobody will
+ever mutate again.
+
+The subtlety, and the reason this algorithm is famous, is that ``atomically
+install a new root'' has to compose with ``atomically replace a node'' without
+losing a writer in between. Two mechanisms cooperate:
+
+\begin{description}
+\item[GCAS] --- generation-compare-and-set --- makes an indirection node's
+replacement safe by publishing a descriptor that readers help complete. A reader
+that finds a node mid-transition finishes the transition rather than waiting for
+it.
+\item[RDCSS] --- restricted double-compare single-swap --- makes the root/main
+transition atomic with respect to the main-node observation, so a writer cannot
+slip between ``I read the main node'' and ``the root was replaced''. The C\#
+implementation gives GCAS priority in that transition specifically to close
+that window.
+\end{description}
+
+Deletion adds a third concern. Removing entries from a deep trie would otherwise
+leave a skeleton of empty interior nodes that future traversals still have to
+walk. The Ctrie contracts these paths by promoting \term{tomb} nodes --- empty
+or singleton markers --- up through their parents, so the structure does not
+accumulate scar tissue.
+
+\section{Crossing back into the persistent world}
+
+A snapshot is only useful if you can hand it to code that expects an immutable
+collection. Conversion is explicit and \bigoh{n}, and its contract is unusually
+specific:
+
+\begin{contractbox}[Snapshot conversion preserves the captured sequence]
+Snapshot enumeration follows canonical CHAMP ordering: at each bitmap level,
+singleton and data entries precede multi-entry child runs; frozen empty tombs
+are skipped; frozen singleton tombs are promoted logically into the data run;
+and equal-hash collision buckets retain their local order. Explicit
+snapshot-to-\code{PersistentHashMap} conversion then preserves that exact
+sequence, the exact policy object, stored key and value representatives,
+present-null semantics, and isolation from every later live write.
+\end{contractbox}
+
+This is the one place in the library where a hash structure commits to an
+enumeration order, and the reason is precisely that conversion must be
+\emph{exact} rather than merely correct.
+
+\section{Why only two ports have the real thing}
+
+\begin{caveatbox}[The reclamation problem]
+Lock-free node replacement is easy to write and hard to free. A thread may be
+holding a pointer into a node you have just unlinked, and nothing in the
+algorithm tells you when the last such thread is done.
+
+On the CLR and the JVM the garbage collector solves this for free, which is why
+C\# and Kotlin ship the complete protocol. In C and C\texttt{++} it would need
+epoch-based reclamation or hazard pointers --- a separate project with its own
+correctness burden. Rust's \code{Arc} does not help either: sharing an
+immutable graph is not the same problem as atomically swapping child pointers,
+and a safe design would mean an \code{ArcSwap} or epoch dependency and a new
+core. Haskell has a collector but no use for an imperative GCAS algorithm behind
+a pure API; \code{STM} or an atomic root wrapper would be a different structure
+wearing the same name.
+
+The parity economics therefore cap the lock-free tier at two managed ports, and
+the porting guide says so out loud rather than leaving a hole in a matrix.
+\end{caveatbox}
+
+OCaml, TypeScript, and Python ship something honest but different: a facade with
+the same consumer-level vocabulary --- a mutable map, \bigoh{1} immutable
+snapshots --- implemented by serialising operations (an \code{RLock} in Python, a
+mutex in OCaml, isolate-locality in TypeScript) and swapping immutable CHAMP
+roots. The names preserve the \emph{use case}. They do not claim GCAS, RDCSS,
+generation renewal, tomb cleanup, or a lock-free progress guarantee, and their
+API notes say so in the first paragraph.
+
+\chapter{Builders, Sessions, and the Frozen Tier}
+\label{ch:lifecycle}
+
+\motto{Immutability is a promise about what others can observe, not a vow of
+celibacy toward your own unpublished nodes.}
+
+\noindent
+Building a million-entry persistent map one \code{SetItem} at a time allocates a
+million paths, and only the last one survives. Everyone who has built a
+persistent collection library has arrived at the same conclusion: there must be
+a way to mutate structure that nobody can see yet.
+
+Durable7 keeps \emph{five} distinct concepts here, and refuses to blur them,
+because each has a different lifecycle and a different set of promises
+(Figure~\ref{fig:lifecycle}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7node] (p1) at (0,0)   {Persistent};
+  \node[d7newnode] (s) at (44,0) {editing session};
+  \node[d7node] (p2) at (92,0)  {Persistent};
+  \draw[d7edge] (p1) -- node[d7label,above,align=center] {adopt\\\bigoh{1}} (s);
+  \draw[d7edge] (s) -- node[d7label,above,align=center] {publish\\\bigoh{1}} (p2);
+
+  \node[d7node] (b) at (44,-20) {staging builder};
+  \node[d7label,anchor=east] at (10,-20) {entries};
+  \draw[d7edge] (12,-20) -- (b);
+  \draw[d7edge] (b) -- node[d7label,above] {freeze} (78,-20);
+  \node[d7node] (p3) at (92,-20) {Persistent};
+
+  \node[d7ghost] (f) at (44,-40) {frozen collection};
+  \node[d7ghost] (p4) at (92,-40) {Persistent};
+  \draw[d7edge,dashed,draw=d7rule] (0,-40) -- node[d7label,above] {\bigoh{n} freeze} (f);
+  \draw[d7edge,dashed,draw=d7rule] (f) -- node[d7label,above] {\bigoh{n}} (p4);
+  \node[d7ghost] at (0,-40) {Persistent};
+  \node[d7label,anchor=west,text=d7slate] at (-16,-48) {\emph{planned; not shipped}};
+\end{tikzpicture}
+\caption{Five distinct lifecycles, kept deliberately separate. The session is
+one-way and consumed by publication; the staging builder is reusable and
+produces detached snapshots; the frozen tier remains an evidence-gated
+proposal.}
+\label{fig:lifecycle}
+\end{figure}
+
+\section{Construction-only bulk builders}
+
+A bulk builder mutates unpublished leaf, collision, and bitmap nodes in place
+during a single construction pass, avoiding a path copy between successive
+input entries. It is narrower than an editing session and its contract says so.
+
+\begin{contractbox}[Bulk builder]
+Nodes under construction are unpublished and mutated in place. Duplicate
+assignment retains the \emph{first} stored key representative, keeps an earlier
+equal value representative, and otherwise installs the last distinct value.
+Freezing produces a \emph{detached} immutable trie --- later builder mutation
+cannot affect an earlier snapshot --- and a reusable freeze leaves the builder
+active. Map and set bulk factories use the builder internally; ordinary updates
+on an existing persistent collection continue to use structural-sharing path
+copies.
+\end{contractbox}
+
+C\# uses one internally; C\texttt{++}, Rust, TypeScript, and Python expose the
+facility publicly. Rust additionally offers a consuming freeze that moves owned
+nodes rather than sharing them. OCaml's reusable staging builder preserves the
+detached-freeze semantics and the representative rules but performs persistent
+path copying internally, and explicitly does not claim the unpublished
+mutable-node construction bound.
+
+\section{The one-way editing session}
+
+A session is the answer to ``I have an existing map and I want to make eighty
+changes to it''. It adopts a persistent root in \bigoh{1}, accepts edits under
+single ownership, and publishes once.
+
+\begin{contractbox}[One-way lifecycle]
+Adoption and successful publication perform \bigoh{1} trie work and do not
+traverse the graph. Sessions preserve the exact equality/hash policy, stored
+representatives, unchanged-version trie order, retained source isolation, and
+receiver-policy set-relation semantics.
+
+Publication is \emph{one-way}: it consumes the logical session, and the language
+either rejects later access dynamically or makes it unavailable through
+ownership. A session is unsynchronised and has one logical owner, even where the
+language permits explicit handle aliases or moves.
+
+Logical no-ops preserve the current root and do not invalidate a version-bound
+view. A clean adopted session therefore republishes the exact source instance.
+A failed edit never installs a partial successor.
+\end{contractbox}
+
+\subsection{One optimised kernel, eight semantic siblings}
+
+This is the sharpest example in the library of the reference-versus-checkpoint
+distinction, and it is worth being precise about.
+
+C\# implements the \term{owner-token transient}: edits mutate only nodes and
+arrays proven to be owned by the active edit token, and path-copy anything
+shared or sealed. \code{Persist()} seals the token, publishes without traversing
+the graph, and invalidates the mutable object along with every view and
+enumerator obtained from it. A clean \code{source.ToTransient().Persist()}
+returns the exact source object, including after logical no-op edits.
+
+The other eight ports implement the same \emph{observable lifecycle} over
+ordinary persistent path copying. Each changed point edit computes a normal
+path-copied successor and replaces the session's current value. They preserve
+policy identity, stored representatives, exact clean/no-op root identity,
+retained sources, and failure atomicity --- and they make \emph{no}
+transient-throughput or allocation-win claim. That is stated in their API notes,
+not discovered in a profiler.
+
+\begin{d7table}{0.13}
+\toprule
+\thead{Port} & \thead{Lifecycle and failure shape} \\
+\midrule
+C           & Explicit clone/destroy handles over one reference-counted state.
+Clones are lifecycle \emph{aliases}: one successful publication consumes them
+all. Operations report a consumed or modified status; failed edits and relation
+queries preserve session and output atomicity. \\
+C\texttt{++} & Sessions are movable but not copyable and publish only through
+\code{std::move(session).persist()}. Generation-bound iterators reject changed
+or consumed sessions. A throwing custom policy move terminally invalidates the
+source (and, for assignment, the destination), and publication after such a move
+carries no retry guarantee --- nothrow-movable policies avoid both boundaries. \\
+Haskell     & Sessions live in \code{IO} and are consumed by
+\code{persistMap}/\code{persistSet}. Candidate construction precedes a masked
+commit, so neither synchronous nor asynchronous failure can partially install an
+edit. \\
+Kotlin      & Consumption is enforced at runtime. Acquired views capture the
+current snapshot and session version, survive logical no-ops, and fail after
+content changes. Callback failure leaves the session unchanged and retryable. \\
+OCaml       & The session retains one persistent root, replaces it with path-copy
+successors, and dynamically rejects access after publication. The reusable bulk
+builder is a separate facility. \\
+Rust        & Publication is \code{into\_persistent(self)}, so the type system
+prevents use-after-publication. \code{into\_transient} moves a source;
+\code{to\_transient} shares its root. \\
+TypeScript  & One-way publication enforced at runtime inside one JavaScript
+isolate; no cross-worker progress claim. \\
+Python      & Consumes on publication and invalidates iterators after content
+changes or publication. \\
+\bottomrule
+\end{d7table}
+
+\section{The frozen tier, and why it has not shipped}
+
+The third lifecycle --- \bigoh{n} conversion to a read-optimised layout with no
+update-shaped API --- is designed, prototyped, and deliberately unshipped.
+
+Its intended contract is already written down: separate \code{FrozenHashMap} and
+\code{FrozenHashSet} types, one offline-built general hash layout for every count
+and key type, preserved comparer identity and stored representatives, preserved
+source traversal sequence, no library-controlled allocation on point lookup, and
+enumeration that is stable for an unchanged instance but otherwise unspecified
+--- never insertion, sorted, canonical, or serialisation order. Freezing an
+already-frozen value is identity; converting back is visibly \bigoh{n}.
+
+What is missing is evidence. The track is staged: a faithful packed-index signal
+first, fixed layouts compared only once a credible read-heavy regime appears, and
+a public type authorised only behind lookup, enumeration, memory, and realistic
+construction break-even numbers. The benchmark-local candidates already cover the
+low-risk half --- rebuilding canonical CHAMP from a packed source-order entry
+sequence through the existing bulk builder, with an untimed verifier locking
+comparer identity, traversal sequence, representative rules, null and collision
+behaviour, and round-trip reconstruction.
+
+\begin{asidebox}[Deliberate non-adaptivity]
+Tiny flat layouts, string prefix and length dispatch, integer-key routing,
+binary-fuse and ribbon filters, Eytzinger and PGM sorted layouts, and
+count-derived representation selectors are all postponed --- not rejected,
+postponed. The stated reason is methodological: the value of the \emph{temporal}
+lifecycle (transient, persistent, frozen) is being isolated before it is
+combined with size or key specialisation, so that a later benchmark can tell
+which of the two produced a gain. Benchmarks may contain tiny and string
+datasets; that is a workload, not permission to select a representation.
+\end{asidebox}
+
 %%APPEND-HERE%%
 
 \end{document}
