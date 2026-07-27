@@ -19,6 +19,8 @@
 \usepackage[varqu,varl,scaled=0.95]{inconsolata}
 \usepackage{microtype}
 \usepackage{textcomp}
+\usepackage{amsmath}
+\usepackage{amssymb}
 
 % --- Page geometry ---------------------------------------------------------
 \usepackage[
@@ -437,6 +439,424 @@ observable semantics match the reference port exactly, but the representation is
 simpler and the asymptotic claim is weaker. Wherever that is the case, this
 guide says so in the same breath as the feature. A guide that only reported the
 good news would be a worse guide.
+
+% ===========================================================================
+%  PART I -- FOUNDATIONS
+% ===========================================================================
+\mainmatter
+
+\part{Foundations}
+\label{part:foundations}
+
+\chapter{What Persistence Buys}
+\label{ch:persistence}
+
+\epigraph{The old version is still there. That one sentence is the whole
+library, and everything else is an argument about how to afford it.}{}
+
+\noindent
+Here is a small program, and a large idea hiding inside it.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var v1 = PersistentHashMap<int, string>.Empty.SetItem(1, "one");
+var v2 = v1.SetItem(2, "two");
+var v3 = v2.SetItem(1, "uno");
+\end{lstlisting}
+
+\noindent
+After three lines you are holding three maps. Not three references to one map
+that has been mutated three times --- three genuinely independent collections,
+each of which will answer questions about its own contents forever. \code{v1}
+still has exactly one entry. \code{v2} still maps \code{1} to \code{"one"}. You
+can hand \code{v1} to another thread while a third thread builds \code{v4} from
+\code{v3}, and no lock is involved anywhere, because nothing that either thread
+can see is ever written to again.
+
+The obvious way to get that behaviour is to copy the map on every update, and
+the obvious problem with the obvious way is that it costs \bigoh{n} time and
+\bigoh{n} space per edit. A library of persistent collections is, in essence, a
+long and inventive answer to the question: \emph{how little can we copy and
+still tell the truth?}
+
+\section{Path copying, and the shape of an update}
+
+The answer, in one picture, is Figure~\ref{fig:pathcopy}. Update-shaped
+operations copy the nodes along the route from the root to the point of change
+and reuse every other node by reference. For a tree of branching factor $b$ and
+$n$ elements, that is $\log_b n$ new nodes rather than $n$ --- for a 32-way trie
+holding a million entries, four small nodes instead of a million entries.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=0pt]
+  \node[d7node] (R)  at (-2.5, 0)    {root};
+  \node[d7newnode] (R2) at ( 2.5, 0) {root$'$};
+  \node[d7node] (C)  at (-3.6,-1.85) {C};
+  \node[d7leafnode] (A) at (-1.25,-1.85) {A};
+  \node[d7leafnode] (B) at ( 1.25,-1.85) {B};
+  \node[d7newnode] (C2) at ( 3.6,-1.85) {C$'$};
+
+  \draw[d7edge] (R) -- (C);
+  \draw[d7edge] (R) -- (A);
+  \draw[d7edge] (R) -- (B);
+  \draw[d7newedge] (R2) -- (C2);
+  \draw[d7newedge] (R2) -- (A);
+  \draw[d7newedge] (R2) -- (B);
+
+  \node[d7label, above=2pt of R]  {version 1};
+  \node[d7label, above=2pt of R2, text=d7copper] {version 2};
+  \node[d7label] at (0,-2.85) {A and B are one object each, reachable from both versions};
+  \node[d7label, text=d7copper] at (0,-3.35) {only the route to the changed subtree is rebuilt};
+\end{tikzpicture}
+\caption{Path copying. Version~2 differs from version~1 in a single subtree.
+The two nodes on the route to that subtree are freshly allocated (copper); every
+other node is shared verbatim. Neither version can observe the other's
+existence.}
+\label{fig:pathcopy}
+\end{figure}
+
+Two consequences follow immediately, and both matter more than they look.
+
+\textbf{Old versions cost almost nothing to keep.} Retaining \code{v1} does not
+pin a second copy of the data; it pins the handful of nodes that later versions
+replaced. A hundred snapshots of a slowly changing map are cheaper than one
+would guess and vastly cheaper than a hundred deep copies. This is what makes
+undo stacks, audit trails, and time-travel debugging practical rather than
+aspirational.
+
+\textbf{Readers need no synchronisation.} Every node reachable from a published
+root is immutable, so a reader that has captured a root is reading a frozen
+world. There is no torn read, no lock, no volatile fence in the read path, and
+no window during which a concurrent writer can make a traversal observe half of
+two different states. The synchronisation problem does not get solved; it gets
+deleted.
+
+\section{The version DAG}
+
+Because an update produces a new value rather than modifying an old one, nothing
+forces versions into a line. Branch from \code{v2} twice and you get two
+descendants that share \code{v2}'s structure and know nothing about each other
+(Figure~\ref{fig:versiondag}). This is why persistent collections are the natural
+substrate for editors, transactional stores, speculative execution, and any
+system where ``what if'' has to be cheap.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+  \node[d7node] (v0) at (0,0)      {$v_0$};
+  \node[d7node] (v1) at (1.9,0)    {$v_1$};
+  \node[d7node] (v2) at (3.8,0)    {$v_2$};
+  \node[d7node] (v3) at (5.9,0.85) {$v_3$};
+  \node[d7node] (v4) at (5.9,-0.85){$v_4$};
+  \node[d7node] (v5) at (7.8,-0.85){$v_5$};
+  \draw[d7edge] (v0)--(v1); \draw[d7edge] (v1)--(v2);
+  \draw[d7edge] (v2)--(v3); \draw[d7edge] (v2)--(v4); \draw[d7edge] (v4)--(v5);
+  \node[d7label,above=1pt of v3] {undo branch};
+  \node[d7label,below=1pt of v5] {mainline};
+\end{tikzpicture}
+\caption{Versions form a directed acyclic graph, not a sequence. Every node in
+the picture is a live, complete collection.}
+\label{fig:versiondag}
+\end{figure}
+
+That freedom has a price, and it is the single most important caveat in this
+book.
+
+\begin{caveatbox}[Amortisation does not survive branching]
+Amortised bounds are proved by a potential argument over \emph{one linear
+history}: an expensive operation is paid for by cheap operations that preceded
+it. Branching breaks the argument. If a version sits just before an expensive
+rebalance, and you branch from it $b$ times, each branch can trigger that same
+rebalance, and the accumulated credit pays for exactly one of them. Potential
+consumed by one child cannot pay for a sibling.
+
+Durable7 therefore classifies every adaptive scheme before believing its
+amortised claim. Constant-size promotion thresholds are safe --- re-branching
+re-pays only \bigoh{1}. Schemes that do \bigoh{n} work at a threshold ---
+relabelling, compaction, wholesale redistribution --- are not, and the library
+either avoids them or states the worst case per produced version. Where a bound
+holds only along a linear lineage, this guide says ``linear lineage''
+explicitly.
+\end{caveatbox}
+
+\section{What it costs}
+
+Persistent collections are not free, and pretending otherwise makes for a bad
+guide. The honest ledger looks like this.
+
+\begin{itemize}
+\item \textbf{Allocation per update.} Every edit allocates its copied path. A
+tight loop of point updates on a persistent map will allocate far more than the
+same loop on a hash table. This is the motivation for the entire builder and
+editing-session tier (Chapter~\ref{ch:lifecycle}).
+\item \textbf{Indirection on reads.} A 32-way trie lookup is a handful of
+pointer hops with good branch prediction, but it is still pointer hops. A flat
+open-addressed table wins on a hot small map, every time.
+\item \textbf{Cache behaviour.} Node-based structures scatter. The library's
+answer is chunking --- ropes hold runs of elements in contiguous leaves, RRB
+vectors hold 32-element arrays, chunked bit sets hold 64-bit words --- so that
+scans get array speed even though edits get tree behaviour.
+\item \textbf{Small collections lose.} The regime in which a persistent map
+looks worst is the one most programs spend most of their time in: maps with
+three entries. The library records a size-tiered representation as a strong idea
+that is deliberately \emph{not} shipped, because it has not yet been justified
+with benchmarks (Appendix~\ref{app:roads}).
+\end{itemize}
+
+\section{Where mutation is allowed}
+
+A library that is honest about persistence has to be equally honest about its
+exceptions. Durable7 confines mutation to four clearly labelled places, and
+every one of them is documented as mutable wherever it appears:
+
+\begin{description}
+\item[Construction-only bulk builders] mutate unpublished trie nodes while
+building a collection from a sequence, then freeze. Nothing observable is ever
+mutated, because the nodes are not reachable until the freeze.
+\item[One-way editing sessions] adopt a persistent root, accept a run of edits
+under single ownership, and publish once. Publication consumes the session.
+\item[The concurrent hash trie] is a genuinely mutable lock-free map whose
+distinguishing feature is that \code{Snapshot()} is \bigoh{1}.
+\item[\code{DabaLite}] is a mutable sliding-window aggregator. It is in the
+library because it reuses the monoid vocabulary, not because it is persistent;
+it explicitly is not.
+\end{description}
+
+\section{Why nine implementations}
+
+Most collection libraries exist once, and a ``port'' is a family resemblance.
+Here, semantic parity is the product. The same ordering rules, the same
+first-representative retention, the same no-op identity, the same failure
+atomicity, and --- for the authenticated tier --- the same bytes on the wire, in
+C, C\texttt{++}, C\#, Haskell, Kotlin, OCaml, Python, Rust, and TypeScript.
+
+The interesting part is what \emph{does not} have to match. Rust uses
+\code{Arc} and forbids \code{unsafe}; C\# exposes \code{IReadOnlyList<T>};
+OCaml returns \code{option} and \code{result}; C is type-erased with explicit
+ownership and fallible allocators; Haskell keeps its sessions in \code{IO}.
+Idioms are local. Semantics are not.
+
+\begin{asidebox}[The checkpoint idea]
+Nine simultaneous implementations of a subtle algorithm would normally mean nine
+opportunities to quietly claim a bound nobody proved. Durable7's device for
+avoiding that is the \term{checkpoint port}: a port that preserves the
+observable API semantics and passes the same behavioural tests, while
+documenting exactly which representation or asymptotic property it does
+\emph{not} yet have. OCaml's range-update sequence is a checkpoint --- same
+algebra, same persistence, no implicit-AVL logarithmic lazy-update claim. Most
+of the newer cursors are checkpoints. Saying so in the API notes is treated as
+part of shipping, not as an admission of failure.
+\end{asidebox}
+
+\chapter{The Shared Contract}
+\label{ch:contract}
+
+\epigraph{A contract that only one implementation upholds is a comment.}{}
+
+\noindent
+Before the structures, the rules they all obey. This chapter is short, dense,
+and load-bearing: nearly every specimen card later in the book is an application
+of something defined here.
+
+\section{Vocabulary}
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{@{}L{0.27\linewidth}Y@{}}
+\toprule
+\thead{Term} & \thead{Meaning in this library} \\
+\midrule
+Persistent value & An operation that looks like an update returns a new value or
+handle and preserves every retained old version. \\
+One-way editing session & A single-owner edit-then-publish lifecycle. It is
+unsynchronised, consumed by publication, and is \emph{not} a reusable staging
+builder. \\
+Structural sharing & Versions reuse immutable substructure; no-op updates often
+preserve the same root or instance where the API exposes that diagnostic. \\
+Reference-first equality & Two provably identical references may be accepted as
+equal without invoking user equality. A \emph{non}-identical reference never
+proves inequality. \\
+Policy preservation & Hash, equality, comparison, measure, allocator, ownership,
+and callback policies flow into derived versions unless an API explicitly
+creates a new policy. \\
+Stable but unspecified order & Enumeration is deterministic for an unchanged
+version, but is not sorted, not insertion order, and not a serialisation
+contract. \\
+Insertion / explicit-position order & Enumeration follows first insertion plus
+unmistakable positional operations. Equality decides membership; it does not
+decide order. \\
+Measure & A monoidal summary cached on a node, chunk, or facade element, used
+for split, locate, rank, priority, interval, and text navigation. \\
+Tag action & A tag monoid acting consistently on elements and on cached ordered
+measures; composition order and distribution laws are part of the public policy
+contract. \\
+Version-bound cursor & An immutable value owning one collection version and a
+position within it. Navigation and editing never silently redirect it to a
+different version. \\
+Checkpoint port & A port that preserves observable semantics and tests while
+documenting a remaining representation or asymptotic parity boundary. \\
+Facade & A public collection built on a shared core engine --- sorted sets on
+measured trees, text ropes on measured ropes. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Policies are values, and they are retained}
+
+Almost every collection in this library carries a \term{policy}: an equality and
+hash pair, a comparison, a measure monoid, a tag algebra, a set of ownership
+callbacks, a codec, an allocator. The policy is not a construction-time
+convenience that gets forgotten --- it is part of the collection's identity and
+flows into every successor, \emph{including empty ones}. Clear a map and the
+result is an empty map with the same comparer, not a default one.
+
+Two rules follow that catch people out.
+
+\textbf{The receiver's policy wins.} When you union two sets, the result uses the
+receiver's equality policy. The argument is normalised under that policy first
+--- eagerly and completely, before any shortcut is applied --- so that a policy
+or enumeration failure in the argument is visible rather than hidden behind an
+optimisation that happened to skip it.
+
+\textbf{Policy identity gates structural shortcuts.} Several structures can
+compare or merge in lockstep, interpreting stored hashes structurally instead of
+performing lookups, but only when the implementation has a positive witness that
+both operands retain \emph{one} hash-policy identity. Two independently created
+but semantically compatible policies are not enough: their coherent hash states
+can differ. In that case the implementation falls back to lookup-based
+comparison, or rejects the operation explicitly, and says which it does.
+
+\section{Representatives}
+
+When two distinct objects are equal under the policy, exactly one of them ends
+up stored. Which one is not left to chance.
+
+\begin{contractbox}[First representative, last payload]
+Construction and duplicate insertion retain the \emph{first} stored key
+representative. Replacing the value for an equivalent key preserves the
+originally stored key object and installs the new value --- so a map is
+``first key wins, last value wins''. Set algebra preserves receiver
+representatives for surviving receiver classes, and the first normalised
+argument representative for argument-only classes.
+\end{contractbox}
+
+This sounds pedantic until the stored objects carry information that equality
+ignores --- a cached parse, a source location, a case-preserved spelling under a
+case-insensitive comparer. Then it is the difference between a correct program
+and a mystery.
+
+\section{No-op identity}
+
+Operations that logically change nothing return the receiver. Removing an absent
+key, clearing an empty collection, adding an item a set already has, replacing a
+value with one that compares equal, applying an identity tag, seeking to the
+position you are already at: all of these hand back the same instance, and where
+a language has reference identity, the same reference.
+
+This is more than an optimisation. It is an observable, tested property that
+downstream code uses to short-circuit change propagation --- a UI that re-renders
+when the model reference changes, an incremental compiler that skips a
+subtree whose table did not move. Because it is observable, the library treats it
+as contract and tests it, rather than as a happy accident of the implementation.
+
+\section{Failure atomicity}
+
+User code runs inside these structures: comparers, hash functions, measure
+policies, tag algebras, codecs, factory delegates, allocators. Any of it can
+fail.
+
+\begin{contractbox}[Nothing partial is ever published]
+If a comparison throws, an allocation fails, a codec rejects input, or a factory
+raises, the operation publishes no successor. The receiver remains valid, every
+retained version remains valid, and no composite is left with one index updated
+and another not. Composites --- bimaps, relations, indexed maps, interval maps,
+graphs --- publish \emph{all} of their constituent indexes together or publish
+nothing at all.
+\end{contractbox}
+
+Validation order is part of the contract too, and it runs in a deliberate
+sequence: argument validation precedes policy callbacks, range checks precede tag
+application, proof-shape limits precede allocation and hashing. The reason is
+that callbacks are the expensive and dangerous part; a malformed request should
+be rejected before any of it runs.
+
+\section{Ordering, stated honestly}
+
+Three different order contracts appear in this library, and conflating them is
+the most common way to write code that breaks on an unrelated change.
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{@{}L{0.24\linewidth}Y@{}}
+\toprule
+\thead{Contract} & \thead{Who has it, and what you may rely on} \\
+\midrule
+Stable but unspecified & CHAMP maps, sets, bags, bimaps, multimaps, relations.
+Deterministic for an unchanged version; \emph{not} sorted, \emph{not} insertion
+order, and never a serialisation format. Tests exist specifically to stop
+consumers depending on the current trie order. \\
+Insertion / explicit position & The neutral Ordered family. First insertion
+plus explicit moves, ranges, reversal, and one-shot stable sort. Equality decides
+membership, never position. \\
+Comparer order & Sorted collections, canonical sets, priority search queues,
+interval structures, Patricia tries (ascending signed key order), Merkle trees
+(policy comparer order). Fully specified and safe to depend on. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Ownership, nine ways}
+
+The same semantic contract lands in nine memory models. This table is the
+translation key for the rest of the book.
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{@{}L{0.13\linewidth}Y@{}}
+\toprule
+\thead{Language} & \thead{Ownership model, and what its docs must pin down} \\
+\midrule
+C\#         & GC references, immutable collection values, single-owner transient
+sessions. Exceptions, nullable/miss behaviour, structural sharing, builder
+publication versus one-way transient consumption. \\
+C           & Opaque handles with explicit copy/destroy, callback policy tables,
+injected allocators. Status codes, allocation failure, retained versus borrowed
+values, alias-wide consumption, callback lifetime. \\
+C\texttt{++} & RAII values over shared immutable nodes; move-only sessions.
+Move/copy cost, exception behaviour including throwing policy moves, policy
+object lifetime. \\
+Haskell     & Pure immutable values plus explicitly scoped \code{IO} sessions.
+Total versus \code{Maybe} operations, session consumption, package-local classes,
+strictness. \\
+Kotlin      & Immutable JVM values, runtime policies, dynamically consumed
+sessions. Null/result/exception shape, version-bound views, comparator behaviour. \\
+OCaml       & Immutable algebraic values, runtime policy records, dynamically
+consumed sessions. \code{option}/\code{result} boundaries, policy identity,
+Unicode-scalar text positions, mutex-coordinated facades. \\
+Rust        & Owned values, borrows, \code{Arc} sharing, consuming sessions.
+Clone requirements, borrowed lookup results, panic boundaries,
+\code{Send}/\code{Sync} claims only when proven. \\
+TypeScript  & GC objects, immutable versions, runtime policies, dynamically
+consumed sessions. ESM exports, \code{undefined}/miss shapes, stable hashing
+versus JavaScript identity, isolate-local concurrency, UTF-16 indexing. \\
+Python      & GC objects, immutable versions, retained policies, dynamically
+consumed sessions. Typing and runtime validation, \code{None} versus absence,
+equality/hash coherence, iterator invalidation, code-point indexing. \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{caveatbox}[Presence versus null]
+Every port has to distinguish ``the key is absent'' from ``the key is present and
+its value is null-like''. The library never collapses the two. C\# uses
+\code{TryGetValue} out-parameters; Rust and OCaml use \code{Option}; Haskell uses
+an outer \code{Maybe} (so a stored \code{Nothing} at element type \code{Maybe a}
+comes back as \code{Just Nothing}); Kotlin, TypeScript, and Python use explicit
+presence-bearing result wrappers rather than a bare nullable return. The
+authenticated three-way merge takes this furthest: it distinguishes a deleted key
+from a key whose merged value is present-and-null, because on the wire those are
+different facts.
+\end{caveatbox}
 
 %%APPEND-HERE%%
 
