@@ -17,6 +17,7 @@ Use the narrowest layer that owns the information:
 | Root `README.md` | Public landing page: what the project is, what it ships, and how to build a port | Project overview, family summary, per-language build entry points, status |
 | [`docs/guides`](README.md) | Procedures and repeatable workflows | Validation commands, agent workflow guidance, documentation maintenance, porting parity |
 | [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog, test-suite map |
+| [`docs/book`](../book/README.md) | Long-form typeset documents: LaTeX source plus the committed build | The data-structure field guide |
 | [`docs/migration`](../migration/README.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
 | Workspace `README.md` | Workspace orientation and local entry points | Purpose, layout, primary build/test command |
 | Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/docs/FingerTree/api-specification.md` |

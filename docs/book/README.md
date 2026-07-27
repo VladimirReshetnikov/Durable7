@@ -1,5 +1,7 @@
 # The Durable7 Field Guide
 
+- Created (UTC): 2026-07-26T00:00:00Z
+- Repository HEAD: e7fcb3517991ee2c0915e28e19916aa2ccfd21d7
 - Audience: Anyone choosing, using, or porting a Durable7 collection
 - Scope: A single long-form document covering every data structure in the repository
 - Format: LaTeX source plus the built PDF, both committed

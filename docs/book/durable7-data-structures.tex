@@ -221,6 +221,8 @@
   aboveskip=11pt,
   belowskip=8pt,
   upquote=true,
+  % T1 turns << and >> into guillemets; shift operators must survive intact.
+  literate={<<}{{\char60\char60}}2 {>>}{{\char62\char62}}2,
 }
 \lstset{style=d7}
 
@@ -1391,8 +1393,8 @@ no comparisons, no rebalancing, and no rotations, ever.
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[x=1mm,y=1mm]
-  \node[d7node] (r)  at (0,0)      {prefix \code{-----}, branch bit $16$};
-  \node[d7node] (l)  at (-22,-15)  {prefix \code{0----}, branch bit $4$};
+  \node[d7node] (r)  at (0,0)      {no prefix, branch bit $16$};
+  \node[d7node] (l)  at (-22,-15)  {prefix \code{0}, branch bit $4$};
   \node[d7leafnode] (k20) at (24,-15) {$20 = \mathtt{10100}$};
   \node[d7leafnode] (k1)  at (-36,-30) {$1 = \mathtt{00001}$};
   \node[d7leafnode] (k5)  at (-8,-30)  {$5 = \mathtt{00101}$};
@@ -2022,7 +2024,8 @@ along the seam; everything away from the seam stays regular and stays fast.
   \node[d7label,anchor=south] at (24,10) {regular branch --- no size table};
   \node[d7node,minimum width=48mm] (reg) at (24,4) {\code{[c0 c1 c2 c3]}\quad each child exactly $32^h$ wide};
   \node[d7label,anchor=north,align=center] at (24,-1)
-    {index by bit arithmetic: \code{(i >> 5h) \& 31}};
+    % NB: >{}> rather than >> -- T1 makes a guillemet ligature out of the latter.
+    {index by bit arithmetic: \code{(i >{}> 5h) \& 31}};
 
   \node[d7label,anchor=south] at (24,-20) {relaxed branch --- cumulative sizes};
   \node[d7node,minimum width=48mm] (rel) at (24,-26) {\code{[c0 c1 c2]} + \code{sizes = [31, 58, 90]}};
@@ -2388,7 +2391,7 @@ live in queue slots.
   \foreach \a/\b/\t in {0/22/{front}, 22/44/{left}, 44/66/{right},
                         66/88/{accum.}, 88/108/{back}}
     {\node[d7label,below=3pt] at ({(\a+\b)/2},-3) {\t};}
-  \node[d7label,anchor=west,align=left,text width=94mm] at (0,-16)
+  \node[d7label,anchor=north west,align=left,text width=104mm] at (2,-13)
     {Every insertion or eviction performs exactly \emph{one} bounded fixup:
      front exhaustion collapses the cursor state, $L = B$ initialises the next
      flip, $L = R$ advances the three work cursors, and otherwise one left and
@@ -2906,16 +2909,16 @@ than by insertion history (Figure~\ref{fig:mst}).
 \begin{figure}[htbp]
 \centering
 \begin{tikzpicture}[x=1mm,y=1mm]
-  \node[d7label,anchor=east] at (-4,10) {layer 2};
-  \node[d7newnode] (top) at (34,10) {block: $\;k_{\mathsf{0x00a\ldots}}\;$};
-  \node[d7label,anchor=east] at (-4,-10) {layer 1};
-  \node[d7node] (m1) at (8,-10)  {block: $k_{\mathsf{0x0c\ldots}}$};
-  \node[d7node] (m2) at (62,-10) {block: $k_{\mathsf{0x0f\ldots}}$};
-  \node[d7label,anchor=east] at (-4,-30) {layer 0};
-  \node[d7leafnode] (l1) at (-8,-30) {\scriptsize run};
-  \node[d7leafnode] (l2) at (24,-30) {\scriptsize run};
-  \node[d7leafnode] (l3) at (50,-30) {\scriptsize run};
-  \node[d7leafnode] (l4) at (78,-30) {\scriptsize run};
+  \node[d7label,anchor=east] at (-9,10) {layer 2};
+  \node[d7newnode] (top) at (40,10) {block: $\;k_{\mathsf{0x00a\ldots}}\;$};
+  \node[d7label,anchor=east] at (-9,-10) {layer 1};
+  \node[d7node] (m1) at (16,-10) {block: $k_{\mathsf{0x0c\ldots}}$};
+  \node[d7node] (m2) at (64,-10) {block: $k_{\mathsf{0x0f\ldots}}$};
+  \node[d7label,anchor=east] at (-9,-30) {layer 0};
+  \node[d7leafnode] (l1) at (4,-30)  {\scriptsize run};
+  \node[d7leafnode] (l2) at (28,-30) {\scriptsize run};
+  \node[d7leafnode] (l3) at (52,-30) {\scriptsize run};
+  \node[d7leafnode] (l4) at (76,-30) {\scriptsize run};
   \draw[d7edge] (top) -- (m1); \draw[d7edge] (top) -- (m2);
   \draw[d7edge] (m1) -- (l1);  \draw[d7edge] (m1) -- (l2);
   \draw[d7edge] (m2) -- (l3);  \draw[d7edge] (m2) -- (l4);
