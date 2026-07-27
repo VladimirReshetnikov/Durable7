@@ -53,6 +53,20 @@ policy-scoped, insertion-order-independent topology. `ZipTreeRankPolicy<T>` comb
 caller-keyed HMAC-SHA-256 rank source. Persistent zip/unzip edits share untouched nodes; same-policy
 equality can reject unequal digests before a lockstep structural comparison.
 
+## Documentation coverage
+
+Kotlin has no compiler gate for missing KDoc, unlike C# where `CS1591` is an error, so coverage here
+is a convention rather than a guarantee. As of 2026-07-27, 750 of 1,313 public functions and
+properties carry a KDoc comment. The cursor surfaces are complete: `SequenceCursors.kt` and
+`OrderedSearchCursors.kt` document every member, which matters most because the null-at-boundary
+contract, the gap-moves-to-sorted-position behavior of `add`/`insert`, and the exact-key versus
+overlap distinction in the interval collections are not visible in a signature.
+
+The remaining gap is concentrated in `Sorted.kt`, `Core.kt`, `PersistentPatricia.kt`, `Rope.kt`, and
+`PersistentHamt.kt`. Prefer documenting a member when its contract is not evident from the type -
+what a `null` return means, which version an edit lands in, what an exception signals - over
+restating the signature in prose.
+
 Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
 checking which persistence, ordering, policy, and representation obligations should align with sibling
 ports, and use the [porting guide](../../docs/guides/porting-and-semantic-parity.md) before changing
