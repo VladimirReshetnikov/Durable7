@@ -176,6 +176,9 @@ eng/    Shared build and test tooling
 src/    One directory per language, each a self-contained workspace
 ```
 
+[`docs/README.md`](docs/README.md) indexes the first, [`eng/README.md`](eng/README.md) the second,
+and [`src/README.md`](src/README.md) the third.
+
 ## Contributing
 
 Start with the [onboarding guide](docs/guides/repository-onboarding.md). The short version: a change

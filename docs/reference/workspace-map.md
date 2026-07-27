@@ -5,69 +5,107 @@
 - Audience: Maintainers and AI agents navigating the repository
 - Scope: Repository organization, workspace roles, and documentation placement
 
-The repository is organized by programming language first. Native, Haskell, Kotlin, and Rust roots keep
-library-family directories directly under the language root. The C# root is a single managed solution
-with projects grouped by role; OCaml, Python, and TypeScript each package their family modules into one
-language-local distribution:
+At the top level the repository separates shipped source from the material about it:
+
+```text
+.github/workflows/   One CI workflow, covering src/Cpp/FingerTree only
+docs/                Repository-wide guides, reference, proposals, reviews, migration, book
+eng/                 Shared build/test tooling used by every language root
+src/                 One directory per language, plus shared native test support
+```
+
+Under `src`, the repository is organized by programming language first. The C, C++, Haskell, Kotlin,
+and Rust roots keep library-family directories directly under the language root. The C# root is a
+single managed solution with projects grouped by role; OCaml, Python, and TypeScript each package
+their family modules into one language-local distribution:
 
 ```text
 src/
 ├── README.md
 ├── C/
 │   ├── README.md
+│   ├── build.ps1
 │   ├── FingerTree/
 │   ├── Hamt/
+│   └── Ordered/
 ├── Cpp/
 │   ├── README.md
+│   ├── build.ps1
 │   ├── FingerTree/
 │   ├── Hamt/
+│   └── Ordered/
 ├── CSharp/
 │   ├── README.md
 │   ├── Durable7.sln
 │   ├── Directory.Build.props
+│   ├── test.ps1
 │   ├── benchmarks/
 │   ├── docs/
 │   │   ├── FingerTree/
 │   │   ├── Hamt/
-│   │   ├── Ordered/
+│   │   └── Ordered/
 │   ├── samples/
 │   ├── src/
 │   │   ├── Durable7.FingerTree/
 │   │   ├── Durable7.Hamt/
-│   │   ├── Durable7.Ordered/
+│   │   └── Durable7.Ordered/
 │   └── tests/
 ├── Haskell/
 │   ├── README.md
+│   ├── cabal.project
+│   ├── test.ps1
 │   ├── FingerTree/
 │   ├── Hamt/
+│   └── Ordered/
 ├── Kotlin/
 │   ├── README.md
+│   ├── build.ps1
 │   ├── FingerTree/
 │   ├── Hamt/
+│   └── Ordered/
 ├── OCaml/
 │   ├── README.md
 │   ├── dune-project
 │   ├── durable7.opam
+│   ├── test.ps1
 │   ├── lib/
+│   │   ├── common/
+│   │   ├── finger_tree/
+│   │   ├── hamt/
+│   │   └── ordered/
 │   ├── docs/
-│   ├── tests/
-│   └── test.ps1
+│   └── tests/
 ├── Python/
 │   ├── README.md
+│   ├── test.ps1
 │   ├── docs/
 │   ├── src/durable7/
-│   ├── tests/
-│   └── test.ps1
+│   └── tests/
 ├── Rust/
 │   ├── README.md
+│   ├── Cargo.toml
+│   ├── test.ps1
 │   ├── FingerTree/
 │   ├── Hamt/
-└── TypeScript/
-    ├── README.md
-    ├── docs/
-    ├── src/
-    └── test/
+│   ├── Ordered/
+│   └── RangeUpdate/
+├── TypeScript/
+│   ├── README.md
+│   ├── docs/
+│   ├── src/
+│   └── test/
+└── test_support/
+    └── include/durable7/test_support/
 ```
+
+Every language root exposes the same three families — `Hamt`, `FingerTree`, and `Ordered` — so that
+name is the reliable cross-language coordinate even where the build unit differs. Rust is the sole
+exception: `RangeUpdate` is a fourth crate there because it owns a distinct implicit-AVL
+representation, while the other ports keep the equivalent type inside their FingerTree unit.
+
+`src/test_support` is not a library. It holds one header-only C shim that native test executables
+call from `main` to make crashes and CRT assertions fail as console diagnostics; it is described in
+the [engineering tooling README](../../eng/README.md#the-headless-test-contract).
 
 This makes language-local build systems, toolchains, include paths, and idioms easy to find while keeping
 related library families aligned across languages where ports exist. In C#, the single solution keeps

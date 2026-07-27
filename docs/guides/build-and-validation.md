@@ -28,6 +28,11 @@ hosts the shared helper is an intentional no-op and the same entry points retain
 behavior. Keep direct low-level compiler, CTest, Cabal, or Cargo commands for diagnosis; use the documented
 entry points for unattended validation.
 
+Native tests reach the same state by two further routes, because `ctest` and a debugger both start
+the executable themselves: the CTest registration functions in `eng/HeadlessTest.cmake` and the
+in-process shim in `src/test_support`. The [engineering tooling README](../../eng/README.md) explains
+how the three layers divide the work and which one to reach for when adding a test.
+
 ## Prerequisites
 
 The reference development environment is Windows. Each workspace needs only its own
@@ -361,6 +366,38 @@ cmake --build --preset msvc-release --parallel 1 --target fingertree_benchmarks
 
 Release configuration is required for meaningful benchmark numbers.
 
+## Continuous Integration
+
+The repository has exactly one GitHub Actions workflow,
+[`.github/workflows/cpp-fingertree.yml`](../../.github/workflows/cpp-fingertree.yml). **Read its
+scope before treating a green check as coverage: it validates `src/Cpp/FingerTree` and nothing
+else.** The other eight ports, and the C++ HAMT and Ordered workspaces, are validated only by the
+local commands in the matrix above. A change to those ports gets no automated verdict, so run the
+workspace gate yourself and record the evidence.
+
+The workflow triggers on pushes and pull requests that touch
+`.github/workflows/cpp-fingertree.yml`, `eng/**`, `src/test_support/**`, or
+`src/Cpp/FingerTree/**`, and on manual dispatch. `eng/**` is in that list deliberately: the shared
+tooling has no gate of its own, and this workflow is what exercises it.
+
+| Job | Runner | What it adds beyond the local gate |
+| --- | --- | --- |
+| MSVC Debug / Release | `windows-latest` | The same compiler as local validation, on a clean machine with no developer environment; the Release job also runs a short `persistence_branching` benchmark probe as a smoke test, not as a measurement |
+| GCC Debug / Release | `ubuntu-latest` | Portability off Windows and off MSVC; a second Release benchmark probe |
+| Clang Debug / Release | `ubuntu-latest` | A third front end; the Debug job additionally runs `clang++ --analyze` over the aggregate public-header surface through the installed-consumer translation unit, with `-Wall -Wextra -Wpedantic -Werror` |
+| Clang ASan + UBSan | `ubuntu-latest` | AddressSanitizer and UndefinedBehaviorSanitizer with `halt_on_error=1` and leak detection on, built with allocation tracking and benchmarks off |
+| Clang TSan | `ubuntu-latest` | ThreadSanitizer with `halt_on_error=1`, the only automated check of the concurrent-reader claims |
+
+`fail-fast` is off, so one failing configuration does not hide the others, and concurrency is
+grouped per ref with `cancel-in-progress`. Every `cmake --build` and `ctest` invocation passes
+`--parallel 1`, matching the repository's single-worker policy. The Windows jobs dot-source
+[`eng/Enable-HeadlessTestMode.ps1`](../../eng/Enable-HeadlessTestMode.ps1) before configuring, so a
+crash or loader failure on the runner surfaces as a nonzero exit rather than a hung job; the
+`permissions: contents: read` grant is the minimum the checkout needs.
+
+The sanitizer and static-analysis jobs are the part hardest to reproduce locally, and they are the
+reason to keep the workflow passing rather than treating it as redundant with the local C++ gate.
+
 ## Documentation Checks
 
 Use `rg` for stale path and accidental-rewrite scans. This current-state scan excludes migration
@@ -397,6 +434,48 @@ foreach ($file in $files) {
 }
 if ($missing.Count -gt 0) { $missing | Sort-Object; exit 1 }
 'All repository-owned Markdown links resolve.'
+```
+
+That check resolves files but ignores the `#fragment`. A link to a heading that was renamed or
+deleted still passes it, so also verify the fragments:
+
+```powershell
+$root = (Resolve-Path .).Path
+$files = rg --files -g '*.md'
+$anchors = @{}
+function Get-Anchors([string]$path) {
+    $set = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($line in [System.IO.File]::ReadAllLines($path)) {
+        if ($line -notmatch '^#{1,6}\s+(?<text>.+?)\s*$') { continue }
+        $text = $Matches['text'] -replace '`', ''
+        $text = [regex]::Replace($text, '\[([^\]]*)\]\([^)]*\)', '$1')
+        $null = $set.Add((($text.ToLowerInvariant() -replace '[^\w\- ]', '').Trim() -replace ' ', '-'))
+    }
+    return $set
+}
+$broken = New-Object System.Collections.Generic.List[string]
+foreach ($file in $files) {
+    $full = Join-Path $root $file
+    $text = [System.IO.File]::ReadAllText($full)
+    foreach ($m in [regex]::Matches($text, '!{0,1}\[[^\]]+\]\((?<target>[^)]+)\)')) {
+        $target = $m.Groups['target'].Value.Trim()
+        if ($target -match '^(https?|mailto|app|file):' -or $target -notmatch '#') { continue }
+        $path, $fragment = ($target -split '#', 2)
+        if ([string]::IsNullOrWhiteSpace($fragment)) { continue }
+        $candidate = if ([string]::IsNullOrWhiteSpace($path)) { $full }
+                     else { Join-Path (Split-Path $full -Parent) ([System.Uri]::UnescapeDataString($path)) }
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+        if ([System.IO.Path]::GetExtension($candidate) -ne '.md') { continue }
+        $key = (Resolve-Path -LiteralPath $candidate).Path
+        if (-not $anchors.ContainsKey($key)) { $anchors[$key] = Get-Anchors $key }
+        if (-not $anchors[$key].Contains([System.Uri]::UnescapeDataString($fragment).ToLowerInvariant())) {
+            $line = ($text.Substring(0, $m.Index) -split "`n").Count
+            $broken.Add("${file}:$line -> $target")
+        }
+    }
+}
+if ($broken.Count -gt 0) { $broken | Sort-Object; exit 1 }
+'All repository-owned Markdown heading anchors resolve.'
 ```
 
 Finish with:

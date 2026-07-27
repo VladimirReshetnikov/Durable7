@@ -67,6 +67,9 @@ Put repository-wide task procedures under `docs/guides`, durable cross-workspace
 reports under `docs/reviews`, extraction/history records under `docs/migration`, and long-form
 typeset documents (LaTeX source plus the built PDF) under `docs/book`.
 
+Documentation for the shared build and test tooling lives with the tooling, in
+[`eng/README.md`](../eng/README.md), not here.
+
 Put C# HAMT implementation, API, and validation documents under
 [src/CSharp/docs/Hamt](../src/CSharp/docs/Hamt/README.md), C HAMT port documents under
 [src/C/Hamt/docs](../src/C/Hamt/docs/README.md), and C++ HAMT port documents under

@@ -19,6 +19,7 @@ Use the narrowest layer that owns the information:
 | [`docs/reference`](../reference/README.md) | Durable cross-workspace maps and facts | Language/data-structure layout, port lineage, data-structure catalog, test-suite map |
 | [`docs/book`](../book/README.md) | Long-form typeset documents: LaTeX source plus the committed build | The data-structure field guide |
 | [`docs/migration`](../migration/README.md) | Extraction, history filtering, and provenance records | Filter-repo notes, commit maps |
+| [`eng/README.md`](../../eng/README.md) | Shared build/test tooling that no single workspace owns | Headless-test layers, MSVC bootstrap, LaTeX builder |
 | Workspace `README.md` | Workspace orientation and local entry points | Purpose, layout, primary build/test command |
 | Workspace `docs/` | API contracts, design notes, validation details, benchmark notes, review reports | `src/CSharp/docs/FingerTree/api-specification.md` |
 | Workspace `tests/` README | Local test runner shape, test-file grouping, direct executable path, filters, stress knobs | `src/CSharp/tests/Durable7.FingerTree.Tests/README.md` |
