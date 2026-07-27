@@ -2440,6 +2440,390 @@ may already have been overwritten; correctness is tested against an external FIF
 model instead. That division of labour is a small model of the whole repository's
 approach to validation.
 
+% ===========================================================================
+%  PART IV -- ORDER AND PRIORITY
+% ===========================================================================
+\part{Order and Priority}
+\label{part:order}
+
+\chapter{Sorted Collections}
+\label{ch:sorted}
+
+\motto{A measured tree with a maximum-key measure is a sorted set. Everything
+else is presentation.}
+
+\begin{specimen}[Specimen --- \code{SortedBag}, \code{SortedSet}, \code{SortedDictionary}]
+\spec{Purpose}{Immutable comparer-ordered multisets, sets, and key/value maps, with rank and boundary queries.}
+\spec{Core}{Order-statistic measures over the measured tree --- typically cached count plus last key --- in the mature ports; an idiomatic ordered storage checkpoint elsewhere.}
+\spec{Identity}{\emph{Comparison} defines equality here, not hashing. Two values that compare equal are the same element.}
+\spec{Enumeration}{Bag: sorted, with duplicates. Set: sorted, one representative per equivalence class. Map: sorted by key.}
+\spec{Builders}{Batched edits published as one immutable snapshot.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+These are the collections most people reach for first, and in this library they
+are facades: put a measure that summarises ``the largest key in this subtree''
+on a measured tree, and splitting at ``prefix maximum $\geq k$'' \emph{is} a
+sorted lower bound. Add a count to the measure --- a product measure --- and the
+same tree also supports rank and select. The sorted collections are that
+observation, dressed for use.
+
+\begin{contractbox}[Sorted-collection obligations]
+Comparison policy defines equality. If two values compare equal, the API must
+document whether duplicates are counted, rejected, replaced, or merged --- and
+each of the three families answers differently, which is the point of having
+three.
+
+Sorted bag enumeration includes duplicates in sorted order. Sorted set
+enumeration contains one representative per comparison-equivalent value. Sorted
+map lookup, rank, and boundary queries use key comparison, never hash equality.
+Rank and index APIs must define zero- versus one-based indexing, miss behaviour,
+and duplicate handling. Builders must document when they stop sharing with
+immutable snapshots and when snapshots are published.
+\end{contractbox}
+
+\begin{caveatbox}[Comparison equality is not hash equality]
+A value can be equal under a comparer and unequal under an equality comparer, or
+vice versa, and mixing the two families in one program is a reliable source of
+confusion. A case-insensitive comparer makes \code{"Key"} and \code{"key"} the
+same element in a \code{SortedSet} and different elements in a
+\code{PersistentHashSet} --- unless the hash policy agrees, which it will only
+do if someone made it agree. The library keeps the two policy kinds firmly
+separate and never derives one from the other.
+\end{caveatbox}
+
+\chapter{Canonical Sorted Sets: Zip and Zip-Zip Trees}
+\label{ch:canonical}
+
+\motto{For collections compared far more often than they are modified.}
+
+\begin{specimen}[Specimen --- \code{CanonicalSortedSet} and \code{ZipTreeRankPolicy}]
+\spec{Purpose}{A sorted set whose \emph{shape} is determined by its contents under a retained rank policy, so equal sets converge on equal topology and inequality is usually rejected in \bigoh{1} by a memoised digest.}
+\spec{Core}{Zip-zip tree: a randomised-rank binary search tree where insertion and deletion are single root-to-position \term{unzip} and \term{zip} passes --- no rotations.}
+\spec{Ranks}{A geometric primary coordinate and a fixed 64-bit secondary coordinate, both derived from HMAC-SHA-256 over the equivalence class.}
+\spec{Policy modes}{An unexposed random key, a public reproducibility seed, or a caller-retained secret key.}
+\spec{Equality}{Memoised root digest rejects most inequality in \bigoh{1}; shared nodes prune the rest; independently built equal sets still cost \bigoh{n}.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+Tarjan, Levy, and Timmel's zip trees (2018/2019) reformulate the treap so that
+insertion and deletion are single passes: to insert, \term{unzip} the search
+path into two spines and hang them off the new node; to delete, \term{zip} the
+two child spines back together. Expected restructuring is \bigoh{1} and there is
+no rotation code at all. Gila, Goodrich, and Tarjan's zip-zip trees (2023) refine
+the rank distribution so that expected depth approaches the information-theoretic
+optimum.
+
+What Durable7 wants from them is not speed. It is \emph{canonicity}.
+
+\section{Shape from contents}
+
+If a node's rank is derived from its key rather than drawn fresh at insertion
+time, then under one retained coherent rank policy, the tree's shape is a
+function of its contents (Figure~\ref{fig:zip}). Insert the same elements in a
+different order and you converge on the same topology.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7node] (b) at (0,0)      {$\mathsf{banana}$ \;\textcolor{d7copper}{r$=$4}};
+  \node[d7node] (a) at (-32,-18)  {$\mathsf{apple}$ \;\textcolor{d7copper}{r$=$2}};
+  \node[d7node] (f) at ( 32,-18)  {$\mathsf{fig}$ \;\textcolor{d7copper}{r$=$3}};
+  \node[d7leafnode] (c) at ( 8,-36) {$\mathsf{cherry}$ \;\textcolor{d7copper}{r$=$1}};
+  \node[d7leafnode] (p) at ( 56,-36) {$\mathsf{plum}$ \;\textcolor{d7copper}{r$=$0}};
+  \draw[d7edge] (b) -- (a); \draw[d7edge] (b) -- (f);
+  \draw[d7edge] (f) -- (c); \draw[d7edge] (f) -- (p);
+  \node[d7label,anchor=west,text width=52mm,align=left] at (-64,-40)
+    {Keys obey the search-tree order.\\
+     Ranks obey the heap order.\\[3pt]
+     Ranks come from \textsc{hmac} over the\\
+     equivalence class, so both\\
+     constraints together pin the shape.};
+\end{tikzpicture}
+\caption{A zip-zip tree. Because ranks are derived rather than drawn, the search
+order and the heap order jointly determine the topology for a given content set
+under a given policy.}
+\label{fig:zip}
+\end{figure}
+
+Canonical shape is worth having when a collection is compared far more often
+than it is modified: memoisation keys, configuration fingerprints, cache
+validity stamps. A memoised root digest rejects most inequality in constant
+time; shared node identity prunes the equal case; and independently built equal
+sets fall back to an honest \bigoh{n} comparison.
+
+\section{Getting ranks right}
+
+The rank source has to be stable, well distributed, and coherent with the
+comparer --- and this turns out to be where the design gets interesting.
+
+\begin{contractbox}[Rank policy obligations]
+A policy may use an unexposed random key, a public reproducibility seed, or a
+caller-retained key. An explicit comparer must \emph{also} supply a rank hash
+that is constant on its equivalence classes; duplicate representatives
+dynamically check that contract.
+
+Set equality is semantic across policy families, but canonical structural
+algebra is gated on policy identity. First-representative retention means
+equivalent values can still retain different concrete objects, so this is
+\term{policy-canonical} topology --- not a claim of globally unique
+representation.
+\end{contractbox}
+
+\begin{caveatbox}[What the fixed-width variant does not inherit]
+This is a practical fixed-width implementation, not the paper's compact
+representation. Its 64-bit secondary coordinate does not inherit the paper's
+\bigoh{\log \log n}-metadata theorem, and the 64-bit caller hash (32-bit for the
+fallback) can collide before HMAC ever runs. Expected-depth claims therefore
+require a well-distributed, stable, equivalence-class-coherent rank source.
+
+A keyed policy resists adaptive rank prediction only while the caller-retained
+key stays secret; a public seed buys reproducibility, not adversarial security.
+And persistence changes the cost profile: an ephemeral zip tree changes
+\bigoh{1} expected pointers, but a persistent update still copies its
+search/zip/unzip path --- expected \bigoh{\log n} nodes, \bigoh{n} under
+adversarial ranks.
+\end{caveatbox}
+
+The implementations take the stack-safety problem seriously, because a fully
+colliding rank chain is a legitimate adversarial input: zip and unzip are
+explicit-stack rather than recursive, and destruction uses an intrusive
+non-allocating worklist so that reclaiming a 16{,}384-node chain neither
+recurses nor allocates.
+
+Cryptographic sourcing is likewise concrete rather than hand-waved: CNG on
+Windows and OpenSSL elsewhere for C and C\texttt{++}, RustCrypto HMAC/SHA-256
+with \code{getrandom} for Rust, \code{crypton} for Haskell, \code{hashlib} and
+\code{hmac} for Python. Rust and Python both pin stable rank hashes explicitly
+rather than trusting a default hasher, because \code{DefaultHasher} and
+randomised \code{str} hashing are exactly the failure this structure cannot
+tolerate.
+
+\chapter{Insertion Order as a First-Class Property}
+\label{ch:ordered}
+
+\motto{Two collections can hold the same elements and still not be the same
+list.}
+
+\begin{specimen}[Specimen --- the neutral Ordered family]
+\spec{Purpose}{Sets, maps, and multimaps whose enumeration follows first insertion plus explicit positional operations --- neither hash order nor comparison order.}
+\spec{Core}{A persistent hash membership/stamp index composed with a persistent ordered sequence. Deliberately independent of any other family.}
+\spec{Identity}{Equality policy decides membership and representatives. It never decides position.}
+\spec{Operations}{Explicit movement, positional reads, ranges, reversal, stable one-shot sort, receiver-policy set algebra, all six set relations.}
+\spec{Ports}{All nine: \code{PersistentOrderedSet}, \code{PersistentOrderedMap}, \code{PersistentOrderedMultimap}.}
+\end{specimen}
+
+\noindent
+Insertion order is the order humans expect. It is what a configuration file
+means, what a UI list means, what a pipeline stage sequence means. Hash order is
+an implementation detail and comparison order is somebody else's opinion; if the
+program's meaning depends on the sequence in which things were added, that has
+to be represented deliberately.
+
+\section{Two indexes, one meaning}
+
+The family composes a hash index --- which answers membership and holds
+representatives --- with a persistent ordered sequence, which answers position.
+The composite obligation from Chapter~\ref{ch:derived} applies in full: both
+indexes publish together or neither does, counts agree, and no entry exists in
+only one.
+
+\begin{contractbox}[Ordered-family obligations]
+Equality policy defines membership, duplicate collapse, stored representatives,
+algebra, and relations; every result retains the exact receiver policy,
+including empties.
+
+Construction and duplicate additions retain the \emph{first} representative
+\emph{and its position} --- a duplicate add never moves or replaces anything.
+Movement is explicit, retains the stored representative, and interprets a
+supplied destination as the final result index.
+
+Union appends argument-only classes after receiver order; intersection and
+difference retain receiver order; symmetric difference emits receiver-only then
+argument-only classes. All algebra and all six relations eagerly enumerate and
+normalise the complete argument under the receiver policy \emph{before} applying
+any shortcut, so a late enumeration or policy failure is visible rather than
+optimised away.
+
+Documented logical no-ops return the receiver; failures publish nothing; private
+sparse position labels are not API, and a relabel rebuild leaves retained
+versions untouched.
+\end{contractbox}
+
+The map adds one rule that is easy to get wrong and important to get right:
+setting an existing key changes \emph{only} its payload. It does not replace the
+stored key representative and it does not move the entry. Range construction
+retains the first key representative and its first position while the last
+payload for that class wins. Equality policy controls key identity and never
+payload equality or sort order.
+
+The multimap nests the same idea: key groups retain first-insertion order, and
+the distinct values within each group retain their own first-insertion order.
+Enumeration is grouped, and an empty group is never stored.
+
+\begin{asidebox}[On sparse labels and branching]
+Insertion-ordered structures are usually implemented with sparse integer
+position labels and midpoint insertion, which occasionally require a wholesale
+relabel. That relabel is an \bigoh{n}-at-threshold amortisation --- precisely
+the kind that Chapter~\ref{ch:persistence} warns does not survive branching.
+The library's response is to treat the labels as strictly private, to state the
+worst case per produced version rather than the amortised one, and to guarantee
+that a relabel rebuild leaves retained versions untouched. The related
+general-purpose \code{OrderMaintenanceList} --- the Dietz--Sleator structure that
+answers ``does $A$ precede $B$?'' --- remains unbuilt for want of a named
+consumer (Appendix~\ref{app:roads}).
+\end{asidebox}
+
+\chapter{Priority: Three Structures, Three Reasons}
+\label{ch:priority}
+
+\motto{``Give me the smallest one'' has more variations than it looks.}
+
+\noindent
+Three families in this library answer priority questions, and they are not
+redundant --- each exists because the other two are wrong for a specific need.
+
+\section{The measured priority queue}
+
+\begin{specimen}[Specimen --- \code{PriorityQueue}]
+\spec{Purpose}{The general persistent minimum-priority queue.}
+\spec{Core}{A minimum-priority measure over the measured tree.}
+\spec{Bounds}{Amortised: \bigoh{1} peek, \bigoh{\log n} enqueue and dequeue, \bigoh{\log \min} meld.}
+\spec{Ties}{Equal priorities drain in insertion order.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+This is the default, and it is a measure facade: cache the minimum priority of
+each subtree, and locating the front entry is a descent. Melding two queues is
+concatenation. It costs nothing conceptually beyond the measure framework, which
+is exactly why it is the default.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var queue = PriorityQueue<string, int>.Empty
+    .Enqueue("slow", 10).Enqueue("fast", 1).Enqueue("normal", 5);
+
+if (queue.TryPeek(out var element, out var priority))
+{
+    // element == "fast"; priority == 1
+}
+\end{lstlisting}
+
+\section{The Brodal--Okasaki heap}
+
+\begin{specimen}[Specimen --- \code{BrodalOkasakiHeap}]
+\spec{Purpose}{Worst-case rather than amortised latency for insert, meld, and minimum.}
+\spec{Core}{Bootstrapped skew-binomial queues (Brodal and Okasaki, JFP 1996).}
+\spec{Bounds}{\bigoh{1} \emph{worst-case} insert, meld, and find-minimum; \bigoh{\log n} worst-case delete-minimum.}
+\spec{Meld}{Requires comparer object identity --- even when one operand is empty.}
+\spec{Enumeration}{Unspecified structural order. Equal elements have no stable tie order. Delete repeatedly for sorted output.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+The measured queue has the same bounds \emph{amortised}. This heap's entire
+reason for existing is the word ``worst-case'': if a latency budget is a hard
+requirement rather than an average, an amortisation spike is a bug. The
+implementation is a direct port of the fused bootstrapped skew-binomial
+representation, with comparison-count tests that assert the operation bounds
+rather than merely believing them.
+
+\begin{asidebox}[One algorithm, two spellings]
+The C and C\texttt{++} \code{skew\_meld} implementations consolidate the child
+forest by rank buckets with carry; C\#, Haskell, Kotlin, and Rust spell the
+equivalent step as \code{uniquify} followed by \code{unionUnique}. This is an
+intentional native implementation-shape difference. Both produce the same valid
+ranked-tree multiset, the same minimum, and the same public bounds --- and the
+repository records the divergence explicitly so that a future reader does not
+mistake it for a porting error.
+\end{asidebox}
+
+\begin{caveatbox}[Why not strict Fibonacci or hollow heaps?]
+Strict Fibonacci heaps (Brodal, Lagogiannis, and Tarjan, STOC 2012) and hollow
+heaps (Hansen, Kaplan, Tarjan, and Zwick, ICALP 2015) achieve optimal
+decrease-key bounds through aggressive pointer mutation --- and persistent path
+copying destroys exactly the surgery they depend on. They are recorded as
+explicit non-goals rather than as omissions.
+\end{caveatbox}
+
+\section{The priority search queue}
+
+\begin{specimen}[Specimen --- \code{PrioritySearchQueue}]
+\spec{Purpose}{Keyed lookup \emph{and} minimum-priority removal \emph{and} a combined key-range plus priority-threshold query, in one structure.}
+\spec{Core}{A persistent AVL ordered by key, each node caching its subtree's minimum-priority winner.}
+\spec{Bounds}{\bigoh{1} minimum; \bigoh{\log n} keyed update, removal, and delete-minimum; \bigoh{\log n + v} range query where $v$ counts nodes pruning cannot exclude.}
+\spec{Ties}{Priority ties break by key order --- deterministic, not merely stable.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+A heap cannot find a key. A map cannot find the minimum. The priority search
+queue does both, and adds the query that motivates it: \emph{which entries in
+this key range have priority at most $p$?} That is the scheduler question, the
+expiry question, and the task-queue question.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var jobs = PrioritySearchQueue<string, int, string>.Create(
+        StringComparer.Ordinal, Comparer<int>.Default)
+    .SetItem("compile", 3, "Build the solution")
+    .SetItem("deploy",  8, "Publish artifacts")
+    .SetItem("audit",   1, "Check invariants");
+
+var next   = jobs.Minimum;                                  // "audit", 1
+var urgent = jobs.EnumerateAtMost("a", "z", maximumPriority: 3);
+jobs = jobs.DeleteMinimum(out var removed);
+\end{lstlisting}
+
+\begin{asidebox}[A deliberate departure from Hinze]
+Hinze's ICFP 2001 priority search queue uses \term{priority-search pennants}: a
+loser tree over a weight-balanced search tree, whose threshold-only
+\code{at-most} operation has the output-sensitive bound
+$\Theta(r(\log n - \log r + 1))$ for $r$ results.
+
+Durable7 deliberately uses a different representation --- a persistent AVL node
+carrying its own entry plus a cached subtree winner --- and claims the bounds
+that representation actually delivers: \bigoh{\log n} keyed operations,
+\bigoh{1} minimum, and \bigoh{\log n + v} for the inclusive key-range and
+priority-threshold traversal, where $v \leq n$ is the number of visited nodes
+that pruning could not exclude. The worst case is therefore \bigoh{n} for a dense
+result, and no pennant-specific output bound is claimed. Choosing a simpler
+representation and reporting its real bounds is treated as preferable to
+importing a bound the code does not earn.
+\end{asidebox}
+
+\chapter{Intervals}
+\label{ch:interval}
+
+\motto{Everything that has a beginning and an end wants one of these.}
+
+\begin{specimen}[Specimen --- \code{IntervalTree} and \code{PersistentIntervalMap}]
+\spec{Purpose}{Ordered collections of intervals with overlap and point-stabbing queries (tree), and the same with one payload attached to each complete interval key (map).}
+\spec{Core}{Interval annotations in the measure: typically count, last low endpoint, and maximum high endpoint.}
+\spec{Pruning}{A subtree whose maximum high endpoint lies below the probe cannot contain an overlap, so the descent skips it entirely.}
+\spec{Map key}{The \emph{complete} \code{(low, high)} pair. Intervals sharing only one endpoint stay distinct.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+The interval tree is the measure framework's most elegant payoff. Put the
+maximum high endpoint of a subtree in its measure, and a stabbing query becomes
+a descent that prunes any subtree which \emph{provably} cannot contain a match ---
+without looking at a single interval inside it.
+
+\begin{contractbox}[Interval obligations]
+Interval construction must define whether empty or inverted intervals are
+rejected, normalised, or accepted. Endpoint comparison policy defines ordering,
+equality, overlap, and containment. Query APIs must document endpoint
+inclusivity and behaviour when several overlaps exist. Removal must state whether
+it removes one match, all matches, or a comparison-equivalent representative.
+\end{contractbox}
+
+The interval \emph{map} adds a payload and, with it, a second index: an exact
+lookup index keyed by the complete interval pair, alongside the augmented search
+index. The composite rule applies --- both contain the same intervals, payloads,
+and count. Replacing a payload preserves the stored interval representative and
+neither duplicates nor moves the key; stabbing and overlap queries return entries
+in the local deterministic interval order.
+
 %%APPEND-HERE%%
 
 \end{document}
