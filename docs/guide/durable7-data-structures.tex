@@ -1740,6 +1740,395 @@ which of the two produced a gain. Benchmarks may contain tiny and string
 datasets; that is a workload, not permission to select a representation.
 \end{asidebox}
 
+% ===========================================================================
+%  PART III -- SEQUENCES
+% ===========================================================================
+\part{Sequences}
+\label{part:sequences}
+
+\chapter{Finger Trees}
+\label{ch:fingertree}
+
+\motto{A tree that keeps its hands in its pockets: whatever else is deep, both
+ends are always within reach.}
+
+\begin{specimen}[Specimen --- \code{FingerTreeDeque} and \code{FingerTree}]
+\spec{Purpose}{A persistent indexed sequence with cheap endpoints and cheap concatenation (\code{FingerTreeDeque}), and a general monoid-measured tree used directly and as the engine beneath a dozen facades (\code{FingerTree}).}
+\spec{Core}{Hinze and Paterson's 2-3 finger tree: digits at each end, a recursively nested spine of nodes in the middle.}
+\spec{Endpoints}{\bigoh{1} amortised push and pop at either end.}
+\spec{Concat}{\bigoh{\log \min(n,m)} --- proportional to the \emph{smaller} operand.}
+\spec{Index / split}{\bigoh{\log d}, where $d$ is the distance from the nearer end. The measured U-shape.}
+\spec{Ports}{All nine: \code{FingerTreeDeque}/\code{PersistentDeque}/\code{persistent\_deque}/\code{Deque}, plus the measured tree under each language's local name.}
+\end{specimen}
+
+\noindent
+Most balanced trees treat all positions alike. A finger tree does not: it keeps
+a small unbalanced ``digit'' of one to four elements at each end and pushes the
+balanced structure into the middle, where a recursively nested spine holds
+\emph{nodes} of two or three elements, which themselves hold nodes, and so on
+(Figure~\ref{fig:fingertree}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \foreach \y/\lft/\rgt/\lbl in {%
+     0/{$a$\,$b$}/{$y$\,$z$}/{depth 0 --- elements},
+   -15/{$(c\,d)$}/{$(w\,x)$}/{depth 1 --- nodes of elements},
+   -30/{$((e\,f)(g\,h))$}/{$((s\,t)(u\,v))$}/{depth 2 --- nodes of nodes}}
+  {
+    \node[d7leafnode] (L\y) at (-30,\y) {\lft};
+    \node[d7leafnode] (R\y) at ( 30,\y) {\rgt};
+    \node[d7label,anchor=west] at (46,\y) {\lbl};
+  }
+  \draw[d7edge] (L0)   -- (-14,-7.5) -- (L-15);
+  \draw[d7edge] (R0)   -- ( 14,-7.5) -- (R-15);
+  \draw[d7edge] (L-15) -- (-14,-22.5) -- (L-30);
+  \draw[d7edge] (R-15) -- ( 14,-22.5) -- (R-30);
+  \node[d7ghost] at (0,-42) {\code{Empty}};
+  \draw[d7edge] (L-30) -- (0,-42);
+  \draw[d7edge] (R-30) -- (0,-42);
+\end{tikzpicture}
+\caption{The finger-tree shape. Both ends sit at depth zero and stay there; only
+the middle gets deeper. This is why endpoint operations are constant-amortised
+while indexing costs a logarithm of the distance to the nearer end.}
+\label{fig:fingertree}
+\end{figure}
+
+That asymmetry is the whole design. Pushing onto an end usually just grows a
+digit, which is \bigoh{1}; occasionally a digit overflows and a node is pushed
+one level down, and the amortised analysis --- with memoised lazy suspensions
+spreading the debt across later forces --- keeps the average constant.
+Concatenation is proportional to the logarithm of the \emph{smaller} operand,
+because the two spines only have to be zipped together as deep as the shorter
+one goes. Indexing costs a logarithm of the distance to the nearer end, so both
+\code{seq[0]} and \code{seq[n-1]} are nearly free while the middle is
+logarithmic --- the ``measured U-shape'' the API notes refer to.
+
+\section{The deque}
+
+\code{FingerTreeDeque<T>} is the tuned sequence facade. It exposes endpoint
+operations, concatenation, splitting, positional edits, and range operations.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var deque    = FingerTreeDeque<int>.Create(1, 2, 3);
+var extended = deque.AddFirst(0).AddLast(4);
+
+var first    = extended.PopFirst();
+var rest     = first.Rest;                 // [1, 2, 3, 4]
+
+var split    = rest.SplitAt(2);
+var joined   = split.Left.Concat(split.Right);
+var replaced = joined.SetItem(1, 20);      // [1, 20, 3, 4]
+\end{lstlisting}
+
+It also carries a small set of helpers for sequences the caller \emph{knows} to
+be sorted --- \code{SortedLowerBound}, \code{SortedUpperBound},
+\code{InsertSorted}, \code{SplitAtSortedEqualRange}. These assume sortedness
+rather than maintaining it, which is exactly the right split of
+responsibilities: if sortedness is a long-lived invariant, the sorted
+collections of Chapter~\ref{ch:sorted} maintain it for you; if it is a passing
+property of a sequence you happen to have, these helpers exploit it without
+committing you to a different type.
+
+\section{The measured tree}
+
+The general \code{FingerTree<TElement, TMeasure, TMeasureOps>} is the deque's
+more powerful sibling and the engine underneath sorted bags, sets and maps,
+priority queues, interval trees, ropes, and the chunked bit set. Every node
+caches the monoidal summary of its subtree, and the tree can be split at the
+first position where a predicate over the running prefix measure flips from
+false to true.
+
+That single operation --- \term{split by measure} --- is startlingly general.
+Measure by element count and you get positional indexing. Measure by maximum key
+and you get sorted lookup. Measure by minimum priority and you get a priority
+queue. Measure by maximum interval endpoint and you get interval search. Measure
+by newline count and you get a text editor's line index. Chapter~\ref{ch:measures}
+is entirely about this idea.
+
+\begin{contractbox}[Finger-tree core obligations]
+Empty, singleton, endpoint, concatenation, split, index, insert, remove, and
+range operations preserve immutable snapshot semantics. Measure policies supply
+an identity, an element measure, and an associative combine. Split and locate
+depend on a documented predicate boundary over prefix measures, and any new
+measure or predicate helper must document the ordering assumptions it needs.
+Product and sum measures preserve component order and component-specific
+predicate mapping. Lazy middle publication and cached measures must never expose
+partially initialised data to a reader.
+\end{contractbox}
+
+\begin{caveatbox}[Checkpoint ports and the lazy spine]
+The C\#, C\texttt{++}, and C implementations are the mature ones. Several other
+ports build their sorted collections, priority queues, and interval trees over a
+measured AVL or similar structure rather than a lazy-spine finger tree, and
+their API notes name the remaining parity boundary explicitly. The observable
+semantics --- ordering, representative retention, no-op identity, failure
+atomicity --- are identical; the asymptotic claim for a specific operation may
+be weaker, and where that is so, it is written down rather than inferred.
+\end{caveatbox}
+
+\chapter{Measures: Monoids as Connective Tissue}
+\label{ch:measures}
+
+\motto{Give a tree an associative summary and it will answer questions you never
+built it to answer.}
+
+\noindent
+This chapter has no data structure of its own. It describes the abstraction that
+makes a third of the library possible, and it is the single best return on
+conceptual investment in this book.
+
+\section{The idea}
+
+A \term{measure} is a monoid --- a type with an identity element and an
+associative binary combine --- plus a function from an element to a value of
+that type. Cache the measure of every subtree on its root node, and two things
+become cheap:
+
+\begin{enumerate}
+\item \textbf{Aggregate queries.} The measure of the whole sequence is the
+measure at the root, read in \bigoh{1}. The measure of a range is a logarithmic
+boundary computation.
+\item \textbf{Measure-guided descent.} Walk from the root, accumulating the
+running prefix measure. At each node, ask whether the prefix \emph{including}
+the left subtree satisfies a predicate. If yes, descend left; if no, add the left
+measure to the accumulator and descend right. You have located the first
+position where the predicate flips, in \bigoh{\log n}, without visiting the
+elements you skipped.
+\end{enumerate}
+
+Associativity is what makes step 2 sound --- it lets the accumulated prefix be
+computed in any grouping. Commutativity is \emph{not} required, and the library
+is scrupulous about this: ordered measures are combined strictly left to right,
+and several tests exist specifically to prove that a non-commutative measure
+behaves.
+
+\begin{contractbox}[What a measure policy must supply]
+An identity value; an element measure; an associative combine. Nothing more.
+Predicates used for split and locate must be monotone over the running prefix
+measure --- false, then true, with no oscillation --- because descent is a binary
+search and an oscillating predicate makes the answer meaningless. Collections
+cannot repair an unlawful policy, and such policies are outside the logical
+contract.
+\end{contractbox}
+
+\section{The measures that ship}
+
+\begin{d7table}{0.24}
+\toprule
+\thead{Measure} & \thead{What it turns the tree into} \\
+\midrule
+Size / count & A positionally indexed sequence: split at ``prefix count $>$ $i$''
+gives element $i$. \\
+Sum & A prefix-sum sequence; range sums by boundary subtraction where the
+element type allows it, or by ordered range measure where it does not. \\
+Maximum & An ordered structure: split at ``prefix max $\geq$ $k$'' is a sorted
+lower bound. Underpins sorted sets, bags, and maps. \\
+Minimum & A priority queue: the root measure is the front priority, and descent
+locates it. \\
+Order statistic (count + last key) & Sorted collections that also support rank
+and select. \\
+Interval (count, last low, max high) & An interval tree: a subtree whose maximum
+high endpoint is below the probe cannot contain an overlap, so it is pruned. \\
+Newline & A text rope: line count in the measure turns line/column navigation
+into a descent. \\
+Popcount & The chunked bit set: inclusive rank and zero-based select by measured
+descent over 64-bit words. \\
+Product / pair & Two measures carried together, preserving component order and
+mapping predicates to the right component. This is how ``sorted \emph{and}
+indexable'' works. \\
+\bottomrule
+\end{d7table}
+
+\section{How the nine ports spell it}
+
+The abstraction is the same everywhere; only its encoding is local. C\#,
+C\texttt{++}, Kotlin, and Python expose typed measure abstractions (with
+comparison and predicate abstractions where their surfaces need them); C exposes
+equivalent policy callbacks with context pointers; Haskell uses an ordinary
+type class and plain functions \code{v -> Bool} as predicates, because in
+Haskell a predicate abstraction would be ceremony. Rust exposes a
+\code{MeasurePolicy} trait plus a generous set of ready-made measures ---
+\code{SizeMeasure}, \code{SumMeasure}, \code{MaxMeasure}, \code{MinMeasure},
+\code{KeyMeasure}, \code{ProductMeasure}, \code{OrderStatisticMeasure}, and the
+combined \code{SizeAndSum}/\code{SizeAndMax}/\code{SizeAndMin} forms.
+
+\begin{asidebox}[Where measures paid off unexpectedly]
+The chunked bit set was originally imagined as a HAMT-backed structure, and it
+half-failed the library's own test for whether a composition is load-bearing.
+The recommended prototype instead put \code{ulong} chunks at the leaves of a
+measured tree with a popcount sum measure --- and got membership, inclusive
+rank, select, and reference-short-circuiting set algebra out of machinery that
+already existed. That is the measure framework doing what it is for: a new
+public capability with no new core.
+\end{asidebox}
+
+\chapter{RRB Vectors}
+\label{ch:rrb}
+
+\motto{The persistent vector everybody means when they say ``persistent
+vector''.}
+
+\begin{specimen}[Specimen --- \code{RrbVector}]
+\spec{Purpose}{A persistent sequence with \emph{uniform} random access --- no U-shape --- plus logarithmic concatenation and splitting.}
+\spec{Core}{Relaxed radix-balanced tree: 32-way branches, 32-element leaves. Regular branches are radix-indexed with pure bit arithmetic and carry no size table; only branches touched by concatenation carry cumulative sizes.}
+\spec{Index}{\bigoh{\log_{32} n} with a small constant, uniform across positions.}
+\spec{Endpoints}{\bigoh{\log_{32} n} --- there is deliberately no persistent tail buffer.}
+\spec{Concat}{\bigoh{\log_{32}(n+m)} boundary-spine merge.}
+\spec{Builder}{Append-only, freezes full leaves safely and caches immutable snapshots.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+Bagwell and Rompf's relaxed radix-balanced tree (2011, with the practical
+transient treatment in Stucki et al., ICFP 2015) is the structure behind Scala's
+persistent vector, Clojure's \code{core.rrb-vector}, C\texttt{++} \code{immer},
+and Rust \code{im}. Its central trick is to be a radix trie \emph{most} of the
+time.
+
+\section{Regular and relaxed branches}
+
+In a plain radix trie of branching factor 32, finding index $i$ is pure bit
+arithmetic: take five bits of $i$ per level and you are there. No size tables, no
+comparisons. That works only if every node is full, which stops being true the
+moment you concatenate two vectors.
+
+RRB's answer is to allow both kinds of node (Figure~\ref{fig:rrb}). A
+\term{regular} branch is full and radix-indexable; it stores no size table at
+all. A \term{relaxed} branch carries a small array of cumulative sizes and is
+searched rather than computed. Concatenation introduces relaxed branches only
+along the seam; everything away from the seam stays regular and stays fast.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7label,anchor=south] at (24,10) {regular branch --- no size table};
+  \node[d7node,minimum width=48mm] (reg) at (24,4) {\code{[c0 c1 c2 c3]}\quad each child exactly $32^h$ wide};
+  \node[d7label,anchor=north,align=center] at (24,-1)
+    {index by bit arithmetic: \code{(i >> 5h) \& 31}};
+
+  \node[d7label,anchor=south] at (24,-20) {relaxed branch --- cumulative sizes};
+  \node[d7node,minimum width=48mm] (rel) at (24,-26) {\code{[c0 c1 c2]} + \code{sizes = [31, 58, 90]}};
+  \node[d7label,anchor=north,align=center] at (24,-31)
+    {index by short scan of the size array};
+\end{tikzpicture}
+\caption{RRB nodes come in two flavours. Only nodes disturbed by concatenation
+pay for a size table; the rest keep the radix trie's pure bit-arithmetic
+indexing.}
+\label{fig:rrb}
+\end{figure}
+
+\section{The representation boundary, stated up front}
+
+\begin{caveatbox}[Boundary-spine concatenation, not global redistribution]
+All ports deliberately implement \emph{boundary-spine} concatenation: the two
+child arrays at the seam are repartitioned, and nothing is promised about
+minimum fullness for leaves or branches away from that seam. The full
+Stucki-et-al.\ redistribution pass is not performed.
+
+The adversarial density assertions in the test suites are regression gates for
+the histories they exercise --- not a validator-certified representation
+contract. What the validators \emph{do} certify is a size-derived height cap:
+$\lfloor (\text{bit width of the count type} - 1)/5 \rfloor + 1$. The first term
+is the greatest minimum height required anywhere in the count domain; the extra
+level admits the boundary-only contract's legal ``minimum height $+\,1$'' slack
+even in the top count band. That works out to seven for the C\#/Kotlin
+\code{Int} count domain and thirteen on 64-bit
+\code{size\_t}/\code{Int}/\code{usize} targets. TypeScript and Python apply their
+own checked runtime count domains.
+\end{caveatbox}
+
+\section{Choosing between three sequences}
+
+The library ships three persistent sequences with overlapping capabilities, and
+declines to pretend one of them wins.
+
+\begin{d7tablethree}{0.20}{0.23}
+\toprule
+\thead{Workload} & \thead{Finger-tree deque} & \thead{Rope \hfill / \hfill RRB vector} \\
+\midrule
+Endpoint push/pop & \bigoh{1} amortised --- best & \bigoh{\log n}, staged
+amortised \bigoh{1} \hfill / \hfill \bigoh{\log_{32} n}, no persistent tail \\
+Random index, middle & \bigoh{\log n}, U-shaped & \bigoh{\log n} chunked
+\hfill / \hfill \bigoh{\log_{32} n}, small constant --- best \\
+Concatenation & \bigoh{\log \min} --- best & \bigoh{\log \min}
+\hfill / \hfill \bigoh{\log n} with relaxed nodes \\
+Cache density & pointer-heavy & chunked, best for scans \hfill / \hfill 32-way
+arrays, good \\
+Bulk build & element-wise & chunk-staged builder --- best \hfill / \hfill
+builder tier \\
+\bottomrule
+\end{d7tablethree}
+
+The RRB vector's differentiator is uniform indexing. The shipped persistent value
+deliberately has \emph{no} dedicated tail buffer, so endpoint operations remain
+logarithmic and the separate append-only builder is the bulk-construction path.
+Concatenation is logarithmic but with worse constants than the deque's.
+
+The library's stance is unusually restrained here: it ships the vector, ships
+benchmark comparisons against the rope and the platform's own immutable list,
+and tells consumers to choose on their measured workload rather than on the
+asymptotics. Shipping an implementation does not, by itself, erase the overlap
+with two existing sequence families.
+
+\chapter{Ropes and Text}
+\label{ch:rope}
+
+\motto{A string that does not mind being edited in the middle.}
+
+\begin{specimen}[Specimen --- \code{Rope}, \code{MeasuredRope}, \code{TextRope}]
+\spec{Purpose}{Persistent chunked sequences (\code{Rope}), the same with a custom split/locate measure (\code{MeasuredRope}), and a newline-aware text specialisation (\code{TextRope}).}
+\spec{Core}{Runs of elements held contiguously in immutable leaf chunks at the leaves of a measured tree.}
+\spec{Edits}{\bigoh{\log n} plus bounded chunk work.}
+\spec{Concat / split}{\bigoh{\log \min} / \bigoh{\log n}.}
+\spec{Scans}{Array speed within a chunk --- the reason to prefer a rope over a pointer-per-element sequence.}
+\spec{Ports}{All nine, each with positional, measured, and text cursors.}
+\end{specimen}
+
+\noindent
+The rope's insight is that the atoms of a sequence do not have to be its
+elements. Put a run of elements in one contiguous immutable leaf, and you get
+tree behaviour for edits with array behaviour for scans --- which is exactly the
+trade a text editor wants, since editing is local and rendering is sequential.
+
+\section{Three layers, one machine}
+
+\begin{description}
+\item[\code{Rope<T>}] is positional. Its measure is element count; indexing,
+splitting, insertion, removal, concatenation, and slicing are all defined over
+logical element offsets.
+\item[\code{MeasuredRope<T, M>}] replaces the count measure with a caller's
+monoid, so split and locate can be driven by anything associative. It inherits
+the measure-law requirements of Chapter~\ref{ch:measures} wholesale.
+\item[\code{TextRope}] is the measured rope specialised to a newline measure,
+plus the helpers that make text navigation pleasant: line and column
+conversion, line extraction, newline-style handling.
+\end{description}
+
+Because \code{TextRope} is a specialisation rather than a separate core, its
+line index is not a side table that can drift out of sync --- it is the measure,
+maintained by the same code path that maintains everything else.
+
+\begin{caveatbox}[What a text position counts]
+This is the least portable thing in the library, and the docs are correspondingly
+blunt about it. Text positions count: UTF-16 code units in C\#, Kotlin, and
+TypeScript; \code{char}-sized bytes in C and C\texttt{++}; Haskell \code{Char}
+elements; Unicode scalar values in OCaml and Rust; Unicode code points in
+Python. \emph{None} of them denotes a grapheme cluster index. Line and column
+rules are zero-based, and the C port uses LF-only newline recognition.
+
+If you are writing cross-language code that exchanges text offsets, this is the
+paragraph that will save you.
+\end{caveatbox}
+
+\section{Builders}
+
+Ropes are commonly built from a stream rather than edited into existence, so
+every port has a builder that stages chunks and publishes an immutable rope.
+The contract that matters is publication isolation: later builder changes cannot
+affect a previously produced rope. As with the trie builders, mutation is
+confined to nodes nobody can see.
+
 %%APPEND-HERE%%
 
 \end{document}
