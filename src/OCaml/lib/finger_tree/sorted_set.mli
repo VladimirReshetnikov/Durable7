@@ -42,10 +42,12 @@ val mem : 'element -> 'element t -> bool
 (** Whether the element is present. *)
 
 val add : 'element -> 'element t -> bool * 'element t
-(** A set containing the given element. *)
+(** A set containing the given element. The flag is [true] when it was newly added and [false] when
+    an equal element was already present, in which case the first representative is kept. *)
 
 val remove : 'element -> 'element t -> bool * 'element t
-(** A set without that element. *)
+(** A set without that element. The flag is [true] when it was present; removing an absent element
+    is not an error and returns the receiver. *)
 
 val floor : 'element -> 'element t -> 'element option
 (** The largest element not greater than the probe. *)
@@ -78,15 +80,28 @@ val value_range : minimum:'element -> maximum:'element -> 'element t -> 'element
 val to_list : 'element t -> 'element list
 (** The elements, in the set's own order. *)
 
+(** A mutable accumulator over one set, for a run of edits that should cost one handle rather than
+    one retained version per element. *)
 module Builder : sig
   type 'element set = 'element t
+  (** The set type this builder produces. *)
+
   type 'element t
-(** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills a
-    buffer and produces a persistent value only on demand, which is cheaper than one version per
-    element. *)
+  (** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills
+      a buffer and produces a persistent value only on demand, which is cheaper than one version per
+      element. *)
 
   val create : 'element set -> 'element t
+  (** A builder seeded with the given set, which is itself left untouched. *)
+
   val add : 'element -> 'element t -> bool
+  (** Add the element. Returns [true] when it was newly added and [false] when an equal element was
+      already present, in which case the first representative is kept. *)
+
   val remove : 'element -> 'element t -> bool
+  (** Remove the element. Returns [true] when it was present. *)
+
   val freeze : 'element t -> 'element set
+  (** The set staged so far. The builder stays usable, and because sets are immutable the returned
+      value is unaffected by later edits. *)
 end

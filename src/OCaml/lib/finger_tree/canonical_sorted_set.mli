@@ -1,6 +1,10 @@
 (** Persistent sorted set with policy-canonical deterministic ranks. *)
 
 type rank = { geometric : int; secondary : int64; content : int64 }
+(** An element's derived rank. [geometric] gives the tree level and decides shape; [secondary] and
+    [content] break ties deterministically, so equal geometric ranks still yield one canonical
+    topology rather than depending on insertion order. *)
+
 type 'element rank_policy
 (** How an element's rank is derived. The rank fixes where the element sits, which is what makes the
     shape depend only on contents. *)

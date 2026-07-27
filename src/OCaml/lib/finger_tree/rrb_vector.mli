@@ -117,17 +117,35 @@ val cursor_replace_next : 'element -> 'element cursor -> 'element cursor option
 val cursor_snapshot : 'element cursor -> 'element t
 (** The vector version this cursor is positioned in. *)
 
+(** A mutable accumulator over one vector. Unlike the rope builder it also edits and removes, so it
+    is a staging area rather than a pure append buffer. *)
 module Builder : sig
   type 'element vector = 'element t
+  (** The vector type this builder produces. *)
+
   type 'element t
-(** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills a
-    buffer and produces a persistent value only on demand, which is cheaper than one version per
-    element. *)
+  (** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills
+      a buffer and produces a persistent value only on demand, which is cheaper than one version per
+      element. *)
 
   val create : 'element vector -> 'element t
+  (** A builder seeded with the given vector, which is itself left untouched. *)
+
   val length : 'element t -> int
+  (** Number of elements staged so far. *)
+
   val append : 'element -> 'element t -> unit
+  (** Append one element to the end. *)
+
   val set : int -> 'element -> 'element t -> (unit, string) result
+  (** Replace the element at the index, reporting an error when the index is out of range. The
+      builder is unchanged on error. *)
+
   val remove : int -> 'element t -> ('element, string) result
+  (** Remove the element at the index and return it, reporting an error when the index is out of
+      range. The builder is unchanged on error. *)
+
   val freeze : 'element t -> 'element vector
+  (** The vector staged so far. The builder stays usable, and because vectors are immutable the
+      returned value is unaffected by later edits. *)
 end

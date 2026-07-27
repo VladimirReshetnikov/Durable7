@@ -1,6 +1,9 @@
 (** Persistent 32-way hash-array mapped trie. *)
 
 exception Duplicate_key
+(** Raised by a strict addition when the key is already present. Use [set] when replacement is
+    intended. *)
+
 exception Transient_consumed
 (** Raised when a spent mutable session is used again. A session is single-use, so this catches a
     stale handle rather than letting it read a version it does not own. *)
@@ -105,33 +108,71 @@ val diff : ('key, 'value) map -> ('key, 'value) map -> ('key, 'value) difference
 (** The entry-level differences between two collections. Subtrees the two already share are skipped
     whole. *)
 
+(** Construction-only bulk building.
+
+    A builder is a mutable cell holding one map, so a run of insertions costs one handle rather than
+    one retained version per entry. It is {e reusable}: [freeze] hands out the map built so far and
+    leaves the builder usable, and because maps are immutable the frozen value is unaffected by
+    later additions. Removal is deliberately absent - this is for construction, not editing; use
+    [Transient] for a session that also removes. *)
 module Bulk_builder : sig
   type ('key, 'value) t
-(** A builder for constructing a map in bulk, cheaper than repeated insertion. *)
+  (** A builder for constructing a map in bulk, cheaper than repeated insertion. *)
 
   val create : ('key, 'value) map -> ('key, 'value) t
+  (** A builder seeded with the given map, which is itself left untouched. *)
+
   val count : ('key, 'value) t -> int
+  (** Number of entries accumulated so far. *)
+
   val set : 'key -> 'value -> ('key, 'value) t -> unit
+  (** Bind the key to the value, replacing any existing binding. *)
+
   val add : 'key -> 'value -> ('key, 'value) t -> unit
+  (** Bind the key to the value, raising [Duplicate_key] when it is already present. *)
+
   val freeze : ('key, 'value) t -> ('key, 'value) map
+  (** The map built so far. The builder stays usable afterwards, and the returned map is detached:
+      later additions do not affect it. *)
 end
 
+(** A one-way mutable editing session.
+
+    Unlike [Bulk_builder], a transient both adds and removes, and it is {e single-use}: [persistent]
+    publishes the accumulated version and spends the session. Every subsequent operation on that
+    handle - including a read - raises [Transient_consumed] rather than silently working against a
+    version the session no longer owns. The map a session was created from is never modified. *)
 module Transient : sig
   type ('key, 'value) t
-(** A mutable session seeded from a map, for building a version in bulk. Its edits are visible only
-    through it until it is persisted. *)
+  (** A mutable session seeded from a map, for building a version in bulk. Its edits are visible
+      only through it until it is persisted. *)
 
   val create : ('key, 'value) map -> ('key, 'value) t
+  (** A session seeded with the given map, which is itself left untouched. *)
+
   val count : ('key, 'value) t -> int
+  (** Number of entries currently in the session. Raises [Transient_consumed] once spent. *)
+
   val find_opt : 'key -> ('key, 'value) t -> 'value option
+  (** The value bound to the key in the session, or [None] when absent. Raises
+      [Transient_consumed] once spent. *)
 
   val fold :
     ('accumulator -> 'key -> 'value -> 'accumulator) ->
     'accumulator ->
     ('key, 'value) t ->
     'accumulator
+  (** Fold over the session's entries. Raises [Transient_consumed] once spent. *)
 
   val set : 'key -> 'value -> ('key, 'value) t -> unit
+  (** Bind the key to the value within the session, replacing any existing binding. Raises
+      [Transient_consumed] once spent. *)
+
   val remove : 'key -> ('key, 'value) t -> unit
+  (** Remove the key from the session; removing an absent key is not an error. Raises
+      [Transient_consumed] once spent. *)
+
   val persistent : ('key, 'value) t -> ('key, 'value) map
+  (** Publish the accumulated version and spend the session. Every later use of this handle raises
+      [Transient_consumed]. *)
 end

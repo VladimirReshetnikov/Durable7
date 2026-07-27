@@ -47,7 +47,8 @@ val add : 'key -> 'value -> ('key, 'value) t -> (('key, 'value) t, string) resul
 (** A map containing the given entry. *)
 
 val set : 'key -> 'value -> ('key, 'value) t -> bool * ('key, 'value) t
-(** A map with the key bound to the value, adding or replacing as needed. *)
+(** A map with the key bound to the value, adding or replacing as needed. The flag is [true] when
+    the key was newly added and [false] when an existing binding was replaced. *)
 
 val remove : 'key -> ('key, 'value) t -> ('value * ('key, 'value) t) option
 (** A map without that entry. *)
@@ -79,15 +80,28 @@ val key_range : minimum:'key -> maximum:'key -> ('key, 'value) t -> ('key, 'valu
 val to_list : ('key, 'value) t -> ('key * 'value) list
 (** The entries, in the map's own order. *)
 
+(** A mutable accumulator over one map, for a run of edits that should cost one handle rather than
+    one retained version per entry. *)
 module Builder : sig
   type ('key, 'value) map = ('key, 'value) t
+  (** The map type this builder produces. *)
+
   type ('key, 'value) t
-(** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills a
-    buffer and produces a persistent value only on demand, which is cheaper than one version per
-    element. *)
+  (** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills
+      a buffer and produces a persistent value only on demand, which is cheaper than one version per
+      element. *)
 
   val create : ('key, 'value) map -> ('key, 'value) t
+  (** A builder seeded with the given map, which is itself left untouched. *)
+
   val set : 'key -> 'value -> ('key, 'value) t -> bool
+  (** Bind the key to the value, adding or replacing as needed. Returns [true] when the key was
+      newly added and [false] when an existing binding was replaced. *)
+
   val remove : 'key -> ('key, 'value) t -> 'value option
+  (** Remove the key and return the value it held, or [None] when it was absent. *)
+
   val freeze : ('key, 'value) t -> ('key, 'value) map
+  (** The map staged so far. The builder stays usable, and because maps are immutable the returned
+      value is unaffected by later edits. *)
 end

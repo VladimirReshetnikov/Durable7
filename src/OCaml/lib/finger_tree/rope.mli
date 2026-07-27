@@ -38,15 +38,27 @@ val slice : start:int -> length:int -> 'element t -> ('element t, string) result
 val to_list : 'element t -> 'element list
 (** The elements, in the collection's own order. *)
 
+(** An append-only accumulator for building a rope in bulk, cheaper than one retained version per
+    element. *)
 module Builder : sig
   type 'element rope = 'element t
+  (** The rope type this builder produces. *)
+
   type 'element t
-(** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills a
-    buffer and produces a persistent value only on demand, which is cheaper than one version per
-    element. *)
+  (** A mutable accumulator for building a collection in bulk. Deliberately not a snapshot: it fills
+      a buffer and produces a persistent value only on demand, which is cheaper than one version per
+      element. *)
 
   val create : unit -> 'element t
+  (** An empty builder. Append-only: there is no seed rope and no removal. *)
+
   val append : 'element -> 'element t -> unit
+  (** Append one element to the buffer. O(1). *)
+
   val append_rope : 'element rope -> 'element t -> unit
+  (** Append every element of an existing rope, in order. The source rope is unaffected. *)
+
   val freeze : 'element t -> 'element rope
+  (** Build a rope from everything appended so far, in append order. The builder stays usable, and
+      because ropes are immutable the returned value is unaffected by later appends. *)
 end

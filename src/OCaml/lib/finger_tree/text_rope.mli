@@ -1,6 +1,8 @@
 (** UTF-8 text rope indexed by Unicode scalar value. *)
 
 type t
+(** A persistent UTF-8 text rope. Positions, lengths, and every index are counted in Unicode scalar
+    values rather than bytes or UTF-16 units, so no operation can split a character. *)
 
 val empty : t
 (** The empty rope. *)

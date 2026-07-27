@@ -1,9 +1,14 @@
 (** Immutable snapshot-bound cursor for UTF-8 text ropes. *)
 
 type t
+(** A retained text-rope version together with a gap position in it, counted in Unicode scalar
+    values rather than bytes. The cursor names a gap {e between} code points, so insertion and
+    deletion have an unambiguous target. Cursors are values: every edit returns a new cursor over a
+    new text version and leaves the receiver untouched. *)
 
 val create : ?position:int -> Text_rope.t -> (t, string) result
-(** An empty collection using the supplied policies, which it retains. *)
+(** A cursor over the given text version at [position], defaulting to the gap before the first code
+    point. Reports an error when the position lies outside [0..length]. *)
 
 val text : t -> Text_rope.t
 (** The text rope version this cursor is positioned in. *)
@@ -15,7 +20,8 @@ val line_column : t -> int * int
 (** The cursor's position expressed as a line and column. *)
 
 val move_to : int -> t -> (t, string) result
-(** A collection with the element moved to the given position in the insertion order. *)
+(** A cursor at the given code-point gap of the same text version, reporting an error when the
+    position lies outside [0..length]. Moves the cursor; the text is unchanged. *)
 
 val move_to_line_column : line:int -> column:int -> t -> (t, string) result
 (** A cursor at the given line and column within the same version. *)

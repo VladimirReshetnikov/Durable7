@@ -1,6 +1,10 @@
 (** Sparse persistent non-negative bit set with rank/select queries. *)
 
 type t
+(** A persistent set of non-negative integers, stored as sparse fixed-width chunks so that a set
+    holding a few very large members costs proportionally to the members rather than to the largest
+    one. *)
+
 type statistics = { bit_count : int; chunk_count : int; highest_bit : int option }
 (** Shape measurements returned by a structural audit. *)
 

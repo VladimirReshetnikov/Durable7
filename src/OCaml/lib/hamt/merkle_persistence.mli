@@ -1,5 +1,8 @@
 (** Verified persistence, packs, and synchronization for MST2 blocks. *)
 
+(** Why a block graph was rejected. Verification distinguishes these rather than reporting one
+    opaque failure, so a caller can tell a recoverable gap - [Missing_block], which synchronization
+    can fill - from evidence that the supplied data is wrong or hostile. *)
 type failure_kind =
   | Unsupported_algorithm
   | Domain_mismatch

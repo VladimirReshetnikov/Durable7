@@ -61,20 +61,54 @@ val disjoint : 'element t -> 'element t -> bool
 val equal : 'element t -> 'element t -> bool
 (** Whether both collections hold the same elements. *)
 
+(** A one-way mutable editing session.
+
+    Edits are visible only through the session until [persistent] publishes them; the set the
+    session was created from is never modified. The session is {e single-use}: [persistent] spends
+    it, and every later operation on that handle - including a read - raises
+    [Persistent_hamt.Transient_consumed].
+
+    All six set relations are available during the session, so a bulk edit can be checked against a
+    published set without first publishing the work in progress. Each takes the session on the left
+    and a published set on the right. *)
 module Transient : sig
   type 'element session
-(** A mutable session seeded from a set, for building a version in bulk. *)
+  (** A mutable session seeded from a set, for building a version in bulk. *)
 
   val create : 'element t -> 'element session
+  (** A session seeded with the given set, which is itself left untouched. *)
+
   val count : 'element session -> int
+  (** Number of elements currently in the session. *)
+
   val mem : 'element -> 'element session -> bool
+  (** Whether the element is present in the session. *)
+
   val subset : 'element session -> 'element t -> bool
+  (** Whether every element of the session is in the given set. *)
+
   val proper_subset : 'element session -> 'element t -> bool
+  (** [subset] and the two are not equal. *)
+
   val superset : 'element session -> 'element t -> bool
+  (** Whether the session contains every element of the given set. *)
+
   val proper_superset : 'element session -> 'element t -> bool
+  (** [superset] and the two are not equal. *)
+
   val overlaps : 'element session -> 'element t -> bool
+  (** Whether the session and the given set share at least one element. *)
+
   val equal : 'element session -> 'element t -> bool
+  (** Whether the session holds exactly the elements of the given set. *)
+
   val add : 'element -> 'element session -> unit
+  (** Add the element to the session; adding a present element is not an error. *)
+
   val remove : 'element -> 'element session -> unit
+  (** Remove the element from the session; removing an absent element is not an error. *)
+
   val persistent : 'element session -> 'element t
+  (** Publish the accumulated version and spend the session. Every later use of this handle raises
+      [Persistent_hamt.Transient_consumed]. *)
 end

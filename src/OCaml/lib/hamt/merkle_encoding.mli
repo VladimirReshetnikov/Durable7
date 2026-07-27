@@ -1,6 +1,8 @@
 (** Canonical codecs, SHA-256 digests, and policy framing for the MST2 wire. *)
 
 type digest
+(** A 256-bit SHA-256 content digest. Two trees holding the same entries under the same policy
+    produce the same digest, which is what makes the structure authenticated. *)
 
 val digest_bytes : digest -> bytes
 (** The digest's raw bytes. *)
@@ -71,7 +73,9 @@ val create_policy :
   value_codec:'value codec ->
   unit ->
   (('key, 'value) policy, string) result
-(** A policy built from the supplied callbacks. *)
+(** A policy built from the supplied callbacks, or an error when they are inconsistent. The
+    [policy_id] and both codec identities are mixed into every digest, so two trees are combinable
+    only when their policies agree; a codec change is therefore never mistaken for a data change. *)
 
 val policy_id : ('key, 'value) policy -> string
 (** The policy's identity, which decides whether two collections may be combined. *)
