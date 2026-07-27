@@ -11,14 +11,25 @@ namespace Durable7.FingerTree.Tests;
 /// </summary>
 internal readonly record struct RangeUpdateTag(int Multiplier, int Offset, int IdentityFlavor = 0)
 {
+    /// <summary>Gets this value's identity, for sharing assertions.</summary>
     internal static RangeUpdateTag Identity => new(1, 0);
 
+    /// <summary>
+    /// Gets an identity tag distinguishable from the canonical one, so a test can check that identity is decided by the
+    /// algebra rather than by reference.
+    /// </summary>
     internal static RangeUpdateTag DistinctIdentity(int flavor) => new(1, 0, flavor);
 
+    /// <summary>Returns a collection containing the given element.</summary>
     internal static RangeUpdateTag Add(int delta) => new(1, delta);
 
+    /// <summary>Returns the tag that overwrites whatever it is applied to, discarding what was there.</summary>
     internal static RangeUpdateTag Assign(int value) => new(0, value);
 
+    /// <summary>
+    /// Returns the tag scaling each element and adding an offset. Composition of two of these is another of the same
+    /// shape, which is what lets them be folded rather than replayed.
+    /// </summary>
     internal static RangeUpdateTag ScaleAndAdd(int multiplier, int offset) => new(multiplier, offset);
 }
 
@@ -82,8 +93,10 @@ internal readonly struct RangeUpdateAffineAlgebra
 /// <summary>Nullable replacement tag; <c>HasReplacement == false</c> is the identity.</summary>
 internal readonly record struct RangeUpdateNullableTag(bool HasReplacement, string? Replacement)
 {
+    /// <summary>Gets this value's identity, for sharing assertions.</summary>
     internal static RangeUpdateNullableTag Identity => default;
 
+    /// <summary>Returns the tag that overwrites whatever it is applied to, discarding what was there.</summary>
     internal static RangeUpdateNullableTag Assign(string? value) => new(true, value);
 }
 
@@ -243,10 +256,12 @@ internal readonly struct RangeUpdateThrowingAlgebra
 internal static class RangeUpdateAssert
 {
     internal static RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateAffineAlgebra>
+        /// <summary>Creates an element collection using the supplied policies, which it retains.</summary>
         Create(params int[] items) =>
         RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateAffineAlgebra>
             .Create(items.AsSpan());
 
+    /// <summary>Folds the sequence's elements into one value.</summary>
     internal static RangeUpdateMeasure Fold(IEnumerable<int> items)
     {
         var result = RangeUpdateAffineAlgebra.Empty;
@@ -255,12 +270,14 @@ internal static class RangeUpdateAssert
         return result;
     }
 
+    /// <summary>Applies this value to its operand, as the algebra defines.</summary>
     internal static void Apply(List<int> model, int index, int count, RangeUpdateTag tag)
     {
         for (var offset = 0; offset < count; offset++)
             model[index + offset] = RangeUpdateAffineAlgebra.ApplyElement(tag, model[index + offset]);
     }
 
+    /// <summary>Asserts that the structure matches the model it is compared against.</summary>
     internal static RangeUpdateStructureSnapshot Matches(
         IReadOnlyList<int> expected,
         RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateAffineAlgebra> actual)
@@ -275,6 +292,9 @@ internal static class RangeUpdateAssert
         return RangeUpdateDiagnosticsAdapter.Validate(actual, static (left, right) => left == right);
     }
 
+    /// <summary>
+    /// Asserts that every range's measure matches the model's, which a pending tag pushed down incorrectly would break.
+    /// </summary>
     internal static void AllRangesMatch(
         IReadOnlyList<int> expected,
         RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateAffineAlgebra> actual)

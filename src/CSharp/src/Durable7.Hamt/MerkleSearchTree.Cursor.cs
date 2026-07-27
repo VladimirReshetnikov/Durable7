@@ -34,6 +34,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
         return new MerkleSearchTreeCursor<TKey, TValue>(this, rank);
     }
 
+    /// <summary>Returns at rank, reporting whether it succeeded.</summary>
     internal bool TryGetAtRank(int rank, out KeyValuePair<TKey, TValue> entry)
     {
         if ((uint)rank >= (uint)Count)
@@ -73,6 +74,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
         throw new InvalidOperationException("Merkle subtree counts do not contain the requested rank.");
     }
 
+    /// <summary>Returns the rank where the probe belongs together with whether it is actually present.</summary>
     internal int GetLowerBoundRank(TKey key, out bool found)
     {
         var rank = 0;
@@ -108,6 +110,7 @@ public readonly struct MerkleSearchTreeCursor<TKey, TValue>
     private readonly MerkleSearchTree<TKey, TValue>? _source;
     private readonly int _position;
 
+    /// <summary>Creates a new merkle search tree cursor.</summary>
     internal MerkleSearchTreeCursor(MerkleSearchTree<TKey, TValue> source, int position)
     {
         _source = source;
@@ -239,6 +242,7 @@ public readonly struct MerkleSearchTreeCursor<TKey, TValue>
 /// </summary>
 internal static class MerkleCursorGuard
 {
+    /// <summary>Throws when the position falls outside the collection.</summary>
     internal static void ValidatePosition(int position, int count)
     {
         if ((uint)position > (uint)count)

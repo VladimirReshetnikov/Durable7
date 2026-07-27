@@ -179,20 +179,30 @@ public sealed class PersistentIndexedMapTests
 
     private sealed class KeyComparer : IEqualityComparer<Key>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static KeyComparer Instance { get; } = new();
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Key? x, Key? y) => StringComparer.OrdinalIgnoreCase.Equals(x?.Class, y?.Class);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(Key obj) => StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Class);
     }
 
     private sealed class CategoryComparer : IEqualityComparer<Category>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static CategoryComparer Instance { get; } = new();
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Category? x, Category? y) =>
             StringComparer.OrdinalIgnoreCase.Equals(x?.Class, y?.Class);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(Category obj) => StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Class);
     }
 }

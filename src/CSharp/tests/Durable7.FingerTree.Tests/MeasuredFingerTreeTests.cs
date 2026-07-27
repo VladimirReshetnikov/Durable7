@@ -15,10 +15,13 @@ public sealed class MeasuredFingerTreeTests
 {
     private readonly struct MaxMeasure : IMeasure<int, int>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => int.MinValue;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => Math.Max(left, right);
 
+        /// <summary>Returns the measure of one element.</summary>
         public static int Measure(int element) => element;
     }
 
@@ -26,11 +29,14 @@ public sealed class MeasuredFingerTreeTests
 
     private readonly struct LastKeyMeasure : IMeasure<int, SumKey>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static SumKey Empty => new(0, int.MinValue);
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static SumKey Combine(SumKey left, SumKey right) =>
             new(left.Count + right.Count, right.Count == 0 ? left.LastKey : right.LastKey);
 
+        /// <summary>Returns the measure of one element.</summary>
         public static SumKey Measure(int element) => new(1, element);
     }
 

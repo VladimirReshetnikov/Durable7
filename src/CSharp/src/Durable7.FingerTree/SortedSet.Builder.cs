@@ -22,12 +22,14 @@ public sealed partial class SortedSet<T>
         private int _cachedVersion;
         private SortedSet<T> _cachedResult;
 
+        /// <summary>Creates a new builder.</summary>
         internal Builder(IComparer<T> comparer)
         {
             _items = new System.Collections.Generic.SortedSet<T>(comparer);
             _cachedResult = Create(comparer);
         }
 
+        /// <summary>Creates a new builder.</summary>
         internal Builder(SortedSet<T> source)
         {
             _items = new System.Collections.Generic.SortedSet<T>(source, source.Comparer);

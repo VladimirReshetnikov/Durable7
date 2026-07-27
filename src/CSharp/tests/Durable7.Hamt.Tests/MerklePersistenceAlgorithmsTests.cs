@@ -617,17 +617,23 @@ public sealed class MerklePersistenceAlgorithmsTests
     {
         private readonly Dictionary<MerkleDigest, MerkleBlock> _blocks = [];
 
+        /// <summary>Gets the number of elements in the collection.</summary>
         public int Count => _blocks.Count;
 
+        /// <summary>Gets every digest the store holds.</summary>
         public IReadOnlyCollection<MerkleDigest> Digests => Array.AsReadOnly(_blocks.Keys.Order().ToArray());
 
+        /// <summary>Gets the put call count.</summary>
         public int PutCallCount { get; private set; }
 
+        /// <summary>Determines whether the element is present.</summary>
         public bool Contains(MerkleDigest digest) => _blocks.ContainsKey(digest);
 
+        /// <summary>Reads the value stored for the key, reporting whether it was present.</summary>
         public bool TryGet(MerkleDigest digest, [NotNullWhen(true)] out MerkleBlock? block) =>
             _blocks.TryGetValue(digest, out block);
 
+        /// <summary>Returns a collection with the key bound to the value, adding or replacing as needed.</summary>
         public bool Put(MerkleBlock block)
         {
             PutCallCount++;
@@ -644,33 +650,52 @@ public sealed class MerklePersistenceAlgorithmsTests
             return true;
         }
 
+        /// <summary>Returns a collection without that element.</summary>
         public bool Remove(MerkleDigest digest) => _blocks.Remove(digest);
 
+        /// <summary>Returns an empty collection retaining the same policies.</summary>
         public void Clear() => _blocks.Clear();
 
+        /// <summary>
+        /// Seeds the store without verification, so a test can construct a deliberately corrupt store.
+        /// </summary>
         internal void SeedUnsafe(MerkleBlock block) => _blocks.Add(block.Digest, block);
     }
 
     private sealed class CountingCodec<T>(IMerkleCodec<T> inner) : IMerkleCodec<T>
     {
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => inner.EncodingId;
 
+        /// <summary>Encodes the call count.</summary>
         internal int EncodeCallCount { get; private set; }
 
+        /// <summary>Decodes the call count.</summary>
         internal int DecodeCallCount { get; private set; }
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(T value)
         {
             EncodeCallCount++;
             return inner.Encode(value);
         }
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public T Decode(ReadOnlySpan<byte> encoding)
         {
             DecodeCallCount++;
             return inner.Decode(encoding);
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         internal void Reset()
         {
             EncodeCallCount = 0;

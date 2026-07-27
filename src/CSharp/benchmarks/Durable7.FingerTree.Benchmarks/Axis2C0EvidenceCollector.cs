@@ -18,6 +18,7 @@ internal static class Axis2C0EvidenceCollector
         WriteIndented = true,
     };
 
+    /// <summary>Runs the operation, reporting failure rather than throwing.</summary>
     internal static bool TryRun(string[] args)
     {
         if (args.Length == 0 || !string.Equals(args[0], Command, StringComparison.Ordinal))

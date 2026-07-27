@@ -11,10 +11,14 @@ namespace Durable7.Tests.Infrastructure;
 /// </summary>
 internal static class HeadlessTestProcess
 {
+    /// <summary>Gets the suppressed error mode mask.</summary>
     internal const uint SuppressedErrorModeMask = 0x0000_8003;
+    /// <summary>Gets the wer always show ui.</summary>
     internal const uint WerAlwaysShowUi = 0x0000_0010;
+    /// <summary>Gets the wer no ui.</summary>
     internal const uint WerNoUi = 0x0000_0020;
 
+/// <summary>Prepares the state this run needs.</summary>
 #pragma warning disable CA2255 // Test assemblies deliberately initialize process-wide failure handling before test code runs.
     [ModuleInitializer]
 #pragma warning restore CA2255
@@ -47,8 +51,10 @@ internal static class HeadlessTestProcess
         }
     }
 
+    /// <summary>Returns the current error mode.</summary>
     internal static uint GetCurrentErrorMode() => GetErrorMode();
 
+    /// <summary>Returns the current wer flags.</summary>
     internal static uint GetCurrentWerFlags() => GetWerFlags();
 
     private static uint GetWerFlags()

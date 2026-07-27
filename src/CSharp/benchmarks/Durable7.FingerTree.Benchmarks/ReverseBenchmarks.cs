@@ -11,6 +11,7 @@ namespace Durable7.FingerTree.Benchmarks;
 [MemoryDiagnoser]
 public class ReverseBenchmarks
 {
+    /// <summary>Gets the number of elements in the collection.</summary>
     [Params(100, 10_000, 1_000_000)]
     public int Size;
 
@@ -18,6 +19,7 @@ public class ReverseBenchmarks
     private ImmutableList<int> _immutable = null!;
     private int[] _array = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {

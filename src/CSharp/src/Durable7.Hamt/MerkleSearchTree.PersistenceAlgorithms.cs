@@ -1036,15 +1036,21 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
         EntryRecord[] entries,
         MerkleDigest[] childDigests)
     {
+        /// <summary>Gets the block this value holds.</summary>
         internal MerkleBlock Block { get; } = block;
+        /// <summary>Gets the node's level in the tree.</summary>
         internal int Level { get; } = level;
+        /// <summary>Gets the subtree count.</summary>
         internal int SubtreeCount { get; } = subtreeCount;
+        /// <summary>Gets the entries.</summary>
         internal EntryRecord[] Entries { get; } = entries;
+        /// <summary>Gets the child digests.</summary>
         internal MerkleDigest[] ChildDigests { get; } = childDigests;
     }
 
     private readonly struct MergeSide
     {
+        /// <summary>Creates a new merge side.</summary>
         internal MergeSide(TKey key, MerkleMergeValue<TValue> value)
         {
             HasKey = true;
@@ -1052,25 +1058,36 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
             Value = value;
         }
 
+        /// <summary>Gets a value indicating whether key.</summary>
         internal bool HasKey { get; }
+        /// <summary>Gets the stored key.</summary>
         internal TKey Key { get; }
+        /// <summary>Gets the stored value.</summary>
         internal MerkleMergeValue<TValue> Value { get; }
     }
 
     private sealed class VerificationContext(MerkleVerificationBudget budget)
     {
+        /// <summary>Gets the budget.</summary>
         internal MerkleVerificationBudget Budget { get; } = budget;
+        /// <summary>Gets how many blocks the structure occupies.</summary>
         internal int BlockCount { get; private set; }
+        /// <summary>Gets the total bytes.</summary>
         internal long TotalBytes { get; private set; }
         private long _entryCount;
         private readonly HashSet<MerkleDigest> _blocks = [];
 
+        /// <summary>Checks the depth.</summary>
         internal void CheckDepth(int depth, MerkleDigest? digest = null)
         {
             if (depth <= 0 || depth > Budget.MaxDepth)
                 throw Verification(MerkleVerificationFailureKind.ResourceLimitExceeded, "Merkle verification exceeded the maximum reference depth.", digest);
         }
 
+        /// <summary>
+        /// Charges one block against the verification budget, reporting whether it had not already been counted. A
+        /// block already seen is not charged twice, so a shared subtree costs once.
+        /// </summary>
         internal bool Account(MerkleBlock block, int depth)
         {
             CheckDepth(depth, block.Digest);
@@ -1085,6 +1102,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
             return true;
         }
 
+        /// <summary>Charges a proof query's bytes against both the per-query and total ceilings.</summary>
         internal void AccountProofQuery(int byteCount, MerkleDigest rootHash)
         {
             if (byteCount > Budget.MaxProofQueryByteCount
@@ -1098,6 +1116,10 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
             TotalBytes += byteCount;
         }
 
+        /// <summary>
+        /// Checks a proof's shape against the budget before any of it is decoded, so a crafted proof cannot force work
+        /// by being large.
+        /// </summary>
         internal void PreflightProofStructure(MerkleProof proof)
         {
             if (proof.Steps.Count > Budget.MaxBlockCount)
@@ -1120,6 +1142,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
             }
         }
 
+        /// <summary>Charges decoded entries against the verification budget.</summary>
         internal void AccountEntries(int count, MerkleDigest digest)
         {
             if (_entryCount > Budget.MaxEntryCount - count)
@@ -1132,6 +1155,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
         IReadOnlyDictionary<MerkleDigest, MerkleBlock> staged,
         IMerkleBlockStore? fallback) : IMerkleBlockStore
     {
+        /// <summary>Gets the number of elements in the collection.</summary>
         public int Count => staged.Count + (fallback?.Count ?? 0);
 
         public IReadOnlyCollection<MerkleDigest> Digests
@@ -1147,9 +1171,11 @@ public sealed partial class MerkleSearchTree<TKey, TValue>
             }
         }
 
+        /// <summary>Determines whether the element is present.</summary>
         public bool Contains(MerkleDigest digest) =>
             staged.ContainsKey(digest) || (fallback?.Contains(digest) ?? false);
 
+        /// <summary>Reads the value stored for the key, reporting whether it was present.</summary>
         public bool TryGet(MerkleDigest digest, [NotNullWhen(true)] out MerkleBlock? block)
         {
             if (staged.TryGetValue(digest, out block))

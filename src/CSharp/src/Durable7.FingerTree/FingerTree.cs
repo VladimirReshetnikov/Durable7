@@ -430,6 +430,7 @@ public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
         private int _cursor;
         private TElement _current;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(MeasuredTree<TElement, MeasuredLeaf<TElement, TMeasure, TMeasureOps>, TMeasure, TMeasureOps> root)
         {
             _state = root.IsEmpty ? null : new TraversalState(root);
@@ -502,12 +503,17 @@ public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
         /// </summary>
         private sealed class TraversalState
         {
+            /// <summary>Gets the traversal's stack of frames.</summary>
             public Frame[] Frames = new Frame[8];
+            /// <summary>Gets the structure's height.</summary>
             public int Depth;
+            /// <summary>Gets a cursor over this collection version.</summary>
             public int Cursor;
 
+            /// <summary>Creates a new traversal state.</summary>
             public TraversalState(IEnumerationBlock<TElement> root) => Push(root);
 
+            /// <summary>Returns a collection with the element added.</summary>
             public void Push(IEnumerationBlock<TElement> block)
             {
                 if (Depth == Frames.Length)
@@ -520,7 +526,9 @@ public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
         /// <param name="block">The block being traversed at this depth.</param>
         private struct Frame(IEnumerationBlock<TElement> block)
         {
+            /// <summary>Gets the block this value holds.</summary>
             public readonly IEnumerationBlock<TElement> Block = block;
+            /// <summary>Gets the next child this traversal step will descend into.</summary>
             public int NextChild = 0;
         }
     }

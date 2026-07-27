@@ -19,12 +19,14 @@ public sealed class ZeroClosureNamedOpTests
     /// <summary>A caller-supplied value-type predicate over the first (count) component.</summary>
     private readonly struct CountAbove(int index) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int count) => count > index;
     }
 
     /// <summary>A caller-supplied value-type predicate over the second (sum) component.</summary>
     private readonly struct SumAbove(int threshold) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int sum) => sum > threshold;
     }
 

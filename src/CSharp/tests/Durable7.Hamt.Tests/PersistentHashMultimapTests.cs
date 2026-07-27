@@ -157,10 +157,15 @@ public sealed class PersistentHashMultimapTests
 
     private sealed class TokenComparer : IEqualityComparer<Token>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static readonly TokenComparer Instance = new();
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Token? x, Token? y) => x?.Class == y?.Class;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(Token obj) => obj.Class;
     }
 }

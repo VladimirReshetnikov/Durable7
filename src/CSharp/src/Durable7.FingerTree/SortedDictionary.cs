@@ -350,6 +350,9 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>
+    /// Builds the map from already-sorted, already-distinct keys, skipping the ordering and deduplication work.
+    /// </summary>
     internal static SortedDictionary<TKey, TValue> FromSortedDistinctKeys(
         IEnumerable<KeyValuePair<TKey, TValue>> sorted,
         IComparer<TKey> comparer)
@@ -371,6 +374,7 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
         return Wrap(tree, comparer);
     }
 
+    /// <summary>Checks the map's structural invariants. For tests and diagnostics.</summary>
     internal void ValidateInvariants()
     {
         var actualCount = _tree.ValidateAndCount();
@@ -390,6 +394,7 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
 
     private (FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> Less,
         FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> AtLeast)
+        /// <summary>Splits at the first point where the accumulated measure reaches the threshold.</summary>
         SplitAtLeast(TKey key) =>
         _tree.Split(new KeyAtLeastPredicate<TKey>(_comparer, key));
 

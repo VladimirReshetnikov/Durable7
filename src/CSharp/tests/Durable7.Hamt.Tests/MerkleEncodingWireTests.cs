@@ -311,10 +311,21 @@ public sealed class MerkleEncodingWireTests
 
     private sealed class NamedIntCodec(string? encodingId) : IMerkleCodec<int>
     {
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => encodingId!;
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(int value) => MerkleCodecs.Int32.Encode(value);
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public int Decode(ReadOnlySpan<byte> encoding) => MerkleCodecs.Int32.Decode(encoding);
     }
 }

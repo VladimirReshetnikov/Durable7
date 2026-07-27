@@ -334,10 +334,12 @@ public sealed class RopeCursorTests
 
     private sealed class ThrowingEquality(int id)
     {
+        /// <summary>Gets the identifier.</summary>
         public int Id { get; } = id;
 
         public override bool Equals(object? obj) => throw new InvalidOperationException("Equality must not be called.");
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Id;
     }
 }

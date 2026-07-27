@@ -7,8 +7,10 @@ namespace Durable7.FingerTree;
 
 public sealed partial class Rope<T>
 {
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object RootIdentityForDiagnostics => _tree;
 
+    /// <summary>Returns the shape measurements a structural audit collects.</summary>
     internal RopeStructureDiagnostics GetStructureDiagnostics()
     {
         var chunkCount = 0;
@@ -40,8 +42,10 @@ public sealed partial class Rope<T>
             EstimatedChunkStorageBytes: estimatedChunkStorageBytes);
     }
 
+    /// <summary>Returns the chunk lengths for diagnostics.</summary>
     internal int[] GetChunkLengthsForDiagnostics() => [.. _tree.Select(static chunk => chunk.Length)];
 
+    /// <summary>Returns how many backing stores the two versions share.</summary>
     internal int CountSharedBackingStoresForDiagnostics(Rope<T> other)
     {
         ArgumentNullException.ThrowIfNull(other);

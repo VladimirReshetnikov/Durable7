@@ -18,9 +18,11 @@ public class BrodalOkasakiHeapBenchmarks
     private int[] _values = null!;
     private (int Element, int Priority)[] _priorityEntries = null!;
 
+    /// <summary>Gets the number of elements in the heap.</summary>
     [Params(1_000, 100_000)]
     public int Count { get; set; }
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -34,41 +36,50 @@ public class BrodalOkasakiHeapBenchmarks
         _otherFingerTree = PriorityQueue<int, int>.CreateRange(_priorityEntries);
     }
 
+    /// <summary>Measures brodal insert.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Insert")]
     public BrodalOkasakiHeap<int> BrodalInsert() => _heap.Insert(Count);
 
+    /// <summary>Measures finger tree enqueue.</summary>
     [Benchmark]
     [BenchmarkCategory("Insert")]
     public PriorityQueue<int, int> FingerTreeEnqueue() => _fingerTree.Enqueue(Count, Count);
 
+    /// <summary>Measures brodal meld.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Meld")]
     public BrodalOkasakiHeap<int> BrodalMeld() => _heap.Meld(_other);
 
+    /// <summary>Measures finger tree meld.</summary>
     [Benchmark]
     [BenchmarkCategory("Meld")]
     public PriorityQueue<int, int> FingerTreeMeld() => _fingerTree.Meld(_otherFingerTree);
 
+    /// <summary>Measures brodal delete minimum.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("DeleteMinimum")]
     public BrodalOkasakiHeap<int> BrodalDeleteMinimum() => _heap.DeleteMinimum();
 
+    /// <summary>Measures finger tree dequeue.</summary>
     [Benchmark]
     [BenchmarkCategory("DeleteMinimum")]
     public PriorityQueue<int, int> FingerTreeDequeue() =>
         _fingerTree.TryDequeue(out _, out _, out var remainder) ? remainder : _fingerTree;
 
+    /// <summary>Measures brodal build from range.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Build")]
     public BrodalOkasakiHeap<int> BrodalBuildFromRange() =>
         BrodalOkasakiHeap<int>.CreateRange(_values);
 
+    /// <summary>Measures finger tree build from range.</summary>
     [Benchmark]
     [BenchmarkCategory("Build")]
     public PriorityQueue<int, int> FingerTreeBuildFromRange() =>
         PriorityQueue<int, int>.CreateRange(_priorityEntries);
 
+    /// <summary>Measures brodal drain all.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Drain")]
     public long BrodalDrainAll()
@@ -84,6 +95,7 @@ public class BrodalOkasakiHeapBenchmarks
         return checksum;
     }
 
+    /// <summary>Measures finger tree drain all.</summary>
     [Benchmark]
     [BenchmarkCategory("Drain")]
     public long FingerTreeDrainAll()
@@ -99,6 +111,7 @@ public class BrodalOkasakiHeapBenchmarks
         return checksum;
     }
 
+    /// <summary>Measures brodal validate structure.</summary>
     [Benchmark]
     [BenchmarkCategory("Validate")]
     public BrodalOkasakiHeapStatistics BrodalValidateStructure() => _heap.ValidateStructure();

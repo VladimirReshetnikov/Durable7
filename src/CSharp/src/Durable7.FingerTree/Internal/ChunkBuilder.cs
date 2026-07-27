@@ -11,8 +11,10 @@ internal sealed class ChunkBuilder<T>
     private T[] _tail = new T[RopeChunking.MaxChunkSize];
     private int _tailLength;
 
+    /// <summary>Gets the number of elements in the chunk.</summary>
     public int Count { get; private set; }
 
+    /// <summary>Returns a chunk containing the given element.</summary>
     public void Add(T item)
     {
         if (Count == int.MaxValue)
@@ -24,6 +26,7 @@ internal sealed class ChunkBuilder<T>
         Count++;
     }
 
+    /// <summary>Returns a chunk containing the given element.</summary>
     public void Add(ReadOnlySpan<T> items)
     {
         if (items.Length == 0)
@@ -44,6 +47,7 @@ internal sealed class ChunkBuilder<T>
         }
     }
 
+    /// <summary>Returns an empty chunk retaining the same policies.</summary>
     public void Clear()
     {
         _fullChunks.Clear();
@@ -53,6 +57,9 @@ internal sealed class ChunkBuilder<T>
         Count = 0;
     }
 
+    /// <summary>
+    /// Freezes the accumulated chunks into their immutable form, ending the builder's exclusive ownership of them.
+    /// </summary>
     public Chunk<T>[] FreezeChunks()
     {
         if (Count == 0)

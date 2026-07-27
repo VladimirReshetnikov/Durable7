@@ -418,6 +418,7 @@ public sealed partial class Rope<T> : IReadOnlyList<T>
     private static Rope<T> Wrap(FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>> tree) =>
         tree.IsEmpty ? EmptyInstance : new Rope<T>(tree);
 
+    /// <summary>Builds a rope from already-frozen chunks, without re-chunking them.</summary>
     internal static Rope<T> FromFrozenChunks(Chunk<T>[] chunks)
     {
         var tree = FingerTree<Chunk<T>, int, ChunkLengthMeasure<T>>.Empty;

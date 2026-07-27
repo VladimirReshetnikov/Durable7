@@ -312,6 +312,7 @@ public sealed partial class ReversibleDeque<T> : IReadOnlyList<T>
         private int _cursor;
         private T _current;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(RevTree<T> root)
         {
             _state = root.IsEmpty ? null : new TraversalState(root);
@@ -390,12 +391,17 @@ public sealed partial class ReversibleDeque<T> : IReadOnlyList<T>
         /// </summary>
         private sealed class TraversalState
         {
+            /// <summary>Gets the traversal's stack of frames.</summary>
             public Frame[] Frames = new Frame[8];
+            /// <summary>Gets the structure's height.</summary>
             public int Depth;
+            /// <summary>Gets a cursor over this collection version.</summary>
             public int Cursor;
 
+            /// <summary>Creates a new traversal state.</summary>
             public TraversalState(RevTree<T> root) => Push(root, mirrored: false);
 
+            /// <summary>Returns a collection with the element added.</summary>
             public void Push(RevTree<T> tree, bool mirrored)
             {
                 if (Depth == Frames.Length)
@@ -403,6 +409,7 @@ public sealed partial class ReversibleDeque<T> : IReadOnlyList<T>
                 Frames[Depth++] = new Frame(tree, mirrored);
             }
 
+            /// <summary>Returns a collection with the element added.</summary>
             public void Push(RevNode<T> node, bool mirrored)
             {
                 if (Depth == Frames.Length)
@@ -417,8 +424,10 @@ public sealed partial class ReversibleDeque<T> : IReadOnlyList<T>
             private readonly RevNode<T>? _node;
             private readonly bool _mirrored;
 
+            /// <summary>Gets the next child this traversal step will descend into.</summary>
             public int NextChild;
 
+            /// <summary>Creates a new frame.</summary>
             public Frame(RevTree<T> tree, bool mirrored)
             {
                 _tree = tree;
@@ -427,6 +436,7 @@ public sealed partial class ReversibleDeque<T> : IReadOnlyList<T>
                 NextChild = 0;
             }
 
+            /// <summary>Creates a new frame.</summary>
             public Frame(RevNode<T> node, bool mirrored)
             {
                 _tree = null;
@@ -435,8 +445,10 @@ public sealed partial class ReversibleDeque<T> : IReadOnlyList<T>
                 NextChild = 0;
             }
 
+            /// <summary>Gets the child count.</summary>
             public readonly int ChildCount => _tree?.EnumerationChildCount ?? _node!.EnumerationChildCount;
 
+            /// <summary>Returns child, reporting whether it succeeded.</summary>
             public readonly bool TryGetChild(
                 int index,
                 out T leaf,

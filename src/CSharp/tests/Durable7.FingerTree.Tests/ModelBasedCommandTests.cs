@@ -464,6 +464,7 @@ public sealed class ModelBasedCommandTests
     /// <summary>A mutable cell holding the current immutable version, so an operation can rebind it.</summary>
     private sealed class Box<T>(T value)
     {
+        /// <summary>Gets the stored value.</summary>
         public T Value = value;
     }
 
@@ -471,6 +472,7 @@ public sealed class ModelBasedCommandTests
     /// closure-free locate against the delegate locate.</summary>
     private readonly struct SumAboveInt(int threshold) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure > threshold;
     }
 }
@@ -480,9 +482,12 @@ public sealed class ModelBasedCommandTests
 /// command tests.</summary>
 internal readonly struct IntSumMeasure : Durable7.FingerTree.IMeasure<int, int>
 {
+    /// <summary>Gets the identity: the measure of an empty tree.</summary>
     public static int Empty => 0;
 
+    /// <summary>Returns the measure of one element.</summary>
     public static int Measure(int value) => value;
 
+    /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
     public static int Combine(int left, int right) => left + right;
 }

@@ -40,6 +40,7 @@ public static class FingerTreeProductExtensions
     public static (
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Left,
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Right)
+        /// <summary>Splits by the product measure's first component.</summary>
         SplitByFirst<TElement, TFirst, TSecond, TFirstOps, TSecondOps>(
             this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
             Func<TFirst, bool> predicate)
@@ -71,6 +72,7 @@ public static class FingerTreeProductExtensions
     public static (
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Left,
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Right)
+        /// <summary>Splits by the product measure's second component.</summary>
         SplitBySecond<TElement, TFirst, TSecond, TFirstOps, TSecondOps>(
             this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
             Func<TSecond, bool> predicate)
@@ -155,6 +157,7 @@ public static class FingerTreeProductExtensions
     public static (
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Left,
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Right)
+        /// <summary>Splits by the product measure's first component.</summary>
         SplitByFirst<TElement, TFirst, TSecond, TFirstOps, TSecondOps, TPredicate>(
             this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
             TPredicate predicate)
@@ -171,6 +174,7 @@ public static class FingerTreeProductExtensions
     public static (
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Left,
         FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> Right)
+        /// <summary>Splits by the product measure's second component.</summary>
         SplitBySecond<TElement, TFirst, TSecond, TFirstOps, TSecondOps, TPredicate>(
             this FingerTree<TElement, MeasurePair<TFirst, TSecond>, ProductMeasure<TElement, TFirst, TSecond, TFirstOps, TSecondOps>> tree,
             TPredicate predicate)
@@ -228,6 +232,7 @@ public static class FingerTreeProductExtensions
     public static (
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> Left,
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> Right)
+        /// <summary>Splits at the given index.</summary>
         SplitAtIndex<T>(this FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> tree, int index)
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T> =>
         tree.SplitByFirst(new IntAbovePredicate(index));
@@ -249,6 +254,7 @@ public static class FingerTreeProductExtensions
     public static (
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> Left,
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> Right)
+        /// <summary>Splits at the first point where the accumulated weight passes the threshold.</summary>
         SplitByCumulativeWeight<T>(this FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>> tree, T threshold)
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>, IComparisonOperators<T, T, bool> =>
         tree.SplitBySecond(new SumAbovePredicate<T>(threshold));

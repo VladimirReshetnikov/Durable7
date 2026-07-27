@@ -16,6 +16,7 @@ internal readonly record struct RangeUpdateStructureSnapshot(
     int PendingTagNodeCount,
     int MaximumPendingTagDepth)
 {
+    /// <summary>Gets a value indicating whether detailed statistics.</summary>
     internal bool HasDetailedStatistics => Height >= 0;
 }
 
@@ -34,6 +35,9 @@ internal readonly record struct RangeUpdateOperationSnapshot(
     long ElementApplyCallbacks,
     long MeasureApplyCallbacks)
 {
+    /// <summary>
+    /// Gets how many times the policy was invoked, which is what an operation's callback bound is asserted against.
+    /// </summary>
     internal long PolicyCallbacks =>
         ElementMeasureCallbacks
         + MeasureCombineCallbacks
@@ -46,6 +50,7 @@ internal readonly record struct RangeUpdateOperationSnapshot(
 /// <summary>Single bridge to internal invariant, sharing, and operation diagnostics.</summary>
 internal static class RangeUpdateDiagnosticsAdapter
 {
+    /// <summary>Checks the collection's structural invariants. For tests and diagnostics.</summary>
     internal static RangeUpdateStructureSnapshot Validate<TElement, TMeasure, TTag, TOps>(
         RangeUpdateSequence<TElement, TMeasure, TTag, TOps> sequence,
         Func<TMeasure, TMeasure, bool> measureEquals)
@@ -62,11 +67,13 @@ internal static class RangeUpdateDiagnosticsAdapter
             report.MaximumPendingTagDepth);
     }
 
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal static object? RootIdentity<TElement, TMeasure, TTag, TOps>(
         RangeUpdateSequence<TElement, TMeasure, TTag, TOps> sequence)
         where TOps : IRangeUpdateAlgebra<TElement, TMeasure, TTag> =>
         sequence.RootIdentityForDiagnostics;
 
+    /// <summary>Returns how many nodes the two versions have in common.</summary>
     internal static int CountSharedNodes<TElement, TMeasure, TTag, TOps>(
         RangeUpdateSequence<TElement, TMeasure, TTag, TOps> first,
         RangeUpdateSequence<TElement, TMeasure, TTag, TOps> second)

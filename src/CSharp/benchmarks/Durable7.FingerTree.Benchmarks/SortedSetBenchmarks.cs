@@ -15,6 +15,7 @@ namespace Durable7.FingerTree.Benchmarks;
 [MemoryDiagnoser]
 public class SortedSetBenchmarks
 {
+    /// <summary>Gets the number of elements in the set.</summary>
     [Params(1_000, 100_000)]
     public int Size;
 
@@ -23,6 +24,7 @@ public class SortedSetBenchmarks
     private int _probe;
     private int _rank;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -34,18 +36,22 @@ public class SortedSetBenchmarks
         _rank = Size / 2;
     }
 
+    /// <summary>Measures ours contains.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("Contains")]
     public bool Ours_Contains() => _ours.Contains(_probe);
 
+    /// <summary>Measures immutable contains.</summary>
     [Benchmark]
     [BenchmarkCategory("Contains")]
     public bool Immutable_Contains() => _immutable.Contains(_probe);
 
+    /// <summary>Measures ours add.</summary>
     [Benchmark]
     [BenchmarkCategory("Add")]
     public FtSortedSet Ours_Add() => _ours.Add(-1);
 
+    /// <summary>Measures immutable add.</summary>
     [Benchmark]
     [BenchmarkCategory("Add")]
     public BclImmutableSortedSet Immutable_Add() => _immutable.Add(-1);

@@ -30,6 +30,7 @@ public readonly struct PersistentChunkedBitSetCursor
     private readonly PersistentChunkedBitSet? _snapshot;
     private readonly long _position;
 
+    /// <summary>Creates a new persistent chunked bit set cursor.</summary>
     internal PersistentChunkedBitSetCursor(PersistentChunkedBitSet snapshot, long position)
     {
         if (position < 0 || position > snapshot.Count)

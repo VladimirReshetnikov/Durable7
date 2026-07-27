@@ -186,8 +186,10 @@ public sealed class PersistentHashSetContractOracleTests
 
     private sealed class ConstantHashOrdinalIgnoreCaseComparer : IEqualityComparer<string>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y) => StringComparer.OrdinalIgnoreCase.Equals(x, y);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj) => 0;
     }
 
@@ -195,19 +197,31 @@ public sealed class PersistentHashSetContractOracleTests
 
     private sealed class ScriptedHashComparer : IEqualityComparer<ScriptedHashItem>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ScriptedHashItem? x, ScriptedHashItem? y) => x?.Name == y?.Name;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ScriptedHashItem obj) => obj.Hash;
     }
 
     private sealed class SwitchableThrowingComparer : IEqualityComparer<string>
     {
+        /// <summary>Gets the failure this result carries.</summary>
         internal ComparerCallbackException Failure { get; } = new();
 
+        /// <summary>
+        /// Throws from the equality callback on demand, so a test can check that a failing comparison leaves the
+        /// collection unchanged.
+        /// </summary>
         internal bool ThrowFromEquals { get; set; }
 
+        /// <summary>
+        /// Throws from the hashing callback on demand, so a test can check that a failing hash leaves the collection
+        /// unchanged.
+        /// </summary>
         internal bool ThrowFromGetHashCode { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y)
         {
             if (ThrowFromEquals)
@@ -216,6 +230,7 @@ public sealed class PersistentHashSetContractOracleTests
             return StringComparer.Ordinal.Equals(x, y);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj)
         {
             if (ThrowFromGetHashCode)

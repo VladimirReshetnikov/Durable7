@@ -89,8 +89,10 @@ public sealed class PersistentBiMap<TKey, TValue> : IReadOnlyDictionary<TKey, TV
         }
     }
 
+    /// <summary>Gets the forward for testing.</summary>
     internal PersistentHashMap<TKey, TValue> ForwardForTesting => _forward;
 
+    /// <summary>Gets the inverse for testing.</summary>
     internal PersistentHashMap<TValue, TKey> InverseForTesting => _inverse;
 
     /// <summary>Creates an empty bimap with independent key and value comparers.</summary>
@@ -286,6 +288,9 @@ public sealed class PersistentBiMap<TKey, TValue> : IReadOnlyDictionary<TKey, TV
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>
+    /// Checks that the two directions are exact inverses, which is the invariant the bimap exists to maintain.
+    /// </summary>
     internal bool ValidateBijection()
     {
         if (_forward.Count != _inverse.Count)
@@ -310,6 +315,7 @@ public sealed class PersistentBiMap<TKey, TValue> : IReadOnlyDictionary<TKey, TV
     {
         private PersistentHashMap<TKey, TValue>.Enumerator _inner;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(PersistentHashMap<TKey, TValue>.Enumerator inner) => _inner = inner;
 
         /// <summary>Gets the current pair.</summary>

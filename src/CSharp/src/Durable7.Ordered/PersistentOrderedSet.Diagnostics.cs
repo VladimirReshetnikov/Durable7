@@ -55,6 +55,7 @@ public sealed partial class PersistentOrderedSet<T>
 /// </summary>
 internal sealed class PersistentOrderedSetDebugView<T>(PersistentOrderedSet<T> set)
 {
+    /// <summary>Gets the elements.</summary>
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
     public T[] Items => set.ToArray();
 }

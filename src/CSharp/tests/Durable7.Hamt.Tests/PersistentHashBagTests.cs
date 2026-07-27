@@ -309,18 +309,26 @@ public sealed class PersistentHashBagTests
 
     private sealed class OrdinalComparer : IEqualityComparer<string>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) => StringComparer.Ordinal.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value) => StringComparer.Ordinal.GetHashCode(value);
     }
 
     private sealed class CountingConstantIgnoreCaseComparer : IEqualityComparer<string>
     {
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         internal int HashCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) =>
             StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value)
         {
             HashCalls++;
@@ -330,14 +338,28 @@ public sealed class PersistentHashBagTests
 
     private sealed class SwitchableThrowingComparer : IEqualityComparer<string>
     {
+        /// <summary>Gets the failure this result carries.</summary>
         internal ComparerCallbackException Failure { get; } = new();
 
+        /// <summary>
+        /// Throws from the equality callback on demand, so a test can check that a failing comparison leaves the
+        /// collection unchanged.
+        /// </summary>
         internal bool ThrowFromEquals { get; set; }
 
+        /// <summary>
+        /// Throws from the hashing callback on demand, so a test can check that a failing hash leaves the collection
+        /// unchanged.
+        /// </summary>
         internal bool ThrowFromGetHashCode { get; set; }
 
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         internal int HashCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right)
         {
             if (ThrowFromEquals)
@@ -345,6 +367,7 @@ public sealed class PersistentHashBagTests
             return StringComparer.Ordinal.Equals(left, right);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value)
         {
             HashCalls++;

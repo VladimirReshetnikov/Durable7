@@ -126,15 +126,19 @@ public sealed class PersistentHashMapEnumeratorTests
 
     private sealed class FewBucketsComparer : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => obj & 3;
     }
 
     private sealed class HighBitsComparer : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => obj;
     }
 }

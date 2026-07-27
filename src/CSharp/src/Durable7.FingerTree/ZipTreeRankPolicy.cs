@@ -105,6 +105,7 @@ public sealed class ZipTreeRankPolicy<T>
         return new(comparer ?? Comparer<T>.Default, rankHash ?? DefaultHash, rankKey.ToArray(), seed: null);
     }
 
+    /// <summary>Returns the rank.</summary>
     internal Rank GetRank(T item)
     {
         Span<byte> source = stackalloc byte[sizeof(ulong)];
@@ -134,6 +135,7 @@ public sealed class ZipTreeRankPolicy<T>
         return SHA256.HashData(material);
     }
 
+    /// <summary>Mixes the bits of a value, spreading them so close inputs land far apart.</summary>
     internal static ulong Mix(ulong value)
     {
         value ^= value >> 30;
@@ -143,5 +145,8 @@ public sealed class ZipTreeRankPolicy<T>
         return value ^ (value >> 31);
     }
 
+    /// <summary>
+    /// An element's derived rank, which fixes where it sits and so makes the shape depend on the contents alone.
+    /// </summary>
     internal readonly record struct Rank(int Geometric, ulong Secondary, ulong Hash);
 }

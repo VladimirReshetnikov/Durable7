@@ -13,6 +13,7 @@ namespace Durable7.FingerTree.Benchmarks;
 [MemoryDiagnoser]
 public class RopeBenchmarks
 {
+    /// <summary>Gets the number of elements in the rope.</summary>
     [Params(100_000, 1_000_000)]
     public int Size;
 
@@ -23,6 +24,7 @@ public class RopeBenchmarks
     private string _string = null!;
     private ImmutableList<char> _immutable = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -41,6 +43,7 @@ public class RopeBenchmarks
     [BenchmarkCategory("Build")]
     public Rope<char> Rope_Build() => Rope<char>.Create(_source);
 
+    /// <summary>Measures immutable build.</summary>
     [Benchmark]
     [BenchmarkCategory("Build")]
     public ImmutableList<char> Immutable_Build() => ImmutableList.CreateRange(_source);
@@ -51,10 +54,12 @@ public class RopeBenchmarks
     [BenchmarkCategory("InsertMid")]
     public Rope<char> Rope_InsertMid() => _rope.InsertRange(Size / 2, Insertion.AsSpan());
 
+    /// <summary>Measures immutable insert mid.</summary>
     [Benchmark]
     [BenchmarkCategory("InsertMid")]
     public ImmutableList<char> Immutable_InsertMid() => _immutable.InsertRange(Size / 2, Insertion);
 
+    /// <summary>Measures string insert mid.</summary>
     [Benchmark]
     [BenchmarkCategory("InsertMid")]
     public string String_InsertMid() => string.Concat(_string.AsSpan(0, Size / 2), Insertion, _string.AsSpan(Size / 2));
@@ -65,6 +70,7 @@ public class RopeBenchmarks
     [BenchmarkCategory("RemoveMid")]
     public Rope<char> Rope_RemoveMid() => _rope.RemoveRange(Size / 2, 1000);
 
+    /// <summary>Measures string remove mid.</summary>
     [Benchmark]
     [BenchmarkCategory("RemoveMid")]
     public string String_RemoveMid() => _string.Remove(Size / 2, 1000);
@@ -79,6 +85,7 @@ public class RopeBenchmarks
         return right.Concat(left);
     }
 
+    /// <summary>Measures string split concat.</summary>
     [Benchmark]
     [BenchmarkCategory("SplitConcat")]
     public string String_SplitConcat() => string.Concat(_string.AsSpan(Size / 2), _string.AsSpan(0, Size / 2));

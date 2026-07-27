@@ -22,6 +22,7 @@ public sealed partial class MeasuredRope<T, TMeasure, TMeasureOps>
         private MeasuredRope<T, TMeasure, TMeasureOps> _prefix;
         private int _version;
 
+        /// <summary>Creates a new builder.</summary>
         internal Builder(MeasuredRope<T, TMeasure, TMeasureOps> prefix) => _prefix = prefix;
 
         /// <summary>Gets the number of staged elements. O(1).</summary>

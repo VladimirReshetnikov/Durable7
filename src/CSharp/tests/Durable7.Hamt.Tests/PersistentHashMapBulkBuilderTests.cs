@@ -364,17 +364,25 @@ public sealed class PersistentHashMapBulkBuilderTests
 
     private sealed class ExplicitHashComparer : IEqualityComparer<ExplicitHashKey>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y) => x.Id == y.Id;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ExplicitHashKey obj) => obj.Hash;
     }
 
     private sealed class CountingStringComparer : IEqualityComparer<string>
     {
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         public int HashCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y) => StringComparer.OrdinalIgnoreCase.Equals(x, y);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj)
         {
             HashCalls++;
@@ -384,19 +392,28 @@ public sealed class PersistentHashMapBulkBuilderTests
 
     private sealed class EquatableReference(string value)
     {
+        /// <summary>Gets the stored value.</summary>
         public string Value { get; } = value;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is EquatableReference other && Value == other.Value;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Value.GetHashCode(StringComparison.Ordinal);
     }
 
     private sealed class ThrowingEquatableReference(string value)
     {
+        /// <summary>
+        /// Throws from the equals callback on demand, so a test can check that a failing callback leaves the collection
+        /// unchanged.
+        /// </summary>
         public static bool ThrowOnEquals { get; set; }
 
+        /// <summary>Gets the stored value.</summary>
         public string Value { get; } = value;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj)
         {
             if (ThrowOnEquals)
@@ -404,6 +421,7 @@ public sealed class PersistentHashMapBulkBuilderTests
             return obj is ThrowingEquatableReference other && Value == other.Value;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Value.GetHashCode(StringComparison.Ordinal);
     }
 
@@ -411,14 +429,22 @@ public sealed class PersistentHashMapBulkBuilderTests
 
     private sealed class InstrumentedKeyComparer : IEqualityComparer<InstrumentedKey>
     {
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         public int HashCalls { get; private set; }
 
+        /// <summary>Gets how many times the policy was asked to compare.</summary>
         public int EqualityCalls { get; private set; }
 
+        /// <summary>Gets the hash failure.</summary>
         public Exception? HashFailure { get; set; }
 
+        /// <summary>Gets the equality failure.</summary>
         public Exception? EqualityFailure { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(InstrumentedKey x, InstrumentedKey y)
         {
             EqualityCalls++;
@@ -427,6 +453,7 @@ public sealed class PersistentHashMapBulkBuilderTests
             return x.Id == y.Id;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(InstrumentedKey obj)
         {
             HashCalls++;
@@ -435,6 +462,7 @@ public sealed class PersistentHashMapBulkBuilderTests
             return obj.Hash;
         }
 
+        /// <summary>Clears the recorded counts.</summary>
         public void ResetCounts()
         {
             HashCalls = 0;

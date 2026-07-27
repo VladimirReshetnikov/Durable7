@@ -231,6 +231,7 @@ public sealed class RopePropertyTests
     /// <summary>A caller-supplied value-type predicate over an accumulated integer sum measure.</summary>
     private readonly struct SumAbove(int threshold) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure > threshold;
     }
 }

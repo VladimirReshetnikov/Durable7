@@ -43,6 +43,7 @@ public class MeasuredRopeCursorBenchmarks
     [Params(MeasuredTextNewlineDensity.Sparse, MeasuredTextNewlineDensity.Dense)]
     public MeasuredTextNewlineDensity NewlineDensity { get; set; }
 
+    /// <summary>Gets the structural measurements a test asserts on.</summary>
     internal MeasuredRopeCursorDiagnosticReport Diagnostics { get; private set; }
 
     /// <summary>
@@ -119,6 +120,7 @@ public class MeasuredRopeCursorGateBenchmarks
     [Params(MeasuredTextNewlineDensity.Sparse, MeasuredTextNewlineDensity.Dense)]
     public MeasuredTextNewlineDensity NewlineDensity { get; set; }
 
+    /// <summary>Gets the structural measurements a test asserts on.</summary>
     internal MeasuredRopeCursorDiagnosticReport Diagnostics { get; private set; }
 
     /// <summary>Creates and validates the exact predeclared gate history.</summary>
@@ -208,6 +210,7 @@ public class MeasuredRopeCursorQueryBenchmarks
     [Params(MeasuredTextNewlineDensity.Sparse, MeasuredTextNewlineDensity.Dense)]
     public MeasuredTextNewlineDensity NewlineDensity { get; set; }
 
+    /// <summary>Gets the structural measurements a test asserts on.</summary>
     internal MeasuredRopeCursorDiagnosticReport Diagnostics { get; private set; }
 
     /// <summary>Creates prepared cursors and proves every timed query returns the baseline result.</summary>
@@ -496,6 +499,7 @@ public class MeasuredRopeCursorDirtyQueryBenchmarks
 /// </summary>
 internal static class MeasuredRopeCursorBenchmarkWorkload
 {
+    /// <summary>Creates a text rope holding the given text.</summary>
     internal static char[] CreateText(int length, MeasuredTextNewlineDensity density)
     {
         var newlineInterval = density switch
@@ -507,6 +511,7 @@ internal static class MeasuredRopeCursorBenchmarkWorkload
         return Axis2BenchmarkPolicy.CreateText(length, newlineInterval);
     }
 
+    /// <summary>Measures run indexed.</summary>
     internal static MeasuredRope<char, int, TMeasureOps> RunIndexed<TMeasureOps>(
         MeasuredRope<char, int, TMeasureOps> source,
         int[] positions,
@@ -525,6 +530,7 @@ internal static class MeasuredRopeCursorBenchmarkWorkload
         return snapshot;
     }
 
+    /// <summary>Measures run cursor.</summary>
     internal static MeasuredRope<char, int, TMeasureOps> RunCursor<TMeasureOps>(
         MeasuredRope<char, int, TMeasureOps> source,
         int[] positions,
@@ -547,6 +553,10 @@ internal static class MeasuredRopeCursorBenchmarkWorkload
         return snapshot;
     }
 
+    /// <summary>
+    /// Fails unless the two results agree, so a benchmark cannot report a speedup it achieved by computing something
+    /// else.
+    /// </summary>
     internal static void RequireEquivalent<TMeasureOps>(
         MeasuredRope<char, int, TMeasureOps> expected,
         MeasuredRope<char, int, TMeasureOps> actual,
@@ -561,9 +571,15 @@ internal static class MeasuredRopeCursorBenchmarkWorkload
         }
     }
 
+    /// <summary>
+    /// Returns a checksum over the seek results, so the benchmark's work cannot be optimized away.
+    /// </summary>
     internal static int MeasureSeekChecksum(int index, int measureBefore, char element) =>
         unchecked(((index * 397) ^ measureBefore) * 397 ^ element);
 
+    /// <summary>
+    /// Returns a checksum over the seek results, so the benchmark's work cannot be optimized away.
+    /// </summary>
     internal static int MeasureSeekChecksum<TMeasureOps>(
         MeasuredRopeCursor<char, int, TMeasureOps> cursor)
         where TMeasureOps : IMeasure<char, int>
@@ -573,6 +589,7 @@ internal static class MeasuredRopeCursorBenchmarkWorkload
         return MeasureSeekChecksum(cursor.Position, cursor.MeasureBefore, element);
     }
 
+    /// <summary>Measures collect diagnostics.</summary>
     internal static MeasuredRopeCursorDiagnosticReport CollectDiagnostics(
         char[] data,
         int[] positions,
@@ -710,6 +727,7 @@ internal readonly record struct MeasuredRopeCursorDiagnosticReport(
     MeasureCallbackCounts SourceMeasureSeekCallbacks,
     MeasureCallbackCounts PreparedMeasureSeekCallbacks)
 {
+    /// <summary>Renders these measurements as one line a script can parse.</summary>
     internal string ToMachineReadableLine(
         string scope,
         int documentSize,
@@ -724,6 +742,7 @@ internal readonly record struct MeasuredRopeCursorDiagnosticReport(
 /// </summary>
 internal readonly struct MeasureAtLeastPredicate(int target) : IMeasurePredicate<int>
 {
+    /// <summary>Returns whether the accumulated measure satisfies this predicate.</summary>
     public bool Invoke(int measure) => measure >= target;
 }
 
@@ -736,25 +755,30 @@ internal readonly struct CountingNewlineMeasure : IMeasure<char, int>
     private static long s_measureCalls;
     private static long s_combineCalls;
 
+    /// <summary>Gets the identity: the measure of an empty tree.</summary>
     public static int Empty => 0;
 
+    /// <summary>Returns the measure of one element.</summary>
     public static int Measure(char value)
     {
         s_measureCalls++;
         return value == '\n' ? 1 : 0;
     }
 
+    /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
     public static int Combine(int left, int right)
     {
         s_combineCalls++;
         return left + right;
     }
 
+    /// <summary>Returns the value to its initial state.</summary>
     internal static void Reset()
     {
         s_measureCalls = 0;
         s_combineCalls = 0;
     }
 
+    /// <summary>Gets the measure policy version this cursor is positioned in.</summary>
     internal static MeasureCallbackCounts Snapshot() => new(s_measureCalls, s_combineCalls);
 }

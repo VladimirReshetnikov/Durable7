@@ -17,6 +17,7 @@ namespace Durable7.FingerTree.Benchmarks;
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 public class SortedBuilderBenchmarks
 {
+    /// <summary>Gets the number of elements in the collection.</summary>
     [Params(1_000, 100_000)]
     public int Size;
 
@@ -28,6 +29,7 @@ public class SortedBuilderBenchmarks
     private FtSortedDictionary _oursDictionary = null!;
     private BclImmutableSortedDictionary _immutableDictionary = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -40,10 +42,12 @@ public class SortedBuilderBenchmarks
         _immutableDictionary = ImmutableSortedDictionary.CreateRange(_baseItems.Select(i => new KeyValuePair<int, int>(i, i)));
     }
 
+    /// <summary>Measures ours set immutable add range.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("SortedSetBatch")]
     public FtSortedSet Ours_Set_ImmutableAddRange() => _oursSet.AddRange(_batchItems);
 
+    /// <summary>Measures ours set builder union freeze.</summary>
     [Benchmark]
     [BenchmarkCategory("SortedSetBatch")]
     public FtSortedSet Ours_Set_BuilderUnionFreeze()
@@ -53,6 +57,7 @@ public class SortedBuilderBenchmarks
         return builder.ToImmutable();
     }
 
+    /// <summary>Measures ours set bcl stage then create range.</summary>
     [Benchmark]
     [BenchmarkCategory("SortedSetBatch")]
     public FtSortedSet Ours_Set_BclStageThenCreateRange()
@@ -62,6 +67,7 @@ public class SortedBuilderBenchmarks
         return FtSortedSet.CreateRange(staged);
     }
 
+    /// <summary>Measures bcl set builder union freeze.</summary>
     [Benchmark]
     [BenchmarkCategory("SortedSetBatch")]
     public BclImmutableSortedSet Bcl_Set_BuilderUnionFreeze()
@@ -71,6 +77,7 @@ public class SortedBuilderBenchmarks
         return builder.ToImmutable();
     }
 
+    /// <summary>Measures ours dictionary immutable set item loop.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("SortedDictionaryBatch")]
     public FtSortedDictionary Ours_Dictionary_ImmutableSetItemLoop()
@@ -81,6 +88,7 @@ public class SortedBuilderBenchmarks
         return result;
     }
 
+    /// <summary>Measures ours dictionary builder set item freeze.</summary>
     [Benchmark]
     [BenchmarkCategory("SortedDictionaryBatch")]
     public FtSortedDictionary Ours_Dictionary_BuilderSetItemFreeze()
@@ -91,6 +99,7 @@ public class SortedBuilderBenchmarks
         return builder.ToImmutable();
     }
 
+    /// <summary>Measures ours dictionary bcl stage then create range.</summary>
     [Benchmark]
     [BenchmarkCategory("SortedDictionaryBatch")]
     public FtSortedDictionary Ours_Dictionary_BclStageThenCreateRange()
@@ -103,6 +112,7 @@ public class SortedBuilderBenchmarks
         return FtSortedDictionary.CreateRange(staged);
     }
 
+    /// <summary>Measures bcl dictionary builder set item freeze.</summary>
     [Benchmark]
     [BenchmarkCategory("SortedDictionaryBatch")]
     public BclImmutableSortedDictionary Bcl_Dictionary_BuilderSetItemFreeze()

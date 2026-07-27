@@ -15,6 +15,7 @@ namespace Durable7.FingerTree.Benchmarks;
 [MemoryDiagnoser]
 public class PersistenceBenchmarks
 {
+    /// <summary>Gets the number of elements in the collection.</summary>
     [Params(100, 10_000, 1_000_000)]
     public int Size;
 
@@ -22,6 +23,7 @@ public class PersistenceBenchmarks
     private SortedSet<int> _ours = null!;
     private ImmutableSortedSet<int> _immutable = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -38,6 +40,7 @@ public class PersistenceBenchmarks
     [BenchmarkCategory("Prepend")]
     public FingerTree<int, int, SizeMeasure<int>> MeasuredTree_PrependRetained() => _tree.Prepend(-1);
 
+    /// <summary>Measures measured tree append retained.</summary>
     [Benchmark]
     [BenchmarkCategory("Append")]
     public FingerTree<int, int, SizeMeasure<int>> MeasuredTree_AppendRetained() => _tree.Append(Size);
@@ -48,6 +51,7 @@ public class PersistenceBenchmarks
     [BenchmarkCategory("SetAdd")]
     public SortedSet<int> Ours_SetAddRetained() => _ours.Add(-1);
 
+    /// <summary>Measures immutable set add retained.</summary>
     [Benchmark]
     [BenchmarkCategory("SetAdd")]
     public ImmutableSortedSet<int> Immutable_SetAddRetained() => _immutable.Add(-1);

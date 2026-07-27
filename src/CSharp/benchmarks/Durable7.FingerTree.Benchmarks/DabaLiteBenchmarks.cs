@@ -14,9 +14,11 @@ public class DabaLiteBenchmarks
     private long _nextDaba;
     private long _nextQueue;
 
+    /// <summary>Gets the number of elements in the window.</summary>
     [Params(63, 64, 65, 1_000, 100_000)]
     public int Count { get; set; }
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -31,6 +33,7 @@ public class DabaLiteBenchmarks
         _nextQueue = Count;
     }
 
+    /// <summary>Measures daba slide and query.</summary>
     [Benchmark(Baseline = true)]
     public long DabaSlideAndQuery()
     {
@@ -39,6 +42,7 @@ public class DabaLiteBenchmarks
         return _daba.Aggregate;
     }
 
+    /// <summary>Measures queue slide and reaggregate.</summary>
     [Benchmark]
     public long QueueSlideAndReaggregate()
     {
@@ -47,13 +51,16 @@ public class DabaLiteBenchmarks
         return _queue.Sum();
     }
 
+    /// <summary>Measures daba validate structure.</summary>
     [Benchmark]
     public DabaLiteStatistics DabaValidateStructure() => _daba.ValidateStructure();
 
     private readonly struct SumMonoid : IMonoid<long>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static long Empty => 0;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static long Combine(long left, long right) => left + right;
     }
 }

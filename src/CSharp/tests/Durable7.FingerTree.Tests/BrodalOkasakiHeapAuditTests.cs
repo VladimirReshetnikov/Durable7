@@ -247,14 +247,17 @@ public sealed class BrodalOkasakiHeapAuditTests
 
     private sealed record Version(BrodalOkasakiHeap<int> Heap, MultisetModel Model, object? Root)
     {
+        /// <summary>Gets the empty collection.</summary>
         internal static Version Empty { get; } = new(BrodalOkasakiHeap<int>.Empty, MultisetModel.Empty, null);
 
+        /// <summary>Returns a collection with the element inserted.</summary>
         internal Version Insert(int item)
         {
             var heap = Heap.Insert(item);
             return new Version(heap, Model.Insert(item), heap.RootIdentity);
         }
 
+        /// <summary>Returns the collection without its minimum-priority entry.</summary>
         internal Version DeleteMinimum()
         {
             var expected = Model.Minimum;
@@ -263,6 +266,7 @@ public sealed class BrodalOkasakiHeapAuditTests
             return new Version(heap, Model.DeleteMinimum(), heap.RootIdentity);
         }
 
+        /// <summary>Returns the collection holding both operands' elements.</summary>
         internal Version Meld(Version other)
         {
             var heap = Heap.Meld(other.Heap);
@@ -274,12 +278,16 @@ public sealed class BrodalOkasakiHeapAuditTests
     {
         private readonly Dictionary<int, int> _counts = counts;
 
+        /// <summary>Gets the empty collection.</summary>
         internal static MultisetModel Empty { get; } = new([], 0);
 
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal int Count { get; } = count;
 
+        /// <summary>Returns the smallest element.</summary>
         internal int Minimum => _counts.Keys.Min();
 
+        /// <summary>Returns a collection with the element inserted.</summary>
         internal MultisetModel Insert(int item)
         {
             var copy = new Dictionary<int, int>(_counts);
@@ -287,6 +295,7 @@ public sealed class BrodalOkasakiHeapAuditTests
             return new MultisetModel(copy, checked(Count + 1));
         }
 
+        /// <summary>Returns the collection without its minimum-priority entry.</summary>
         internal MultisetModel DeleteMinimum()
         {
             var minimum = Minimum;
@@ -298,6 +307,7 @@ public sealed class BrodalOkasakiHeapAuditTests
             return new MultisetModel(copy, Count - 1);
         }
 
+        /// <summary>Returns the collection holding both operands' elements.</summary>
         internal MultisetModel Meld(MultisetModel other)
         {
             var copy = new Dictionary<int, int>(_counts);
@@ -306,6 +316,7 @@ public sealed class BrodalOkasakiHeapAuditTests
             return new MultisetModel(copy, checked(Count + other.Count));
         }
 
+        /// <summary>Returns the elements in ascending order.</summary>
         internal int[] ToSortedArray() => _counts.OrderBy(pair => pair.Key)
             .SelectMany(pair => Enumerable.Repeat(pair.Key, pair.Value))
             .ToArray();
@@ -317,14 +328,17 @@ public sealed class BrodalOkasakiHeapAuditTests
 
     private sealed class CountingComparer<T>(IComparer<T> inner) : IComparer<T>
     {
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal long Count { get; private set; }
 
+        /// <summary>Orders two values.</summary>
         public int Compare(T? left, T? right)
         {
             Count++;
             return inner.Compare(left!, right!);
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         internal void Reset() => Count = 0;
     }
 
@@ -333,6 +347,7 @@ public sealed class BrodalOkasakiHeapAuditTests
         private const BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
         private static readonly Dictionary<Type, Accessors> AccessorsByType = [];
 
+        /// <summary>Checks the heap's structural invariants. For tests and diagnostics.</summary>
         internal static void Validate<T>(BrodalOkasakiHeap<T> heap)
         {
             var statistics = heap.ValidateStructure();
@@ -400,6 +415,7 @@ public sealed class BrodalOkasakiHeapAuditTests
             }
         }
 
+        /// <summary>Gets how many references were added and released over the measured region.</summary>
         internal static ReferenceChanges ReferenceDelta<T>(BrodalOkasakiHeap<T> before, BrodalOkasakiHeap<T> after)
         {
             var oldNodes = UniqueNodes(before.RootIdentity);
@@ -408,8 +424,10 @@ public sealed class BrodalOkasakiHeapAuditTests
             return new ReferenceChanges(shared, newNodes.Count - shared, oldNodes.Count - shared);
         }
 
+        /// <summary>Gets this node's children.</summary>
         internal static object? Children(object tree) => For(tree).Children.GetValue(tree);
 
+        /// <summary>Gets the trailing part.</summary>
         internal static object? Tail(object forest) => For(forest).Tail.GetValue(forest);
 
         private static object Head(object forest) => For(forest).Head.GetValue(forest)!;
@@ -582,6 +600,9 @@ public sealed class BrodalOkasakiHeapAuditTests
             return accessors;
         }
 
+        /// <summary>
+        /// How many references a measured operation added and released, for the retained-memory assertions.
+        /// </summary>
         internal readonly record struct ReferenceChanges(int Shared, int Created, int Discarded);
 
         private readonly record struct Shape(long Size, int Height);
@@ -600,10 +621,15 @@ public sealed class BrodalOkasakiHeapAuditTests
 
         private sealed class ReferenceIdentityComparer : IEqualityComparer<object>
         {
+            /// <summary>
+            /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+            /// </summary>
             internal static ReferenceIdentityComparer Instance { get; } = new();
 
+            /// <summary>Determines whether both values hold the same elements.</summary>
             public new bool Equals(object? left, object? right) => ReferenceEquals(left, right);
 
+            /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
             public int GetHashCode(object value) => RuntimeHelpers.GetHashCode(value);
         }
     }

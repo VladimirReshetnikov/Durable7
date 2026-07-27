@@ -20,9 +20,11 @@ public class TransientLifecycleBenchmarks
     private Axis2TransientOpportunityCounters _opportunityCounters;
     private Axis2OwnerTokenKernelEvidence _separateNodeEvidence;
 
+    /// <summary>Gets the workload.</summary>
     [ParamsSource(nameof(WorkloadValues))]
     public Axis2TransientWorkload Workload { get; set; }
 
+    /// <summary>Gets the workload values.</summary>
     public IEnumerable<Axis2TransientWorkload> WorkloadValues => Axis2BenchmarkPolicy.TransientWorkloads;
 
     [Params(
@@ -32,6 +34,7 @@ public class TransientLifecycleBenchmarks
         Axis2EditHistory.FullCollision,
         Axis2EditHistory.Removal,
         Axis2EditHistory.Mixed)]
+    /// <summary>Gets the history.</summary>
     public Axis2EditHistory History { get; set; }
 
     [Params(
@@ -39,6 +42,7 @@ public class TransientLifecycleBenchmarks
         Axis2PublicationCadence.Every8,
         Axis2PublicationCadence.Every64,
         Axis2PublicationCadence.End)]
+    /// <summary>Gets the publication cadence.</summary>
     public Axis2PublicationCadence PublicationCadence { get; set; }
 
     /// <summary>Initializes the direct-persistent lane and collects its untimed opportunity counters.</summary>
@@ -401,6 +405,7 @@ internal readonly record struct Axis2TransientOpportunityCounters(
     long HashCallbackCount,
     long EqualityCallbackCount)
 {
+    /// <summary>Renders the collected measurements as CSV.</summary>
     internal string ToCsv() => string.Join(
         ',',
         "AXIS2_T0_COUNTER_V1",
@@ -448,6 +453,7 @@ internal readonly record struct Axis2OwnerTokenKernelEvidence(
     long PublishedLayoutAdjustedRetainedBytes,
     int RecursiveEntryCount)
 {
+    /// <summary>Renders the collected measurements as CSV.</summary>
     internal string ToCsv() => string.Join(
         ',',
         "AXIS2_T1_COUNTER_V2",

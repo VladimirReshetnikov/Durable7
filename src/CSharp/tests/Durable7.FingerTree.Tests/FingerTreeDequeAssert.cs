@@ -10,6 +10,7 @@ namespace Durable7.FingerTree.Tests;
 /// </summary>
 internal static class FingerTreeDequeAssert
 {
+    /// <summary>Asserts that the sequences hold equal elements in the same order.</summary>
     public static void SequenceEqual<T>(IReadOnlyList<T> expected, FingerTreeDeque<T> actual)
     {
         Assert.Equal(expected.Count, actual.Count);
@@ -47,5 +48,6 @@ internal static class FingerTreeDequeAssert
         }
     }
 
+    /// <summary>Gets the deque under test.</summary>
     public static FingerTreeDeque<T> Deque<T>(params T[] items) => FingerTreeDeque<T>.Create(items);
 }

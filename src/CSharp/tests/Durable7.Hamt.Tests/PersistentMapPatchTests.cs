@@ -150,8 +150,10 @@ public sealed class PersistentMapPatchTests
 
     private sealed class DelegatingStringComparer : IEqualityComparer<string>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y) => StringComparer.OrdinalIgnoreCase.Equals(x, y);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj) => StringComparer.OrdinalIgnoreCase.GetHashCode(obj);
     }
 }

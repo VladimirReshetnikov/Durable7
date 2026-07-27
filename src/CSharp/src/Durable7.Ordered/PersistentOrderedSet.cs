@@ -60,13 +60,18 @@ public sealed partial class PersistentOrderedSet<T> : IReadOnlySet<T>
 
     private sealed class StampOrder : IComparer<Entry>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         public static readonly StampOrder Instance = new();
 
+        /// <summary>Orders two values.</summary>
         public int Compare(Entry x, Entry y) => x.Stamp.CompareTo(y.Stamp);
     }
 
     private sealed class StableItemOrder(IComparer<T> comparer) : IComparer<Entry>
     {
+        /// <summary>Orders two values.</summary>
         public int Compare(Entry x, Entry y)
         {
             var byItem = comparer.Compare(x.Item, y.Item);
@@ -496,6 +501,7 @@ public sealed partial class PersistentOrderedSet<T> : IReadOnlySet<T>
     {
         private FingerTreeDeque<Entry>.Enumerator _inner;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(PersistentOrderedSet<T> owner) => _inner = owner._order.GetEnumerator();
 
         /// <summary>

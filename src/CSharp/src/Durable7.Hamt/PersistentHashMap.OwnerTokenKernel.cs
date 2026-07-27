@@ -18,11 +18,17 @@ public sealed partial class PersistentHashMap<TKey, TValue>
     {
         private int _sealed;
 
+        /// <summary>Gets a value indicating whether active.</summary>
         internal bool IsActive => Volatile.Read(ref _sealed) == 0;
 
+        /// <summary>
+        /// Seals the token, so no further edit may claim ownership through it. This is what makes a published version
+        /// safe to share.
+        /// </summary>
         internal void Seal() => Interlocked.Exchange(ref _sealed, 1);
     }
 
+    /// <summary>Gets the enum owner token kernel failure point.</summary>
     internal enum OwnerTokenKernelFailurePoint
     {
         BeforeTokenAllocation,
@@ -36,6 +42,10 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         PublicationPrepared,
     }
 
+    /// <summary>
+    /// How many edits could have reused an owned node versus how many actually did, which is what decides whether a
+    /// transient is paying off.
+    /// </summary>
     internal readonly record struct OwnerTokenKernelCounters(
         long AdoptionCount,
         long AdoptionNodeVisits,
@@ -128,6 +138,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private bool _hasPersistentMutation;
         private bool _dirty;
 
+        /// <summary>Creates a new transient.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Transient(
             PersistentHashMap<TKey, TValue> source,
@@ -196,22 +207,30 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             }
         }
 
+        /// <summary>Gets a value indicating whether active for diagnostics.</summary>
         internal bool IsActiveForDiagnostics => Volatile.Read(ref _state) == ActiveState;
 
+        /// <summary>Gets the token is active for diagnostics.</summary>
         internal bool TokenIsActiveForDiagnostics =>
             IsActiveForDiagnostics && (_token?.IsActive ?? true);
 
+        /// <summary>Gets the token is allocated for diagnostics.</summary>
         internal bool TokenIsAllocatedForDiagnostics => _token is not null;
 
+        /// <summary>Gets the commit plan is allocated for diagnostics.</summary>
         internal bool CommitPlanIsAllocatedForDiagnostics => _commits is not null;
 
+        /// <summary>Gets the version for diagnostics.</summary>
         internal long VersionForDiagnostics => _version;
 
+        /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
         internal object? RootIdentityForDiagnostics => _root;
 
+        /// <summary>Gets the deferred persistent identity for diagnostics.</summary>
         internal PersistentHashMap<TKey, TValue>? DeferredPersistentIdentityForDiagnostics =>
             _hasPersistentMutation && !_dirty ? _source : null;
 
+        /// <summary>Returns the counters for diagnostics.</summary>
         internal OwnerTokenKernelCounters GetCountersForDiagnostics()
         {
             if (!_diagnosticsEnabled)
@@ -257,6 +276,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return false;
         }
 
+        /// <summary>Returns the session's current contents as an array, for tests.</summary>
         internal KeyValuePair<TKey, TValue>[] ToArrayForDiagnostics()
         {
             EnsureActive();
@@ -439,6 +459,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return CommitPublication(prepared);
         }
 
+        /// <summary>Prepares the publication.</summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
         internal PreparedPublication PreparePublication()
         {
@@ -470,6 +491,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return new PreparedPublication(this, result, _version, newVersion, allocatedPersistentWrapper);
         }
 
+        /// <summary>Publishes the prepared version, making the session's edits visible.</summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal PersistentHashMap<TKey, TValue> CommitPublication(PreparedPublication prepared)
         {
@@ -1695,8 +1717,13 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                 _flags = flags;
             }
 
+            /// <summary>
+            /// Gets a value indicating whether this step rewrites an array, which is what decides whether it can be
+            /// applied in place.
+            /// </summary>
             internal bool WritesArray => (_flags & 3) != 0;
 
+            /// <summary>Describes a commit step that rewrites a collision node.</summary>
             internal static CommitStep ForCollision(
                 SeparateTransientCollisionNode collision,
                 Entry[] entries,
@@ -1714,6 +1741,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     childIndex: 0,
                     flags: (byte)(writeEntry ? 1 : 0));
 
+            /// <summary>Describes a commit step that rewrites a branch node.</summary>
             internal static CommitStep ForBranch(
                 SeparateTransientBranchNode branch,
                 BranchState state,
@@ -1734,6 +1762,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     childIndex,
                     flags: (byte)((writeData ? 1 : 0) | (writeChild ? 2 : 0)));
 
+            /// <summary>Applies this value to its operand, as the algebra defines.</summary>
             internal void Apply()
             {
                 if (_collision is not null)
@@ -1766,29 +1795,48 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         private sealed class KernelDiagnostics
         {
+            /// <summary>Gets the hook a test uses to make a callback fail at a chosen point.</summary>
             internal Action<OwnerTokenKernelFailurePoint>? FailureInjector;
+            /// <summary>Gets the counters.</summary>
             internal MutableCounters Counters;
         }
 
         private struct MutableCounters
         {
+            /// <summary>Gets the adoption count.</summary>
             internal long AdoptionCount;
+            /// <summary>Gets the adoption node visits.</summary>
             internal long AdoptionNodeVisits;
+            /// <summary>Gets the publication count.</summary>
             internal long PublicationCount;
+            /// <summary>Gets the publication node visits.</summary>
             internal long PublicationNodeVisits;
+            /// <summary>Gets the deferred persistent mutation count.</summary>
             internal long DeferredPersistentMutationCount;
+            /// <summary>Gets the editable promotion count.</summary>
             internal long EditablePromotionCount;
+            /// <summary>Gets the commit plan allocation count.</summary>
             internal long CommitPlanAllocationCount;
+            /// <summary>Gets the prepared mutation count.</summary>
             internal long PreparedMutationCount;
+            /// <summary>Gets the copied node count.</summary>
             internal long CopiedNodeCount;
+            /// <summary>Gets the allocated node count.</summary>
             internal long AllocatedNodeCount;
+            /// <summary>Gets the copied array count.</summary>
             internal long CopiedArrayCount;
+            /// <summary>Gets the allocated array count.</summary>
             internal long AllocatedArrayCount;
+            /// <summary>Gets the in place node mutation count.</summary>
             internal long InPlaceNodeMutationCount;
+            /// <summary>Gets the in place array write count.</summary>
             internal long InPlaceArrayWriteCount;
+            /// <summary>Gets the persistent wrapper allocation count.</summary>
             internal long PersistentWrapperAllocationCount;
+            /// <summary>Gets the deferred persistent wrapper allocation count.</summary>
             internal long DeferredPersistentWrapperAllocationCount;
 
+            /// <summary>Gets the collection version this cursor is positioned in.</summary>
             internal readonly OwnerTokenKernelCounters Snapshot() =>
                 new(
                     AdoptionCount,

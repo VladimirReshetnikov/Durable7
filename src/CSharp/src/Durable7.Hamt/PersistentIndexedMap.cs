@@ -43,7 +43,9 @@ public sealed class PersistentIndexedMap<TKey, TValue, TIndexKey> :
 
     private sealed class Entry(TValue value, TIndexKey indexKey)
     {
+        /// <summary>Gets the stored value.</summary>
         internal TValue Value { get; } = value;
+        /// <summary>Gets the index key.</summary>
         internal TIndexKey IndexKey { get; } = indexKey;
     }
 

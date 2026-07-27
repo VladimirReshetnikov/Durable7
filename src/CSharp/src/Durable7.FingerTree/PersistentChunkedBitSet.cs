@@ -28,11 +28,14 @@ internal readonly record struct BitSetAnnotation(
 /// </summary>
 internal readonly struct BitSetMeasure : IMeasure<BitSetChunk, BitSetAnnotation>
 {
+    /// <summary>Gets the identity: the measure of an empty tree.</summary>
     public static BitSetAnnotation Empty => new(0, 0, Optional<int>.None);
 
+    /// <summary>Returns the measure of one element.</summary>
     public static BitSetAnnotation Measure(BitSetChunk element) =>
         new(1, BitOperations.PopCount(element.Bits), Optional<int>.Some(element.WordIndex));
 
+    /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
     public static BitSetAnnotation Combine(BitSetAnnotation left, BitSetAnnotation right) =>
         new(
             checked(left.ChunkCount + right.ChunkCount),
@@ -71,12 +74,14 @@ public sealed partial class PersistentChunkedBitSet : IEnumerable<int>
 
     private readonly struct WordAtLeastPredicate(int wordIndex) : IMeasurePredicate<BitSetAnnotation>
     {
+        /// <summary>Returns whether the accumulated measure satisfies this predicate.</summary>
         public bool Invoke(BitSetAnnotation measure) =>
             measure.LastWordIndex.HasValue && measure.LastWordIndex.Value >= wordIndex;
     }
 
     private readonly struct PopCountAbovePredicate(long rank) : IMeasurePredicate<BitSetAnnotation>
     {
+        /// <summary>Returns whether the accumulated measure satisfies this predicate.</summary>
         public bool Invoke(BitSetAnnotation measure) => measure.PopCount > rank;
     }
 
@@ -306,6 +311,7 @@ public sealed partial class PersistentChunkedBitSet : IEnumerable<int>
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>Checks the bit set's structural invariants. For tests and diagnostics.</summary>
     internal void ValidateInvariants()
     {
         _chunks.ValidateInvariants();

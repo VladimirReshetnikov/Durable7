@@ -36,6 +36,7 @@ public sealed partial class PersistentLongMap<TValue> : IReadOnlyDictionary<long
         ? value
         : throw new KeyNotFoundException($"The key '{key}' was not present in the map.");
 
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object? RootIdentity => _core.RootIdentity;
 
     /// <summary>Creates a map from entries with last-wins duplicate semantics.</summary>

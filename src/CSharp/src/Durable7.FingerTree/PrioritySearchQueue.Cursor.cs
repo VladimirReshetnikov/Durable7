@@ -50,6 +50,7 @@ public sealed partial class PrioritySearchQueue<TKey, TPriority, TValue>
         return rank;
     }
 
+    /// <summary>Returns the entry at the given rank, used by the cursors to address positions.</summary>
     internal PrioritySearchEntry<TKey, TPriority, TValue> CursorEntryAt(int rank)
     {
         if ((uint)rank >= (uint)Count)
@@ -72,6 +73,7 @@ public readonly struct PrioritySearchQueueCursor<TKey, TPriority, TValue>
     private readonly PrioritySearchQueue<TKey, TPriority, TValue>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new priority search queue cursor.</summary>
     internal PrioritySearchQueueCursor(
         PrioritySearchQueue<TKey, TPriority, TValue> snapshot,
         int position)

@@ -226,6 +226,7 @@ public static class RopeText
     /// target line, so <see cref="LineStartOffset"/> navigates with no delegate allocation.</summary>
     private readonly struct NewlineAtLeastPredicate(int line) : IMeasurePredicate<int>
     {
+        /// <summary>Returns whether the accumulated measure satisfies this predicate.</summary>
         public bool Invoke(int newlines) => newlines >= line;
     }
 
@@ -234,6 +235,7 @@ public static class RopeText
     {
         private int _peeked = -1;
 
+        /// <summary>Returns the next value without consuming it.</summary>
         public override int Peek()
         {
             if (_peeked >= 0)
@@ -243,6 +245,7 @@ public static class RopeText
             return _peeked;
         }
 
+        /// <summary>Reads the next value from the input.</summary>
         public override int Read()
         {
             if (_peeked >= 0)
@@ -255,6 +258,7 @@ public static class RopeText
             return source.MoveNext() ? source.Current : -1;
         }
 
+        /// <summary>Releases the resources this value holds.</summary>
         protected override void Dispose(bool disposing)
         {
             if (disposing)

@@ -418,41 +418,53 @@ public sealed class PrioritySearchQueueAdversarialTests
 
     private sealed class CountingComparer<T>(IComparer<T> inner) : IComparer<T>
     {
+        /// <summary>Gets the comparison count.</summary>
         internal int ComparisonCount { get; private set; }
 
+        /// <summary>Orders two values.</summary>
         public int Compare(T? left, T? right)
         {
             ComparisonCount++;
             return inner.Compare(left!, right!);
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         internal void Reset() => ComparisonCount = 0;
     }
 
     private sealed class PriorityProbe(int rank, int equalityClass) : IEquatable<PriorityProbe>
     {
+        /// <summary>Gets the rank.</summary>
         internal int Rank { get; } = rank;
 
         private int EqualityClass { get; } = equalityClass;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(PriorityProbe? other) =>
             other is not null && EqualityClass == other.EqualityClass;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is PriorityProbe other && Equals(other);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => EqualityClass;
     }
 
     private readonly record struct KeyBound<TKey>
     {
+        /// <summary>Creates a new key bound.</summary>
         internal KeyBound(TKey value)
         {
             HasValue = true;
             Value = value;
         }
 
+        /// <summary>
+        /// Gets a value indicating whether a value is present. Explicit, so a stored null stays distinct from absence.
+        /// </summary>
         internal bool HasValue { get; }
 
+        /// <summary>Gets the stored value.</summary>
         internal TKey Value { get; }
     }
 

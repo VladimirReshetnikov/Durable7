@@ -775,21 +775,29 @@ public sealed class PersistentHashMapSinglePassUpdateTests
 
     private sealed class CountingStringComparer : IEqualityComparer<string>
     {
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         public int HashCalls { get; private set; }
+        /// <summary>Gets how many times the policy was asked to compare.</summary>
         public int EqualityCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y)
         {
             EqualityCalls++;
             return StringComparer.OrdinalIgnoreCase.Equals(x, y);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj)
         {
             HashCalls++;
             return StringComparer.OrdinalIgnoreCase.GetHashCode(obj);
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public void Reset()
         {
             HashCalls = 0;
@@ -799,21 +807,29 @@ public sealed class PersistentHashMapSinglePassUpdateTests
 
     private sealed class CountingConstantHashIntComparer : IEqualityComparer<int>
     {
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         public int HashCalls { get; private set; }
+        /// <summary>Gets how many times the policy was asked to compare.</summary>
         public int EqualityCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y)
         {
             EqualityCalls++;
             return x == y;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj)
         {
             HashCalls++;
             return 0;
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public void Reset()
         {
             HashCalls = 0;
@@ -823,21 +839,29 @@ public sealed class PersistentHashMapSinglePassUpdateTests
 
     private sealed class CountingExplicitHashComparer : IEqualityComparer<ExplicitHashKey>
     {
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         public int HashCalls { get; private set; }
+        /// <summary>Gets how many times the policy was asked to compare.</summary>
         public int EqualityCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y)
         {
             EqualityCalls++;
             return x.Id == y.Id;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ExplicitHashKey obj)
         {
             HashCalls++;
             return obj.Hash;
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public void Reset()
         {
             HashCalls = 0;
@@ -847,8 +871,12 @@ public sealed class PersistentHashMapSinglePassUpdateTests
 
     private sealed class ConfigurableKeyComparer(bool constantHash) : IEqualityComparer<ExplicitHashKey>
     {
+        /// <summary>
+        /// Gets or sets whether the equality callback should throw, for the failure-atomicity tests.
+        /// </summary>
         public bool ThrowOnEquality { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y)
         {
             if (ThrowOnEquality)
@@ -856,14 +884,22 @@ public sealed class PersistentHashMapSinglePassUpdateTests
             return x.Id == y.Id;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ExplicitHashKey obj) => constantHash ? 0 : obj.Hash;
     }
 
     private sealed class ThrowingStringComparer : IEqualityComparer<string>
     {
+        /// <summary>
+        /// Gets or sets whether the hashing callback should throw, for the failure-atomicity tests.
+        /// </summary>
         public bool ThrowOnHash { get; set; }
+        /// <summary>
+        /// Gets or sets whether the equality callback should throw, for the failure-atomicity tests.
+        /// </summary>
         public bool ThrowOnEquality { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y)
         {
             if (ThrowOnEquality)
@@ -871,6 +907,7 @@ public sealed class PersistentHashMapSinglePassUpdateTests
             return StringComparer.Ordinal.Equals(x, y);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj)
         {
             if (ThrowOnHash)
@@ -883,8 +920,12 @@ public sealed class PersistentHashMapSinglePassUpdateTests
     {
         private int Id { get; } = id;
 
+        /// <summary>
+        /// Gets or sets whether the equality callback should throw, for the failure-atomicity tests.
+        /// </summary>
         public bool ThrowOnEquality { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ThrowingValue? other)
         {
             if (ThrowOnEquality)
@@ -892,15 +933,19 @@ public sealed class PersistentHashMapSinglePassUpdateTests
             return other is not null && Id == other.Id;
         }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is ThrowingValue other && Equals(other);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Id;
     }
 
     private sealed record EquatableValue(int Id, string Label)
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(EquatableValue? other) => other is not null && Id == other.Id;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Id;
     }
 
@@ -908,8 +953,10 @@ public sealed class PersistentHashMapSinglePassUpdateTests
 
     private sealed class ExplicitHashComparer : IEqualityComparer<ExplicitHashKey>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y) => x.Id == y.Id;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ExplicitHashKey obj) => obj.Hash;
     }
 

@@ -1043,6 +1043,7 @@ public sealed partial class FingerTreeDeque<T> : IReadOnlyList<T>
         private int _cursor;
         private T _current;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(Tree<T, Leaf<T>> root)
         {
             _state = root.Size > 0 ? new TraversalState(root) : null;
@@ -1121,12 +1122,17 @@ public sealed partial class FingerTreeDeque<T> : IReadOnlyList<T>
         /// </summary>
         private sealed class TraversalState
         {
+            /// <summary>Gets the traversal's stack of frames.</summary>
             public Frame[] Frames = new Frame[8];
+            /// <summary>Gets the structure's height.</summary>
             public int Depth;
+            /// <summary>Gets a cursor over this collection version.</summary>
             public int Cursor;
 
+            /// <summary>Creates a new traversal state.</summary>
             public TraversalState(IEnumerationBlock<T> root) => Push(root);
 
+            /// <summary>Returns a collection with the element added.</summary>
             public void Push(IEnumerationBlock<T> block)
             {
                 if (Depth == Frames.Length)
@@ -1139,7 +1145,9 @@ public sealed partial class FingerTreeDeque<T> : IReadOnlyList<T>
         /// <param name="block">The block being traversed at this depth.</param>
         private struct Frame(IEnumerationBlock<T> block)
         {
+            /// <summary>Gets the block this value holds.</summary>
             public readonly IEnumerationBlock<T> Block = block;
+            /// <summary>Gets the next child this traversal step will descend into.</summary>
             public int NextChild = 0;
         }
     }

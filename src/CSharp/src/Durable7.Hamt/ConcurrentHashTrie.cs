@@ -26,8 +26,11 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
     private object _root;
     private long _revision;
 
+    /// <summary>Gets the snapshot main read hook for testing.</summary>
     internal Action? SnapshotMainReadHookForTesting;
+    /// <summary>Gets the gcas installed hook for testing.</summary>
     internal Action? GcasInstalledHookForTesting;
+    /// <summary>Gets the removal committed hook for testing.</summary>
     internal Action? RemovalCommittedHookForTesting;
 
     /// <summary>Initializes an empty trie with the default key comparer.</summary>
@@ -660,6 +663,7 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
         (!typeof(TValue).IsValueType && ReferenceEquals(left, right)) ||
         EqualityComparer<TValue>.Default.Equals(left!, right!);
 
+    /// <summary>Checks the structural invariants. For tests and diagnostics.</summary>
     internal CtrieStatistics ValidateStructureForTesting()
     {
         var root = ReadRoot();
@@ -798,6 +802,7 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
         private readonly ConcurrentHashTrie<TKey, TValue> _owner;
         private readonly Root _root;
 
+        /// <summary>Creates a new snapshot view.</summary>
         internal SnapshotView(ConcurrentHashTrie<TKey, TValue> owner, Root root)
         {
             _owner = owner;
@@ -835,7 +840,9 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
+    /// <summary>Gets the class trie generation.</summary>
     internal sealed class TrieGeneration;
+    /// <summary>Shape measurements from a structural audit of the concurrent trie.</summary>
     internal readonly record struct CtrieStatistics(
         int IndirectionNodeCount,
         int CollisionNodeCount,
@@ -845,34 +852,52 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
 
     private readonly record struct BranchSummary(SNode? Singleton, bool HasMultipleEntries);
 
+    /// <summary>The trie's root, which every version names and which an edit replaces rather than mutates.</summary>
     internal sealed class Root(INode node, TrieGeneration generation)
     {
+        /// <summary>Gets the underlying node.</summary>
         internal INode Node { get; } = node;
+        /// <summary>Gets the version's generation counter.</summary>
         internal TrieGeneration Generation { get; } = generation;
     }
 
+    /// <summary>Gets the class branch.</summary>
     internal abstract class Branch;
+    /// <summary>Gets the class main node.</summary>
     internal abstract class MainNode;
 
+    /// <summary>
+    /// The trie node contract: a node answers lookups and returns the node that replaces it after an edit, so an edit
+    /// never mutates what other versions still reference.
+    /// </summary>
     internal sealed class INode(MainNode main, TrieGeneration generation) : Branch
     {
+        /// <summary>Gets the main.</summary>
         internal object Main = main;
+        /// <summary>Gets the version's generation counter.</summary>
         internal TrieGeneration Generation { get; } = generation;
     }
 
     private sealed class SNode(uint hash, TKey key, TValue value) : Branch
     {
+        /// <summary>Returns the hash of the value.</summary>
         internal uint Hash { get; } = hash;
+        /// <summary>Gets the stored key.</summary>
         internal TKey Key { get; } = key;
+        /// <summary>Gets the stored value.</summary>
         internal TValue Value { get; } = value;
     }
 
     private sealed class CNode(uint bitmap, Branch[] branches) : MainNode
     {
+        /// <summary>Gets the empty node.</summary>
         internal static readonly CNode Empty = new(0, []);
+        /// <summary>Gets the bitmap.</summary>
         internal uint Bitmap { get; } = bitmap;
+        /// <summary>Gets the branches.</summary>
         internal Branch[] Branches { get; } = branches;
 
+        /// <summary>Returns a node with the element inserted.</summary>
         internal CNode Insert(int index, uint flag, Branch branch)
         {
             var result = new Branch[Branches.Length + 1];
@@ -882,13 +907,17 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
             return new CNode(Bitmap | flag, result);
         }
 
+        /// <summary>Returns the node with one child replaced, leaving every other child shared.</summary>
         internal CNode Replace(int index, Branch branch) => new(Bitmap, ReplaceAt(Branches, index, branch));
+        /// <summary>Returns a node without that element.</summary>
         internal CNode Remove(int index, uint flag) => new(Bitmap & ~flag, RemoveAt(Branches, index));
     }
 
     private sealed class LNode(SNode[] entries) : MainNode
     {
+        /// <summary>Gets the entries.</summary>
         internal SNode[] Entries { get; } = entries;
+        /// <summary>Finds the entry for the key.</summary>
         internal int Find(uint hash, TKey key, IEqualityComparer<TKey> comparer)
         {
             for (var i = 0; i < Entries.Length; i++)
@@ -900,38 +929,58 @@ public sealed class ConcurrentHashTrie<TKey, TValue> : IReadOnlyDictionary<TKey,
 
     private sealed class TNode(SNode? entry) : MainNode
     {
+        /// <summary>Gets the empty node.</summary>
         internal static readonly TNode Empty = new(entry: null);
+        /// <summary>Gets the stored entry.</summary>
         internal SNode? Entry { get; } = entry;
     }
 
     private sealed class Descriptor(MainNode before, MainNode after, Root root)
     {
+        /// <summary>The state meaning the outcome has not been settled.</summary>
         internal const int Undecided = 0;
+        /// <summary>The state meaning the session's edits were published.</summary>
         internal const int Committed = 1;
+        /// <summary>The state meaning the session was abandoned without publishing.</summary>
         internal const int Aborted = 2;
+        /// <summary>Gets the state this change expects to find.</summary>
         internal MainNode Before { get; } = before;
+        /// <summary>Gets the state this change produces.</summary>
         internal MainNode After { get; } = after;
+        /// <summary>Gets the root.</summary>
         internal Root Root { get; } = root;
+        /// <summary>Gets the current state.</summary>
         internal int Status;
     }
 
     private sealed class RootDescriptor(Root before, MainNode expectedMain, Root after)
     {
+        /// <summary>The state meaning the outcome has not been settled.</summary>
         internal const int Undecided = 0;
+        /// <summary>The state meaning the session's edits were published.</summary>
         internal const int Committed = 1;
+        /// <summary>The state meaning the session was abandoned without publishing.</summary>
         internal const int Aborted = 2;
+        /// <summary>Gets the state this change expects to find.</summary>
         internal Root Before { get; } = before;
+        /// <summary>Gets the expected main.</summary>
         internal MainNode ExpectedMain { get; } = expectedMain;
+        /// <summary>Gets the state this change produces.</summary>
         internal Root After { get; } = after;
+        /// <summary>Gets the current state.</summary>
         internal int Status;
     }
 
     private enum DecisionKind { None, Set, Remove }
     private readonly record struct Decision(DecisionKind Kind, TValue? Value, TValue? ResultValue)
     {
+        /// <summary>The decision meaning nothing further is required.</summary>
         internal static Decision None => new(DecisionKind.None, default, default);
+        /// <summary>Returns a collection with the key bound to the value, adding or replacing as needed.</summary>
         internal static Decision Set(TValue value) => new(DecisionKind.Set, value, value);
+        /// <summary>Returns a collection without that element.</summary>
         internal static Decision Remove(TValue? value) => new(DecisionKind.Remove, default, value);
+        /// <summary>The decision meaning the caller should return the accompanying result.</summary>
         internal static Decision Return(TValue? value) => new(DecisionKind.None, default, value);
     }
     private readonly record struct MutationResult(bool Changed, TValue? Value);

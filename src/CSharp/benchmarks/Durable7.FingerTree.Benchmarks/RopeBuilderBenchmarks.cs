@@ -13,12 +13,14 @@ namespace Durable7.FingerTree.Benchmarks;
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByCategory)]
 public class RopeBuilderBenchmarks
 {
+    /// <summary>Gets the number of elements in the rope.</summary>
     [Params(10_000, 100_000)]
     public int Size;
 
     private char[] _chars = null!;
     private int[] _ints = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -32,10 +34,12 @@ public class RopeBuilderBenchmarks
         }
     }
 
+    /// <summary>Measures rope create.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("RopeBuild")]
     public Rope<char> Rope_Create() => Rope<char>.Create(_chars);
 
+    /// <summary>Measures rope builder add range span.</summary>
     [Benchmark]
     [BenchmarkCategory("RopeBuild")]
     public Rope<char> Rope_BuilderAddRangeSpan()
@@ -45,6 +49,7 @@ public class RopeBuilderBenchmarks
         return builder.ToImmutable();
     }
 
+    /// <summary>Measures rope builder add one by one.</summary>
     [Benchmark]
     [BenchmarkCategory("RopeBuild")]
     public Rope<char> Rope_BuilderAddOneByOne()
@@ -55,6 +60,7 @@ public class RopeBuilderBenchmarks
         return builder.ToImmutable();
     }
 
+    /// <summary>Measures rope add last loop.</summary>
     [Benchmark]
     [BenchmarkCategory("RopeBuild")]
     public Rope<char> Rope_AddLastLoop()
@@ -65,6 +71,7 @@ public class RopeBuilderBenchmarks
         return rope;
     }
 
+    /// <summary>Measures immutable list builder add one by one.</summary>
     [Benchmark]
     [BenchmarkCategory("RopeBuild")]
     public ImmutableList<char> ImmutableListBuilder_AddOneByOne()
@@ -75,11 +82,13 @@ public class RopeBuilderBenchmarks
         return builder.ToImmutable();
     }
 
+    /// <summary>Measures measured rope create.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("MeasuredRopeBuild")]
     public MeasuredRope<int, int, SumMeasure<int>> MeasuredRope_Create() =>
         MeasuredRope<int, int, SumMeasure<int>>.Create(_ints);
 
+    /// <summary>Measures measured rope builder add range span.</summary>
     [Benchmark]
     [BenchmarkCategory("MeasuredRopeBuild")]
     public MeasuredRope<int, int, SumMeasure<int>> MeasuredRope_BuilderAddRangeSpan()
@@ -89,6 +98,7 @@ public class RopeBuilderBenchmarks
         return builder.ToImmutable();
     }
 
+    /// <summary>Measures text rope builder to rope.</summary>
     [Benchmark]
     [BenchmarkCategory("TextBuilder")]
     public Rope<char> Text_RopeBuilderToRope()
@@ -98,6 +108,7 @@ public class RopeBuilderBenchmarks
         return builder.ToRope();
     }
 
+    /// <summary>Measures text string builder then create.</summary>
     [Benchmark]
     [BenchmarkCategory("TextBuilder")]
     public Rope<char> Text_StringBuilderThenCreate()

@@ -160,8 +160,10 @@ public sealed class PersistentOrderedCursorTests
 
     private sealed class IeeeDoubleComparer : IEqualityComparer<double>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(double x, double y) => x == y;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(double value) => value.GetHashCode();
     }
 }

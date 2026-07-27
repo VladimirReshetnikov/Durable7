@@ -16,6 +16,7 @@ public sealed class ProductMeasureTests
 {
     // Convenient aliases for the three headline measure types.
     private static FingerTree<int, MeasurePair<int, int>, ProductMeasure<int, int, int, SizeMeasure<int>, SumMeasure<int>>>
+        /// <summary>Gets the size-and-sum product measure under test.</summary>
         SizeSum(params int[] values) => ProductMeasures.CreateSizeAndSumRange(values);
 
     /// <summary>Verifies the product measure is the component-wise pair (count, sum), including the identity.</summary>

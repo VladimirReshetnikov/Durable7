@@ -13,6 +13,7 @@ public sealed class CustomComparisonMeasureTests
 {
     private readonly struct ByLength : IComparison<string>
     {
+        /// <summary>Orders two values.</summary>
         public static int Compare(string left, string right) => left.Length.CompareTo(right.Length);
     }
 

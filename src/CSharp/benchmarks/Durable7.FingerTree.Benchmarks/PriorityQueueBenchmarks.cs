@@ -16,6 +16,9 @@ public class PriorityQueueBenchmarks
 {
     private const int LeftSize = 100_000;
 
+    /// <summary>
+    /// Gets the size of the right operand, which decides how much of a concatenation's seam must be rebuilt.
+    /// </summary>
     [Params(100, 100_000)]
     public int RightSize;
 
@@ -24,6 +27,7 @@ public class PriorityQueueBenchmarks
     private int[] _leftElems = null!;
     private int[] _rightElems = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {

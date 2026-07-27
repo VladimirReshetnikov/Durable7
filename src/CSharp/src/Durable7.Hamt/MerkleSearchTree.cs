@@ -68,6 +68,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary
         ? value
         : throw new KeyNotFoundException($"The key '{key}' was not present in the Merkle search tree.");
 
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object? RootIdentity => _root;
 
     internal (int Level, TKey Key, int EntriesInBlock, int SubtreeCount)[] ShapeForTesting()
@@ -804,13 +805,16 @@ public sealed partial class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary
 
     private sealed class ValidationAccumulator
     {
+        /// <summary>Gets the entry count.</summary>
         internal int EntryCount;
+        /// <summary>Gets how many blocks the structure occupies.</summary>
         internal int BlockCount;
         private int _minimumEntries = int.MaxValue;
         private int _maximumEntries;
         private int _minimumBlockBytes = int.MaxValue;
         private int _maximumBlockBytes;
 
+        /// <summary>Returns a collection containing the given element.</summary>
         internal void Add(Node node)
         {
             EntryCount = checked(EntryCount + node.Entries.Length);
@@ -821,6 +825,7 @@ public sealed partial class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary
             _maximumBlockBytes = Math.Max(_maximumBlockBytes, node.BlockBytes.Length);
         }
 
+        /// <summary>Returns these measurements as the public statistics type.</summary>
         internal MerkleSearchTreeStatistics ToStatistics(int height) => new(
             EntryCount,
             BlockCount,
@@ -840,10 +845,15 @@ public sealed partial class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary
         byte[] valueBytes,
         int layer)
     {
+        /// <summary>Gets the stored key.</summary>
         internal TKey Key { get; } = key;
+        /// <summary>Gets the stored value.</summary>
         internal TValue Value { get; } = value;
+        /// <summary>Gets the key bytes.</summary>
         internal byte[] KeyBytes { get; } = keyBytes;
+        /// <summary>Gets the value bytes.</summary>
         internal byte[] ValueBytes { get; } = valueBytes;
+        /// <summary>Gets the layer.</summary>
         internal int Layer { get; } = layer;
     }
 
@@ -859,15 +869,25 @@ public sealed partial class MerkleSearchTree<TKey, TValue> : IReadOnlyDictionary
         byte[] blockBytes,
         MerkleDigest digest)
     {
+        /// <summary>Gets the node's level in the tree.</summary>
         internal int Level { get; } = level;
+        /// <summary>Gets the entries.</summary>
         internal EntryRecord[] Entries { get; } = entries;
+        /// <summary>Gets this node's children.</summary>
         internal Node?[] Children { get; } = children;
+        /// <summary>Gets the number of elements in the node.</summary>
         internal int Count { get; } = count;
+        /// <summary>Gets the structure's height.</summary>
         internal int Height { get; } = height;
+        /// <summary>Gets how many blocks the structure occupies.</summary>
         internal int BlockCount { get; } = blockCount;
+        /// <summary>Gets the minimum key.</summary>
         internal TKey MinimumKey { get; } = minimumKey;
+        /// <summary>Gets the maximum key.</summary>
         internal TKey MaximumKey { get; } = maximumKey;
+        /// <summary>Gets the block bytes.</summary>
         internal byte[] BlockBytes { get; } = blockBytes;
+        /// <summary>Gets the digest.</summary>
         internal MerkleDigest Digest { get; } = digest;
     }
 }
@@ -907,12 +927,15 @@ public readonly record struct MerkleMapDifference<TKey, TValue>(
     TValue? OldValue,
     TValue? NewValue)
 {
+    /// <summary>Gets the entries present only in the target.</summary>
     internal static MerkleMapDifference<TKey, TValue> Added(TKey key, TValue value) =>
         new(MerkleMapDifferenceKind.Added, key, default, value);
 
+    /// <summary>Gets the entries present only in the source.</summary>
     internal static MerkleMapDifference<TKey, TValue> Removed(TKey key, TValue value) =>
         new(MerkleMapDifferenceKind.Removed, key, value, default);
 
+    /// <summary>Gets the entries present in both with different values.</summary>
     internal static MerkleMapDifference<TKey, TValue> Changed(TKey key, TValue oldValue, TValue newValue) =>
         new(MerkleMapDifferenceKind.Changed, key, oldValue, newValue);
 }

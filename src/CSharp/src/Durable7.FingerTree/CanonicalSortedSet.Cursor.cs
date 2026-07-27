@@ -45,6 +45,7 @@ public sealed partial class CanonicalSortedSet<T>
         return rank;
     }
 
+    /// <summary>Returns the entry at the given rank, used by the cursors to address positions.</summary>
     internal T CursorEntryAt(int rank)
     {
         if ((uint)rank >= (uint)Count)
@@ -67,6 +68,7 @@ public readonly struct CanonicalSortedSetCursor<T>
     private readonly CanonicalSortedSet<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new canonical sorted set cursor.</summary>
     internal CanonicalSortedSetCursor(CanonicalSortedSet<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

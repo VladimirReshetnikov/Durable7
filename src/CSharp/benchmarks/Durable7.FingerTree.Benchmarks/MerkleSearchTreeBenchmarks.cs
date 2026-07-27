@@ -22,9 +22,11 @@ public class MerkleSearchTreeBenchmarks
     private System.Collections.Generic.SortedDictionary<int, long> _dictionary = null!;
     private int _probe;
 
+    /// <summary>Gets the number of entries in the tree.</summary>
     [Params(1_000, 100_000)]
     public int Count { get; set; }
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -46,40 +48,52 @@ public class MerkleSearchTreeBenchmarks
         _probe = Count / 2;
     }
 
+    /// <summary>Measures merkle lookup.</summary>
     [Benchmark(Baseline = true)]
     public long MerkleLookup() => _tree[_probe];
 
+    /// <summary>Looks up in the framework's sorted dictionary, as an ordered baseline.</summary>
     [Benchmark]
     public long SortedDictionaryLookup() => _dictionary[_probe];
 
+    /// <summary>Measures merkle content equality.</summary>
     [Benchmark]
     public bool MerkleContentEquality() => _tree.ContentEquals(_independent);
 
+    /// <summary>Measures merkle single change diff.</summary>
     [Benchmark]
     public IReadOnlyList<MerkleMapDifference<int, long>> MerkleSingleChangeDiff() => _tree.Diff(_changed);
 
+    /// <summary>Measures merkle persistent update.</summary>
     [Benchmark]
     public MerkleSearchTree<int, long> MerklePersistentUpdate() => _tree.SetItem(_probe, -1);
 
+    /// <summary>Measures merkle persistent insert.</summary>
     [Benchmark]
     public MerkleSearchTree<int, long> MerklePersistentInsert() => _tree.SetItem(Count, Count);
 
+    /// <summary>Measures merkle persistent remove.</summary>
     [Benchmark]
     public MerkleSearchTree<int, long> MerklePersistentRemove() => _tree.Remove(_probe);
 
+    /// <summary>Measures merkle verified load.</summary>
     [Benchmark]
     public MerkleSearchTree<int, long> MerkleVerifiedLoad() =>
         MerkleSearchTree<int, long>.Load(_tree.RootHash, _policy, _store);
 
+    /// <summary>Measures merkle cold sync pack.</summary>
     [Benchmark]
     public MerkleBlockPack MerkleColdSyncPack() => _tree.CreateSyncPack(_emptyStore);
 
+    /// <summary>Measures merkle membership proof.</summary>
     [Benchmark]
     public MerkleProof MerkleMembershipProof() => _tree.CreateProof(_probe);
 
+    /// <summary>Measures merkle range proof.</summary>
     [Benchmark]
     public MerkleProof MerkleRangeProof() => _tree.CreateRangeProof(_probe - 32, _probe + 32);
 
+    /// <summary>Measures merkle disjoint three way merge.</summary>
     [Benchmark]
     public MerkleThreeWayMergeResult<int, long> MerkleDisjointThreeWayMerge() =>
         MerkleSearchTree<int, long>.Merge(_tree, _left, _right);

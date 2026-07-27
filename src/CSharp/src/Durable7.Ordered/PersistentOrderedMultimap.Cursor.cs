@@ -38,6 +38,7 @@ public sealed partial class PersistentOrderedMultimap<TKey, TValue>
         return false;
     }
 
+    /// <summary>Returns the entry at the given rank, used by the cursors to address positions.</summary>
     internal KeyValuePair<TKey, TValue> CursorEntryAt(long rank)
     {
         if (rank < 0 || rank >= PairCount)
@@ -51,6 +52,7 @@ public sealed partial class PersistentOrderedMultimap<TKey, TValue>
         throw new InvalidOperationException("The ordered-multimap pair count disagrees with its groups.");
     }
 
+    /// <summary>Returns the position of the given pair, used by the cursors to address it.</summary>
     internal long CursorIndexOf(TKey key, TValue value)
     {
         long position = 0;
@@ -98,6 +100,7 @@ public readonly struct PersistentOrderedMultimapCursor<TKey, TValue>
     private readonly PersistentOrderedMultimap<TKey, TValue>? _snapshot;
     private readonly long _position;
 
+    /// <summary>Creates a new persistent ordered multimap cursor.</summary>
     internal PersistentOrderedMultimapCursor(
         PersistentOrderedMultimap<TKey, TValue> snapshot,
         long position)

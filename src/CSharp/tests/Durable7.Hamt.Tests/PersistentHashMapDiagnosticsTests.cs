@@ -615,8 +615,10 @@ public sealed class PersistentHashMapDiagnosticsTests
 
     private sealed class ConstantHashComparer : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int left, int right) => left == right;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int value) => 0;
     }
 }

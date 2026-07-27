@@ -334,48 +334,61 @@ public sealed class MeasuredRopeCursorMeasureSeekTests
 
     private readonly struct PositiveWeightMeasure : IMeasure<int, int>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => 0;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static int Measure(int element) => element;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => left + right;
     }
 
     private readonly struct CountMeasure : IMeasure<int, int>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => 0;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static int Measure(int element) => 1;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => left + right;
     }
 
     private readonly struct ConcatenatingMeasure : IMeasure<char, string>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static string Empty => string.Empty;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static string Measure(char element) => element.ToString();
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static string Combine(string left, string right) => left + right;
     }
 
     private readonly struct AtLeast(int threshold) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure >= threshold;
     }
 
     private readonly struct CountAbove(int count) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure > count;
     }
 
     private readonly struct LengthAtLeast(int length) : IMeasurePredicate<string>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(string measure) => measure.Length >= length;
     }
 
     private readonly struct AlwaysTrue : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => true;
     }
 

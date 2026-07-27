@@ -11,6 +11,7 @@ namespace Durable7.FingerTree;
 /// </summary>
 internal readonly record struct RopeCursorPrototypeConfiguration(int FocusCapacity, int FlushChunkSize)
 {
+    /// <summary>Creates an element rope using the supplied policies, which it retains.</summary>
     internal static RopeCursorPrototypeConfiguration Create(int focusCapacity, int flushChunkSize)
     {
         if (focusCapacity is < 2 or > 128)
@@ -44,6 +45,7 @@ internal sealed class CursorVersionState<T>
     private readonly RopeZipperContext<T> _snapshotSeed;
     private Rope<T>? _snapshot;
 
+    /// <summary>Creates a new cursor version state.</summary>
     internal CursorVersionState(int count, RopeZipperContext<T> snapshotSeed, Rope<T>? snapshot)
     {
         Count = count;
@@ -51,12 +53,16 @@ internal sealed class CursorVersionState<T>
         _snapshot = snapshot;
     }
 
+    /// <summary>Gets the number of elements in the collection.</summary>
     internal int Count { get; }
 
+    /// <summary>Gets a value indicating whether cached snapshot.</summary>
     internal bool HasCachedSnapshot => Volatile.Read(ref _snapshot) is not null;
 
+    /// <summary>Gets the snapshot seed for diagnostics.</summary>
     internal RopeZipperContext<T> SnapshotSeedForDiagnostics => _snapshotSeed;
 
+    /// <summary>Gets the collection version this cursor is positioned in.</summary>
     internal Rope<T> Snapshot()
     {
         var cached = Volatile.Read(ref _snapshot);
@@ -80,6 +86,7 @@ internal readonly record struct RopeCursorPrototypeEdit<T>(
 /// </summary>
 internal static class RopeCursorPrototypeEngine<T>
 {
+    /// <summary>Creates an element rope using the supplied policies, which it retains.</summary>
     internal static RopeCursorPrototypeEdit<T> Create(
         Rope<T> source,
         int position,
@@ -95,6 +102,7 @@ internal static class RopeCursorPrototypeEngine<T>
             context);
     }
 
+    /// <summary>Creates the context.</summary>
     internal static RopeZipperContext<T> CreateContext(
         Rope<T> source,
         int position,
@@ -130,6 +138,7 @@ internal static class RopeCursorPrototypeEngine<T>
         return context;
     }
 
+    /// <summary>Reads the element immediately before the gap, reporting whether one exists.</summary>
     internal static bool TryPeekPrevious(
         in RopeZipperContext<T> context,
         [MaybeNullWhen(false)] out T value)
@@ -158,6 +167,7 @@ internal static class RopeCursorPrototypeEngine<T>
         return true;
     }
 
+    /// <summary>Reads the element immediately after the gap, reporting whether one exists.</summary>
     internal static bool TryPeekNext(
         in RopeZipperContext<T> context,
         int count,
@@ -187,6 +197,10 @@ internal static class RopeCursorPrototypeEngine<T>
         return true;
     }
 
+    /// <summary>
+    /// Returns a cursor one position earlier. The receiver is unchanged; movement produces a new cursor over the same
+    /// version.
+    /// </summary>
     internal static RopeZipperContext<T> MovePrevious(in RopeZipperContext<T> source, int count)
     {
         if (source.Position == 0)
@@ -204,6 +218,7 @@ internal static class RopeCursorPrototypeEngine<T>
         return context;
     }
 
+    /// <summary>Advances to the next element, reporting whether there was one.</summary>
     internal static RopeZipperContext<T> MoveNext(in RopeZipperContext<T> source, int count)
     {
         if (source.Position == count)
@@ -221,6 +236,7 @@ internal static class RopeCursorPrototypeEngine<T>
         return context;
     }
 
+    /// <summary>Returns a cursor at the given position within the same rope version.</summary>
     internal static RopeZipperContext<T> Seek(
         CursorVersionState<T> version,
         in RopeZipperContext<T> source,
@@ -235,6 +251,7 @@ internal static class RopeCursorPrototypeEngine<T>
         return CreateContext(version.Snapshot(), position, source.Configuration);
     }
 
+    /// <summary>Returns a rope with the element inserted.</summary>
     internal static RopeCursorPrototypeEdit<T> Insert(
         CursorVersionState<T> version,
         in RopeZipperContext<T> source,
@@ -255,6 +272,9 @@ internal static class RopeCursorPrototypeEngine<T>
         return CreateEditedVersion(context, version.Count + 1);
     }
 
+    /// <summary>
+    /// Inserts a sequence's elements at the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal static RopeCursorPrototypeEdit<T> InsertRange(
         CursorVersionState<T> version,
         in RopeZipperContext<T> source,
@@ -280,6 +300,9 @@ internal static class RopeCursorPrototypeEngine<T>
         return CreateEditedVersion(context, checked(version.Count + values.Length));
     }
 
+    /// <summary>
+    /// Removes the element before the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal static RopeCursorPrototypeEdit<T> DeletePrevious(
         CursorVersionState<T> version,
         in RopeZipperContext<T> source)
@@ -304,6 +327,9 @@ internal static class RopeCursorPrototypeEngine<T>
         return CreateEditedVersion(context, version.Count - 1);
     }
 
+    /// <summary>
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal static RopeCursorPrototypeEdit<T> DeleteNext(
         CursorVersionState<T> version,
         in RopeZipperContext<T> source)
@@ -323,6 +349,9 @@ internal static class RopeCursorPrototypeEngine<T>
         return CreateEditedVersion(context, version.Count - 1);
     }
 
+    /// <summary>
+    /// Replaces the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal static RopeCursorPrototypeEdit<T> ReplaceNext(
         CursorVersionState<T> version,
         in RopeZipperContext<T> source,
@@ -345,6 +374,7 @@ internal static class RopeCursorPrototypeEngine<T>
         return CreateEditedVersion(context, version.Count);
     }
 
+    /// <summary>Builds the snapshot.</summary>
     internal static Rope<T> BuildSnapshot(in RopeZipperContext<T> context, int count)
     {
         var middleLength = checked(context.LeftCarry.Length + context.Active.Length + context.RightCarry.Length);
@@ -366,6 +396,7 @@ internal static class RopeCursorPrototypeEngine<T>
         return snapshot;
     }
 
+    /// <summary>Returns the structural measurements a test asserts on.</summary>
     internal static RopeCursorPrototypeStateDiagnostics GetDiagnostics(
         CursorVersionState<T> version,
         in RopeZipperContext<T> context) =>
@@ -384,6 +415,7 @@ internal static class RopeCursorPrototypeEngine<T>
                 version.SnapshotSeedForDiagnostics,
                 context));
 
+    /// <summary>Checks the rope's structural invariants. For tests and diagnostics.</summary>
     internal static void Validate(in RopeZipperContext<T> context, int count)
     {
         if ((uint)context.Gap > (uint)context.Active.Length)
@@ -653,16 +685,22 @@ internal sealed class RopeCursorPrototype<T>
         RopeCursorDiagnostics.RecordWrapperAllocation();
     }
 
+    /// <summary>Gets the number of elements in the rope.</summary>
     internal int Count => _version.Count;
 
+    /// <summary>Gets the cursor's gap position.</summary>
     internal int Position => _context.Position;
 
+    /// <summary>Gets a value indicating whether the gap precedes the first element.</summary>
     internal bool IsAtStart => Position == 0;
 
+    /// <summary>Gets a value indicating whether the gap follows the last element.</summary>
     internal bool IsAtEnd => Position == Count;
 
+    /// <summary>Gets the version identity.</summary>
     internal object VersionIdentity => _version;
 
+    /// <summary>Creates an element rope using the supplied policies, which it retains.</summary>
     internal static RopeCursorPrototype<T> Create(
         Rope<T> source,
         int position,
@@ -674,44 +712,68 @@ internal sealed class RopeCursorPrototype<T>
         return new RopeCursorPrototype<T>(created.Version, created.Context);
     }
 
+    /// <summary>Reads the element immediately before the gap, reporting whether one exists.</summary>
     internal bool TryPeekPrevious([MaybeNullWhen(false)] out T value) =>
         RopeCursorPrototypeEngine<T>.TryPeekPrevious(_context, out value);
 
+    /// <summary>Reads the element immediately after the gap, reporting whether one exists.</summary>
     internal bool TryPeekNext([MaybeNullWhen(false)] out T value) =>
         RopeCursorPrototypeEngine<T>.TryPeekNext(_context, Count, out value);
 
+    /// <summary>
+    /// Returns a cursor one position earlier. The receiver is unchanged; movement produces a new cursor over the same
+    /// version.
+    /// </summary>
     internal RopeCursorPrototype<T> MovePrevious() =>
         new(_version, RopeCursorPrototypeEngine<T>.MovePrevious(_context, Count));
 
+    /// <summary>Advances to the next element, reporting whether there was one.</summary>
     internal RopeCursorPrototype<T> MoveNext() =>
         new(_version, RopeCursorPrototypeEngine<T>.MoveNext(_context, Count));
 
+    /// <summary>Returns a cursor at the given position within the same rope version.</summary>
     internal RopeCursorPrototype<T> Seek(int position) =>
         position == Position
             ? this
             : new RopeCursorPrototype<T>(_version, RopeCursorPrototypeEngine<T>.Seek(_version, _context, position));
 
+    /// <summary>Returns a rope with the element inserted.</summary>
     internal RopeCursorPrototype<T> Insert(T value) => FromEdit(
         RopeCursorPrototypeEngine<T>.Insert(_version, _context, value));
 
+    /// <summary>
+    /// Inserts a sequence's elements at the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorPrototype<T> InsertRange(ReadOnlySpan<T> values) => values.IsEmpty
         ? this
         : FromEdit(RopeCursorPrototypeEngine<T>.InsertRange(_version, _context, values));
 
+    /// <summary>
+    /// Removes the element before the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorPrototype<T> DeletePrevious() => FromEdit(
         RopeCursorPrototypeEngine<T>.DeletePrevious(_version, _context));
 
+    /// <summary>
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorPrototype<T> DeleteNext() => FromEdit(
         RopeCursorPrototypeEngine<T>.DeleteNext(_version, _context));
 
+    /// <summary>
+    /// Replaces the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorPrototype<T> ReplaceNext(T value) => FromEdit(
         RopeCursorPrototypeEngine<T>.ReplaceNext(_version, _context, value));
 
+    /// <summary>Gets the rope version this cursor is positioned in.</summary>
     internal Rope<T> Snapshot() => _version.Snapshot();
 
+    /// <summary>Returns the structural measurements a test asserts on.</summary>
     internal RopeCursorPrototypeStateDiagnostics GetDiagnostics() =>
         RopeCursorPrototypeEngine<T>.GetDiagnostics(_version, _context);
 
+    /// <summary>Checks the rope's structural invariants. For tests and diagnostics.</summary>
     internal void Validate() => RopeCursorPrototypeEngine<T>.Validate(_context, Count);
 
     private static RopeCursorPrototype<T> FromEdit(RopeCursorPrototypeEdit<T> edit) =>
@@ -732,14 +794,19 @@ internal readonly struct RopeCursorStructPrototype<T>
         _context = context;
     }
 
+    /// <summary>Gets the number of elements in the rope.</summary>
     internal int Count => Version.Count;
 
+    /// <summary>Gets the cursor's gap position.</summary>
     internal int Position => _context.Position;
 
+    /// <summary>Gets a value indicating whether the gap precedes the first element.</summary>
     internal bool IsAtStart => Position == 0;
 
+    /// <summary>Gets a value indicating whether the gap follows the last element.</summary>
     internal bool IsAtEnd => Position == Count;
 
+    /// <summary>Creates an element rope using the supplied policies, which it retains.</summary>
     internal static RopeCursorStructPrototype<T> Create(
         Rope<T> source,
         int position,
@@ -751,18 +818,26 @@ internal readonly struct RopeCursorStructPrototype<T>
         return new RopeCursorStructPrototype<T>(created.Version, created.Context);
     }
 
+    /// <summary>
+    /// Returns a cursor one position earlier. The receiver is unchanged; movement produces a new cursor over the same
+    /// version.
+    /// </summary>
     internal RopeCursorStructPrototype<T> MovePrevious() =>
         new(Version, RopeCursorPrototypeEngine<T>.MovePrevious(_context, Count));
 
+    /// <summary>Advances to the next element, reporting whether there was one.</summary>
     internal RopeCursorStructPrototype<T> MoveNext() =>
         new(Version, RopeCursorPrototypeEngine<T>.MoveNext(_context, Count));
 
+    /// <summary>Reads the element immediately before the gap, reporting whether one exists.</summary>
     internal bool TryPeekPrevious([MaybeNullWhen(false)] out T value) =>
         RopeCursorPrototypeEngine<T>.TryPeekPrevious(_context, out value);
 
+    /// <summary>Reads the element immediately after the gap, reporting whether one exists.</summary>
     internal bool TryPeekNext([MaybeNullWhen(false)] out T value) =>
         RopeCursorPrototypeEngine<T>.TryPeekNext(_context, Count, out value);
 
+    /// <summary>Returns a cursor at the given position within the same rope version.</summary>
     internal RopeCursorStructPrototype<T> Seek(int position) =>
         position == Position
             ? this
@@ -770,12 +845,16 @@ internal readonly struct RopeCursorStructPrototype<T>
                 Version,
                 RopeCursorPrototypeEngine<T>.Seek(Version, _context, position));
 
+    /// <summary>Returns a rope with the element inserted.</summary>
     internal RopeCursorStructPrototype<T> Insert(T value)
     {
         var edit = RopeCursorPrototypeEngine<T>.Insert(Version, _context, value);
         return new RopeCursorStructPrototype<T>(edit.Version, edit.Context);
     }
 
+    /// <summary>
+    /// Inserts a sequence's elements at the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorStructPrototype<T> InsertRange(ReadOnlySpan<T> values)
     {
         if (values.IsEmpty)
@@ -784,26 +863,37 @@ internal readonly struct RopeCursorStructPrototype<T>
         return new RopeCursorStructPrototype<T>(edit.Version, edit.Context);
     }
 
+    /// <summary>
+    /// Removes the element before the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorStructPrototype<T> DeletePrevious()
     {
         var edit = RopeCursorPrototypeEngine<T>.DeletePrevious(Version, _context);
         return new RopeCursorStructPrototype<T>(edit.Version, edit.Context);
     }
 
+    /// <summary>
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorStructPrototype<T> DeleteNext()
     {
         var edit = RopeCursorPrototypeEngine<T>.DeleteNext(Version, _context);
         return new RopeCursorStructPrototype<T>(edit.Version, edit.Context);
     }
 
+    /// <summary>
+    /// Replaces the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal RopeCursorStructPrototype<T> ReplaceNext(T value)
     {
         var edit = RopeCursorPrototypeEngine<T>.ReplaceNext(Version, _context, value);
         return new RopeCursorStructPrototype<T>(edit.Version, edit.Context);
     }
 
+    /// <summary>Gets the rope version this cursor is positioned in.</summary>
     internal Rope<T> Snapshot() => Version.Snapshot();
 
+    /// <summary>Returns the structural measurements a test asserts on.</summary>
     internal RopeCursorPrototypeStateDiagnostics GetDiagnostics() =>
         RopeCursorPrototypeEngine<T>.GetDiagnostics(Version, _context);
 
@@ -826,14 +916,19 @@ internal sealed class RopeMutableCursorPrototype<T>
         _context = context;
     }
 
+    /// <summary>Gets the number of elements in the rope.</summary>
     internal int Count => _version.Count;
 
+    /// <summary>Gets the cursor's gap position.</summary>
     internal int Position => _context.Position;
 
+    /// <summary>Gets a value indicating whether the gap precedes the first element.</summary>
     internal bool IsAtStart => Position == 0;
 
+    /// <summary>Gets a value indicating whether the gap follows the last element.</summary>
     internal bool IsAtEnd => Position == Count;
 
+    /// <summary>Creates an element rope using the supplied policies, which it retains.</summary>
     internal static RopeMutableCursorPrototype<T> Create(
         Rope<T> source,
         int position,
@@ -845,38 +940,61 @@ internal sealed class RopeMutableCursorPrototype<T>
         return new RopeMutableCursorPrototype<T>(created.Version, created.Context);
     }
 
+    /// <summary>
+    /// Returns a cursor one position earlier. The receiver is unchanged; movement produces a new cursor over the same
+    /// version.
+    /// </summary>
     internal void MovePrevious() => _context = RopeCursorPrototypeEngine<T>.MovePrevious(_context, Count);
 
+    /// <summary>Advances to the next element, reporting whether there was one.</summary>
     internal void MoveNext() => _context = RopeCursorPrototypeEngine<T>.MoveNext(_context, Count);
 
+    /// <summary>Reads the element immediately before the gap, reporting whether one exists.</summary>
     internal bool TryPeekPrevious([MaybeNullWhen(false)] out T value) =>
         RopeCursorPrototypeEngine<T>.TryPeekPrevious(_context, out value);
 
+    /// <summary>Reads the element immediately after the gap, reporting whether one exists.</summary>
     internal bool TryPeekNext([MaybeNullWhen(false)] out T value) =>
         RopeCursorPrototypeEngine<T>.TryPeekNext(_context, Count, out value);
 
+    /// <summary>Returns a cursor at the given position within the same rope version.</summary>
     internal void Seek(int position)
     {
         if (position != Position)
             _context = RopeCursorPrototypeEngine<T>.Seek(_version, _context, position);
     }
 
+    /// <summary>Returns a rope with the element inserted.</summary>
     internal void Insert(T value) => Apply(RopeCursorPrototypeEngine<T>.Insert(_version, _context, value));
 
+    /// <summary>
+    /// Inserts a sequence's elements at the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal void InsertRange(ReadOnlySpan<T> values)
     {
         if (!values.IsEmpty)
             Apply(RopeCursorPrototypeEngine<T>.InsertRange(_version, _context, values));
     }
 
+    /// <summary>
+    /// Removes the element before the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal void DeletePrevious() => Apply(RopeCursorPrototypeEngine<T>.DeletePrevious(_version, _context));
 
+    /// <summary>
+    /// Removes the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal void DeleteNext() => Apply(RopeCursorPrototypeEngine<T>.DeleteNext(_version, _context));
 
+    /// <summary>
+    /// Replaces the element after the gap, producing a new version the returned cursor is positioned in.
+    /// </summary>
     internal void ReplaceNext(T value) => Apply(RopeCursorPrototypeEngine<T>.ReplaceNext(_version, _context, value));
 
+    /// <summary>Gets the rope version this cursor is positioned in.</summary>
     internal Rope<T> Snapshot() => _version.Snapshot();
 
+    /// <summary>Returns the structural measurements a test asserts on.</summary>
     internal RopeCursorPrototypeStateDiagnostics GetDiagnostics() =>
         RopeCursorPrototypeEngine<T>.GetDiagnostics(_version, _context);
 

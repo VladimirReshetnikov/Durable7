@@ -44,6 +44,7 @@ internal sealed class RobinHoodFrozenMapPrototype<TKey, TValue>
             throw new InvalidOperationException("The source map count changed while it was enumerated.");
     }
 
+    /// <summary>Creates an entry map using the supplied policies, which it retains.</summary>
     internal static RobinHoodFrozenMapPrototype<TKey, TValue> Create(
         PersistentHashMap<TKey, TValue> source)
     {
@@ -51,8 +52,10 @@ internal sealed class RobinHoodFrozenMapPrototype<TKey, TValue>
         return new RobinHoodFrozenMapPrototype<TKey, TValue>(source);
     }
 
+    /// <summary>Gets the number of entries in the map.</summary>
     internal int Count => _entries.Length;
 
+    /// <summary>Gets the retained ordering policy.</summary>
     internal IEqualityComparer<TKey> Comparer => _comparer;
 
     internal PackedFrozenMapPrototypeDiagnostics Diagnostics
@@ -71,6 +74,7 @@ internal sealed class RobinHoodFrozenMapPrototype<TKey, TValue>
         }
     }
 
+    /// <summary>Reads the value stored for the key, reporting whether it was present.</summary>
     internal bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         if (TryGetEntry(key, out _, out value))
@@ -80,6 +84,7 @@ internal sealed class RobinHoodFrozenMapPrototype<TKey, TValue>
         return false;
     }
 
+    /// <summary>Reads the stored key representative, reporting whether the key was present.</summary>
     internal bool TryGetKey(TKey equalKey, [MaybeNullWhen(false)] out TKey actualKey)
     {
         if (TryGetEntry(equalKey, out actualKey, out _))
@@ -98,6 +103,7 @@ internal sealed class RobinHoodFrozenMapPrototype<TKey, TValue>
         return builder.ToImmutable();
     }
 
+    /// <summary>Returns an enumerator over the entries, in the map's own order.</summary>
     public FrozenLayoutEnumerator<TKey, TValue> GetEnumerator() => new(_entries);
 
     private bool TryGetEntry(
@@ -236,6 +242,7 @@ internal sealed class QuadraticFrozenMapPrototype<TKey, TValue>
             throw new InvalidOperationException("The source map count changed while it was enumerated.");
     }
 
+    /// <summary>Creates an entry map using the supplied policies, which it retains.</summary>
     internal static QuadraticFrozenMapPrototype<TKey, TValue> Create(
         PersistentHashMap<TKey, TValue> source)
     {
@@ -243,8 +250,10 @@ internal sealed class QuadraticFrozenMapPrototype<TKey, TValue>
         return new QuadraticFrozenMapPrototype<TKey, TValue>(source);
     }
 
+    /// <summary>Gets the number of entries in the map.</summary>
     internal int Count => _entries.Length;
 
+    /// <summary>Gets the retained ordering policy.</summary>
     internal IEqualityComparer<TKey> Comparer => _comparer;
 
     internal PackedFrozenMapPrototypeDiagnostics Diagnostics
@@ -263,6 +272,7 @@ internal sealed class QuadraticFrozenMapPrototype<TKey, TValue>
         }
     }
 
+    /// <summary>Reads the value stored for the key, reporting whether it was present.</summary>
     internal bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         if (TryGetEntry(key, out _, out value))
@@ -272,6 +282,7 @@ internal sealed class QuadraticFrozenMapPrototype<TKey, TValue>
         return false;
     }
 
+    /// <summary>Reads the stored key representative, reporting whether the key was present.</summary>
     internal bool TryGetKey(TKey equalKey, [MaybeNullWhen(false)] out TKey actualKey)
     {
         if (TryGetEntry(equalKey, out actualKey, out _))
@@ -290,6 +301,7 @@ internal sealed class QuadraticFrozenMapPrototype<TKey, TValue>
         return builder.ToImmutable();
     }
 
+    /// <summary>Returns an enumerator over the entries, in the map's own order.</summary>
     public FrozenLayoutEnumerator<TKey, TValue> GetEnumerator() => new(_entries);
 
     private bool TryGetEntry(
@@ -368,8 +380,11 @@ internal sealed class QuadraticFrozenMapPrototype<TKey, TValue>
 /// <summary>An entry shared by the F1 fixed-layout prototypes.</summary>
 internal readonly struct FrozenLayoutEntry<TKey, TValue>(uint hash, TKey key, TValue value)
 {
+    /// <summary>Returns the hash of the value.</summary>
     internal readonly uint Hash = hash;
+    /// <summary>Gets the stored key.</summary>
     internal readonly TKey Key = key;
+    /// <summary>Gets the stored value.</summary>
     internal readonly TValue Value = value;
 }
 
@@ -379,6 +394,7 @@ internal struct FrozenLayoutEnumerator<TKey, TValue>
     private readonly FrozenLayoutEntry<TKey, TValue>[] _entries;
     private int _index;
 
+    /// <summary>Creates a new frozen layout enumerator.</summary>
     internal FrozenLayoutEnumerator(FrozenLayoutEntry<TKey, TValue>[] entries)
     {
         _entries = entries;
@@ -386,8 +402,10 @@ internal struct FrozenLayoutEnumerator<TKey, TValue>
         Current = default;
     }
 
+    /// <summary>Gets the value at the current position.</summary>
     public KeyValuePair<TKey, TValue> Current { get; private set; }
 
+    /// <summary>Advances to the next element, reporting whether there was one.</summary>
     public bool MoveNext()
     {
         var next = _index + 1;
@@ -413,6 +431,9 @@ internal static class FrozenLayoutMemory
         BindingFlags.Static | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("Unable to bind the frozen-layout size helper.");
 
+    /// <summary>
+    /// Estimates how many bytes the arrays occupy, which is what the retained-memory comparison is made on.
+    /// </summary>
     internal static long EstimateArrayBytes<TElement>(int length)
     {
         if (length == 0)

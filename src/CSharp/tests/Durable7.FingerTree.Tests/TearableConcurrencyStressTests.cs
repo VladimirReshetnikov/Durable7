@@ -243,12 +243,16 @@ public sealed class TearableConcurrencyStressTests
     /// </summary>
     private readonly struct Tearable(long value)
     {
+        /// <summary>Gets the a.</summary>
         public readonly long A = value, B = value, C = value, D = value;
 
+        /// <summary>Gets the stored value.</summary>
         public long Value => A;
 
+        /// <summary>Gets a value indicating whether intact.</summary>
         public bool IsIntact => A == B && B == C && C == D;
 
+        /// <summary>Returns a readable representation, for diagnostics.</summary>
         public override string ToString() => $"Tearable(A={A}, B={B}, C={C}, D={D})";
     }
 
@@ -256,10 +260,13 @@ public sealed class TearableConcurrencyStressTests
     /// of intact values is itself intact, and the whole-rope measure is the sum of element values.</summary>
     private readonly struct TearableSumMeasure : IMeasure<Tearable, Tearable>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static Tearable Empty => new(0);
 
+        /// <summary>Returns the measure of one element.</summary>
         public static Tearable Measure(Tearable value) => value;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static Tearable Combine(Tearable left, Tearable right) => new(left.Value + right.Value);
     }
 }

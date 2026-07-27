@@ -14,8 +14,10 @@ public sealed class FingerTreeDequeComplexityGuardTests
 {
     private sealed class CountingComparer : IComparer<int>
     {
+        /// <summary>Gets the calls.</summary>
         public int Calls { get; private set; }
 
+        /// <summary>Orders two values.</summary>
         public int Compare(int x, int y)
         {
             Calls++;

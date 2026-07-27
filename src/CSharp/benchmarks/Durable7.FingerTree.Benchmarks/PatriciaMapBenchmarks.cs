@@ -16,9 +16,11 @@ public class PatriciaMapBenchmarks
     private ImmutableDictionary<int, int> _immutable = null!;
     private int _probe;
 
+    /// <summary>Gets the number of entries in the map.</summary>
     [Params(1_000, 100_000)]
     public int Count { get; set; }
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -31,15 +33,21 @@ public class PatriciaMapBenchmarks
         _probe = (Count * 3 / 4) * 2;
     }
 
+    /// <summary>Measures patricia lookup.</summary>
     [Benchmark(Baseline = true)]
     public int PatriciaLookup() => _patricia[_probe];
 
+    /// <summary>Looks up in the CHAMP-backed map, for comparison against the other representations.</summary>
     [Benchmark]
     public int ChampLookup() => _champ[_probe];
 
+    /// <summary>
+    /// Looks up in the framework's immutable dictionary, as the baseline the persistent map is compared against.
+    /// </summary>
     [Benchmark]
     public int ImmutableDictionaryLookup() => _immutable[_probe];
 
+    /// <summary>Measures patricia structural union.</summary>
     [Benchmark]
     public PersistentIntMap<int> PatriciaStructuralUnion() => _patricia.Union(_patriciaDelta);
 }

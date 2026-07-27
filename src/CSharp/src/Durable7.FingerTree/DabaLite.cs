@@ -344,9 +344,13 @@ public sealed class DabaLite<T, TMonoid>
 
     private sealed class Block
     {
+        /// <summary>Gets the capacity.</summary>
         internal const int Capacity = 64;
+        /// <summary>Gets the elements.</summary>
         internal readonly T[] Items = new T[Capacity];
+        /// <summary>Gets the previous.</summary>
         internal Block? Previous;
+        /// <summary>Gets the next.</summary>
         internal Block? Next;
     }
 
@@ -354,25 +358,32 @@ public sealed class DabaLite<T, TMonoid>
     {
         private Block _first;
 
+        /// <summary>Creates a new chunked queue.</summary>
         internal ChunkedQueue()
         {
             _first = new Block();
         }
 
+        /// <summary>Gets the position the queue currently begins at.</summary>
         internal Cursor Begin => new(_first, 0);
 
+        /// <summary>Gets the first block.</summary>
         internal Block FirstBlock => _first;
 
+        /// <summary>Reads the next value from the input.</summary>
         internal T Read(Cursor cursor) => cursor.Block.Items[cursor.Index];
 
+        /// <summary>Writes the value at the current position.</summary>
         internal void Write(Cursor cursor, T value) => cursor.Block.Items[cursor.Index] = value;
 
+        /// <summary>Clears the slot.</summary>
         internal void ClearSlot(Cursor cursor)
         {
             if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
                 cursor.Block.Items[cursor.Index] = default!;
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         internal Cursor Reset()
         {
             var first = new Block();
@@ -380,6 +391,7 @@ public sealed class DabaLite<T, TMonoid>
             return new Cursor(first, 0);
         }
 
+        /// <summary>Advances past the given number of elements.</summary>
         internal Cursor Advance(Cursor cursor)
         {
             if (cursor.Index + 1 < Block.Capacity)
@@ -388,6 +400,7 @@ public sealed class DabaLite<T, TMonoid>
             return new Cursor(cursor.Block.Next!, 0);
         }
 
+        /// <summary>Advances the end.</summary>
         internal Cursor AdvanceEnd(Cursor cursor)
         {
             if (cursor.Index + 1 < Block.Capacity)
@@ -401,6 +414,7 @@ public sealed class DabaLite<T, TMonoid>
             return new Cursor(next, 0);
         }
 
+        /// <summary>Steps back over the given number of elements.</summary>
         internal Cursor Retreat(Cursor cursor)
         {
             if (cursor.Index != 0)
@@ -409,6 +423,7 @@ public sealed class DabaLite<T, TMonoid>
             return new Cursor(cursor.Block.Previous!, Block.Capacity - 1);
         }
 
+        /// <summary>Restores the successor a rollback removed.</summary>
         internal void RestoreSuccessor(Block block, Block? successor)
         {
             var current = block.Next;
@@ -421,6 +436,9 @@ public sealed class DabaLite<T, TMonoid>
                 current.Previous = null;
         }
 
+        /// <summary>
+        /// Drops everything before the position, so the queue's backing store does not grow without bound.
+        /// </summary>
         internal void TrimBefore(Cursor front)
         {
             if (ReferenceEquals(_first, front.Block))

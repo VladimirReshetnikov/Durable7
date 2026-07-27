@@ -272,10 +272,13 @@ public sealed class PersistentHashBagPropertyTests
         private readonly List<Entry> _entries = [];
         private long _totalCount;
 
+        /// <summary>Gets the retained ordering policy.</summary>
         internal IEqualityComparer<T> Comparer { get; } = comparer;
 
+        /// <summary>Gets the distinct count.</summary>
         internal int DistinctCount => _entries.Count;
 
+        /// <summary>Gets the total count.</summary>
         internal long TotalCount => _totalCount;
 
         internal IEnumerable<(T Representative, int Count)> Classes
@@ -287,6 +290,7 @@ public sealed class PersistentHashBagPropertyTests
             }
         }
 
+        /// <summary>Adds the copies.</summary>
         internal void AddCopies(T item, int count)
         {
             if (count == 0)
@@ -305,6 +309,7 @@ public sealed class PersistentHashBagPropertyTests
             _totalCount = checked(_totalCount + count);
         }
 
+        /// <summary>Removes the copies.</summary>
         internal void RemoveCopies(T item, int count)
         {
             if (count == 0)
@@ -322,6 +327,7 @@ public sealed class PersistentHashBagPropertyTests
             _totalCount = checked(_totalCount - removed);
         }
 
+        /// <summary>Removes the all.</summary>
         internal void RemoveAll(T item)
         {
             var index = FindIndex(item);
@@ -332,18 +338,21 @@ public sealed class PersistentHashBagPropertyTests
             _entries.RemoveAt(index);
         }
 
+        /// <summary>Returns an empty bag retaining the same policies.</summary>
         internal void Clear()
         {
             _entries.Clear();
             _totalCount = 0;
         }
 
+        /// <summary>Returns how many times the element occurs.</summary>
         internal int CountOf(T item)
         {
             var index = FindIndex(item);
             return index < 0 ? 0 : _entries[index].Count;
         }
 
+        /// <summary>Returns representative, reporting whether it succeeded.</summary>
         internal bool TryGetRepresentative(T item, out T representative)
         {
             var index = FindIndex(item);
@@ -357,6 +366,7 @@ public sealed class PersistentHashBagPropertyTests
             return true;
         }
 
+        /// <summary>Returns a second handle on the same bag version.</summary>
         internal LinearBagModel<T> Clone()
         {
             var clone = new LinearBagModel<T>(Comparer);
@@ -366,6 +376,7 @@ public sealed class PersistentHashBagPropertyTests
             return clone;
         }
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         internal LinearBagModel<T> Combine(LinearBagModel<T> other, BagOperation operation)
         {
             var result = Clone();
@@ -440,16 +451,20 @@ public sealed class PersistentHashBagPropertyTests
 
         private sealed class Entry(T representative, int count)
         {
+            /// <summary>Gets the representative.</summary>
             internal T Representative { get; } = representative;
 
+            /// <summary>Gets the number of elements in the collection.</summary>
             internal int Count { get; set; } = count;
         }
     }
 
     private sealed class ModularCollisionComparer(int modulus, int hashBuckets) : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int left, int right) => ClassOf(left) == ClassOf(right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int value) => ClassOf(value) % hashBuckets;
 
         private int ClassOf(int value)
@@ -461,9 +476,11 @@ public sealed class PersistentHashBagPropertyTests
 
     private sealed class NullCaseCollisionComparer : IEqualityComparer<string?>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) =>
             StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string? value) => 0;
     }
 }

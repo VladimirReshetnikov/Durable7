@@ -184,6 +184,7 @@ public sealed class AllocationFreeReadTests
     /// <summary>A value-type predicate over an <see cref="int"/> measure, driving a closure-free locate.</summary>
     private readonly struct MeasureAtLeast(int target) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure >= target;
     }
 }

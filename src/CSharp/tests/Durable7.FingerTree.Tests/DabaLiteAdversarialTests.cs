@@ -488,6 +488,7 @@ public sealed class DabaLiteAdversarialTests
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (DabaLite<ReferenceAggregate, FirstReferenceMonoid> Daba, WeakReference Token)
+        /// <summary>Creates the prompt release scenario.</summary>
         CreatePromptReleaseScenario()
     {
         var daba = new DabaLite<ReferenceAggregate, FirstReferenceMonoid>();
@@ -520,14 +521,17 @@ public sealed class DabaLiteAdversarialTests
     {
         private const long Modulus = 1_000_003;
 
+        /// <summary>Gets this value's identity, for sharing assertions.</summary>
         internal static Matrix Identity { get; } = new(1, 0, 0, 1);
 
+        /// <summary>Creates an element collection using the supplied policies, which it retains.</summary>
         internal static Matrix Create(int seed) => new(
             Math.Abs((long)seed * 17 + 3) % Modulus,
             Math.Abs((long)seed * 29 + 5) % Modulus,
             Math.Abs((long)seed * 43 + 7) % Modulus,
             Math.Abs((long)seed * 61 + 11) % Modulus);
 
+        /// <summary>Returns the product of the two matrices.</summary>
         internal static Matrix Multiply(Matrix left, Matrix right) => new(
             (left.M00 * right.M00 + left.M01 * right.M10) % Modulus,
             (left.M00 * right.M01 + left.M01 * right.M11) % Modulus,
@@ -537,22 +541,28 @@ public sealed class DabaLiteAdversarialTests
 
     private readonly struct MatrixMonoid : IMonoid<Matrix>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static Matrix Empty => Matrix.Identity;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static Matrix Combine(Matrix left, Matrix right) => Matrix.Multiply(left, right);
     }
 
     private readonly struct OffsetMonoid : IMonoid<int>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => OffsetIdentity;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => left + right - OffsetIdentity;
     }
 
     private readonly struct CountingOffsetMonoid : IMonoid<int>
     {
+        /// <summary>Gets the combine count.</summary>
         public static int CombineCount { get; private set; }
 
+        /// <summary>Gets the empty count.</summary>
         public static int EmptyCount { get; private set; }
 
         public static int Empty
@@ -564,12 +574,14 @@ public sealed class DabaLiteAdversarialTests
             }
         }
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right)
         {
             CombineCount++;
             return left + right - OffsetIdentity;
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public static void Reset()
         {
             CombineCount = 0;
@@ -581,10 +593,13 @@ public sealed class DabaLiteAdversarialTests
     {
         private static int _throwOn;
 
+        /// <summary>Gets the combine count.</summary>
         public static int CombineCount { get; private set; }
 
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => OffsetIdentity;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right)
         {
             CombineCount++;
@@ -593,12 +608,14 @@ public sealed class DabaLiteAdversarialTests
             return left + right - OffsetIdentity;
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public static void Reset()
         {
             CombineCount = 0;
             _throwOn = 0;
         }
 
+        /// <summary>Gets or sets whether the callback should throw, for the failure-atomicity tests.</summary>
         public static void ThrowOn(int ordinal)
         {
             CombineCount = 0;
@@ -610,6 +627,7 @@ public sealed class DabaLiteAdversarialTests
     {
         private static int _throwOn;
 
+        /// <summary>Gets the empty count.</summary>
         public static int EmptyCount { get; private set; }
 
         public static int Empty
@@ -623,14 +641,17 @@ public sealed class DabaLiteAdversarialTests
             }
         }
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => left + right - OffsetIdentity;
 
+        /// <summary>Returns the value to its initial state.</summary>
         public static void Reset()
         {
             EmptyCount = 0;
             _throwOn = 0;
         }
 
+        /// <summary>Gets or sets whether the callback should throw, for the failure-atomicity tests.</summary>
         public static void ThrowOn(int ordinal)
         {
             EmptyCount = 0;
@@ -640,17 +661,22 @@ public sealed class DabaLiteAdversarialTests
 
     private sealed class ReferenceAggregate(object? token, bool isIdentity = false)
     {
+        /// <summary>Gets this value's identity, for sharing assertions.</summary>
         internal static ReferenceAggregate Identity { get; } = new(null, isIdentity: true);
 
+        /// <summary>Gets the token.</summary>
         internal object? Token { get; } = token;
 
+        /// <summary>Gets a value indicating whether identity.</summary>
         internal bool IsIdentity { get; } = isIdentity;
     }
 
     private readonly struct FirstReferenceMonoid : IMonoid<ReferenceAggregate>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static ReferenceAggregate Empty => ReferenceAggregate.Identity;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static ReferenceAggregate Combine(ReferenceAggregate left, ReferenceAggregate right) =>
             left.IsIdentity ? right : left;
     }

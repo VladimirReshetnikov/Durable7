@@ -483,14 +483,19 @@ public sealed partial class PrioritySearchQueue<TKey, TPriority, TValue> :
 
     private readonly record struct KeyBound
     {
+        /// <summary>Creates a new key bound.</summary>
         internal KeyBound(TKey value)
         {
             HasValue = true;
             Value = value;
         }
 
+        /// <summary>
+        /// Gets a value indicating whether a value is present. Explicit, so a stored null stays distinct from absence.
+        /// </summary>
         internal bool HasValue { get; }
 
+        /// <summary>Gets the stored value.</summary>
         internal TKey Value { get; }
     }
 
@@ -502,11 +507,17 @@ public sealed partial class PrioritySearchQueue<TKey, TPriority, TValue> :
         Node? right,
         PrioritySearchEntry<TKey, TPriority, TValue> winner)
     {
+        /// <summary>Gets the stored entry.</summary>
         internal PrioritySearchEntry<TKey, TPriority, TValue> Entry { get; } = entry;
+        /// <summary>Gets the left child.</summary>
         internal Node? Left { get; } = left;
+        /// <summary>Gets the right child.</summary>
         internal Node? Right { get; } = right;
+        /// <summary>Gets the winner.</summary>
         internal PrioritySearchEntry<TKey, TPriority, TValue> Winner { get; } = winner;
+        /// <summary>Gets the structure's height.</summary>
         internal int Height { get; } = checked(1 + Math.Max(left?.Height ?? 0, right?.Height ?? 0));
+        /// <summary>Gets the number of elements in the node.</summary>
         internal int Count { get; } = checked(1 + (left?.Count ?? 0) + (right?.Count ?? 0));
     }
 }

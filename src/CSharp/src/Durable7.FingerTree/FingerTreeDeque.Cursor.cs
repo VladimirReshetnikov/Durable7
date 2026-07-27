@@ -16,6 +16,7 @@ public readonly struct FingerTreeDequeCursor<T>
     private readonly FingerTreeDeque<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new finger tree deque cursor.</summary>
     internal FingerTreeDequeCursor(FingerTreeDeque<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

@@ -132,21 +132,29 @@ public sealed class PersistentHashSetStructuralAlgebraTests
 
     private sealed class CountingComparer : IEqualityComparer<Key>
     {
+        /// <summary>
+        /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as
+        /// often as its bound allows.
+        /// </summary>
         public int HashCalls { get; private set; }
+        /// <summary>Gets how many times the policy was asked to compare.</summary>
         public int EqualityCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Key? left, Key? right)
         {
             EqualityCalls++;
             return left?.Id == right?.Id;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(Key value)
         {
             HashCalls++;
             return value.Hash;
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public void Reset() => (HashCalls, EqualityCalls) = (0, 0);
     }
 
@@ -163,6 +171,7 @@ public sealed class PersistentHashSetStructuralAlgebraTests
 /// </summary>
 internal static class SetModelExtensions
 {
+    /// <summary>Returns the elements present in exactly one of the two models.</summary>
     internal static HashSet<T> SymmetricExceptModel<T>(this HashSet<T> left, HashSet<T> right)
     {
         var result = new HashSet<T>(left, left.Comparer);

@@ -130,15 +130,19 @@ public sealed class PersistentHashMapTransientEnumeratorTests
 
     private sealed class ConstantHashComparer : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => 0;
     }
 
     private sealed class IdentityHashComparer : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => obj;
     }
 }

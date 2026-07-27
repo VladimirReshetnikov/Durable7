@@ -20,6 +20,7 @@ public sealed partial class PersistentLongSet : IReadOnlySet<long>
     /// <summary>Gets whether the set is empty.</summary>
     public bool IsEmpty => Count == 0;
 
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object? RootIdentity => _map.RootIdentity;
 
     /// <summary>Creates a set from a sequence.</summary>
@@ -117,10 +118,13 @@ public sealed partial class PersistentLongSet : IReadOnlySet<long>
 
     private readonly struct Unit : IEquatable<Unit>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Unit other) => true;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is Unit;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => 0;
     }
 }

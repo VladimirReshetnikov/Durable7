@@ -1167,32 +1167,41 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
 
     private sealed class ExplicitHashComparer : IEqualityComparer<ExplicitHashKey>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ExplicitHashKey left, ExplicitHashKey right) => left.Value == right.Value;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ExplicitHashKey value) => value.Hash;
     }
 
     private sealed class ConstantHashOrdinalIgnoreCaseComparer : IEqualityComparer<string>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) =>
             StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value) => 0;
     }
 
     private sealed class ConstantHashIntComparer : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int left, int right) => left == right;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int value) => 0;
     }
 
     private sealed class SwitchableThrowingComparer : IEqualityComparer<string>
     {
+        /// <summary>Throws the hash.</summary>
         internal bool ThrowHash { get; set; }
 
+        /// <summary>Throws the equals.</summary>
         internal bool ThrowEquals { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right)
         {
             if (ThrowEquals)
@@ -1200,6 +1209,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             return StringComparer.Ordinal.Equals(left, right);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value)
         {
             if (ThrowHash)
@@ -1210,10 +1220,13 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
 
     private sealed class ThrowingValue(string text) : IEquatable<ThrowingValue>
     {
+        /// <summary>Gets the text.</summary>
         internal string Text { get; } = text;
 
+        /// <summary>Throws the equals.</summary>
         internal bool ThrowEquals { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ThrowingValue? other)
         {
             if (ThrowEquals)
@@ -1221,8 +1234,10 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
             return other is not null && Text == other.Text;
         }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is ThrowingValue other && Equals(other);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Text.GetHashCode(StringComparison.Ordinal);
     }
 

@@ -373,8 +373,10 @@ public sealed class PersistentHashSetTransientTests
 
     private sealed class NullableCollisionComparer : IEqualityComparer<string?>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y) => StringComparer.Ordinal.Equals(x, y);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string? obj) => 0;
     }
 

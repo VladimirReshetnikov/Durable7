@@ -31,12 +31,15 @@ public readonly record struct MapDifference<TKey, TValue>(
     TValue? OldValue,
     TValue? NewValue)
 {
+    /// <summary>Gets the entries present only in the target.</summary>
     internal static MapDifference<TKey, TValue> Added(TKey key, TValue value) =>
         new(MapDifferenceKind.Added, key, default, value);
 
+    /// <summary>Gets the entries present only in the source.</summary>
     internal static MapDifference<TKey, TValue> Removed(TKey key, TValue value) =>
         new(MapDifferenceKind.Removed, key, value, default);
 
+    /// <summary>Gets the entries present in both with different values.</summary>
     internal static MapDifference<TKey, TValue> Changed(TKey key, TValue oldValue, TValue newValue) =>
         new(MapDifferenceKind.Changed, key, oldValue, newValue);
 }

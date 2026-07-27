@@ -120,6 +120,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
+        /// <summary>Splits at the first key not less than the probe.</summary>
         SplitByLowerBound<T>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -137,6 +138,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
+        /// <summary>Splits after any key equal to the probe.</summary>
         SplitByUpperBound<T>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -152,6 +154,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="index">Number of elements to place in the left part; clamped conceptually to the count.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
+        /// <summary>Splits at the given index.</summary>
         SplitAtIndex<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, int index)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -168,6 +171,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
+        /// <summary>Splits at the first key not less than the probe.</summary>
         SplitByLowerBound<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -183,6 +187,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
+        /// <summary>Splits after any key equal to the probe.</summary>
         SplitByUpperBound<T>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
     {
         ArgumentNullException.ThrowIfNull(tree);
@@ -291,6 +296,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
+        /// <summary>Splits at the first key not less than the probe.</summary>
         SplitByLowerBound<T, TComparison>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
         where TComparison : IComparison<T>
     {
@@ -308,6 +314,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, Optional<T>, KeyMeasure<T>> Left, FingerTree<T, Optional<T>, KeyMeasure<T>> Right)
+        /// <summary>Splits after any key equal to the probe.</summary>
         SplitByUpperBound<T, TComparison>(this FingerTree<T, Optional<T>, KeyMeasure<T>> tree, T key)
         where TComparison : IComparison<T>
     {
@@ -325,6 +332,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
+        /// <summary>Splits at the first key not less than the probe.</summary>
         SplitByLowerBound<T, TComparison>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
         where TComparison : IComparison<T>
     {
@@ -342,6 +350,7 @@ public static class FingerTreeMeasureExtensions
     /// <param name="key">The search key.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Left, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Right)
+        /// <summary>Splits after any key equal to the probe.</summary>
         SplitByUpperBound<T, TComparison>(this FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> tree, T key)
         where TComparison : IComparison<T>
     {

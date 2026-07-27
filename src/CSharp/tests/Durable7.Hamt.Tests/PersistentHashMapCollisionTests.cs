@@ -191,15 +191,19 @@ public sealed class PersistentHashMapCollisionTests
 
     private sealed class ConstantHashComparer : IEqualityComparer<CollisionKey>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(CollisionKey x, CollisionKey y) => x.Id == y.Id;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(CollisionKey obj) => 0x12345;
     }
 
     private sealed class ConstantHashIgnoreCaseComparer : IEqualityComparer<string>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y) => StringComparer.OrdinalIgnoreCase.Equals(x, y);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj) => 0x77;
     }
 
@@ -207,8 +211,10 @@ public sealed class PersistentHashMapCollisionTests
 
     private sealed class ExplicitHashComparer : IEqualityComparer<ExplicitHashKey>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y) => x.Id == y.Id;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ExplicitHashKey obj) => obj.Hash;
     }
 }

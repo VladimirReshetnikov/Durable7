@@ -22,6 +22,7 @@ public readonly struct PersistentOrderedMapCursor<TKey, TValue>
     private readonly PersistentOrderedMap<TKey, TValue>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new persistent ordered map cursor.</summary>
     internal PersistentOrderedMapCursor(PersistentOrderedMap<TKey, TValue> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

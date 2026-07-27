@@ -51,8 +51,16 @@ public static class MerkleCodecs
 
     private sealed class Int32Codec : IMerkleCodec<int>
     {
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => "i32-be-v1";
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(int value)
         {
             var bytes = new byte[sizeof(int)];
@@ -60,6 +68,9 @@ public static class MerkleCodecs
             return bytes;
         }
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public int Decode(ReadOnlySpan<byte> encoding)
         {
             RequireLength(encoding, sizeof(int), EncodingId);
@@ -69,8 +80,16 @@ public static class MerkleCodecs
 
     private sealed class Int64Codec : IMerkleCodec<long>
     {
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => "i64-be-v1";
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(long value)
         {
             var bytes = new byte[sizeof(long)];
@@ -78,6 +97,9 @@ public static class MerkleCodecs
             return bytes;
         }
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public long Decode(ReadOnlySpan<byte> encoding)
         {
             RequireLength(encoding, sizeof(long), EncodingId);
@@ -89,8 +111,16 @@ public static class MerkleCodecs
     {
         private static readonly UTF8Encoding Utf8 = new(false, true);
 
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => "nullable-utf8-v1";
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(string? value)
         {
             if (value is null)
@@ -102,6 +132,9 @@ public static class MerkleCodecs
             return result;
         }
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public string? Decode(ReadOnlySpan<byte> encoding)
         {
             RequireTag(encoding, EncodingId);
@@ -125,8 +158,16 @@ public static class MerkleCodecs
 
     private sealed class BytesCodec : IMerkleCodec<byte[]?>
     {
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => "nullable-bytes-v1";
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(byte[]? value)
         {
             if (value is null)
@@ -137,6 +178,9 @@ public static class MerkleCodecs
             return result;
         }
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public byte[]? Decode(ReadOnlySpan<byte> encoding)
         {
             RequireTag(encoding, EncodingId);
@@ -153,8 +197,16 @@ public static class MerkleCodecs
 
     private sealed class GuidCodec : IMerkleCodec<Guid>
     {
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => "guid-rfc4122-v1";
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(Guid value)
         {
             Span<byte> little = stackalloc byte[16];
@@ -172,6 +224,9 @@ public static class MerkleCodecs
             return result;
         }
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public Guid Decode(ReadOnlySpan<byte> encoding)
         {
             RequireLength(encoding, 16, EncodingId);
@@ -220,6 +275,7 @@ public readonly struct MerkleDigest : IEquatable<MerkleDigest>, IComparable<Merk
     private readonly ulong _c;
     private readonly ulong _d;
 
+    /// <summary>Creates a new merkle digest.</summary>
     internal MerkleDigest(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length != ByteLength)
@@ -499,6 +555,7 @@ public sealed class MerkleSearchTreePolicy<TKey, TValue>
     /// <summary>Gets the digest identifying algorithm, policy, and codec versions.</summary>
     public MerkleDigest DomainDigest { get; }
 
+    /// <summary>Gets the empty digest.</summary>
     internal MerkleDigest EmptyDigest { get; }
 
     /// <summary>Creates a deterministic Merkle policy.</summary>
@@ -528,8 +585,10 @@ public sealed class MerkleSearchTreePolicy<TKey, TValue>
         return new(policyId, comparer, keyCodec, valueCodec);
     }
 
+    /// <summary>Returns the digest of a key.</summary>
     internal MerkleDigest HashKey(byte[] keyBytes) => HashFramed(0x4b, DomainDigest.ToArray(), keyBytes);
 
+    /// <summary>Returns the digest of the given bytes.</summary>
     internal MerkleDigest HashBytes(ReadOnlySpan<byte> bytes)
     {
         Span<byte> digest = stackalloc byte[MerkleDigest.ByteLength];
@@ -537,6 +596,10 @@ public sealed class MerkleSearchTreePolicy<TKey, TValue>
         return new MerkleDigest(digest);
     }
 
+    /// <summary>
+    /// Returns the digest of a node: its entries and its children's digests together, which is what makes equal digests
+    /// mean equal contents.
+    /// </summary>
     internal MerkleDigest HashNode(
         byte[] keyBytes,
         byte[] valueBytes,

@@ -54,6 +54,7 @@ public sealed partial class IntervalTree<T>
     public bool TryGetContainingCursor(T point, out IntervalTreeCursor<T> cursor) =>
         TryGetOverlapCursor(new(point, point), out cursor);
 
+    /// <summary>Returns the rank of the first interval whose low endpoint is not less than the probe.</summary>
     internal int CursorLowBoundRank(T low, bool upper)
     {
         var comparer = Comparer<T>.Default;
@@ -66,6 +67,7 @@ public sealed partial class IntervalTree<T>
         return lowerBefore.Count;
     }
 
+    /// <summary>Returns the entry at the given rank, used by the cursors to address positions.</summary>
     internal Interval<T> CursorEntryAt(int rank)
     {
         if ((uint)rank >= (uint)Count)
@@ -74,6 +76,9 @@ public sealed partial class IntervalTree<T>
         return interval;
     }
 
+    /// <summary>
+    /// Removes the interval at the given rank, used by the cursors to edit in place of a full descent.
+    /// </summary>
     internal IntervalTree<T> RemoveAtCursorRank(int rank)
     {
         var (before, atOrAfter) = _tree.Split(new IntervalCountAboveCursorPredicate<T>(rank));
@@ -83,6 +88,10 @@ public sealed partial class IntervalTree<T>
         return tree.IsEmpty ? Empty : new(tree);
     }
 
+    /// <summary>
+    /// Returns a cursor at the next interval overlapping the probe, starting from the given position. Subtrees whose
+    /// cached maximum endpoint falls short of the probe are skipped whole.
+    /// </summary>
     internal bool TryGetOverlapCursorFrom(
         int start,
         Interval<T> query,
@@ -117,6 +126,7 @@ public readonly struct IntervalTreeCursor<T>
     private readonly IntervalTree<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new interval tree cursor.</summary>
     internal IntervalTreeCursor(IntervalTree<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

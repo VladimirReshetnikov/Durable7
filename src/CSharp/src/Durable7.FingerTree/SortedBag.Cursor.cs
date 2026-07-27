@@ -23,6 +23,9 @@ public sealed partial class SortedBag<T>
         return position < Count && _comparer.Compare(this[position], item) == 0;
     }
 
+    /// <summary>
+    /// Removes the element at the given rank, used by the cursors to edit in place of a full descent.
+    /// </summary>
     internal SortedBag<T> RemoveAtCursorRank(int rank)
     {
         var (before, atOrAfter) = _tree.Split(new CountAbovePredicate<T>(rank));
@@ -38,6 +41,7 @@ public readonly struct SortedBagCursor<T>
     private readonly SortedBag<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new sorted bag cursor.</summary>
     internal SortedBagCursor(SortedBag<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

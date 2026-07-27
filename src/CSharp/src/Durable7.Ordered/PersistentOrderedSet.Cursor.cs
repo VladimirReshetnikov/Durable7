@@ -22,6 +22,7 @@ public readonly struct PersistentOrderedSetCursor<T>
     private readonly PersistentOrderedSet<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new persistent ordered set cursor.</summary>
     internal PersistentOrderedSetCursor(PersistentOrderedSet<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

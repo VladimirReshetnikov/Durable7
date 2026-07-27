@@ -16,6 +16,7 @@ public readonly struct RrbVectorCursor<T>
     private readonly RrbVector<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new rrb vector cursor.</summary>
     internal RrbVectorCursor(RrbVector<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

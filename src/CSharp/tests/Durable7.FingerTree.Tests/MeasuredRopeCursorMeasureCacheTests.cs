@@ -344,6 +344,7 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
 
     private readonly struct CountAbove(int count) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure > count;
     }
 
@@ -357,12 +358,16 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
         private static ManualResetEventSlim? s_blockedCombineEntered;
         private static ManualResetEventSlim? s_releaseBlockedCombine;
 
+        /// <summary>Gets how many times the element-measure callback ran.</summary>
         internal static int MeasureCalls => Volatile.Read(ref s_measureCalls);
 
+        /// <summary>Gets how many times the combine callback ran.</summary>
         internal static int CombineCalls => Volatile.Read(ref s_combineCalls);
 
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => 0;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static int Measure(int element)
         {
             var ordinal = Interlocked.Increment(ref s_measureCalls);
@@ -371,6 +376,7 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
             return 1;
         }
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right)
         {
             var ordinal = Interlocked.Increment(ref s_combineCalls);
@@ -385,6 +391,7 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
             return checked(left + right);
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         internal static void Reset(int throwOnMeasure = 0, int throwOnCombine = 0)
         {
             Volatile.Write(ref s_measureCalls, 0);
@@ -396,6 +403,9 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
             Volatile.Write(ref s_releaseBlockedCombine, null);
         }
 
+        /// <summary>
+        /// Blocks inside the combine callback, so a test can observe a half-finished operation from another thread.
+        /// </summary>
         internal static void BlockCombine(int ordinal)
         {
             Volatile.Write(ref s_blockedCombineEntered, new ManualResetEventSlim());
@@ -403,6 +413,7 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
             Volatile.Write(ref s_blockOnCombine, ordinal);
         }
 
+        /// <summary>Waits until a combine callback is blocked, so the test can proceed deterministically.</summary>
         internal static void WaitForBlockedCombine()
         {
             var entered = Volatile.Read(ref s_blockedCombineEntered);
@@ -410,9 +421,13 @@ public sealed class MeasuredRopeCursorMeasureCacheTests
             Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
         }
 
+        /// <summary>Releases a combine callback blocked by BlockCombine.</summary>
         internal static void ReleaseBlockedCombine() =>
             Volatile.Read(ref s_releaseBlockedCombine)?.Set();
 
+        /// <summary>
+        /// Stops the instrumented policy from failing, so a test can finish setting up after exercising a failure.
+        /// </summary>
         internal static void DisableFailures()
         {
             Volatile.Write(ref s_throwOnMeasure, 0);

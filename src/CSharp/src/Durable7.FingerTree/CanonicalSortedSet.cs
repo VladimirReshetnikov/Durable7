@@ -50,6 +50,7 @@ public sealed partial class CanonicalSortedSet<T> : IReadOnlySet<T>
     /// </remarks>
     public ulong ContentHash => _root?.GetDigest() ?? 0;
 
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object? RootIdentity => _root;
 
     internal (T Item, int LeftCount, int RightCount)[] ShapeForTesting()
@@ -562,14 +563,19 @@ public sealed partial class CanonicalSortedSet<T> : IReadOnlySet<T>
 
     private readonly record struct KeyBound
     {
+        /// <summary>Creates a new key bound.</summary>
         internal KeyBound(T value)
         {
             HasValue = true;
             Value = value;
         }
 
+        /// <summary>
+        /// Gets a value indicating whether a value is present. Explicit, so a stored null stays distinct from absence.
+        /// </summary>
         internal bool HasValue { get; }
 
+        /// <summary>Gets the stored value.</summary>
         internal T Value { get; }
     }
 
@@ -581,14 +587,19 @@ public sealed partial class CanonicalSortedSet<T> : IReadOnlySet<T>
 
     private sealed class BuilderNode(T item, ZipTreeRankPolicy<T>.Rank rank)
     {
+        /// <summary>Gets the item.</summary>
         internal T Item { get; } = item;
 
+        /// <summary>Gets the rank.</summary>
         internal ZipTreeRankPolicy<T>.Rank Rank { get; } = rank;
 
+        /// <summary>Gets the left child.</summary>
         internal BuilderNode? Left { get; set; }
 
+        /// <summary>Gets the right child.</summary>
         internal BuilderNode? Right { get; set; }
 
+        /// <summary>Gets the frozen.</summary>
         internal Node? Frozen { get; set; }
     }
 
@@ -600,18 +611,25 @@ public sealed partial class CanonicalSortedSet<T> : IReadOnlySet<T>
     {
         private object? _digest;
 
+        /// <summary>Gets the item.</summary>
         internal T Item { get; } = item;
 
+        /// <summary>Gets the rank.</summary>
         internal ZipTreeRankPolicy<T>.Rank Rank { get; } = rank;
 
+        /// <summary>Gets the left child.</summary>
         internal Node? Left { get; } = left;
 
+        /// <summary>Gets the right child.</summary>
         internal Node? Right { get; } = right;
 
+        /// <summary>Gets the number of elements in the node.</summary>
         internal int Count { get; } = checked(1 + (left?.Count ?? 0) + (right?.Count ?? 0));
 
+        /// <summary>Gets the structure's height.</summary>
         internal int Height { get; } = checked(1 + Math.Max(left?.Height ?? 0, right?.Height ?? 0));
 
+        /// <summary>Returns the digest.</summary>
         internal ulong GetDigest()
         {
             if (Volatile.Read(ref _digest) is ulong cached)

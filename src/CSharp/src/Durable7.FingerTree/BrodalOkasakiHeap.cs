@@ -44,6 +44,7 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
 
     private object? MinimumForDebugger => _root is null ? null : _root.Value;
 
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object? RootIdentity => _root;
 
     /// <summary>
@@ -399,14 +400,19 @@ public sealed class BrodalOkasakiHeap<T> : IEnumerable<T>
 
     private sealed class Tree(int rank, T value, Forest? children)
     {
+        /// <summary>Gets the rank.</summary>
         internal int Rank { get; } = rank;
+        /// <summary>Gets the stored value.</summary>
         internal T Value { get; } = value;
+        /// <summary>Gets this node's children.</summary>
         internal Forest? Children { get; } = children;
     }
 
     private sealed class Forest(Tree head, Forest? tail)
     {
+        /// <summary>Gets the head.</summary>
         internal Tree Head { get; } = head;
+        /// <summary>Gets the trailing part.</summary>
         internal Forest? Tail { get; } = tail;
     }
 }

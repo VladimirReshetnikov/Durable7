@@ -15,8 +15,11 @@ public sealed class MeasuredRopeTests
 {
     private readonly struct LineMeasure : IMeasure<char, int>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => 0;
+        /// <summary>Returns the measure of one element.</summary>
         public static int Measure(char value) => value == '\n' ? 1 : 0;
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => left + right;
     }
 

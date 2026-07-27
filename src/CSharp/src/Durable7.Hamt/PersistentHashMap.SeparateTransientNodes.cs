@@ -17,6 +17,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private Entry[] _entries;
         private byte _ownedArrays;
 
+        /// <summary>Creates a new separate transient collision node.</summary>
         internal SeparateTransientCollisionNode(
             uint hash,
             Entry[] entries,
@@ -29,14 +30,22 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             Owner = owner;
         }
 
+        /// <summary>Gets the number of elements in the node.</summary>
         internal override int Count => _entries.Length;
+        /// <summary>Gets the entries.</summary>
         internal Entry[] Entries => _entries;
+        /// <summary>Gets the token identifying which session, if any, may edit this node in place.</summary>
         internal EditToken Owner { get; }
+        /// <summary>
+        /// Gets a value indicating whether this session owns the entries array and so may edit it in place.
+        /// </summary>
         internal bool EntriesOwned => (_ownedArrays & EntriesOwnedMask) != 0;
 
+        /// <summary>Gets a value indicating whether write entries.</summary>
         internal bool CanWriteEntries(EditToken token) =>
             ReferenceEquals(Owner, token) && token.IsActive && EntriesOwned;
 
+        /// <summary>Closes the session and produces the collection holding its accumulated edits.</summary>
         internal void CommitTransient(
             Entry[] entries,
             bool entriesOwned,
@@ -51,6 +60,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _ownedArrays = entries.Length != 0 && entriesOwned ? EntriesOwnedMask : (byte)0;
         }
 
+        /// <summary>Returns a node with the key bound to the value, adding or replacing as needed.</summary>
         internal override Node Set(
             TKey key,
             TValue value,
@@ -87,6 +97,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return new CollisionNode(Hash, entries);
         }
 
+        /// <summary>Returns a node without that element.</summary>
         internal override Node? Remove(
             TKey key,
             uint hash,
@@ -146,6 +157,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         private Node[] _children;
         private byte _ownedArrays;
 
+        /// <summary>Creates a new separate transient branch node.</summary>
         internal SeparateTransientBranchNode(
             uint dataMap,
             Entry[] data,
@@ -165,21 +177,39 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             Owner = owner;
         }
 
+        /// <summary>Gets the number of elements in the node.</summary>
         internal override int Count => _count;
+        /// <summary>
+        /// Gets the bitmap marking which slots hold inline entries. Bitmap indexing is what lets a node's arrays hold
+        /// no empty slots.
+        /// </summary>
         internal uint DataMap => _dataMap;
+        /// <summary>Gets the stored data.</summary>
         internal Entry[] Data => _data;
+        /// <summary>Gets the bitmap marking which slots hold child nodes.</summary>
         internal uint NodeMap => _nodeMap;
+        /// <summary>Gets this node's children.</summary>
         internal Node[] Children => _children;
+        /// <summary>Gets the token identifying which session, if any, may edit this node in place.</summary>
         internal EditToken Owner { get; }
+        /// <summary>
+        /// Gets a value indicating whether this session owns the data array and so may edit it in place.
+        /// </summary>
         internal bool DataOwned => (_ownedArrays & DataOwnedMask) != 0;
+        /// <summary>
+        /// Gets a value indicating whether this session owns the children array and so may edit it in place.
+        /// </summary>
         internal bool ChildrenOwned => (_ownedArrays & ChildrenOwnedMask) != 0;
 
+        /// <summary>Gets a value indicating whether write data.</summary>
         internal bool CanWriteData(EditToken token) =>
             ReferenceEquals(Owner, token) && token.IsActive && DataOwned;
 
+        /// <summary>Gets a value indicating whether write children.</summary>
         internal bool CanWriteChildren(EditToken token) =>
             ReferenceEquals(Owner, token) && token.IsActive && ChildrenOwned;
 
+        /// <summary>Closes the session and produces the collection holding its accumulated edits.</summary>
         internal void CommitTransient(
             uint dataMap,
             Entry[] data,
@@ -210,6 +240,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             _ownedArrays = OwnershipMask(data, dataOwned, children, childrenOwned);
         }
 
+        /// <summary>Returns a node with the key bound to the value, adding or replacing as needed.</summary>
         internal override Node Set(
             TKey key,
             TValue value,
@@ -262,6 +293,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return new BitmapIndexedNode(_dataMap | bit, inserted, _nodeMap, _children);
         }
 
+        /// <summary>Returns a node without that element.</summary>
         internal override Node? Remove(
             TKey key,
             uint hash,
@@ -395,13 +427,23 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             Count = count;
         }
 
+        /// <summary>Gets the source.</summary>
         internal Node Source { get; }
+        /// <summary>
+        /// Gets the bitmap marking which slots hold inline entries. Bitmap indexing is what lets a node's arrays hold
+        /// no empty slots.
+        /// </summary>
         internal uint DataMap { get; }
+        /// <summary>Gets the stored data.</summary>
         internal Entry[] Data { get; }
+        /// <summary>Gets the bitmap marking which slots hold child nodes.</summary>
         internal uint NodeMap { get; }
+        /// <summary>Gets this node's children.</summary>
         internal Node[] Children { get; }
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal int Count { get; }
 
+        /// <summary>Creates create, reporting whether it succeeded.</summary>
         internal static bool TryCreate(Node node, out BranchView view)
         {
             if (node is BitmapIndexedNode ordinary)
@@ -432,6 +474,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             return false;
         }
 
+        /// <summary>Creates an element collection using the supplied policies, which it retains.</summary>
         internal static BranchView Create(Node node)
         {
             if (TryCreate(node, out var view))

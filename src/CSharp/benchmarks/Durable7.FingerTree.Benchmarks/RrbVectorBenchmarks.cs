@@ -17,9 +17,11 @@ public class RrbVectorBenchmarks
     private ImmutableList<int> _immutable = null!;
     private int _index;
 
+    /// <summary>Gets the number of elements in the vector.</summary>
     [Params(1_000, 100_000)]
     public int Count { get; set; }
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -32,21 +34,27 @@ public class RrbVectorBenchmarks
         _index = Count / 2;
     }
 
+    /// <summary>Measures rrb middle index.</summary>
     [Benchmark(Baseline = true)]
     public int RrbMiddleIndex() => _vector[_index];
 
+    /// <summary>Measures rope middle index.</summary>
     [Benchmark]
     public int RopeMiddleIndex() => _rope[_index];
 
+    /// <summary>Measures immutable list middle index.</summary>
     [Benchmark]
     public int ImmutableListMiddleIndex() => _immutable[_index];
 
+    /// <summary>Measures rrb concat.</summary>
     [Benchmark]
     public RrbVector<int> RrbConcat() => _vector.Concat(_suffix);
 
+    /// <summary>Measures rope concat.</summary>
     [Benchmark]
     public Rope<int> RopeConcat() => _rope.Concat(_ropeSuffix);
 
+    /// <summary>Measures immutable list concat.</summary>
     [Benchmark]
     public ImmutableList<int> ImmutableListConcat() => _immutable.AddRange(_immutable);
 }

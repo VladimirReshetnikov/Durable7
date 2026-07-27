@@ -64,6 +64,7 @@ public readonly struct RopeCursor<T>
     private readonly CursorVersionState<T>? _version;
     private readonly RopeZipperContext<T> _context;
 
+    /// <summary>Creates a new rope cursor.</summary>
     internal RopeCursor(CursorVersionState<T> version, RopeZipperContext<T> context)
     {
         _version = version;
@@ -93,6 +94,7 @@ public readonly struct RopeCursor<T>
     /// <exception cref="InvalidOperationException">This is the default, uninitialized cursor value.</exception>
     public bool IsAtEnd => Position == Count;
 
+    /// <summary>Gets the version identity for diagnostics.</summary>
     internal object VersionIdentityForDiagnostics => Version;
 
     internal RopeZipperContext<T> ContextForDiagnostics
@@ -104,6 +106,7 @@ public readonly struct RopeCursor<T>
         }
     }
 
+    /// <summary>Creates an element rope using the supplied policies, which it retains.</summary>
     internal static RopeCursor<T> Create(Rope<T> source, int position)
     {
         var configuration = RopeCursorPrototypeConfiguration.Create(FocusCapacity, FlushChunkSize);
@@ -279,9 +282,11 @@ public readonly struct RopeCursor<T>
     /// </remarks>
     public Rope<T> Snapshot() => Version.Snapshot();
 
+    /// <summary>Returns the structural measurements a test asserts on.</summary>
     internal RopeCursorPrototypeStateDiagnostics GetDiagnostics() =>
         RopeCursorPrototypeEngine<T>.GetDiagnostics(Version, _context);
 
+    /// <summary>Gets a value indicating whether same context state for diagnostics.</summary>
     internal bool HasSameContextStateForDiagnostics(RopeCursor<T> other)
     {
         _ = Version;
@@ -296,6 +301,7 @@ public readonly struct RopeCursor<T>
             _context.Configuration == other._context.Configuration;
     }
 
+    /// <summary>Checks the rope's structural invariants. For tests and diagnostics.</summary>
     internal void Validate() => RopeCursorPrototypeEngine<T>.Validate(_context, Version.Count);
 
     private CursorVersionState<T> Version =>

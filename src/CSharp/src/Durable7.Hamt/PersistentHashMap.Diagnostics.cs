@@ -7,8 +7,10 @@ namespace Durable7.Hamt;
 
 public sealed partial class PersistentHashMap<TKey, TValue>
 {
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object? RootIdentityForDiagnostics => _root;
 
+    /// <summary>Returns the shape measurements a structural audit collects.</summary>
     internal PersistentHashMapStructureDiagnostics GetStructureDiagnostics()
     {
         var nodes = new HashSet<Node>(ReferenceEqualityComparer.Instance);
@@ -156,6 +158,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             EstimatedRetainedBytes: retainedBytes);
     }
 
+    /// <summary>Returns the mutation diagnostics.</summary>
     internal PersistentHashMapMutationDiagnostics GetMutationDiagnostics(
         PersistentHashMap<TKey, TValue> previous,
         TKey editedKey)
@@ -202,6 +205,10 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             RootChanged: !ReferenceEquals(_root, previous._root));
     }
 
+    /// <summary>
+    /// Returns how many nodes an operation visited, so a test can assert on the work it did rather than only on its
+    /// result.
+    /// </summary>
     internal int CountNodeVisitsForDiagnostics(TKey key)
     {
         var node = _root;

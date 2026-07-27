@@ -20,6 +20,7 @@ internal static class RangeUpdateSequenceDiagnostics
         get => s_current is not null;
     }
 
+    /// <summary>Starts collecting diagnostics; disposing the returned session restores the previous state.</summary>
     internal static RangeUpdateSequenceDiagnosticSession BeginSession()
     {
         var session = new RangeUpdateSequenceDiagnosticSession(s_current);
@@ -27,42 +28,55 @@ internal static class RangeUpdateSequenceDiagnostics
         return session;
     }
 
+    /// <summary>Counts one node visit.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordNodeVisit() => s_current?.RecordNodeVisit();
 
+    /// <summary>Counts one node allocation.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordNodeAllocation() => s_current?.RecordNodeAllocation();
 
+    /// <summary>Counts one facade allocation.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordFacadeAllocation() => s_current?.RecordFacadeAllocation();
 
+    /// <summary>Counts one rotation.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordRotation() => s_current?.RecordRotation();
 
+    /// <summary>Counts one push.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordPush() => s_current?.RecordPush();
 
+    /// <summary>Counts one subtree application.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordSubtreeApplication() => s_current?.RecordSubtreeApplication();
 
+    /// <summary>Counts one element-measure callback.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordElementMeasureCallback() => s_current?.RecordElementMeasureCallback();
 
+    /// <summary>Counts one measure-combine callback.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordMeasureCombineCallback() => s_current?.RecordMeasureCombineCallback();
 
+    /// <summary>Counts one identity test callback.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordIdentityTestCallback() => s_current?.RecordIdentityTestCallback();
 
+    /// <summary>Counts one tag compose callback.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordTagComposeCallback() => s_current?.RecordTagComposeCallback();
 
+    /// <summary>Counts one element apply callback.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordElementApplyCallback() => s_current?.RecordElementApplyCallback();
 
+    /// <summary>Counts one measure apply callback.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void RecordMeasureApplyCallback() => s_current?.RecordMeasureApplyCallback();
 
+    /// <summary>Stops collecting diagnostics and restores the previous state.</summary>
     internal static void EndSession(
         RangeUpdateSequenceDiagnosticSession session,
         RangeUpdateSequenceDiagnosticSession? previous)
@@ -98,9 +112,11 @@ internal sealed class RangeUpdateSequenceDiagnosticSession : IDisposable
     private long _elementApplyCallbacks;
     private long _measureApplyCallbacks;
 
+    /// <summary>Creates a new range update sequence diagnostic session.</summary>
     internal RangeUpdateSequenceDiagnosticSession(RangeUpdateSequenceDiagnosticSession? previous) =>
         _previous = previous;
 
+    /// <summary>Gets the sequence version this cursor is positioned in.</summary>
     internal RangeUpdateSequenceOperationDiagnostics Snapshot => new(
         NodeVisits: _nodeVisits,
         NodeAllocations: _nodeAllocations,
@@ -115,36 +131,49 @@ internal sealed class RangeUpdateSequenceDiagnosticSession : IDisposable
         ElementApplyCallbacks: _elementApplyCallbacks,
         MeasureApplyCallbacks: _measureApplyCallbacks);
 
+    /// <summary>Counts one node visit.</summary>
     internal void RecordNodeVisit() => _nodeVisits = checked(_nodeVisits + 1);
 
+    /// <summary>Counts one node allocation.</summary>
     internal void RecordNodeAllocation() => _nodeAllocations = checked(_nodeAllocations + 1);
 
+    /// <summary>Counts one facade allocation.</summary>
     internal void RecordFacadeAllocation() => _facadeAllocations = checked(_facadeAllocations + 1);
 
+    /// <summary>Counts one rotation.</summary>
     internal void RecordRotation() => _rotations = checked(_rotations + 1);
 
+    /// <summary>Counts one push.</summary>
     internal void RecordPush() => _pushes = checked(_pushes + 1);
 
+    /// <summary>Counts one subtree application.</summary>
     internal void RecordSubtreeApplication() => _subtreeApplications = checked(_subtreeApplications + 1);
 
+    /// <summary>Counts one element-measure callback.</summary>
     internal void RecordElementMeasureCallback() =>
         _elementMeasureCallbacks = checked(_elementMeasureCallbacks + 1);
 
+    /// <summary>Counts one measure-combine callback.</summary>
     internal void RecordMeasureCombineCallback() =>
         _measureCombineCallbacks = checked(_measureCombineCallbacks + 1);
 
+    /// <summary>Counts one identity test callback.</summary>
     internal void RecordIdentityTestCallback() =>
         _identityTestCallbacks = checked(_identityTestCallbacks + 1);
 
+    /// <summary>Counts one tag compose callback.</summary>
     internal void RecordTagComposeCallback() =>
         _tagComposeCallbacks = checked(_tagComposeCallbacks + 1);
 
+    /// <summary>Counts one element apply callback.</summary>
     internal void RecordElementApplyCallback() =>
         _elementApplyCallbacks = checked(_elementApplyCallbacks + 1);
 
+    /// <summary>Counts one measure apply callback.</summary>
     internal void RecordMeasureApplyCallback() =>
         _measureApplyCallbacks = checked(_measureApplyCallbacks + 1);
 
+    /// <summary>Releases the resources this value holds.</summary>
     public void Dispose()
     {
         if (_disposed)
@@ -170,6 +199,9 @@ internal readonly record struct RangeUpdateSequenceOperationDiagnostics(
     long ElementApplyCallbacks,
     long MeasureApplyCallbacks)
 {
+    /// <summary>
+    /// Gets how many times the policy was invoked, which is what an operation's callback bound is asserted against.
+    /// </summary>
     internal long PolicyCallbacks => checked(
         ElementMeasureCallbacks
         + MeasureCombineCallbacks

@@ -271,10 +271,13 @@ public sealed class IntervalTreeTests
     /// </summary>
     private readonly struct Keyed(int order, int id) : IComparable<Keyed>
     {
+        /// <summary>Gets the order.</summary>
         public int Order { get; } = order;
 
+        /// <summary>Gets the identifier.</summary>
         public int Id { get; } = id;
 
+        /// <summary>Orders this value against another.</summary>
         public int CompareTo(Keyed other) => Order.CompareTo(other.Order);
     }
 

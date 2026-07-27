@@ -306,15 +306,21 @@ public sealed class PersistentHashMapTransientTests
 
     private sealed class CollisionComparer : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => obj & 3;
     }
 
     private sealed class ThrowingComparer : IEqualityComparer<int>
     {
+        /// <summary>
+        /// Throws on demand, so a test can check that a failing callback leaves the collection unchanged.
+        /// </summary>
         public bool Throw { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y)
         {
             if (Throw)
@@ -322,6 +328,7 @@ public sealed class PersistentHashMapTransientTests
             return x == y;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj)
         {
             if (Throw)

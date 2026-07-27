@@ -207,12 +207,17 @@ public sealed class OrderedSearchCursorTests
 
     private sealed class RankedItemComparer : IComparer<RankedItem>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static RankedItemComparer Instance { get; } = new();
+        /// <summary>Orders two values.</summary>
         public int Compare(RankedItem? x, RankedItem? y) => x!.Rank.CompareTo(y!.Rank);
     }
 
     private sealed record Endpoint(int Order, string Name) : IComparable<Endpoint>
     {
+        /// <summary>Orders this value against another.</summary>
         public int CompareTo(Endpoint? other) => Order.CompareTo(other!.Order);
     }
 }

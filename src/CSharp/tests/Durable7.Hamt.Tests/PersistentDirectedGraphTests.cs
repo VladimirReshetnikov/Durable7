@@ -143,11 +143,16 @@ public sealed class PersistentDirectedGraphTests
 
     private sealed class VertexComparer : IEqualityComparer<Vertex>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static VertexComparer Instance { get; } = new();
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Vertex? x, Vertex? y) =>
             StringComparer.OrdinalIgnoreCase.Equals(x?.Class, y?.Class);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(Vertex obj) => StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Class);
     }
 }

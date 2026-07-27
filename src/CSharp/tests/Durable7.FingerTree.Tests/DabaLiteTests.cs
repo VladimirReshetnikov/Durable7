@@ -94,15 +94,19 @@ public sealed class DabaLiteTests
 
     private readonly struct StringMonoid : IMonoid<string>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static string Empty => string.Empty;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static string Combine(string left, string right) => left + right;
     }
 
     private readonly struct SumMonoid : IMonoid<long>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static long Empty => 0;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static long Combine(long left, long right) => left + right;
     }
 
@@ -110,16 +114,20 @@ public sealed class DabaLiteTests
     {
         private static int _count;
 
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => 0;
 
+        /// <summary>Gets the number of elements in the collection.</summary>
         public static int Count => _count;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right)
         {
             _count++;
             return left + right;
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public static void Reset() => _count = 0;
     }
 }

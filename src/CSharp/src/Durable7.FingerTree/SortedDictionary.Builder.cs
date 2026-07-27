@@ -25,6 +25,7 @@ public sealed partial class SortedDictionary<TKey, TValue>
         private int _cachedVersion;
         private SortedDictionary<TKey, TValue> _cachedResult;
 
+        /// <summary>Creates a new builder.</summary>
         internal Builder(IComparer<TKey> comparer)
         {
             _comparer = comparer;
@@ -34,6 +35,7 @@ public sealed partial class SortedDictionary<TKey, TValue>
             _cachedResult = Create(comparer);
         }
 
+        /// <summary>Creates a new builder.</summary>
         internal Builder(SortedDictionary<TKey, TValue> source)
         {
             _comparer = source.Comparer;
@@ -214,6 +216,7 @@ public sealed partial class SortedDictionary<TKey, TValue>
 
         private sealed class KeyEnumerable(Builder builder) : IEnumerable<TKey>
         {
+            /// <summary>Returns an enumerator over the elements, in the collection's own order.</summary>
             public IEnumerator<TKey> GetEnumerator() => builder.EnumerateKeys(builder._version).GetEnumerator();
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -221,6 +224,7 @@ public sealed partial class SortedDictionary<TKey, TValue>
 
         private sealed class ValueEnumerable(Builder builder) : IEnumerable<TValue>
         {
+            /// <summary>Returns an enumerator over the elements, in the collection's own order.</summary>
             public IEnumerator<TValue> GetEnumerator() => builder.EnumerateValues(builder._version).GetEnumerator();
 
             IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -228,6 +232,7 @@ public sealed partial class SortedDictionary<TKey, TValue>
 
         private sealed class EntryKeyComparer(IComparer<TKey> keyComparer) : IComparer<KeyValuePair<TKey, TValue>>
         {
+            /// <summary>Orders two values.</summary>
             public int Compare(KeyValuePair<TKey, TValue> x, KeyValuePair<TKey, TValue> y) =>
                 keyComparer.Compare(x.Key, y.Key);
         }

@@ -28,6 +28,7 @@ public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
         return !right.IsEmpty;
     }
 
+    /// <summary>Gets left measured, reporting whether it succeeded.</summary>
     internal bool TryViewLeftMeasured(
         out MeasuredLeaf<TElement, TMeasure, TMeasureOps> leaf,
         out FingerTree<TElement, TMeasure, TMeasureOps> rest)
@@ -43,6 +44,7 @@ public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
         return false;
     }
 
+    /// <summary>Gets right measured, reporting whether it succeeded.</summary>
     internal bool TryViewRightMeasured(
         out MeasuredLeaf<TElement, TMeasure, TMeasureOps> leaf,
         out FingerTree<TElement, TMeasure, TMeasureOps> rest)
@@ -58,9 +60,11 @@ public sealed partial class FingerTree<TElement, TMeasure, TMeasureOps>
         return false;
     }
 
+    /// <summary>Prepends to a measured tree, recomputing only the measures the change reaches.</summary>
     internal FingerTree<TElement, TMeasure, TMeasureOps> PrependMeasured(
         MeasuredLeaf<TElement, TMeasure, TMeasureOps> leaf) => new(_root.Cons(leaf));
 
+    /// <summary>Appends to a measured tree, recomputing only the measures the change reaches.</summary>
     internal FingerTree<TElement, TMeasure, TMeasureOps> AppendMeasured(
         MeasuredLeaf<TElement, TMeasure, TMeasureOps> leaf) => new(_root.Snoc(leaf));
 }

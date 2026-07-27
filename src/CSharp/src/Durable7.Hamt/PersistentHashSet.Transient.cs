@@ -6,6 +6,7 @@ namespace Durable7.Hamt;
 
 public sealed partial class PersistentHashSet<T>
 {
+    /// <summary>Gets the enum transient failure point.</summary>
     internal enum TransientFailurePoint
     {
         BeforeSetWrapperAllocation,
@@ -38,6 +39,7 @@ public sealed partial class PersistentHashSet<T>
     /// </remarks>
     public Transient ToTransient() => new(this, _map.ToTransient());
 
+    /// <summary>Creates the transient for diagnostics.</summary>
     internal Transient CreateTransientForDiagnostics() =>
         new(this, _map.CreateSeparateNodeTransientKernel());
 
@@ -70,6 +72,7 @@ public sealed partial class PersistentHashSet<T>
         private PersistentHashSet<T>? _source;
         private readonly PersistentHashMap<T, Unit>.Transient _map;
 
+        /// <summary>Creates a new transient.</summary>
         internal Transient(
             PersistentHashSet<T> source,
             PersistentHashMap<T, Unit>.Transient map)
@@ -78,10 +81,13 @@ public sealed partial class PersistentHashSet<T>
             _map = map;
         }
 
+        /// <summary>Gets the hook a test uses to make a callback fail at a chosen point.</summary>
         internal Action<TransientFailurePoint>? FailureInjector { get; set; }
 
+        /// <summary>Gets the map for diagnostics.</summary>
         internal PersistentHashMap<T, Unit>.Transient MapForDiagnostics => _map;
 
+        /// <summary>Gets the source for diagnostics.</summary>
         internal PersistentHashSet<T>? SourceForDiagnostics => _source;
 
         /// <summary>Gets the number of items in the active session.</summary>
@@ -347,6 +353,7 @@ public sealed partial class PersistentHashSet<T>
         {
             private PersistentHashMap<T, Unit>.Transient.Enumerator _inner;
 
+            /// <summary>Creates a new enumerator.</summary>
             internal Enumerator(PersistentHashMap<T, Unit>.Transient.Enumerator inner)
             {
                 _inner = inner;

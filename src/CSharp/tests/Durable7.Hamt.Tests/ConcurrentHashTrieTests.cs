@@ -49,14 +49,17 @@ public sealed class ConcurrentHashTrieTests
 
     private sealed class EqualityCountingValue
     {
+        /// <summary>Gets how many times the policy was asked to compare.</summary>
         public int EqualityCalls { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj)
         {
             EqualityCalls++;
             return ReferenceEquals(this, obj);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => 0;
     }
 
@@ -414,16 +417,23 @@ public sealed class ConcurrentHashTrieTests
 
     private sealed class ConstantHashComparer : IEqualityComparer<int>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static readonly ConstantHashComparer Instance = new();
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => 0;
     }
 
     private sealed class NullableCollisionComparer : IEqualityComparer<string?>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) =>
             StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string? value) => 0;
     }
 
@@ -431,15 +441,25 @@ public sealed class ConcurrentHashTrieTests
 
     private sealed class CollisionThenSplitComparer : IEqualityComparer<int>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static readonly CollisionThenSplitComparer Instance = new();
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => obj < 2 ? 0 : 32;
     }
 
     private sealed class HashBandComparer : IEqualityComparer<int>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static readonly HashBandComparer Instance = new();
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => obj & 255;
     }
 }

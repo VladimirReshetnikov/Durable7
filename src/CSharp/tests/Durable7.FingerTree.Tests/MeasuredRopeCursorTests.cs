@@ -335,24 +335,30 @@ public sealed class MeasuredRopeCursorTests
 
     private readonly struct SumAbove(int threshold) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure > threshold;
     }
 
     private sealed class ThrowingEquality(int id)
     {
+        /// <summary>Gets the identifier.</summary>
         public int Id { get; } = id;
 
         public override bool Equals(object? obj) => throw new InvalidOperationException("Equality must not be called.");
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Id;
     }
 
     private readonly struct ThrowingEqualityMeasure : IMeasure<ThrowingEquality, int>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => 0;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static int Measure(ThrowingEquality element) => element.Id;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => left + right;
     }
 }

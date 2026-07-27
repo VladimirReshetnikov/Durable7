@@ -106,14 +106,17 @@ public sealed class BrodalOkasakiHeapTests
 
     private sealed class CountingComparer : IComparer<int>
     {
+        /// <summary>Gets the number of elements in the collection.</summary>
         public int Count { get; private set; }
 
+        /// <summary>Orders two values.</summary>
         public int Compare(int x, int y)
         {
             Count++;
             return x.CompareTo(y);
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public void Reset() => Count = 0;
     }
 }

@@ -478,13 +478,21 @@ public sealed partial class RangeUpdateSequence<TElement, TMeasure, TTag, TOps>
         bool hasPendingTag,
         TTag pendingTag)
     {
+        /// <summary>Gets the stored value.</summary>
         internal TElement Value { get; } = value;
+        /// <summary>Gets the left child.</summary>
         internal Node? Left { get; } = left;
+        /// <summary>Gets the right child.</summary>
         internal Node? Right { get; } = right;
+        /// <summary>Gets the structure's height.</summary>
         internal int Height { get; } = height;
+        /// <summary>Gets the number of elements in the node.</summary>
         internal int Count { get; } = count;
+        /// <summary>Gets the combined measure of every element, read from the cached root measure.</summary>
         internal TMeasure Measure { get; } = measure;
+        /// <summary>Gets a value indicating whether pending tag.</summary>
         internal bool HasPendingTag { get; } = hasPendingTag;
+        /// <summary>Gets the pending tag.</summary>
         internal TTag PendingTag { get; } = pendingTag;
     }
 }

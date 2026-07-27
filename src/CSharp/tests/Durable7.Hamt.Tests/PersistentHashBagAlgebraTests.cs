@@ -310,27 +310,41 @@ public sealed class PersistentHashBagAlgebraTests
 
     private sealed class OrdinalComparer : IEqualityComparer<string>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) => StringComparer.Ordinal.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value) => StringComparer.Ordinal.GetHashCode(value);
     }
 
     private sealed class ConstantHashIgnoreCaseComparer : IEqualityComparer<string>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) =>
             StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value) => 0;
     }
 
     private sealed class SwitchableThrowingIgnoreCaseComparer : IEqualityComparer<string>
     {
+        /// <summary>Gets the failure this result carries.</summary>
         internal ComparerCallbackException Failure { get; } = new();
 
+        /// <summary>
+        /// Throws from the hashing callback on demand, so a test can check that a failing hash leaves the collection
+        /// unchanged.
+        /// </summary>
         internal bool ThrowFromGetHashCode { get; set; }
 
+        /// <summary>
+        /// Throws from the equality callback on demand, so a test can check that a failing comparison leaves the
+        /// collection unchanged.
+        /// </summary>
         internal bool ThrowFromEquals { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right)
         {
             if (ThrowFromEquals)
@@ -338,6 +352,7 @@ public sealed class PersistentHashBagAlgebraTests
             return StringComparer.OrdinalIgnoreCase.Equals(left, right);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string value)
         {
             if (ThrowFromGetHashCode)

@@ -54,6 +54,7 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
         }
     }
 
+    /// <summary>Gets the root node's identity, for tests that a no-op shared rather than copied.</summary>
     internal object? RootIdentity => _root;
 
     /// <summary>Creates an empty mutable append-only builder.</summary>
@@ -465,6 +466,7 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
         private int _stagedCount;
         private int _version;
 
+        /// <summary>Creates a new builder.</summary>
         internal Builder(RrbVector<T> prefix) => _prefix = prefix;
 
         /// <summary>Gets the number of elements in the frozen prefix and staged tail.</summary>
@@ -603,11 +605,16 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
         private int _minimumBranchingFactor = int.MaxValue;
         private int _maximumBranchingFactor;
 
+        /// <summary>Gets the leaf count.</summary>
         internal int LeafCount { get; private set; }
+        /// <summary>Gets the branch count.</summary>
         internal int BranchCount { get; private set; }
+        /// <summary>Gets the regular branch count.</summary>
         internal int RegularBranchCount { get; private set; }
+        /// <summary>Gets the relaxed branch count.</summary>
         internal int RelaxedBranchCount { get; private set; }
 
+        /// <summary>Adds the leaf.</summary>
         internal void AddLeaf(int length)
         {
             LeafCount++;
@@ -615,6 +622,7 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
             _maximumLeafLength = Math.Max(_maximumLeafLength, length);
         }
 
+        /// <summary>Records one branch, for the statistics a structural audit collects.</summary>
         internal void AddBranch(int branchingFactor, bool regular)
         {
             BranchCount++;
@@ -626,6 +634,7 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
             _maximumBranchingFactor = Math.Max(_maximumBranchingFactor, branchingFactor);
         }
 
+        /// <summary>Returns these measurements as the public statistics type.</summary>
         internal RrbVectorStatistics ToStatistics(int count, int height) => new(
             count,
             height,
@@ -641,22 +650,28 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
 
     private abstract class Node
     {
+        /// <summary>Gets the number of elements in the node.</summary>
         internal abstract int Count { get; }
 
+        /// <summary>Gets the structure's height.</summary>
         internal abstract int Height { get; }
     }
 
     private sealed class Leaf(T[] items) : Node
     {
+        /// <summary>Gets the elements.</summary>
         internal T[] Items { get; } = items;
 
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal override int Count => Items.Length;
 
+        /// <summary>Gets the structure's height.</summary>
         internal override int Height => 0;
     }
 
     private sealed class Branch : Node
     {
+        /// <summary>Creates a new branch.</summary>
         internal Branch(Node[] children)
         {
             Debug.Assert(children is { Length: > 0 and <= BranchFactor });
@@ -674,16 +689,22 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
             CumulativeSizes = HasRegularLayout(children, Height) ? null : BuildSizes(children);
         }
 
+        /// <summary>Gets this node's children.</summary>
         internal Node[] Children { get; }
 
+        /// <summary>Gets the cumulative sizes.</summary>
         internal int[]? CumulativeSizes { get; }
 
+        /// <summary>Gets a value indicating whether regular.</summary>
         internal bool IsRegular => CumulativeSizes is null;
 
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal override int Count { get; }
 
+        /// <summary>Gets the structure's height.</summary>
         internal override int Height { get; }
 
+        /// <summary>Finds the child.</summary>
         internal int FindChild(int index, out int before)
         {
             Debug.Assert((uint)index < (uint)Count);
@@ -707,6 +728,7 @@ public sealed partial class RrbVector<T> : IReadOnlyList<T>
             throw new UnreachableException();
         }
 
+        /// <summary>Gets a value indicating whether regular layout.</summary>
         internal static bool HasRegularLayout(Node[] children, int height)
         {
             if (children.Length == 0 || height is < 1 or > MaximumHeight)

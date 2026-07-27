@@ -20,6 +20,7 @@ public sealed partial class Rope<T>
         private Rope<T> _prefix;
         private int _version;
 
+        /// <summary>Creates a new builder.</summary>
         internal Builder(Rope<T> prefix) => _prefix = prefix;
 
         /// <summary>Gets the number of staged elements. O(1).</summary>

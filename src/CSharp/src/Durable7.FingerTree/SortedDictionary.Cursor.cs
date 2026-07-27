@@ -30,6 +30,7 @@ public readonly struct SortedDictionaryCursor<TKey, TValue>
     private readonly SortedDictionary<TKey, TValue>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new sorted dictionary cursor.</summary>
     internal SortedDictionaryCursor(SortedDictionary<TKey, TValue> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

@@ -11,6 +11,7 @@ namespace Durable7.FingerTree.Benchmarks;
 [MemoryDiagnoser]
 public class MeasuredRopeBenchmarks
 {
+    /// <summary>Gets the lines.</summary>
     [Params(10_000, 1_000_000)]
     public int Lines;
 
@@ -19,6 +20,7 @@ public class MeasuredRopeBenchmarks
     private int _midLine;
     private int _midOffset;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -37,6 +39,7 @@ public class MeasuredRopeBenchmarks
     [BenchmarkCategory("LineStart")]
     public int Rope_LineStartOffset() => _rope.LineStartOffset(_midLine);
 
+    /// <summary>Measures scan line start offset.</summary>
     [Benchmark]
     [BenchmarkCategory("LineStart")]
     public int Scan_LineStartOffset()
@@ -59,6 +62,7 @@ public class MeasuredRopeBenchmarks
     [BenchmarkCategory("LineOf")]
     public int Rope_LineOfOffset() => _rope.LineOfOffset(_midOffset);
 
+    /// <summary>Measures scan line of offset.</summary>
     [Benchmark]
     [BenchmarkCategory("LineOf")]
     public int Scan_LineOfOffset()

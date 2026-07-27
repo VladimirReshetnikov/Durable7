@@ -12,6 +12,7 @@ namespace Durable7.FingerTree.Benchmarks;
 [MemoryDiagnoser]
 public class WeightedSelectBenchmarks
 {
+    /// <summary>Gets the number of elements in the collection.</summary>
     [Params(1_000, 100_000)]
     public int Size;
 
@@ -19,6 +20,7 @@ public class WeightedSelectBenchmarks
     private long[] _weights = null!;
     private long _target;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {

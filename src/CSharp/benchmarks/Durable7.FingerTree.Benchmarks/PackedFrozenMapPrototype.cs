@@ -50,6 +50,7 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
             throw new InvalidOperationException("The source map count changed while it was enumerated.");
     }
 
+    /// <summary>Creates an entry map using the supplied policies, which it retains.</summary>
     internal static PackedFrozenMapPrototype<TKey, TValue> Create(
         PersistentHashMap<TKey, TValue> source)
     {
@@ -57,8 +58,10 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
         return new PackedFrozenMapPrototype<TKey, TValue>(source);
     }
 
+    /// <summary>Gets the number of entries in the map.</summary>
     internal int Count => _entries.Length;
 
+    /// <summary>Gets the retained ordering policy.</summary>
     internal IEqualityComparer<TKey> Comparer => _comparer;
 
     internal PackedFrozenMapPrototypeDiagnostics Diagnostics
@@ -77,6 +80,7 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
         }
     }
 
+    /// <summary>Reads the value stored for the key, reporting whether it was present.</summary>
     internal bool TryGetValue(TKey key, [MaybeNullWhen(false)] out TValue value)
     {
         if (TryGetEntry(key, out _, out value))
@@ -86,6 +90,7 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
         return false;
     }
 
+    /// <summary>Reads the stored key representative, reporting whether the key was present.</summary>
     internal bool TryGetKey(TKey equalKey, [MaybeNullWhen(false)] out TKey actualKey)
     {
         if (TryGetEntry(equalKey, out actualKey, out _))
@@ -107,6 +112,7 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
         return builder.ToImmutable();
     }
 
+    /// <summary>Returns an enumerator over the entries, in the map's own order.</summary>
     public Enumerator GetEnumerator() => new(_entries);
 
     private bool TryGetEntry(
@@ -186,18 +192,24 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
         return checked((bytes + alignment - 1) & ~(alignment - 1));
     }
 
+    /// <summary>One entry in the packed layout, laid out for probing rather than for sharing.</summary>
     internal readonly struct PackedEntry(uint hash, TKey key, TValue value)
     {
+        /// <summary>Returns the hash of the value.</summary>
         internal readonly uint Hash = hash;
+        /// <summary>Gets the stored key.</summary>
         internal readonly TKey Key = key;
+        /// <summary>Gets the stored value.</summary>
         internal readonly TValue Value = value;
     }
 
+    /// <summary>Gets the struct enumerator.</summary>
     public struct Enumerator
     {
         private readonly PackedEntry[] _entries;
         private int _index;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(PackedEntry[] entries)
         {
             _entries = entries;
@@ -205,8 +217,10 @@ internal sealed class PackedFrozenMapPrototype<TKey, TValue>
             Current = default;
         }
 
+        /// <summary>Gets the value at the current position.</summary>
         public KeyValuePair<TKey, TValue> Current { get; private set; }
 
+        /// <summary>Advances to the next element, reporting whether there was one.</summary>
         public bool MoveNext()
         {
             var next = _index + 1;
@@ -237,6 +251,7 @@ internal readonly record struct PackedFrozenMapPrototypeDiagnostics(
     long EstimatedSlotArrayBytes,
     long EstimatedRetainedArrayBytes)
 {
+    /// <summary>Gets the estimated retained array bytes per entry.</summary>
     internal double EstimatedRetainedArrayBytesPerEntry =>
         EntryCount == 0 ? 0 : (double)EstimatedRetainedArrayBytes / EntryCount;
 }
@@ -283,6 +298,7 @@ internal sealed class FrozenF0AxisFixture
 {
     private const int ProbeCount = 1_024;
 
+    /// <summary>Creates a new frozen f 0 axis fixture.</summary>
     internal FrozenF0AxisFixture(
         int count,
         int hitPercentage,
@@ -328,51 +344,72 @@ internal sealed class FrozenF0AxisFixture
         }
     }
 
+    /// <summary>Gets the entries.</summary>
     internal KeyValuePair<Axis2HashKey, int>[] Entries { get; }
 
+    /// <summary>Gets how many probes the operation needed.</summary>
     internal Axis2HashKey[] Probes { get; }
 
+    /// <summary>Gets the persistent representation under comparison.</summary>
     internal PersistentHashMap<Axis2HashKey, int> Persistent { get; }
 
+    /// <summary>Gets the packed representation under comparison.</summary>
     internal PackedFrozenMapPrototype<Axis2HashKey, int> Packed { get; }
 
+    /// <summary>Gets the Robin Hood hashed representation under comparison.</summary>
     internal RobinHoodFrozenMapPrototype<Axis2HashKey, int> RobinHood { get; }
 
+    /// <summary>Gets the quadratically probed representation under comparison.</summary>
     internal QuadraticFrozenMapPrototype<Axis2HashKey, int> Quadratic { get; }
 
+    /// <summary>Gets the dictionary.</summary>
     internal Dictionary<Axis2HashKey, int> Dictionary { get; }
 
+    /// <summary>Gets the immutable.</summary>
     internal System.Collections.Immutable.ImmutableDictionary<Axis2HashKey, int> Immutable { get; }
 
+    /// <summary>Gets the bcl frozen.</summary>
     internal System.Collections.Frozen.FrozenDictionary<Axis2HashKey, int> BclFrozen { get; }
 
+    /// <summary>Builds the persistent representation, measuring construction rather than lookup.</summary>
     internal PersistentHashMap<Axis2HashKey, int> ConstructPersistent() =>
         PersistentHashMap<Axis2HashKey, int>.CreateRange(Persistent, Axis2HashKeyComparer.Instance);
 
+    /// <summary>Builds the packed representation.</summary>
     internal PackedFrozenMapPrototype<Axis2HashKey, int> ConstructPacked() =>
         PackedFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
 
+    /// <summary>Builds the Robin Hood hashed representation.</summary>
     internal RobinHoodFrozenMapPrototype<Axis2HashKey, int> ConstructRobinHood() =>
         RobinHoodFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
 
+    /// <summary>Builds the quadratically probed representation.</summary>
     internal QuadraticFrozenMapPrototype<Axis2HashKey, int> ConstructQuadratic() =>
         QuadraticFrozenMapPrototype<Axis2HashKey, int>.Create(Persistent);
 
+    /// <summary>
+    /// Converts the packed representation into the persistent one, measuring what adopting persistence costs.
+    /// </summary>
     internal PersistentHashMap<Axis2HashKey, int> ConvertPackedToPersistent() =>
         Packed.ToPersistent();
 
+    /// <summary>Converts the Robin Hood representation into the persistent one.</summary>
     internal PersistentHashMap<Axis2HashKey, int> ConvertRobinHoodToPersistent() =>
         RobinHood.ToPersistent();
 
+    /// <summary>Converts the quadratic representation into the persistent one.</summary>
     internal PersistentHashMap<Axis2HashKey, int> ConvertQuadraticToPersistent() =>
         Quadratic.ToPersistent();
 
+    /// <summary>Builds the framework's dictionary, as a baseline.</summary>
     internal Dictionary<Axis2HashKey, int> ConstructDictionary() =>
         CreateDictionary(Persistent, Axis2HashKeyComparer.Instance);
 
+    /// <summary>Builds the framework's immutable dictionary, as a baseline.</summary>
     internal System.Collections.Immutable.ImmutableDictionary<Axis2HashKey, int> ConstructImmutable() =>
         CreateImmutable(Persistent, Axis2HashKeyComparer.Instance);
 
+    /// <summary>Builds the framework's frozen dictionary, as a baseline.</summary>
     internal System.Collections.Frozen.FrozenDictionary<Axis2HashKey, int> ConstructBclFrozen() =>
         Persistent.ToFrozenDictionary(Axis2HashKeyComparer.Instance);
 
@@ -582,6 +619,9 @@ internal sealed class FrozenF0AxisFixture
             throw new InvalidOperationException("The quadratic prototype enumerated too many entries.");
     }
 
+    /// <summary>
+    /// Reports how many arrays each representation retains, which is what the memory comparison is made on.
+    /// </summary>
     internal static void ReportRetainedArrays(
         string lane,
         long persistentEstimatedRetainedBytes,
@@ -599,6 +639,7 @@ internal sealed class FrozenF0AxisFixture
             bclFrozenEstimatedArrayBytes));
     }
 
+    /// <summary>Formats the retained arrays.</summary>
     internal static string FormatRetainedArrays(
         string lane,
         long persistentEstimatedRetainedBytes,
@@ -657,6 +698,7 @@ internal sealed class FrozenF0NullCollisionFixture
     private const int ProbeCount = 1_024;
     private readonly NullCollisionComparer _comparer = new();
 
+    /// <summary>Creates a new frozen f 0 null collision fixture.</summary>
     internal FrozenF0NullCollisionFixture(
         int count,
         int hitPercentage,
@@ -710,34 +752,48 @@ internal sealed class FrozenF0NullCollisionFixture
         }
     }
 
+    /// <summary>Gets how many probes the operation needed.</summary>
     internal string?[] Probes { get; }
 
+    /// <summary>Gets the persistent representation under comparison.</summary>
     internal PersistentHashMap<string?, int> Persistent { get; }
 
+    /// <summary>Gets the packed representation under comparison.</summary>
     internal PackedFrozenMapPrototype<string?, int> Packed { get; }
 
+    /// <summary>Gets the Robin Hood hashed representation under comparison.</summary>
     internal RobinHoodFrozenMapPrototype<string?, int> RobinHood { get; }
 
+    /// <summary>Gets the quadratically probed representation under comparison.</summary>
     internal QuadraticFrozenMapPrototype<string?, int> Quadratic { get; }
 
+    /// <summary>Builds the persistent representation, measuring construction rather than lookup.</summary>
     internal PersistentHashMap<string?, int> ConstructPersistent() =>
         PersistentHashMap<string?, int>.CreateRange(Persistent, _comparer);
 
+    /// <summary>Builds the packed representation.</summary>
     internal PackedFrozenMapPrototype<string?, int> ConstructPacked() =>
         PackedFrozenMapPrototype<string?, int>.Create(Persistent);
 
+    /// <summary>Builds the Robin Hood hashed representation.</summary>
     internal RobinHoodFrozenMapPrototype<string?, int> ConstructRobinHood() =>
         RobinHoodFrozenMapPrototype<string?, int>.Create(Persistent);
 
+    /// <summary>Builds the quadratically probed representation.</summary>
     internal QuadraticFrozenMapPrototype<string?, int> ConstructQuadratic() =>
         QuadraticFrozenMapPrototype<string?, int>.Create(Persistent);
 
+    /// <summary>
+    /// Converts the packed representation into the persistent one, measuring what adopting persistence costs.
+    /// </summary>
     internal PersistentHashMap<string?, int> ConvertPackedToPersistent() =>
         Packed.ToPersistent();
 
+    /// <summary>Converts the Robin Hood representation into the persistent one.</summary>
     internal PersistentHashMap<string?, int> ConvertRobinHoodToPersistent() =>
         RobinHood.ToPersistent();
 
+    /// <summary>Converts the quadratic representation into the persistent one.</summary>
     internal PersistentHashMap<string?, int> ConvertQuadraticToPersistent() =>
         Quadratic.ToPersistent();
 
@@ -855,9 +911,11 @@ internal sealed class FrozenF0NullCollisionFixture
 
     private sealed class NullCollisionComparer : IEqualityComparer<string?>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? left, string? right) =>
             StringComparer.OrdinalIgnoreCase.Equals(left, right);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string? value) => 0x51a7;
     }
 }

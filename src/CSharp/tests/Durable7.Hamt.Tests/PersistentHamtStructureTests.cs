@@ -288,21 +288,26 @@ public sealed class PersistentHamtStructureTests
 
     private sealed class ExplicitHashComparer : IEqualityComparer<ExplicitHashKey>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(ExplicitHashKey x, ExplicitHashKey y) => x.Id == y.Id;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(ExplicitHashKey obj) => obj.Hash;
     }
 
     private sealed class CountingStringComparer : IEqualityComparer<string>
     {
+        /// <summary>Gets the comparison count.</summary>
         public int ComparisonCount { get; private set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(string? x, string? y)
         {
             ComparisonCount++;
             return StringComparer.Ordinal.Equals(x, y);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(string obj) => StringComparer.Ordinal.GetHashCode(obj);
     }
 

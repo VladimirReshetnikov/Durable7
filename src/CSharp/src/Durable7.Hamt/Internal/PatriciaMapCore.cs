@@ -11,24 +11,45 @@ namespace Durable7.Hamt.Internal;
 /// </summary>
 internal interface IPatriciaKey<TKey>
 {
+    /// <summary>
+    /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+    /// would produce a second digest and defeat comparison by digest.
+    /// </summary>
     static abstract ulong Encode(TKey key);
 
+    /// <summary>
+    /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+    /// </summary>
     static abstract TKey Decode(ulong bits);
 }
 
 /// <summary>The Patricia key operations for signed 32-bit keys.</summary>
 internal readonly struct Int32PatriciaKey : IPatriciaKey<int>
 {
+    /// <summary>
+    /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+    /// would produce a second digest and defeat comparison by digest.
+    /// </summary>
     public static ulong Encode(int key) => (uint)key ^ 0x80000000u;
 
+    /// <summary>
+    /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+    /// </summary>
     public static int Decode(ulong bits) => unchecked((int)((uint)bits ^ 0x80000000u));
 }
 
 /// <summary>The Patricia key operations for signed 64-bit keys.</summary>
 internal readonly struct Int64PatriciaKey : IPatriciaKey<long>
 {
+    /// <summary>
+    /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+    /// would produce a second digest and defeat comparison by digest.
+    /// </summary>
     public static ulong Encode(long key) => (ulong)key ^ 0x8000000000000000UL;
 
+    /// <summary>
+    /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+    /// </summary>
     public static long Decode(ulong bits) => unchecked((long)(bits ^ 0x8000000000000000UL));
 }
 
@@ -557,28 +578,37 @@ internal sealed class PatriciaMapCore<TKey, TValue, TKeyPolicy>
 
     private abstract class Node
     {
+        /// <summary>Gets the number of elements in the node.</summary>
         internal abstract int Count { get; }
     }
 
     private sealed class Leaf(ulong key, TValue value) : Node
     {
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal override int Count => 1;
 
+        /// <summary>Gets the stored key.</summary>
         internal ulong Key { get; } = key;
 
+        /// <summary>Gets the stored value.</summary>
         internal TValue Value { get; } = value;
     }
 
     private sealed class Branch(ulong prefix, ulong mask, Node left, Node right) : Node
     {
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal override int Count { get; } = checked(left.Count + right.Count);
 
+        /// <summary>Gets the prefix.</summary>
         internal ulong Prefix { get; } = prefix;
 
+        /// <summary>Gets the mask.</summary>
         internal ulong Mask { get; } = mask;
 
+        /// <summary>Gets the left child.</summary>
         internal Node Left { get; } = left;
 
+        /// <summary>Gets the right child.</summary>
         internal Node Right { get; } = right;
     }
 }

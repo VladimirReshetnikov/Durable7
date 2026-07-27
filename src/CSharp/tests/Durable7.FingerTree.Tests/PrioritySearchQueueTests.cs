@@ -21,8 +21,11 @@ public sealed class PrioritySearchQueueTests
 
     private sealed class EqualityCountingValue
     {
+        /// <summary>Gets how many times the policy was asked to compare.</summary>
         public int EqualityCalls { get; private set; }
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) { EqualityCalls++; return ReferenceEquals(this, obj); }
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => 0;
     }
 

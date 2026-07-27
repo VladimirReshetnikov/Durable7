@@ -46,15 +46,22 @@ public sealed partial class PersistentOrderedMap<TKey, TValue> : IReadOnlyDictio
 
     private sealed class Entry(long stamp, TKey key, TValue value)
     {
+        /// <summary>Gets the stamp.</summary>
         internal long Stamp { get; } = stamp;
+        /// <summary>Gets the stored key.</summary>
         internal TKey Key { get; } = key;
+        /// <summary>Gets the stored value.</summary>
         internal TValue Value { get; } = value;
     }
 
     private sealed class StampOrder : IComparer<Entry>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static readonly StampOrder Instance = new();
 
+        /// <summary>Orders two values.</summary>
         public int Compare(Entry? x, Entry? y) => x!.Stamp.CompareTo(y!.Stamp);
     }
 
@@ -312,6 +319,7 @@ public sealed partial class PersistentOrderedMap<TKey, TValue> : IReadOnlyDictio
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>Checks the map's structural invariants. For tests and diagnostics.</summary>
     internal void ValidateInvariants()
     {
         if (_order.Count != _byKey.Count)

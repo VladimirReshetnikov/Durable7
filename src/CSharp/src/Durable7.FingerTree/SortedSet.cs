@@ -345,6 +345,9 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>
+    /// Builds the set from already-sorted, already-distinct elements, skipping the ordering and deduplication work.
+    /// </summary>
     internal static SortedSet<T> FromSortedDistinct(IEnumerable<T> sorted, IComparer<T> comparer)
     {
         ArgumentNullException.ThrowIfNull(sorted);
@@ -364,6 +367,7 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
         return Wrap(tree, comparer);
     }
 
+    /// <summary>Checks the set's structural invariants. For tests and diagnostics.</summary>
     internal void ValidateInvariants()
     {
         var actualCount = _tree.ValidateAndCount();
@@ -401,6 +405,7 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
     }
 
     private (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Less, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> AtLeast)
+        /// <summary>Splits at the first point where the accumulated measure reaches the threshold.</summary>
         SplitAtLeast(T item) =>
         _tree.Split(new KeyAtLeastPredicate<T>(_comparer, item));
 

@@ -116,6 +116,9 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
+    /// <summary>
+    /// Gets the root node, so a test can assert on the structure rather than only on the contents.
+    /// </summary>
     internal Node? RootForTesting => _root;
 
     /// <summary>
@@ -1363,20 +1366,24 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         private readonly HashNode? _node;
         private readonly Entry _single;
 
+        /// <summary>Creates a new entry run.</summary>
         internal EntryRun(HashNode node)
         {
             _node = node;
             _single = default;
         }
 
+        /// <summary>Creates a new entry run.</summary>
         internal EntryRun(Entry single)
         {
             _node = null;
             _single = single;
         }
 
+        /// <summary>Returns the hash of the value.</summary>
         internal uint Hash => _node is null ? _single.Hash : _node.Hash;
 
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal int Count => _node switch
         {
             null => 1,
@@ -1466,6 +1473,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         private int _collisionIndex;
         private KeyValuePair<TKey, TValue> _current;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(Node? root)
         {
             _next = root;
@@ -1585,9 +1593,13 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
 
         private struct Frame(Entry[] data, Node[] children)
         {
+            /// <summary>Gets the stored data.</summary>
             public readonly Entry[] Data = data;
+            /// <summary>Gets this node's children.</summary>
             public readonly Node[] Children = children;
+            /// <summary>Gets the data index.</summary>
             public int DataIndex;
+            /// <summary>Gets the child index.</summary>
             public int ChildIndex;
         }
 
@@ -1608,8 +1620,10 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         private readonly List<Entry> _entries = [];
         private readonly Dictionary<uint, List<int>> _hashBuckets = [];
 
+        /// <summary>Gets the number of elements in the collection.</summary>
         internal int Count => _entries.Count;
 
+        /// <summary>Sets the item.</summary>
         internal void SetItem(TKey key, TValue value)
         {
             var hash = unchecked((uint)_comparer.GetHashCode(key!));
@@ -1692,6 +1706,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             return addValue;
         }
 
+        /// <summary>Returns the immutable collection holding the current contents.</summary>
         internal PersistentHashMap<TKey, TValue> ToImmutable()
         {
             if (_entries.Count == 0)
@@ -1744,19 +1759,27 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
+    /// <summary>One stored key and value.</summary>
     internal readonly struct Entry(uint hash, TKey key, TValue value)
     {
+        /// <summary>Returns the hash of the value.</summary>
         public readonly uint Hash = hash;
+        /// <summary>Gets the stored key.</summary>
         public readonly TKey Key = key;
+        /// <summary>Gets the stored value.</summary>
         public readonly TValue Value = value;
 
+        /// <summary>Creates an entry from its key and value.</summary>
         internal static Entry From(LeafNode leaf) => new(leaf.Hash, leaf.Key, leaf.Value);
     }
 
+    /// <summary>Gets the class node.</summary>
     internal abstract class Node
     {
+        /// <summary>Gets the number of elements in the node.</summary>
         internal abstract int Count { get; }
 
+        /// <summary>Returns a node with the key bound to the value, adding or replacing as needed.</summary>
         internal abstract Node Set(
             TKey key,
             TValue value,
@@ -1766,6 +1789,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             bool overwrite,
             out bool added);
 
+        /// <summary>Returns a node without that element.</summary>
         internal abstract Node? Remove(
             TKey key,
             uint hash,
@@ -1775,19 +1799,26 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             out TValue value);
     }
 
+    /// <summary>A trie node addressed by a slice of the key's hash.</summary>
     internal abstract class HashNode(uint hash) : Node
     {
+        /// <summary>Returns the hash of the value.</summary>
         internal readonly uint Hash = hash;
     }
 
+    /// <summary>A node holding one entry.</summary>
     internal sealed class LeafNode(uint hash, TKey key, TValue value) : HashNode(hash)
     {
+        /// <summary>Gets the number of elements in the node.</summary>
         internal override int Count => 1;
 
+        /// <summary>Gets the stored key.</summary>
         internal TKey Key { get; } = key;
 
+        /// <summary>Gets the stored value.</summary>
         internal TValue Value { get; } = value;
 
+        /// <summary>Returns a node with the key bound to the value, adding or replacing as needed.</summary>
         internal override Node Set(
             TKey key,
             TValue value,
@@ -1810,6 +1841,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
             return MergeHashNodes(this, new LeafNode(hash, key, value), shift);
         }
 
+        /// <summary>Returns a node without that element.</summary>
         internal override Node? Remove(
             TKey key,
             uint hash,
@@ -1831,6 +1863,10 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
+    /// <summary>
+    /// A node holding the entries whose hashes agree all the way down. Kept immutable and scanned linearly, since a
+    /// collision run is expected to be tiny.
+    /// </summary>
     internal sealed class CollisionNode(uint hash, Entry[] entries) : HashNode(hash)
     {
         internal override int Count => Entries.Length;
@@ -1931,6 +1967,10 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
         }
     }
 
+    /// <summary>
+    /// A node whose two bitmaps mark which slots hold inline entries and which hold children, so its arrays carry no
+    /// empty slots and its shape is a function of its contents.
+    /// </summary>
     internal sealed class BitmapIndexedNode(
         uint dataMap,
         Entry[] data,
@@ -2114,6 +2154,7 @@ public sealed partial class PersistentHashMap<TKey, TValue> : IReadOnlyDictionar
 /// <summary>The debugger's view of a map: its entries, rather than its trie nodes.</summary>
 internal sealed class PersistentHashMapDebugView<TKey, TValue>(PersistentHashMap<TKey, TValue> map)
 {
+    /// <summary>Gets the entries.</summary>
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
     public KeyValuePair<TKey, TValue>[] Items => [.. map];
 }

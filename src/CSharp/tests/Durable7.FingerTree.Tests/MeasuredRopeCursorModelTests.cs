@@ -422,19 +422,25 @@ public sealed class MeasuredRopeCursorModelTests
 
     private readonly struct CountMeasure : IMeasure<int, int>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static int Empty => 0;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static int Measure(int element) => 1;
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static int Combine(int left, int right) => left + right;
     }
 
     private readonly struct OrderedTokenMeasure : IMeasure<int, string>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static string Empty => string.Empty;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static string Measure(int element) => $"[{element}]";
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static string Combine(string left, string right) => string.Concat(left, right);
     }
 }

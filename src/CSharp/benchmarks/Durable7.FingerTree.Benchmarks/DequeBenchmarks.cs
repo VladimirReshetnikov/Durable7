@@ -12,12 +12,14 @@ namespace Durable7.FingerTree.Benchmarks;
 [MemoryDiagnoser]
 public class DequeEndpointBenchmarks
 {
+    /// <summary>Gets the number of elements in the deque.</summary>
     [Params(1_000, 100_000)]
     public int Size;
 
     private FingerTreeDeque<int> _deque = null!;
     private ImmutableList<int> _immutable = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -26,26 +28,32 @@ public class DequeEndpointBenchmarks
         _immutable = ImmutableList.CreateRange(items);
     }
 
+    /// <summary>Measures deque add first.</summary>
     [Benchmark(Baseline = true)]
     [BenchmarkCategory("AddFirst")]
     public FingerTreeDeque<int> Deque_AddFirst() => _deque.AddFirst(-1);
 
+    /// <summary>Measures immutable list insert0.</summary>
     [Benchmark]
     [BenchmarkCategory("AddFirst")]
     public ImmutableList<int> ImmutableList_Insert0() => _immutable.Insert(0, -1);
 
+    /// <summary>Measures deque add last.</summary>
     [Benchmark]
     [BenchmarkCategory("AddLast")]
     public FingerTreeDeque<int> Deque_AddLast() => _deque.AddLast(-1);
 
+    /// <summary>Measures immutable list add.</summary>
     [Benchmark]
     [BenchmarkCategory("AddLast")]
     public ImmutableList<int> ImmutableList_Add() => _immutable.Add(-1);
 
+    /// <summary>Measures deque remove first.</summary>
     [Benchmark]
     [BenchmarkCategory("RemoveFirst")]
     public FingerTreeDeque<int> Deque_RemoveFirst() => _deque.RemoveFirst();
 
+    /// <summary>Measures deque first.</summary>
     [Benchmark]
     [BenchmarkCategory("First")]
     public int Deque_First() => _deque.First;
@@ -57,9 +65,11 @@ public class DequeEndpointBenchmarks
 [MemoryDiagnoser]
 public class DequeIndexingBenchmarks
 {
+    /// <summary>Gets the number of elements in the deque.</summary>
     [Params(100_000)]
     public int Size;
 
+    /// <summary>Gets the cursor's gap position.</summary>
     [Params("Start", "Quarter", "Mid", "End")]
     public string Position = "";
 
@@ -67,6 +77,7 @@ public class DequeIndexingBenchmarks
     private ImmutableList<int> _immutable = null!;
     private int _index;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -83,9 +94,11 @@ public class DequeIndexingBenchmarks
         };
     }
 
+    /// <summary>Measures deque index.</summary>
     [Benchmark(Baseline = true)]
     public int Deque_Index() => _deque[_index];
 
+    /// <summary>Measures immutable list index.</summary>
     [Benchmark]
     public int ImmutableList_Index() => _immutable[_index];
 }
@@ -96,6 +109,9 @@ public class DequeIndexingBenchmarks
 [MemoryDiagnoser]
 public class DequeConcatBenchmarks
 {
+    /// <summary>
+    /// Gets the size of the right operand, which decides how much of a concatenation's seam must be rebuilt.
+    /// </summary>
     [Params(100, 100_000)]
     public int RightSize;
 
@@ -106,6 +122,7 @@ public class DequeConcatBenchmarks
     private ImmutableList<int> _leftImmutable = null!;
     private ImmutableList<int> _rightImmutable = null!;
 
+    /// <summary>Prepares the workload this benchmark measures. Runs outside the measured region.</summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -115,9 +132,11 @@ public class DequeConcatBenchmarks
         _rightImmutable = ImmutableList.CreateRange(Enumerable.Range(LeftSize, RightSize));
     }
 
+    /// <summary>Measures deque concat.</summary>
     [Benchmark(Baseline = true)]
     public FingerTreeDeque<int> Deque_Concat() => _left.Concat(_right);
 
+    /// <summary>Measures immutable list add range.</summary>
     [Benchmark]
     public ImmutableList<int> ImmutableList_AddRange() => _leftImmutable.AddRange(_rightImmutable);
 }

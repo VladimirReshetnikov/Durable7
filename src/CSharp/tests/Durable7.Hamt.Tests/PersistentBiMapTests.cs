@@ -355,48 +355,68 @@ public sealed class PersistentBiMapTests
 
     private sealed class TokenClassComparer : IEqualityComparer<Token>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static TokenClassComparer Instance { get; } = new();
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Token? x, Token? y) =>
             ReferenceEquals(x, y) || (x is not null && y is not null
                 && StringComparer.OrdinalIgnoreCase.Equals(x.Class, y.Class));
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(Token obj) => StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Class);
     }
 
     private sealed class LooseValue(int @class, string representative) : IEquatable<LooseValue>
     {
+        /// <summary>Gets the class.</summary>
         internal int Class { get; } = @class;
+        /// <summary>Gets the representative.</summary>
         internal string Representative { get; } = representative;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(LooseValue? other) => other is not null && Class == other.Class;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is LooseValue other && Equals(other);
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => Class;
     }
 
     private sealed class ExactLooseValueComparer : IEqualityComparer<LooseValue>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static ExactLooseValueComparer Instance { get; } = new();
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(LooseValue? x, LooseValue? y) =>
             ReferenceEquals(x, y) || (x is not null && y is not null && x.Class == y.Class
                 && StringComparer.Ordinal.Equals(x.Representative, y.Representative));
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(LooseValue obj) => HashCode.Combine(obj.Class, obj.Representative);
     }
 
     private sealed class ThrowingComparer<T> : IEqualityComparer<T>
     {
+        /// <summary>
+        /// Throws on demand, so a test can check that a failing callback leaves the collection unchanged.
+        /// </summary>
         internal bool Throw { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(T? x, T? y)
         {
             FailIfRequested();
             return EqualityComparer<T>.Default.Equals(x!, y!);
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(T obj)
         {
             FailIfRequested();

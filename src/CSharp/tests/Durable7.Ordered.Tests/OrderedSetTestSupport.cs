@@ -10,10 +10,13 @@ namespace Durable7.Ordered.Tests;
 /// </summary>
 internal sealed class Representative(int equivalenceClass, string name)
 {
+    /// <summary>Gets the equivalence class.</summary>
     internal int EquivalenceClass { get; } = equivalenceClass;
 
+    /// <summary>Gets the name.</summary>
     internal string Name { get; } = name;
 
+    /// <summary>Returns a readable representation, for diagnostics.</summary>
     public override string ToString() => $"{Name}:{EquivalenceClass}";
 }
 
@@ -26,16 +29,23 @@ internal class RepresentativeComparer(int hashBuckets = 1) : IEqualityComparer<R
         ? hashBuckets
         : throw new ArgumentOutOfRangeException(nameof(hashBuckets));
 
+    /// <summary>
+    /// Gets how many times the policy was asked to hash, so a test can assert an operation consulted it only as often
+    /// as its bound allows.
+    /// </summary>
     internal int HashCalls { get; private set; }
 
+    /// <summary>Gets how many times the policy was asked to compare.</summary>
     internal int EqualityCalls { get; private set; }
 
+    /// <summary>Determines whether both values hold the same elements.</summary>
     public virtual bool Equals(Representative? left, Representative? right)
     {
         EqualityCalls++;
         return left?.EquivalenceClass == right?.EquivalenceClass;
     }
 
+    /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
     public virtual int GetHashCode(Representative? value)
     {
         HashCalls++;
@@ -45,6 +55,7 @@ internal class RepresentativeComparer(int hashBuckets = 1) : IEqualityComparer<R
         return remainder < 0 ? remainder + _hashBuckets : remainder;
     }
 
+    /// <summary>Clears the recorded counts.</summary>
     internal void ResetCounts()
     {
         HashCalls = 0;
@@ -88,12 +99,22 @@ internal sealed class SwitchableRepresentativeComparer(int hashBuckets = 1)
 /// </summary>
 internal sealed class ReferenceRepresentativeComparer : IEqualityComparer<Representative?>
 {
+    /// <summary>Gets the failure this result carries.</summary>
     internal ComparerCallbackException Failure { get; } = new();
 
+    /// <summary>
+    /// Throws from the hash callback on demand, so a test can check that a failing callback leaves the collection
+    /// unchanged.
+    /// </summary>
     internal bool ThrowFromHash { get; set; }
 
+    /// <summary>
+    /// Throws from the equality callback on demand, so a test can check that a failing comparison leaves the collection
+    /// unchanged.
+    /// </summary>
     internal bool ThrowFromEquals { get; set; }
 
+    /// <summary>Determines whether both values hold the same elements.</summary>
     public bool Equals(Representative? left, Representative? right)
     {
         if (ThrowFromEquals)
@@ -101,6 +122,7 @@ internal sealed class ReferenceRepresentativeComparer : IEqualityComparer<Repres
         return ReferenceEquals(left, right);
     }
 
+    /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
     public int GetHashCode(Representative? value)
     {
         if (ThrowFromHash)
@@ -138,6 +160,7 @@ internal sealed class OrderingCallbackException : Exception
 /// </summary>
 internal static class OrderedSetAssert
 {
+    /// <summary>Asserts that the structure matches the model it is compared against.</summary>
     internal static void Matches<T>(IReadOnlyList<T> expected, PersistentOrderedSet<T> actual)
     {
         Assert.Equal(expected.Count, actual.Count);
@@ -169,6 +192,7 @@ internal static class OrderedSetAssert
         actual.ValidateInvariants();
     }
 
+    /// <summary>Asserts the reference sequence.</summary>
     internal static void AssertReferenceSequence<T>(IEnumerable<T> expected, IEnumerable<T> actual)
     {
         var expectedArray = expected.ToArray();
@@ -178,6 +202,7 @@ internal static class OrderedSetAssert
             AssertRepresentative(expectedArray[index], actualArray[index]);
     }
 
+    /// <summary>Asserts the representative.</summary>
     internal static void AssertRepresentative<T>(T expected, T actual)
     {
         if (typeof(T).IsValueType)
@@ -195,14 +220,18 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
 {
     private readonly List<T> _items = [];
 
+    /// <summary>Gets the retained ordering policy.</summary>
     internal IEqualityComparer<T> Comparer { get; } = comparer;
 
+    /// <summary>Gets the number of elements in the collection.</summary>
     internal int Count => _items.Count;
 
     internal T this[int index] => _items[index];
 
+    /// <summary>Gets the elements.</summary>
     internal IReadOnlyList<T> Items => _items;
 
+    /// <summary>Returns a second handle on the same collection version.</summary>
     internal OrderedListModel<T> Clone()
     {
         var clone = new OrderedListModel<T>(Comparer);
@@ -210,6 +239,7 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         return clone;
     }
 
+    /// <summary>Returns a collection containing the given element.</summary>
     internal bool Add(T item)
     {
         if (FindIndex(item) >= 0)
@@ -218,6 +248,7 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         return true;
     }
 
+    /// <summary>Adds the first.</summary>
     internal bool AddFirst(T item)
     {
         if (FindIndex(item) >= 0)
@@ -226,6 +257,7 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         return true;
     }
 
+    /// <summary>Returns a collection with the element inserted.</summary>
     internal bool Insert(int index, T item)
     {
         if (FindIndex(item) >= 0)
@@ -234,6 +266,7 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         return true;
     }
 
+    /// <summary>Moves the to.</summary>
     internal bool MoveTo(int finalIndex, T equalValue)
     {
         var oldIndex = FindIndex(equalValue);
@@ -247,6 +280,7 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         return true;
     }
 
+    /// <summary>Returns a collection without that element.</summary>
     internal bool Remove(T equalValue)
     {
         var index = FindIndex(equalValue);
@@ -256,8 +290,10 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         return true;
     }
 
+    /// <summary>Removes the at.</summary>
     internal void RemoveAt(int index) => _items.RemoveAt(index);
 
+    /// <summary>Returns the range.</summary>
     internal void GetRange(int index, int count)
     {
         var kept = _items.GetRange(index, count);
@@ -265,8 +301,10 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         _items.AddRange(kept);
     }
 
+    /// <summary>Returns the model in the opposite order.</summary>
     internal void Reverse() => _items.Reverse();
 
+    /// <summary>Returns the model sorted, keeping equal elements in their original order.</summary>
     internal void StableSort(IComparer<T> comparer)
     {
         var sorted = _items
@@ -279,26 +317,31 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         _items.AddRange(sorted);
     }
 
+    /// <summary>Returns an empty collection retaining the same policies.</summary>
     internal void Clear() => _items.Clear();
 
+    /// <summary>Returns the elements of both models.</summary>
     internal void Union(IEnumerable<T> argument)
     {
         foreach (var item in Normalize(argument))
             Add(item);
     }
 
+    /// <summary>Returns this model's elements that are absent from the other.</summary>
     internal void Except(IEnumerable<T> argument)
     {
         foreach (var item in Normalize(argument))
             Remove(item);
     }
 
+    /// <summary>Returns the elements present in both models.</summary>
     internal void Intersect(IEnumerable<T> argument)
     {
         var normalized = Normalize(argument);
         _items.RemoveAll(item => !normalized.Any(candidate => Comparer.Equals(item, candidate)));
     }
 
+    /// <summary>Returns the elements present in exactly one of the two models.</summary>
     internal void SymmetricExcept(IEnumerable<T> argument)
     {
         var normalized = Normalize(argument);
@@ -313,6 +356,9 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         _items.AddRange(argumentOnly);
     }
 
+    /// <summary>
+    /// Returns the model in its canonical form, so two models built differently compare equal exactly when they should.
+    /// </summary>
     internal T[] Normalize(IEnumerable<T> argument)
     {
         List<T> result = [];
@@ -324,6 +370,7 @@ internal sealed class OrderedListModel<T>(IEqualityComparer<T> comparer)
         return result.ToArray();
     }
 
+    /// <summary>Finds the index.</summary>
     internal int FindIndex(T equalValue)
     {
         for (var index = 0; index < _items.Count; index++)

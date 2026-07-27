@@ -9,6 +9,7 @@ public sealed class SequenceCursorTests
 {
     private readonly struct CountAbove(int boundary) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int measure) => measure > boundary;
     }
 

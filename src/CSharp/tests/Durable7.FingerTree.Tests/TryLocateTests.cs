@@ -69,6 +69,7 @@ public sealed class TryLocateTests
     /// <summary>A user-defined non-capturing struct predicate, the public zero-allocation locate API.</summary>
     private readonly struct AtLeastSum(int threshold) : IMeasurePredicate<int>
     {
+        /// <summary>Runs the operation.</summary>
         public bool Invoke(int runningTotal) => runningTotal >= threshold;
     }
 

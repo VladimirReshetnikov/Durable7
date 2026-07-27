@@ -123,6 +123,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
             private readonly long _version;
             private PersistentHashMap<TKey, TValue>.Enumerator _inner;
 
+            /// <summary>Creates a new enumerator.</summary>
             internal Enumerator(
                 Transient owner,
                 long version,
@@ -169,12 +170,14 @@ public sealed partial class PersistentHashMap<TKey, TValue>
                     "Resetting this enumerator is not supported; create a new enumerator instead.");
             }
 
+            /// <summary>Checks the collection's structural invariants. For tests and diagnostics.</summary>
             internal readonly void Validate() =>
                 _owner?.ValidateEnumerationVersion(_version);
         }
 
         private sealed class KeyView(Transient owner, long version) : IEnumerable<TKey>
         {
+            /// <summary>Returns an enumerator over the elements, in the collection's own order.</summary>
             public IEnumerator<TKey> GetEnumerator() =>
                 new KeyEnumerator(owner.GetEnumerator(version));
 
@@ -183,6 +186,7 @@ public sealed partial class PersistentHashMap<TKey, TValue>
 
         private sealed class ValueView(Transient owner, long version) : IEnumerable<TValue>
         {
+            /// <summary>Returns an enumerator over the elements, in the collection's own order.</summary>
             public IEnumerator<TValue> GetEnumerator() =>
                 new ValueEnumerator(owner.GetEnumerator(version));
 
@@ -193,12 +197,15 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         {
             private Enumerator _inner = inner;
 
+            /// <summary>Gets the value at the current position.</summary>
             public TKey Current => _inner.Current.Key;
 
             object? IEnumerator.Current => Current;
 
+            /// <summary>Advances to the next element, reporting whether there was one.</summary>
             public bool MoveNext() => _inner.MoveNext();
 
+            /// <summary>Releases the resources this value holds.</summary>
             public void Dispose()
             {
             }
@@ -215,12 +222,15 @@ public sealed partial class PersistentHashMap<TKey, TValue>
         {
             private Enumerator _inner = inner;
 
+            /// <summary>Gets the value at the current position.</summary>
             public TValue Current => _inner.Current.Value;
 
             object? IEnumerator.Current => Current;
 
+            /// <summary>Advances to the next element, reporting whether there was one.</summary>
             public bool MoveNext() => _inner.MoveNext();
 
+            /// <summary>Releases the resources this value holds.</summary>
             public void Dispose()
             {
             }

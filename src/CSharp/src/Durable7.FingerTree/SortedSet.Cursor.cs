@@ -32,6 +32,7 @@ public readonly struct SortedSetCursor<T>
     private readonly SortedSet<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new sorted set cursor.</summary>
     internal SortedSetCursor(SortedSet<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

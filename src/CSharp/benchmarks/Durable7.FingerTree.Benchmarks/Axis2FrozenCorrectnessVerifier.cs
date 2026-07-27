@@ -11,6 +11,7 @@ internal static class Axis2FrozenCorrectnessVerifier
 {
     private const string Command = "--verify-axis2-frozen-layouts";
 
+    /// <summary>Runs the operation, reporting failure rather than throwing.</summary>
     internal static bool TryRun(string[] args)
     {
         if (args.Length == 0 || !string.Equals(args[0], Command, StringComparison.Ordinal))
@@ -596,10 +597,17 @@ internal static class Axis2FrozenCorrectnessVerifier
 
     private sealed class ArmedComparer : IEqualityComparer<Axis2HashKey>
     {
+        /// <summary>
+        /// Gets or sets whether the hashing callback should throw, for the failure-atomicity tests.
+        /// </summary>
         internal bool ThrowOnHash { get; set; }
 
+        /// <summary>
+        /// Gets or sets whether the equality callback should throw, for the failure-atomicity tests.
+        /// </summary>
         internal bool ThrowOnEquality { get; set; }
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Axis2HashKey left, Axis2HashKey right)
         {
             if (ThrowOnEquality)
@@ -608,6 +616,7 @@ internal static class Axis2FrozenCorrectnessVerifier
             return left.Value == right.Value;
         }
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(Axis2HashKey value)
         {
             if (ThrowOnHash)
@@ -623,6 +632,7 @@ internal static class Axis2FrozenCorrectnessVerifier
 
     private sealed class RepresentativeKey(string text)
     {
+        /// <summary>Gets the text.</summary>
         internal string Text { get; } = text;
     }
 
@@ -630,12 +640,14 @@ internal static class Axis2FrozenCorrectnessVerifier
 
     private sealed class RepresentativeKeyComparer : IEqualityComparer<RepresentativeKey>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(RepresentativeKey? left, RepresentativeKey? right) =>
             ReferenceEquals(left, right)
             || (left is not null
                 && right is not null
                 && StringComparer.OrdinalIgnoreCase.Equals(left.Text, right.Text));
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(RepresentativeKey value) => Axis2BenchmarkPolicy.FullCollisionHash;
     }
 }

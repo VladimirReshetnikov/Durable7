@@ -395,8 +395,12 @@ public sealed class MerkleSearchTreeCoreStressTests
 
     private sealed class LayeredKeyComparer : IComparer<LayeredKey>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static LayeredKeyComparer Instance { get; } = new();
 
+        /// <summary>Orders two values.</summary>
         public int Compare(LayeredKey left, LayeredKey right)
         {
             var comparison = left.Order.CompareTo(right.Order);
@@ -406,10 +410,21 @@ public sealed class MerkleSearchTreeCoreStressTests
 
     private sealed class LayeredKeyCodec : IMerkleCodec<LayeredKey>
     {
+        /// <summary>
+        /// Gets the shared instance. The value carries no state, so one instance serves every caller.
+        /// </summary>
         internal static LayeredKeyCodec Instance { get; } = new();
 
+        /// <summary>
+        /// Gets the stable identifier ending in <c>-v</c> followed by decimal digits, mixed into the digest domain so
+        /// changing an encoding changes every digest derived from it.
+        /// </summary>
         public string EncodingId => "test-layered-key-v1";
 
+        /// <summary>
+        /// Writes the value's one canonical byte representation. Must be injective: a second encoding of the same value
+        /// would produce a second digest and defeat comparison by digest.
+        /// </summary>
         public byte[] Encode(LayeredKey value)
         {
             var result = new byte[sizeof(int) * 2];
@@ -418,6 +433,9 @@ public sealed class MerkleSearchTreeCoreStressTests
             return result;
         }
 
+        /// <summary>
+        /// Reads the value these bytes encode, rejecting noncanonical input rather than accepting it leniently.
+        /// </summary>
         public LayeredKey Decode(ReadOnlySpan<byte> encoding)
         {
             if (encoding.Length != sizeof(int) * 2)

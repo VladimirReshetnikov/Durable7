@@ -46,8 +46,14 @@ public sealed partial class PersistentHashSet<T> : IReadOnlySet<T>
     /// </summary>
     public IEqualityComparer<T> Comparer => _map.Comparer;
 
+    /// <summary>
+    /// Gets the root node, so a test can assert on the structure rather than only on the contents.
+    /// </summary>
     internal object? RootForTesting => _map.RootForTesting;
 
+    /// <summary>
+    /// Checks that the shape is a function of the contents, so different edit histories converge on one structure.
+    /// </summary>
     internal PersistentHashMapCanonicalityDiagnostics ValidateCanonicalityForDiagnostics() =>
         _map.ValidateCanonicalityForDiagnostics();
 
@@ -578,6 +584,7 @@ public sealed partial class PersistentHashSet<T> : IReadOnlySet<T>
     {
         private PersistentHashMap<T, Unit>.Enumerator _inner;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(PersistentHashMap<T, Unit>.Enumerator inner)
         {
             _inner = inner;
@@ -610,12 +617,16 @@ public sealed partial class PersistentHashSet<T> : IReadOnlySet<T>
             throw new NotSupportedException("Resetting this enumerator is not supported; create a new enumerator instead.");
     }
 
+    /// <summary>Gets the struct unit.</summary>
     internal readonly struct Unit : IEquatable<Unit>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(Unit other) => true;
 
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is Unit;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public override int GetHashCode() => 0;
     }
 }
@@ -623,6 +634,7 @@ public sealed partial class PersistentHashSet<T> : IReadOnlySet<T>
 /// <summary>The debugger's view of a set: its elements, rather than its trie nodes.</summary>
 internal sealed class PersistentHashSetDebugView<T>(PersistentHashSet<T> set)
 {
+    /// <summary>Gets the elements.</summary>
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
     public T[] Items => [.. set];
 }

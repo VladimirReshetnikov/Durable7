@@ -126,6 +126,7 @@ public sealed class SortedCollectionPropertyTests
 /// <summary>Nullable first/last helpers that avoid the value/empty ambiguity of <c>DefaultIfEmpty</c>.</summary>
 internal static class NeighborQueryExtensions
 {
+    /// <summary>Returns the first match, or null when there is none.</summary>
     public static int? FirstOrNull(this IEnumerable<int> source)
     {
         foreach (var value in source)
@@ -133,6 +134,7 @@ internal static class NeighborQueryExtensions
         return null;
     }
 
+    /// <summary>Returns the last match, or null when there is none.</summary>
     public static int? LastOrNull(this IEnumerable<int> source)
     {
         int? last = null;

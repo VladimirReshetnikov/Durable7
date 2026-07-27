@@ -332,6 +332,7 @@ public class RopeCursorGateBenchmarks
 /// </summary>
 internal static class RopeCursorBenchmarkWorkload
 {
+    /// <summary>Measures create positions.</summary>
     internal static int[] CreatePositions(int size, int localityWindow, int count)
     {
         var positions = new int[count];
@@ -347,6 +348,7 @@ internal static class RopeCursorBenchmarkWorkload
         return positions;
     }
 
+    /// <summary>Measures run indexed rope.</summary>
     internal static Rope<char> RunIndexedRope(
         Rope<char> source,
         int[] positions,
@@ -364,6 +366,7 @@ internal static class RopeCursorBenchmarkWorkload
         return snapshot;
     }
 
+    /// <summary>Measures run class cursor.</summary>
     internal static Rope<char> RunClassCursor(
         Rope<char> source,
         int[] positions,
@@ -385,6 +388,7 @@ internal static class RopeCursorBenchmarkWorkload
         return snapshot;
     }
 
+    /// <summary>Measures run struct cursor.</summary>
     internal static Rope<char> RunStructCursor(
         Rope<char> source,
         int[] positions,
@@ -406,6 +410,7 @@ internal static class RopeCursorBenchmarkWorkload
         return snapshot;
     }
 
+    /// <summary>Measures run mutable cursor.</summary>
     internal static Rope<char> RunMutableCursor(
         Rope<char> source,
         int[] positions,
@@ -427,6 +432,7 @@ internal static class RopeCursorBenchmarkWorkload
         return snapshot;
     }
 
+    /// <summary>Measures run string builder.</summary>
     internal static string RunStringBuilder(
         string source,
         int[] positions,
@@ -444,6 +450,7 @@ internal static class RopeCursorBenchmarkWorkload
         return snapshot;
     }
 
+    /// <summary>Measures run struct cursor carry cycle.</summary>
     internal static Rope<char> RunStructCursorCarryCycle(
         Rope<char> source,
         int startPosition,

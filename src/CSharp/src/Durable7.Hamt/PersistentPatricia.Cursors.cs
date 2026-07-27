@@ -43,8 +43,10 @@ public sealed partial class PersistentIntMap<TValue>
         return new PersistentIntMapCursor<TValue>(this, rank);
     }
 
+    /// <summary>Reads the entry at the given position, reporting whether the position is in range.</summary>
     internal bool TryGetAt(int index, out KeyValuePair<int, TValue> entry) => _core.TryGetAt(index, out entry);
 
+    /// <summary>Returns the rank where the probe belongs together with whether it is actually present.</summary>
     internal int GetLowerBoundRank(int key, out bool found) => _core.GetLowerBoundRank(key, out found);
 }
 
@@ -63,6 +65,7 @@ public readonly struct PersistentIntMapCursor<TValue>
     private readonly PersistentIntMap<TValue>? _source;
     private readonly int _position;
 
+    /// <summary>Creates a new persistent int map cursor.</summary>
     internal PersistentIntMapCursor(PersistentIntMap<TValue> source, int position)
     {
         _source = source;
@@ -223,8 +226,10 @@ public sealed partial class PersistentLongMap<TValue>
         return new PersistentLongMapCursor<TValue>(this, rank);
     }
 
+    /// <summary>Reads the entry at the given position, reporting whether the position is in range.</summary>
     internal bool TryGetAt(int index, out KeyValuePair<long, TValue> entry) => _core.TryGetAt(index, out entry);
 
+    /// <summary>Returns the rank where the probe belongs together with whether it is actually present.</summary>
     internal int GetLowerBoundRank(long key, out bool found) => _core.GetLowerBoundRank(key, out found);
 }
 
@@ -239,6 +244,7 @@ public readonly struct PersistentLongMapCursor<TValue>
     private readonly PersistentLongMap<TValue>? _source;
     private readonly int _position;
 
+    /// <summary>Creates a new persistent long map cursor.</summary>
     internal PersistentLongMapCursor(PersistentLongMap<TValue> source, int position)
     {
         _source = source;
@@ -390,6 +396,7 @@ public sealed partial class PersistentIntSet
         return new PersistentIntSetCursor(this, rank);
     }
 
+    /// <summary>Reads the element at the given position, reporting whether the position is in range.</summary>
     internal bool TryGetAt(int index, out int item)
     {
         if (_map.TryGetAt(index, out var entry))
@@ -401,6 +408,7 @@ public sealed partial class PersistentIntSet
         return false;
     }
 
+    /// <summary>Returns the rank where the probe belongs together with whether it is actually present.</summary>
     internal int GetLowerBoundRank(int item, out bool found) => _map.GetLowerBoundRank(item, out found);
 }
 
@@ -411,6 +419,7 @@ public readonly struct PersistentIntSetCursor
     private readonly PersistentIntSet? _source;
     private readonly int _position;
 
+    /// <summary>Creates a new persistent int set cursor.</summary>
     internal PersistentIntSetCursor(PersistentIntSet source, int position)
     {
         _source = source;
@@ -539,6 +548,7 @@ public sealed partial class PersistentLongSet
         return new PersistentLongSetCursor(this, rank);
     }
 
+    /// <summary>Reads the element at the given position, reporting whether the position is in range.</summary>
     internal bool TryGetAt(int index, out long item)
     {
         if (_map.TryGetAt(index, out var entry))
@@ -550,6 +560,7 @@ public sealed partial class PersistentLongSet
         return false;
     }
 
+    /// <summary>Returns the rank where the probe belongs together with whether it is actually present.</summary>
     internal int GetLowerBoundRank(long item, out bool found) => _map.GetLowerBoundRank(item, out found);
 }
 
@@ -560,6 +571,7 @@ public readonly struct PersistentLongSetCursor
     private readonly PersistentLongSet? _source;
     private readonly int _position;
 
+    /// <summary>Creates a new persistent long set cursor.</summary>
     internal PersistentLongSetCursor(PersistentLongSet source, int position)
     {
         _source = source;
@@ -662,6 +674,7 @@ public readonly struct PersistentLongSetCursor
 /// <summary>Guards a Patricia cursor against use after its version is gone.</summary>
 internal static class PatriciaCursorGuard
 {
+    /// <summary>Throws when the position falls outside the collection.</summary>
     internal static void ValidatePosition(int position, int count)
     {
         if ((uint)position > (uint)count)

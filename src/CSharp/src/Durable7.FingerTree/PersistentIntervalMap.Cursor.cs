@@ -65,6 +65,7 @@ public sealed partial class PersistentIntervalMap<TEndpoint, TValue>
         out PersistentIntervalMapCursor<TEndpoint, TValue> cursor) =>
         TryGetOverlapCursor(new(point, point), out cursor);
 
+    /// <summary>Returns the rank the probe's bound search lands on.</summary>
     internal int CursorBoundRank(Interval<TEndpoint> interval, bool upper)
     {
         ValidateInterval(interval, nameof(interval));
@@ -77,6 +78,7 @@ public sealed partial class PersistentIntervalMap<TEndpoint, TValue>
         return lowerBefore.Count;
     }
 
+    /// <summary>Returns the entry at the given rank, used by the cursors to address positions.</summary>
     internal KeyValuePair<Interval<TEndpoint>, TValue> CursorEntryAt(int rank)
     {
         if ((uint)rank >= (uint)Count)
@@ -85,6 +87,10 @@ public sealed partial class PersistentIntervalMap<TEndpoint, TValue>
         return ToPair(entry);
     }
 
+    /// <summary>
+    /// Returns a cursor at the next interval overlapping the probe, starting from the given position. Subtrees whose
+    /// cached maximum endpoint falls short of the probe are skipped whole.
+    /// </summary>
     internal bool TryGetOverlapCursorFrom(
         int start,
         Interval<TEndpoint> query,
@@ -119,6 +125,7 @@ public readonly struct PersistentIntervalMapCursor<TEndpoint, TValue>
     private readonly PersistentIntervalMap<TEndpoint, TValue>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new persistent interval map cursor.</summary>
     internal PersistentIntervalMapCursor(
         PersistentIntervalMap<TEndpoint, TValue> snapshot,
         int position)

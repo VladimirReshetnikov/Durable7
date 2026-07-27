@@ -78,6 +78,9 @@ public sealed class PersistentHashBag<T> : IEnumerable<T>
         }
     }
 
+    /// <summary>
+    /// Gets the root node, so a test can assert on the structure rather than only on the contents.
+    /// </summary>
     internal object? RootForTesting => _counts.RootForTesting;
 
     /// <summary>Creates an empty bag with the specified item comparer.</summary>
@@ -344,6 +347,9 @@ public sealed class PersistentHashBag<T> : IEnumerable<T>
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
+    /// <summary>
+    /// Checks that the shape is a function of the contents, so different edit histories converge on one structure.
+    /// </summary>
     internal PersistentHashBagCanonicalityDiagnostics ValidateCanonicalityForDiagnostics()
     {
         var mapDiagnostics = _counts.ValidateCanonicalityForDiagnostics();
@@ -571,6 +577,7 @@ public sealed class PersistentHashBag<T> : IEnumerable<T>
         private T? _current;
         private int _remaining;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(PersistentHashMap<T, int>.Enumerator inner)
         {
             _inner = inner;
@@ -630,6 +637,7 @@ internal readonly record struct PersistentHashBagCanonicalityDiagnostics(
 /// </summary>
 internal sealed class PersistentHashBagDebugView<T>(PersistentHashBag<T> bag)
 {
+    /// <summary>Gets the occurrences.</summary>
     [DebuggerBrowsable(DebuggerBrowsableState.RootHidden)]
     public KeyValuePair<T, int>[] Items => [.. bag.Entries];
 }

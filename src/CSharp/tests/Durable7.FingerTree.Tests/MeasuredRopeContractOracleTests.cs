@@ -232,10 +232,13 @@ public sealed class MeasuredRopeContractOracleTests
 
     private readonly struct OrderedTextMeasure : IMeasure<char, string>
     {
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static string Empty => string.Empty;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static string Measure(char element) => element.ToString();
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static string Combine(string left, string right) => string.Concat(left, right);
     }
 
@@ -246,8 +249,10 @@ public sealed class MeasuredRopeContractOracleTests
         private static int s_throwOnMeasure;
         private static int s_throwOnCombine;
 
+        /// <summary>Gets the identity: the measure of an empty tree.</summary>
         public static string Empty => string.Empty;
 
+        /// <summary>Returns the measure of one element.</summary>
         public static string Measure(int element)
         {
             if (++s_measureCount == s_throwOnMeasure)
@@ -255,6 +260,7 @@ public sealed class MeasuredRopeContractOracleTests
             return $"{element}|";
         }
 
+        /// <summary>Combines two measures in order. Must be associative; it need not be commutative.</summary>
         public static string Combine(string left, string right)
         {
             if (++s_combineCount == s_throwOnCombine)
@@ -262,6 +268,7 @@ public sealed class MeasuredRopeContractOracleTests
             return string.Concat(left, right);
         }
 
+        /// <summary>Returns the value to its initial state.</summary>
         public static void Reset()
         {
             s_measureCount = 0;
@@ -270,12 +277,20 @@ public sealed class MeasuredRopeContractOracleTests
             s_throwOnCombine = 0;
         }
 
+        /// <summary>
+        /// Throws from the measure callback on demand, so a test can check that a failing callback leaves the
+        /// collection unchanged.
+        /// </summary>
         public static void ThrowOnMeasure(int ordinal)
         {
             Reset();
             s_throwOnMeasure = ordinal;
         }
 
+        /// <summary>
+        /// Throws from the combine callback on demand, so a test can check that a failing callback leaves the
+        /// collection unchanged.
+        /// </summary>
         public static void ThrowOnCombine(int ordinal)
         {
             Reset();

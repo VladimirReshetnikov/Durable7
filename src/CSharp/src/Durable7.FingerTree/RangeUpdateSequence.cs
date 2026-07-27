@@ -420,6 +420,7 @@ public sealed partial class RangeUpdateSequence<TElement, TMeasure, TTag, TOps>
         private int _cursor;
         private TElement _current;
 
+        /// <summary>Creates a new enumerator.</summary>
         internal Enumerator(RangeUpdateSequence<TElement, TMeasure, TTag, TOps> sequence)
         {
             var root = sequence._root;
@@ -524,13 +525,18 @@ public sealed partial class RangeUpdateSequence<TElement, TMeasure, TTag, TOps>
 
         private sealed class TraversalState
         {
+            /// <summary>Gets the traversal's stack of frames.</summary>
             internal Frame[] Frames = new Frame[8];
+            /// <summary>Gets the structure's height.</summary>
             internal int Depth;
+            /// <summary>Gets a cursor over this collection version.</summary>
             internal int Cursor;
 
+            /// <summary>Creates a new traversal state.</summary>
             internal TraversalState(Node root) =>
                 Push(root, hasInheritedTag: false, inheritedTag: default!);
 
+            /// <summary>Returns a collection with the element added.</summary>
             internal void Push(Node node, bool hasInheritedTag, TTag inheritedTag)
             {
                 if (Depth == Frames.Length)
@@ -541,14 +547,22 @@ public sealed partial class RangeUpdateSequence<TElement, TMeasure, TTag, TOps>
 
         private struct Frame(Node node, bool hasInheritedTag, TTag inheritedTag)
         {
+            /// <summary>Gets the underlying node.</summary>
             internal readonly Node Node = node;
+            /// <summary>Gets a value indicating whether inherited tag.</summary>
             internal readonly bool HasInheritedTag = hasInheritedTag;
+            /// <summary>Gets the inherited tag.</summary>
             internal readonly TTag InheritedTag = inheritedTag;
+            /// <summary>Gets the stage.</summary>
             internal byte Stage;
+            /// <summary>Gets the child tag computed.</summary>
             internal bool ChildTagComputed;
+            /// <summary>Gets the child has inherited tag.</summary>
             internal bool ChildHasInheritedTag;
+            /// <summary>Gets the child inherited tag.</summary>
             internal TTag ChildInheritedTag = default!;
 
+            /// <summary>Ensures the child tag.</summary>
             internal void EnsureChildTag()
             {
                 if (ChildTagComputed)

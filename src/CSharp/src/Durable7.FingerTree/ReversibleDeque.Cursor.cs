@@ -16,6 +16,7 @@ public readonly struct ReversibleDequeCursor<T>
     private readonly ReversibleDeque<T>? _snapshot;
     private readonly int _position;
 
+    /// <summary>Creates a new reversible deque cursor.</summary>
     internal ReversibleDequeCursor(ReversibleDeque<T> snapshot, int position)
     {
         if ((uint)position > (uint)snapshot.Count)

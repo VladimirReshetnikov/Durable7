@@ -196,22 +196,33 @@ public sealed class ConcurrentHashTrieLinearizabilityTests
         int argument,
         int comparison)
     {
+        /// <summary>Gets the kind.</summary>
         internal OperationKind Kind { get; } = kind;
+        /// <summary>Gets the stored key.</summary>
         internal int Key { get; } = key;
+        /// <summary>Gets the argument.</summary>
         internal int Argument { get; } = argument;
+        /// <summary>Gets the comparison.</summary>
         internal int Comparison { get; } = comparison;
+        /// <summary>Gets the start.</summary>
         internal int Start { get; set; }
+        /// <summary>Gets the end position.</summary>
         internal int End { get; set; }
+        /// <summary>Gets the boolean result.</summary>
         internal bool BooleanResult { get; private set; }
+        /// <summary>Gets the value result.</summary>
         internal int ValueResult { get; private set; }
+        /// <summary>Gets the snapshot result.</summary>
         internal Dictionary<int, int>? SnapshotResult { get; private set; }
 
+        /// <summary>Creates an element collection using the supplied policies, which it retains.</summary>
         internal static HistoryOperation Create(Random random) => new(
             (OperationKind)random.Next(Enum.GetValues<OperationKind>().Length),
             random.Next(4),
             random.Next(8),
             random.Next(1, 4));
 
+        /// <summary>Replays this recorded operation against the structure.</summary>
         internal void Execute(ConcurrentHashTrie<int, int> trie)
         {
             switch (Kind)
@@ -250,6 +261,7 @@ public sealed class ConcurrentHashTrieLinearizabilityTests
             }
         }
 
+        /// <summary>Returns a readable representation, for diagnostics.</summary>
         public override string ToString()
         {
             var result = Kind switch
@@ -266,8 +278,10 @@ public sealed class ConcurrentHashTrieLinearizabilityTests
 
     private sealed class ScenarioComparer(int scenario) : IEqualityComparer<int>
     {
+        /// <summary>Determines whether both values hold the same elements.</summary>
         public bool Equals(int x, int y) => x == y;
 
+        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
         public int GetHashCode(int obj) => scenario switch
         {
             0 => obj,
