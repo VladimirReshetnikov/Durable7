@@ -63,7 +63,24 @@ parity is the product:
 | **Cursors** | Immutable, version-bound gap and search cursors over the maps, sets, sequences, and ropes that have a stable neighbor axis |
 
 The [data-structure catalog](docs/reference/data-structure-catalog.md) lists every public entry point
-per language.
+per language. For the long version — what each structure actually is, how it is represented, and when
+to reach for it — read the field guide below.
+
+## 📖 The field guide
+
+**[Persistent Data Structures: The Durable7 Field Guide](docs/book/durable7-data-structures.pdf)**
+(PDF, 133 pages) is a single long-form tour of every collection in this repository.
+
+It covers CHAMP and the nine families composed over it, Patricia integer tries, the concurrent trie,
+finger trees and the measure framework that turns one tree into a dozen collections, RRB vectors,
+ropes and text, the range-update sequence, zip-zip canonical sets, the three priority structures,
+interval trees, Merkle search trees with their proofs and synchronisation, and cursors — plus a
+complexity table for the whole library, a nine-language name index, and the design decisions the
+project deliberately declined.
+
+It is written to be read, not merely consulted, and it is candid about where each guarantee stops.
+[LaTeX source](docs/book/durable7-data-structures.tex) and
+[build instructions](docs/book/README.md) are committed alongside it.
 
 ## A quick look
 
@@ -142,6 +159,7 @@ performance numbers are published as shipment evidence.
 
 | If you want to… | Read |
 | --- | --- |
+| Understand every structure in depth, end to end | [The field guide](docs/book/durable7-data-structures.pdf) (PDF) |
 | Compare families and find entry points | [Data-structure catalog](docs/reference/data-structure-catalog.md) |
 | Understand the shared behavior contracts | [Semantic contracts](docs/reference/semantic-contracts.md) |
 | Find the doc that owns a topic | [Navigation matrix](docs/reference/navigation-matrix.md) |

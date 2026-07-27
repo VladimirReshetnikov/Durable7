@@ -8,6 +8,10 @@
 This directory contains repository-level guides, reference material, and extraction provenance.
 Library-specific design and API documentation lives beside each workspace under `src/`.
 
+## Field guide
+
+- [The Durable7 Field Guide](book/README.md) - `Persistent Data Structures`, a single 133-page PDF prepared in LaTeX covering every data-structure family in the repository: representation, design rationale, complexity, the exact point at which each guarantee stops, and the nine-language spellings. Source and built PDF are both committed. It is a companion to, not a replacement for, the workspace API specifications.
+
 ## Guides
 
 - [Guides index](guides/README.md) - task-oriented repository procedures.
@@ -60,7 +64,8 @@ Library-specific design and API documentation lives beside each workspace under 
 
 Put repository-wide task procedures under `docs/guides`, durable cross-workspace maps under
 `docs/reference`, forward-looking design proposals under `docs/proposals`, point-in-time review
-reports under `docs/reviews`, and extraction/history records under `docs/migration`.
+reports under `docs/reviews`, extraction/history records under `docs/migration`, and long-form
+typeset documents (LaTeX source plus the built PDF) under `docs/book`.
 
 Put C# HAMT implementation, API, and validation documents under
 [src/CSharp/docs/Hamt](../src/CSharp/docs/Hamt/README.md), C HAMT port documents under

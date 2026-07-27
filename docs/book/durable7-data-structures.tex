@@ -136,6 +136,11 @@
 \setlength{\parskip}{0pt}
 \setlength{\parindent}{1.2em}
 \linespread{1.06}
+% Long unbreakable \code{} spans in a 5.25in measure would otherwise overflow;
+% let TeX buy the space from interword glue on the offending line instead.
+\setlength{\emergencystretch}{2.5em}
+\hbadness=2500
+\vbadness=2500
 \setlist{itemsep=2pt,parsep=1pt,topsep=5pt}
 \setlist[itemize]{label=\textcolor{d7copper}{\small$\blacktriangleright$}}
 \setlist[description]{font=\sffamily\bfseries\color{d7ink}}
@@ -514,7 +519,7 @@ still tell the truth?}
 
 The answer, in one picture, is Figure~\ref{fig:pathcopy}. Update-shaped
 operations copy the nodes along the route from the root to the point of change
-and reuse every other node by reference. For a tree of branching factor $b$ and
+and reuse every other node by reference.\index{path copying} For a tree of branching factor $b$ and
 $n$ elements, that is $\log_b n$ new nodes rather than $n$ --- for a 32-way trie
 holding a million entries, four small nodes instead of a million entries.
 
@@ -551,7 +556,7 @@ Two consequences follow immediately, and both matter more than they look.
 
 \textbf{Old versions cost almost nothing to keep.} Retaining \code{v1} does not
 pin a second copy of the data; it pins the handful of nodes that later versions
-replaced. A hundred snapshots of a slowly changing map are cheaper than one
+replaced.\index{structural sharing} A hundred snapshots of a slowly changing map are cheaper than one
 would guess and vastly cheaper than a hundred deep copies. This is what makes
 undo stacks, audit trails, and time-travel debugging practical rather than
 aspirational.
@@ -566,7 +571,7 @@ deleted.
 \section{The version DAG}
 
 Because an update produces a new value rather than modifying an old one, nothing
-forces versions into a line. Branch from \code{v2} twice and you get two
+forces versions into a line.\index{version DAG} Branch from \code{v2} twice and you get two
 descendants that share \code{v2}'s structure and know nothing about each other
 (Figure~\ref{fig:versiondag}). This is why persistent collections are the natural
 substrate for editors, transactional stores, speculative execution, and any
@@ -597,7 +602,7 @@ book.
 \begin{caveatbox}[Amortisation does not survive branching]
 Amortised bounds are proved by a potential argument over \emph{one linear
 history}: an expensive operation is paid for by cheap operations that preceded
-it. Branching breaks the argument. If a version sits just before an expensive
+it.\index{amortisation!under branching} Branching breaks the argument. If a version sits just before an expensive
 rebalance, and you branch from it $b$ times, each branch can trigger that same
 rebalance, and the accumulated credit pays for exactly one of them. Potential
 consumed by one child cannot pay for a sibling.
@@ -674,7 +679,7 @@ opportunities to quietly claim a bound nobody proved. Durable7's device for
 avoiding that is the \term{checkpoint port}: a port that preserves the
 observable API semantics and passes the same behavioural tests, while
 documenting exactly which representation or asymptotic property it does
-\emph{not} yet have. OCaml's range-update sequence is a checkpoint --- same
+\emph{not} yet have.\index{checkpoint port} OCaml's range-update sequence is a checkpoint --- same
 algebra, same persistence, no implicit-AVL logarithmic lazy-update claim. Most
 of the newer cursors are checkpoints. Saying so in the API notes is treated as
 part of shipping, not as an admission of failure.
@@ -734,7 +739,7 @@ measured trees, text ropes on measured ropes. \\
 
 Almost every collection in this library carries a \term{policy}: an equality and
 hash pair, a comparison, a measure monoid, a tag algebra, a set of ownership
-callbacks, a codec, an allocator. The policy is not a construction-time
+callbacks, a codec, an allocator.\index{policy} The policy is not a construction-time
 convenience that gets forgotten --- it is part of the collection's identity and
 flows into every successor, \emph{including empty ones}. Clear a map and the
 result is an empty map with the same comparer, not a default one.
@@ -758,7 +763,7 @@ comparison, or rejects the operation explicitly, and says which it does.
 \section{Representatives}
 
 When two distinct objects are equal under the policy, exactly one of them ends
-up stored. Which one is not left to chance.
+up stored.\index{representative!first-representative rule} Which one is not left to chance.
 
 \begin{contractbox}[First representative, last payload]
 Construction and duplicate insertion retain the \emph{first} stored key
@@ -776,7 +781,7 @@ and a mystery.
 
 \section{No-op identity}
 
-Operations that logically change nothing return the receiver. Removing an absent
+Operations that logically change nothing return the receiver.\index{no-op identity} Removing an absent
 key, clearing an empty collection, adding an item a set already has, replacing a
 value with one that compares equal, applying an identity tag, seeking to the
 position you are already at: all of these hand back the same instance, and where
@@ -791,7 +796,7 @@ as contract and tests it, rather than as a happy accident of the implementation.
 \section{Failure atomicity}
 
 User code runs inside these structures: comparers, hash functions, measure
-policies, tag algebras, codecs, factory delegates, allocators. Any of it can
+policies, tag algebras, codecs, factory delegates, allocators.\index{failure atomicity} Any of it can
 fail.
 
 \begin{contractbox}[Nothing partial is ever published]
@@ -812,7 +817,7 @@ be rejected before any of it runs.
 \section{Ordering, stated honestly}
 
 Three different order contracts appear in this library, and conflating them is
-the most common way to write code that breaks on an unrelated change.
+the most common way to write code that breaks on an unrelated change.\index{ordering contracts}
 
 \begin{d7table}{0.24}
 \toprule
@@ -894,6 +899,7 @@ different facts.
 different hat.}
 
 \begin{specimen}[Specimen --- persistent hash map and set]
+\index{PersistentHashMap@\texttt{PersistentHashMap}}\index{PersistentHashSet@\texttt{PersistentHashSet}}\index{hash trie|see{CHAMP}}%
 \spec{Purpose}{Unordered key/value and membership collections with structural sharing, policy-defined equality, and structural equality/diff.}
 \spec{Core}{CHAMP: a 32-way bitmap-indexed prefix tree with split data/node bitmaps and canonical deletion topology.}
 \spec{Lookup}{\bigoh{\log_{32} n} --- at most seven levels for 32-bit hashes, plus bucket work on a full-hash collision.}
@@ -915,7 +921,7 @@ substrate for a third of the collections in this book.
 
 Bagwell's hash array mapped trie is the classic design: consume five bits of the
 hash per level, use a 32-bit bitmap to record which of the 32 slots are
-occupied, and store only the occupied slots in a compact array. Population count
+occupied, and store only the occupied slots in a compact array.\index{HAMT} Population count
 on the bitmap below the slot's bit gives the array index. Lookup is a handful of
 hops; the tree is shallow because $32^7 > 2^{32}$.
 
@@ -926,7 +932,7 @@ Vinju's OOPSLA 2015 paper --- keeps that skeleton and changes two things.
 
 A CHAMP node keeps \emph{two} bitmaps: a \code{datamap} recording which slots
 hold an inline key/value payload, and a \code{nodemap} recording which slots
-hold a pointer to a sub-node. The single backing array is then divided into two
+hold a pointer to a sub-node.\index{CHAMP!bitmap split} The single backing array is then divided into two
 regions: payloads packed at the front, sub-node references packed at the back
 (Figure~\ref{fig:champnode}).
 
@@ -970,7 +976,7 @@ is the second change.
 
 \subsection{Canonical deletion topology}
 
-In a plain HAMT, deletion leaves scar tissue. A sub-node that shrinks to a single
+In a plain HAMT, deletion leaves scar tissue.\index{CHAMP!canonical deletion} A sub-node that shrinks to a single
 entry stays a sub-node, so the tree's shape encodes its update history: two maps
 with identical contents can have different skeletons depending on what was
 inserted and removed along the way.
@@ -1011,7 +1017,7 @@ not require looking every key of one up in the other. You can walk both trees in
 lockstep, aligning logical bitmap slots, and compare structure directly.
 Better: when two versions share ancestry --- which they will, constantly, in a
 persistent library --- entire subtrees are \emph{reference-identical}, and a
-reference comparison prunes them without touching a single key.
+reference comparison prunes them without touching a single key.\index{reference pruning}
 
 \begin{contractbox}[Structural equality and diff]
 Where the implementation has a positive witness that both operands retain one
@@ -1044,7 +1050,7 @@ build the result bottom-up.
 \section{Collisions}
 
 Two keys whose \emph{entire} 32-bit hash is equal cannot be separated by any
-number of levels. CHAMP handles this with an immutable collision bucket: a small
+number of levels.\index{collision bucket} CHAMP handles this with an immutable collision bucket: a small
 array of entries that share a hash, searched linearly under the equality policy.
 This is strictly better than the alternative of extending the trie past the hash
 --- there is nothing left to extend it with --- and it degrades gracefully,
@@ -1076,7 +1082,7 @@ var counted = PersistentHashMap<string, int>.Empty.AddOrUpdate(
     out int requestCount);
 \end{lstlisting}
 
-Both hash once and descend once. That is the point: the naive composition
+Both hash once and descend once.\index{single-descent factories} That is the point: the naive composition
 (\code{TryGetValue} then \code{SetItem}) hashes twice and walks the trie twice.
 The contract around them is tight, and worth stating in full because it is easy
 to get subtly wrong.
@@ -1161,7 +1167,7 @@ other.}
 
 \noindent
 Nine families in this library are built by composing existing substrates rather
-than by introducing a new core tree. That is a deliberate rule, not an accident
+than by introducing a new core tree.\index{composition-first families} That is a deliberate rule, not an accident
 of laziness: a new core is a new set of invariants, a new validator, a new
 adversarial test suite, and nine new implementations. A composition inherits all
 of that from its parts, and the only genuinely new obligation is keeping the
@@ -1178,6 +1184,7 @@ versions and returns the receiver for documented logical no-ops.
 \section{Persistent hash bag}
 
 \begin{specimen}[Specimen --- \code{PersistentHashBag}]
+\index{PersistentHashBag@\texttt{PersistentHashBag}}%
 \spec{Purpose}{Unordered multiset: one representative and one positive multiplicity per equality class.}
 \spec{Built from}{One CHAMP map from representative to count.}
 \spec{Counts}{Distinct-class count and expanded total count are separate values. No ambiguous single ``count'' is exposed.}
@@ -1186,7 +1193,7 @@ versions and returns the receiver for documented logical no-ops.
 \end{specimen}
 
 The bag stores multiplicities in $1 \dots 2^{31}-1$ per class --- never zero,
-because a zero-multiplicity class is an absent class. The expanded total is
+because a zero-multiplicity class is an absent class.\index{multiset} The expanded total is
 carried in a wider checked integer, and the choice of type is a small tour of the
 nine runtimes: C\# uses a checked \code{long}, TypeScript a \code{bigint},
 Python an unbounded \code{int}, OCaml a checked native \code{int}, and the native
@@ -1203,6 +1210,7 @@ each, in the usual stable-but-unspecified order.
 \section{Persistent bidirectional map}
 
 \begin{specimen}[Specimen --- \code{PersistentBiMap}]
+\index{PersistentBiMap@\texttt{PersistentBiMap}}%
 \spec{Purpose}{A strict bijection: each key class and each value class appears at most once.}
 \spec{Built from}{A forward CHAMP $K \to V$ and an inverse CHAMP $V \to K$, with independently retained policies.}
 \spec{Inverse}{\bigoh{1} in pair count; enumerates nothing.}
@@ -1213,7 +1221,7 @@ each, in the usual stable-but-unspecified order.
 The bimap is the clearest illustration of the composite rule, because its
 consistency obligation is symmetric and total: both maps have the same count,
 every forward entry has exactly one equivalent inverse entry, and every inverse
-entry has exactly one forward entry. There is no operation that can be halfway
+entry has exactly one forward entry.\index{bijection} There is no operation that can be halfway
 done.
 
 The interesting decisions are in the update semantics.
@@ -1246,6 +1254,7 @@ consumer asking for it.
 \section{Set-valued multimap and relation}
 
 \begin{specimen}[Specimen --- \code{PersistentHashMultimap} and \code{PersistentRelation}]
+\index{PersistentHashMultimap@\texttt{PersistentHashMultimap}}\index{PersistentRelation@\texttt{PersistentRelation}}%
 \spec{Purpose}{One key to many values (multimap); many-to-many with cheap inverse traversal (relation).}
 \spec{Built from}{Multimap: CHAMP map from key to non-empty CHAMP set. Relation: two multimaps, forward and reverse.}
 \spec{Counts}{Distinct-key count and checked pair count are separate.}
@@ -1254,7 +1263,7 @@ consumer asking for it.
 \end{specimen}
 
 A multimap stores \emph{only} non-empty value sets: removing the last pair for a
-key removes the key. That single invariant is what makes ``does this key have
+key removes the key.\index{multimap} That single invariant is what makes ``does this key have
 any values'' a membership test rather than a set-emptiness test, and it is why
 duplicate pair insertion and removal of an absent pair are identity no-ops.
 
@@ -1266,6 +1275,7 @@ mutually consistent.
 \section{Map patch}
 
 \begin{specimen}[Specimen --- \code{PersistentMapPatch}]
+\index{PersistentMapPatch@\texttt{PersistentMapPatch}}%
 \spec{Purpose}{A first-class, invertible, composable description of a change to a map.}
 \spec{Semantics}{Distinguishes absence from every present value, including null-like ones.}
 \spec{Apply}{Validates \emph{all} before-states before applying \emph{any} edit; preserves the source map on conflict.}
@@ -1275,7 +1285,7 @@ mutually consistent.
 \end{specimen}
 
 The patch is the library's answer to ``I want to describe a change, inspect it,
-send it somewhere, and maybe undo it''. Its preflight discipline is the whole
+send it somewhere, and maybe undo it''.\index{map patch} Its preflight discipline is the whole
 design: a patch either applies completely or does not apply at all, and it will
 refuse rather than apply half of itself to a map whose before-state has drifted.
 The absence-versus-null distinction matters here more than almost anywhere else,
@@ -1285,6 +1295,7 @@ that a sloppier encoding would conflate.
 \section{Directed graph}
 
 \begin{specimen}[Specimen --- \code{PersistentDirectedGraph}]
+\index{PersistentDirectedGraph@\texttt{PersistentDirectedGraph}}%
 \spec{Purpose}{Explicit vertices and unique directed edges with forward and reverse adjacency.}
 \spec{Built from}{A vertex set plus two adjacency multimaps.}
 \spec{Vertices}{Stored explicitly, so an isolated vertex is a real vertex. Adding an edge adds any missing endpoints.}
@@ -1292,7 +1303,7 @@ that a sloppier encoding would conflate.
 \spec{Ports}{All nine.}
 \end{specimen}
 
-Storing vertices separately from edges is the design decision worth noticing.
+Storing vertices separately from edges is the design decision worth noticing.\index{directed graph}
 An edge-list-only graph cannot represent an isolated vertex, which means it
 cannot represent ``I have declared this node but not yet connected it'' --- a
 state that occurs constantly in dependency graphs and build systems.
@@ -1300,13 +1311,14 @@ state that occurs constantly in dependency graphs and build systems.
 \section{Indexed map}
 
 \begin{specimen}[Specimen --- \code{PersistentIndexedMap}]
+\index{PersistentIndexedMap@\texttt{PersistentIndexedMap}}%
 \spec{Purpose}{A primary map with one automatically maintained non-unique secondary index.}
 \spec{Built from}{The primary CHAMP map plus a secondary multimap keyed by a selector result.}
 \spec{Invariant}{Exactly one secondary pair per primary key; changing a row's selector class moves its membership atomically.}
 \spec{Ports}{All nine.}
 \end{specimen}
 
-This is the ``find all users in this city'' structure. The selector is applied on
+This is the ``find all users in this city'' structure.\index{secondary index} The selector is applied on
 insertion, and the composite's job is to keep the derived index honest across
 every edit --- including the awkward one, where updating a row changes which
 secondary bucket it belongs to.
@@ -1314,6 +1326,7 @@ secondary bucket it belongs to.
 \section{Persistent chunked bit set}
 
 \begin{specimen}[Specimen --- \code{PersistentChunkedBitSet}]
+\index{PersistentChunkedBitSet@\texttt{PersistentChunkedBitSet}}%
 \spec{Purpose}{A sparse set of non-negative 32-bit integers with population rank and select.}
 \spec{Core}{64-bit words at the leaves of a measured tree, with a popcount sum measure.}
 \spec{Membership}{\bigoh{\log c} for $c$ represented chunks.}
@@ -1325,7 +1338,7 @@ secondary bucket it belongs to.
 The chunked bit set is filed with the trie companions because it plays the same
 role --- a set --- but its representation belongs to the sequence world: 64-bit
 words at the leaves of a measured tree whose measure is the population count of
-its subtree. That measure is what turns \code{Rank} and \code{Select} into
+its subtree.\index{population count} That measure is what turns \code{Rank} and \code{Select} into
 descents rather than scans, and it is a small, satisfying demonstration of how
 much the measure framework (Chapter~\ref{ch:measures}) buys.
 
@@ -1350,6 +1363,7 @@ word-wise algebra is the reason you are here.
 pure ceremony.}
 
 \begin{specimen}[Specimen --- Patricia integer maps and sets]
+\index{Patricia trie!maps and sets}\index{PersistentIntMap@\texttt{PersistentIntMap}}\index{PersistentIntSet@\texttt{PersistentIntSet}}%
 \spec{Purpose}{Persistent maps and sets over signed 32- or 64-bit integer keys, with ascending key order and structural merge.}
 \spec{Core}{Big-endian path-compressed binary trie: each internal node stores a common prefix and the single bit on which its two subtrees differ.}
 \spec{Point ops}{\bigoh{\min(n, W)} for key width $W$ --- in practice a few node hops.}
@@ -1371,7 +1385,7 @@ practicality for two decades.
 A binary trie over the bits of an integer key would be $W$ levels deep and
 mostly empty. Patricia collapses the empty stretches: each internal node stores
 the prefix its subtree shares, together with the single bit position at which
-its two children diverge. Descent is then a prefix test and a bit test ---
+its two children diverge.\index{Patricia trie!path compression} Descent is then a prefix test and a bit test ---
 no comparisons, no rebalancing, and no rotations, ever.
 
 \begin{figure}[htbp]
@@ -1411,7 +1425,7 @@ so the width contract does not depend on a platform \code{Int}.
 \section{The reason it exists: structural merge}
 
 Point operations are not the interesting part. The differentiator --- the thing
-the hash trie genuinely cannot match --- is \term{structural merge}.
+the hash trie genuinely cannot match --- is \term{structural merge}.\index{structural merge}
 
 Union, intersection, and difference align compressed prefixes and descend both
 tries together. Where the two prefixes are disjoint, the answer is known without
@@ -1460,6 +1474,7 @@ than promoted to a promise.
 \motto{A mutable map you can photograph in constant time.}
 
 \begin{specimen}[Specimen --- \code{ConcurrentHashTrie}]
+\index{ConcurrentHashTrie@\texttt{ConcurrentHashTrie}}%
 \spec{Purpose}{A lock-free \emph{mutable} concurrent hash map whose \code{Snapshot()} is \bigoh{1} and yields an immutable view.}
 \spec{Core}{Bitmap C-nodes, singleton leaves, equal-hash collision nodes, and tomb nodes, with generation-stamped indirection nodes.}
 \spec{Mechanism}{Node-local GCAS for safe indirection replacement; root/main RDCSS for the snapshot transition; lazy generation renewal on later writes; tomb promotion on deletion.}
@@ -1484,7 +1499,7 @@ exactly in that gap: mutable-map throughput with \bigoh{1} snapshots.
 
 \section{How a constant-time snapshot is possible}
 
-The trick is generation stamping. Every indirection node carries the generation
+The trick is generation stamping.\index{Ctrie!generation stamping} Every indirection node carries the generation
 in which it was created. \code{Snapshot()} does not copy anything; it atomically
 installs a new root with a bumped generation. From that moment, any writer that
 wants to modify a node belonging to an older generation must first
@@ -1498,12 +1513,12 @@ losing a writer in between. Two mechanisms cooperate:
 
 \begin{description}
 \item[GCAS] --- generation-compare-and-set --- makes an indirection node's
-replacement safe by publishing a descriptor that readers help complete. A reader
+replacement safe by publishing a descriptor that readers help complete.\index{GCAS} A reader
 that finds a node mid-transition finishes the transition rather than waiting for
 it.
 \item[RDCSS] --- restricted double-compare single-swap --- makes the root/main
 transition atomic with respect to the main-node observation, so a writer cannot
-slip between ``I read the main node'' and ``the root was replaced''. The C\#
+slip between ``I read the main node'' and ``the root was replaced''.\index{RDCSS} The C\#
 implementation gives GCAS priority in that transition specifically to close
 that window.
 \end{description}
@@ -1512,7 +1527,7 @@ Deletion adds a third concern. Removing entries from a deep trie would otherwise
 leave a skeleton of empty interior nodes that future traversals still have to
 walk. The Ctrie contracts these paths by promoting \term{tomb} nodes --- empty
 or singleton markers --- up through their parents, so the structure does not
-accumulate scar tissue.
+accumulate scar tissue.\index{tomb node}
 
 \section{Crossing back into the persistent world}
 
@@ -1612,7 +1627,7 @@ proposal.}
 
 A bulk builder mutates unpublished leaf, collision, and bitmap nodes in place
 during a single construction pass, avoiding a path copy between successive
-input entries. It is narrower than an editing session and its contract says so.
+input entries.\index{bulk builder} It is narrower than an editing session and its contract says so.
 
 \begin{contractbox}[Bulk builder]
 Nodes under construction are unpublished and mutated in place. Duplicate
@@ -1635,7 +1650,7 @@ mutable-node construction bound.
 \section{The one-way editing session}
 
 A session is the answer to ``I have an existing map and I want to make eighty
-changes to it''. It adopts a persistent root in \bigoh{1}, accepts edits under
+changes to it''.\index{editing session} It adopts a persistent root in \bigoh{1}, accepts edits under
 single ownership, and publishes once.
 
 \begin{contractbox}[One-way lifecycle]
@@ -1661,7 +1676,7 @@ distinction, and it is worth being precise about.
 
 C\# implements the \term{owner-token transient}: edits mutate only nodes and
 arrays proven to be owned by the active edit token, and path-copy anything
-shared or sealed. \code{Persist()} seals the token, publishes without traversing
+shared or sealed.\index{owner-token transient} \code{Persist()} seals the token, publishes without traversing
 the graph, and invalidates the mutable object along with every view and
 enumerator obtained from it. A clean \code{source.ToTransient().Persist()}
 returns the exact source object, including after logical no-op edits.
@@ -1710,7 +1725,7 @@ changes or publication. \\
 \section{The frozen tier, and why it has not shipped}
 
 The third lifecycle --- \bigoh{n} conversion to a read-optimised layout with no
-update-shaped API --- is designed, prototyped, and deliberately unshipped.
+update-shaped API --- is designed, prototyped, and deliberately unshipped.\index{frozen collection tier}
 
 Its intended contract is already written down: separate \code{FrozenHashMap} and
 \code{FrozenHashSet} types, one offline-built general hash layout for every count
@@ -1753,6 +1768,7 @@ datasets; that is a workload, not permission to select a representation.
 ends are always within reach.}
 
 \begin{specimen}[Specimen --- \code{FingerTreeDeque} and \code{FingerTree}]
+\index{FingerTreeDeque@\texttt{FingerTreeDeque}}\index{FingerTree@\texttt{FingerTree}}%
 \spec{Purpose}{A persistent indexed sequence with cheap endpoints and cheap concatenation (\code{FingerTreeDeque}), and a general monoid-measured tree used directly and as the engine beneath a dozen facades (\code{FingerTree}).}
 \spec{Core}{Hinze and Paterson's 2-3 finger tree: digits at each end, a recursively nested spine of nodes in the middle.}
 \spec{Endpoints}{\bigoh{1} amortised push and pop at either end.}
@@ -1762,11 +1778,11 @@ ends are always within reach.}
 \end{specimen}
 
 \noindent
-Most balanced trees treat all positions alike. A finger tree does not: it keeps
+Most balanced trees treat all positions alike.\index{finger tree} A finger tree does not: it keeps
 a small unbalanced ``digit'' of one to four elements at each end and pushes the
 balanced structure into the middle, where a recursively nested spine holds
 \emph{nodes} of two or three elements, which themselves hold nodes, and so on
-(Figure~\ref{fig:fingertree}).
+(Figure~\ref{fig:fingertree}).\index{digit}
 
 \begin{figure}[htbp]
 \centering
@@ -1882,7 +1898,7 @@ conceptual investment in this book.
 
 A \term{measure} is a monoid --- a type with an identity element and an
 associative binary combine --- plus a function from an element to a value of
-that type. Cache the measure of every subtree on its root node, and two things
+that type.\index{measure} Cache the measure of every subtree on its root node, and two things
 become cheap:
 
 \begin{enumerate}
@@ -1898,7 +1914,7 @@ elements you skipped.
 \end{enumerate}
 
 Associativity is what makes step 2 sound --- it lets the accumulated prefix be
-computed in any grouping. Commutativity is \emph{not} required, and the library
+computed in any grouping.\index{monoid!associativity} Commutativity is \emph{not} required, and the library
 is scrupulous about this: ordered measures are combined strictly left to right,
 and several tests exist specifically to prove that a non-commutative measure
 behaves.
@@ -1970,6 +1986,7 @@ public capability with no new core.
 vector''.}
 
 \begin{specimen}[Specimen --- \code{RrbVector}]
+\index{RrbVector@\texttt{RrbVector}}%
 \spec{Purpose}{A persistent sequence with \emph{uniform} random access --- no U-shape --- plus logarithmic concatenation and splitting.}
 \spec{Core}{Relaxed radix-balanced tree: 32-way branches, 32-element leaves. Regular branches are radix-indexed with pure bit arithmetic and carry no size table; only branches touched by concatenation carry cumulative sizes.}
 \spec{Index}{\bigoh{\log_{32} n} with a small constant, uniform across positions.}
@@ -1989,14 +2006,14 @@ time.
 \section{Regular and relaxed branches}
 
 In a plain radix trie of branching factor 32, finding index $i$ is pure bit
-arithmetic: take five bits of $i$ per level and you are there. No size tables, no
+arithmetic: take five bits of $i$ per level and you are there.\index{radix trie} No size tables, no
 comparisons. That works only if every node is full, which stops being true the
 moment you concatenate two vectors.
 
 RRB's answer is to allow both kinds of node (Figure~\ref{fig:rrb}). A
 \term{regular} branch is full and radix-indexable; it stores no size table at
-all. A \term{relaxed} branch carries a small array of cumulative sizes and is
-searched rather than computed. Concatenation introduces relaxed branches only
+all.\index{RRB vector!regular branch} A \term{relaxed} branch carries a small array of cumulative sizes and is
+searched rather than computed.\index{RRB vector!relaxed branch} Concatenation introduces relaxed branches only
 along the seam; everything away from the seam stays regular and stays fast.
 
 \begin{figure}[htbp]
@@ -2077,6 +2094,7 @@ with two existing sequence families.
 \motto{A string that does not mind being edited in the middle.}
 
 \begin{specimen}[Specimen --- \code{Rope}, \code{MeasuredRope}, \code{TextRope}]
+\index{Rope@\texttt{Rope}}\index{MeasuredRope@\texttt{MeasuredRope}}\index{TextRope@\texttt{TextRope}}%
 \spec{Purpose}{Persistent chunked sequences (\code{Rope}), the same with a custom split/locate measure (\code{MeasuredRope}), and a newline-aware text specialisation (\code{TextRope}).}
 \spec{Core}{Runs of elements held contiguously in immutable leaf chunks at the leaves of a measured tree.}
 \spec{Edits}{\bigoh{\log n} plus bounded chunk work.}
@@ -2087,7 +2105,7 @@ with two existing sequence families.
 
 \noindent
 The rope's insight is that the atoms of a sequence do not have to be its
-elements. Put a run of elements in one contiguous immutable leaf, and you get
+elements.\index{rope} Put a run of elements in one contiguous immutable leaf, and you get
 tree behaviour for edits with array behaviour for scans --- which is exactly the
 trade a text editor wants, since editing is local and rendering is sequential.
 
@@ -2102,7 +2120,7 @@ monoid, so split and locate can be driven by anything associative. It inherits
 the measure-law requirements of Chapter~\ref{ch:measures} wholesale.
 \item[\code{TextRope}] is the measured rope specialised to a newline measure,
 plus the helpers that make text navigation pleasant: line and column
-conversion, line extraction, newline-style handling.
+conversion, line extraction, newline-style handling.\index{text rope}
 \end{description}
 
 Because \code{TextRope} is a specialisation rather than a separate core, its
@@ -2135,6 +2153,7 @@ confined to nodes nobody can see.
 \motto{Lazy propagation, but you are allowed to keep the old version.}
 
 \begin{specimen}[Specimen --- \code{RangeUpdateSequence}]
+\index{RangeUpdateSequence@\texttt{RangeUpdateSequence}}%
 \spec{Purpose}{An immutable indexed sequence that can apply one algebraic transformation to a contiguous range, and query that range's aggregate, without visiting the covered elements.}
 \spec{Core}{A separately owned path-copied implicit AVL --- \emph{not} a tagged modification of either finger-tree engine.}
 \spec{Whole-sequence update}{\bigoh{1}: one new root.}
@@ -2149,7 +2168,7 @@ Competitive programmers know the ephemeral version of this structure as a
 segment tree with lazy propagation, and it is one of the great practical
 algorithms: ``add 7 to every element between positions 200 and 9{,}000'' in
 logarithmic time, by writing a pending instruction on a handful of internal
-nodes instead of touching nine thousand elements.
+nodes instead of touching nine thousand elements.\index{lazy propagation}
 
 Making it persistent is harder than it sounds, because the classic
 implementation \emph{pushes} pending tags down as it descends --- and pushing is
@@ -2163,7 +2182,7 @@ The library resolves this with a carefully chosen convention
 
 \begin{contractbox}[The node invariant]
 A node's stored value and cached measure \emph{already include} that node's own
-pending tag. Its children do \emph{not}.
+pending tag.\index{pending tag} Its children do \emph{not}.
 
 Structural descent and rotations push a pending tag down before rearranging
 nodes. Read-only indexing, range measurement, and enumeration instead carry the
@@ -2204,7 +2223,7 @@ element visits at all.
 
 The policy --- \code{IRangeUpdateAlgebra<TElement, TMeasure, TTag>} in C\#, with
 local spellings elsewhere --- extends the ordinary measure monoid with a tag
-monoid and two actions. The single most important detail is the composition
+monoid and two actions.\index{tag algebra} The single most important detail is the composition
 direction, and it is stated everywhere it appears:
 
 \begin{center}
@@ -2286,6 +2305,7 @@ mistake surfaces immediately rather than as silent misreads.
 are.}
 
 \begin{specimen}[Specimen --- \code{ReversibleDeque}]
+\index{ReversibleDeque@\texttt{ReversibleDeque}}%
 \spec{Purpose}{A persistent sequence for which logical reversal is a primary operation.}
 \spec{Core}{Persistent deque storage plus an orientation bit or mirrored root.}
 \spec{Reverse}{\bigoh{1} --- a new view over shared storage, not a materialised sequence.}
@@ -2296,7 +2316,7 @@ are.}
 \noindent
 This is the smallest structure in the book and it makes a point worth more than
 its size: a great many ``operations'' are really changes of perspective, and
-a persistent library is in an unusually good position to represent them as such.
+a persistent library is in an unusually good position to represent them as such.\index{orientation}
 
 \begin{lstlisting}[language={[Sharp]C}]
 var deque    = ReversibleDeque<int>.Create(1, 2, 3);
@@ -2328,6 +2348,7 @@ implementation.
 \motto{Not persistent, not sorry.}
 
 \begin{specimen}[Specimen --- \code{DabaLite}]
+\index{DabaLite@\texttt{DabaLite}}%
 \spec{Purpose}{Maintain the aggregate of a FIFO sliding window under any associative monoid --- no commutativity, no inverse required.}
 \spec{Core}{The De-Amortised Banker's Aggregator (Lite), over a linked queue of 64-slot chunks with six ordered cursors.}
 \spec{Callback ceilings}{Insert invokes \code{Combine} at most three times; evict at most twice; query at most once; an empty query, none. Unconditional.}
@@ -2353,7 +2374,7 @@ special case.
 
 The window is a queue of partial aggregates, overlaid with six cursors that
 always satisfy $F \leq L \leq R \leq A \leq B \leq E$
-(Figure~\ref{fig:daba}). Between them they delimit the front, left, right,
+(Figure~\ref{fig:daba}).\index{sliding window} Between them they delimit the front, left, right,
 accumulator, and back regions; two extra fields carry the products that do not
 live in queue slots.
 
@@ -2453,6 +2474,7 @@ approach to validation.
 else is presentation.}
 
 \begin{specimen}[Specimen --- \code{SortedBag}, \code{SortedSet}, \code{SortedDictionary}]
+\index{SortedBag@\texttt{SortedBag}}\index{SortedSet@\texttt{SortedSet}}\index{SortedDictionary@\texttt{SortedDictionary}}%
 \spec{Purpose}{Immutable comparer-ordered multisets, sets, and key/value maps, with rank and boundary queries.}
 \spec{Core}{Order-statistic measures over the measured tree --- typically cached count plus last key --- in the mature ports; an idiomatic ordered storage checkpoint elsewhere.}
 \spec{Identity}{\emph{Comparison} defines equality here, not hashing. Two values that compare equal are the same element.}
@@ -2465,7 +2487,7 @@ else is presentation.}
 These are the collections most people reach for first, and in this library they
 are facades: put a measure that summarises ``the largest key in this subtree''
 on a measured tree, and splitting at ``prefix maximum $\geq k$'' \emph{is} a
-sorted lower bound. Add a count to the measure --- a product measure --- and the
+sorted lower bound.\index{sorted collections} Add a count to the measure --- a product measure --- and the
 same tree also supports rank and select. The sorted collections are that
 observation, dressed for use.
 
@@ -2499,6 +2521,7 @@ separate and never derives one from the other.
 \motto{For collections compared far more often than they are modified.}
 
 \begin{specimen}[Specimen --- \code{CanonicalSortedSet} and \code{ZipTreeRankPolicy}]
+\index{CanonicalSortedSet@\texttt{CanonicalSortedSet}}\index{ZipTreeRankPolicy@\texttt{ZipTreeRankPolicy}}%
 \spec{Purpose}{A sorted set whose \emph{shape} is determined by its contents under a retained rank policy, so equal sets converge on equal topology and inequality is usually rejected in \bigoh{1} by a memoised digest.}
 \spec{Core}{Zip-zip tree: a randomised-rank binary search tree where insertion and deletion are single root-to-position \term{unzip} and \term{zip} passes --- no rotations.}
 \spec{Ranks}{A geometric primary coordinate and a fixed 64-bit secondary coordinate, both derived from HMAC-SHA-256 over the equivalence class.}
@@ -2511,10 +2534,10 @@ separate and never derives one from the other.
 Tarjan, Levy, and Timmel's zip trees (2018/2019) reformulate the treap so that
 insertion and deletion are single passes: to insert, \term{unzip} the search
 path into two spines and hang them off the new node; to delete, \term{zip} the
-two child spines back together. Expected restructuring is \bigoh{1} and there is
+two child spines back together.\index{zip tree} Expected restructuring is \bigoh{1} and there is
 no rotation code at all. Gila, Goodrich, and Tarjan's zip-zip trees (2023) refine
 the rank distribution so that expected depth approaches the information-theoretic
-optimum.
+optimum.\index{zip-zip tree}
 
 What Durable7 wants from them is not speed. It is \emph{canonicity}.
 
@@ -2522,7 +2545,7 @@ What Durable7 wants from them is not speed. It is \emph{canonicity}.
 
 If a node's rank is derived from its key rather than drawn fresh at insertion
 time, then under one retained coherent rank policy, the tree's shape is a
-function of its contents (Figure~\ref{fig:zip}). Insert the same elements in a
+function of its contents (Figure~\ref{fig:zip}).\index{rank policy} Insert the same elements in a
 different order and you converge on the same topology.
 
 \begin{figure}[htbp]
@@ -2608,6 +2631,7 @@ tolerate.
 list.}
 
 \begin{specimen}[Specimen --- the neutral Ordered family]
+\index{Ordered family (insertion-ordered)}\index{PersistentOrderedSet@\texttt{PersistentOrderedSet}}\index{PersistentOrderedMap@\texttt{PersistentOrderedMap}}\index{PersistentOrderedMultimap@\texttt{PersistentOrderedMultimap}}%
 \spec{Purpose}{Sets, maps, and multimaps whose enumeration follows first insertion plus explicit positional operations --- neither hash order nor comparison order.}
 \spec{Core}{A persistent hash membership/stamp index composed with a persistent ordered sequence. Deliberately independent of any other family.}
 \spec{Identity}{Equality policy decides membership and representatives. It never decides position.}
@@ -2616,7 +2640,7 @@ list.}
 \end{specimen}
 
 \noindent
-Insertion order is the order humans expect. It is what a configuration file
+Insertion order is the order humans expect.\index{insertion order} It is what a configuration file
 means, what a UI list means, what a pipeline stage sequence means. Hash order is
 an implementation detail and comparison order is somebody else's opinion; if the
 program's meaning depends on the sequence in which things were added, that has
@@ -2688,6 +2712,7 @@ redundant --- each exists because the other two are wrong for a specific need.
 \section{The measured priority queue}
 
 \begin{specimen}[Specimen --- \code{PriorityQueue}]
+\index{PriorityQueue@\texttt{PriorityQueue}}%
 \spec{Purpose}{The general persistent minimum-priority queue.}
 \spec{Core}{A minimum-priority measure over the measured tree.}
 \spec{Bounds}{Amortised: \bigoh{1} peek, \bigoh{\log n} enqueue and dequeue, \bigoh{\log \min} meld.}
@@ -2696,7 +2721,7 @@ redundant --- each exists because the other two are wrong for a specific need.
 \end{specimen}
 
 This is the default, and it is a measure facade: cache the minimum priority of
-each subtree, and locating the front entry is a descent. Melding two queues is
+each subtree, and locating the front entry is a descent.\index{priority queue} Melding two queues is
 concatenation. It costs nothing conceptually beyond the measure framework, which
 is exactly why it is the default.
 
@@ -2713,6 +2738,7 @@ if (queue.TryPeek(out var element, out var priority))
 \section{The Brodal--Okasaki heap}
 
 \begin{specimen}[Specimen --- \code{BrodalOkasakiHeap}]
+\index{BrodalOkasakiHeap@\texttt{BrodalOkasakiHeap}}%
 \spec{Purpose}{Worst-case rather than amortised latency for insert, meld, and minimum.}
 \spec{Core}{Bootstrapped skew-binomial queues (Brodal and Okasaki, JFP 1996).}
 \spec{Bounds}{\bigoh{1} \emph{worst-case} insert, meld, and find-minimum; \bigoh{\log n} worst-case delete-minimum.}
@@ -2721,7 +2747,7 @@ if (queue.TryPeek(out var element, out var priority))
 \spec{Ports}{All nine.}
 \end{specimen}
 
-The measured queue has the same bounds \emph{amortised}. This heap's entire
+The measured queue has the same bounds \emph{amortised}.\index{Brodal--Okasaki heap} This heap's entire
 reason for existing is the word ``worst-case'': if a latency budget is a hard
 requirement rather than an average, an amortisation spike is a bug. The
 implementation is a direct port of the fused bootstrapped skew-binomial
@@ -2749,6 +2775,7 @@ explicit non-goals rather than as omissions.
 \section{The priority search queue}
 
 \begin{specimen}[Specimen --- \code{PrioritySearchQueue}]
+\index{PrioritySearchQueue@\texttt{PrioritySearchQueue}}%
 \spec{Purpose}{Keyed lookup \emph{and} minimum-priority removal \emph{and} a combined key-range plus priority-threshold query, in one structure.}
 \spec{Core}{A persistent AVL ordered by key, each node caching its subtree's minimum-priority winner.}
 \spec{Bounds}{\bigoh{1} minimum; \bigoh{\log n} keyed update, removal, and delete-minimum; \bigoh{\log n + v} range query where $v$ counts nodes pruning cannot exclude.}
@@ -2756,7 +2783,7 @@ explicit non-goals rather than as omissions.
 \spec{Ports}{All nine.}
 \end{specimen}
 
-A heap cannot find a key. A map cannot find the minimum. The priority search
+A heap cannot find a key.\index{priority search queue} A map cannot find the minimum. The priority search
 queue does both, and adds the query that motivates it: \emph{which entries in
 this key range have priority at most $p$?} That is the scheduler question, the
 expiry question, and the task-queue question.
@@ -2796,6 +2823,7 @@ importing a bound the code does not earn.
 \motto{Everything that has a beginning and an end wants one of these.}
 
 \begin{specimen}[Specimen --- \code{IntervalTree} and \code{PersistentIntervalMap}]
+\index{IntervalTree@\texttt{IntervalTree}}\index{PersistentIntervalMap@\texttt{PersistentIntervalMap}}%
 \spec{Purpose}{Ordered collections of intervals with overlap and point-stabbing queries (tree), and the same with one payload attached to each complete interval key (map).}
 \spec{Core}{Interval annotations in the measure: typically count, last low endpoint, and maximum high endpoint.}
 \spec{Pruning}{A subtree whose maximum high endpoint lies below the probe cannot contain an overlap, so the descent skips it entirely.}
@@ -2807,7 +2835,7 @@ importing a bound the code does not earn.
 The interval tree is the measure framework's most elegant payoff. Put the
 maximum high endpoint of a subtree in its measure, and a stabbing query becomes
 a descent that prunes any subtree which \emph{provably} cannot contain a match ---
-without looking at a single interval inside it.
+without looking at a single interval inside it.\index{interval tree}
 
 \begin{contractbox}[Interval obligations]
 Interval construction must define whether empty or inverted intervals are
@@ -2837,6 +2865,7 @@ in the local deterministic interval order.
 machines.}
 
 \begin{specimen}[Specimen --- \code{MerkleSearchTree}]
+\index{MerkleSearchTree@\texttt{MerkleSearchTree}}%
 \spec{Purpose}{An ordered, content-addressed persistent map whose root digest names the entire collection, so two processes that agree on a digest agree on every entry.}
 \spec{Core}{A $B=16$ wide tree in which each key's layer is derived from the count of leading zero nibbles of its SHA-256 digest --- a geometric distribution --- so the shape is independent of insertion order.}
 \spec{Identity}{Policy \code{mst-sha256-b16-v2}: a versioned semantic id, comparer semantics, canonical per-type codecs, and a SHA-256 domain digest.}
@@ -2854,7 +2883,7 @@ apart by unrelated code --- pointer identity tells you nothing and you are back
 to comparing everything.
 
 Content addressing fixes this by making the \emph{name} of a subtree a function
-of its contents. Give every node a digest of what it holds, including the digests
+of its contents.\index{content addressing} Give every node a digest of what it holds, including the digests
 of its children, and equal digests prove equal subtrees no matter who built them
 or when. That is the Merkle idea, and applying it to an ordered map gives
 the structure behind AT Protocol repositories (Bluesky) and Dolt's versioned SQL
@@ -2869,7 +2898,7 @@ a different --- equally valid --- tree.
 
 Auvolat and Taïani's Merkle search trees (SRDS 2019) fix the shape by deriving
 it from the data. Hash each key; count its leading zero nibbles; that count is
-the key's \term{layer}. Since each additional zero nibble is a 1-in-16 event,
+the key's \term{layer}.\index{Merkle search tree!layers} Since each additional zero nibble is a 1-in-16 event,
 layers follow a geometric distribution with $B = 16$, which is exactly the
 branching behaviour a B-tree wants --- but assigned by the hash function rather
 than by insertion history (Figure~\ref{fig:mst}).
@@ -2890,14 +2919,13 @@ than by insertion history (Figure~\ref{fig:mst}).
   \draw[d7edge] (top) -- (m1); \draw[d7edge] (top) -- (m2);
   \draw[d7edge] (m1) -- (l1);  \draw[d7edge] (m1) -- (l2);
   \draw[d7edge] (m2) -- (l3);  \draw[d7edge] (m2) -- (l4);
-  \node[d7label,anchor=west,text width=44mm,align=left] at (94,-10)
-    {A key's layer is the number of leading zero nibbles of its SHA-256 digest.
-     One block holds each consecutive same-layer run, and its digest covers the
-     policy domain, its entries, its subtree count, and its child digests.};
 \end{tikzpicture}
-\caption{Layer assignment in a Merkle search tree. Because the shape comes from
-the hashes, two processes that insert the same entries in different orders build
-the same tree and compute the same root digest.}
+\caption{Layer assignment in a Merkle search tree. A key's layer is the number
+of leading zero nibbles of its SHA-256 digest; one block holds each consecutive
+same-layer run, and that block's digest covers the policy domain, its entries,
+its subtree count, and its child digests. Because the shape comes from the
+hashes, two processes that insert the same entries in different orders build the
+same tree and compute the same root digest.}
 \label{fig:mst}
 \end{figure}
 
@@ -2990,7 +3018,7 @@ Everything here ships in all nine languages with byte-identical wire behaviour.
 
 \section{Blocks and stores}
 
-A \term{block} is one immutable node's canonical bytes, addressed by its digest.
+A \term{block} is one immutable node's canonical bytes, addressed by its digest.\index{block}
 A \term{store} is a mapping from digest to block --- the persistence boundary.
 The library's in-memory implementations are concurrent (an \code{RLock} in
 Python, a shared mutex in C\texttt{++}, a synchronised three-state store in C),
@@ -3020,7 +3048,7 @@ which is what the digest actually claims.
 
 \section{Packs, and the transport boundary}
 
-A \term{pack} is a set of blocks prepared for transport. A \emph{complete} pack
+A \term{pack} is a set of blocks prepared for transport.\index{pack} A \emph{complete} pack
 is self-contained. A \emph{partial} pack can be completed from blocks the
 destination already holds --- which is the common case, since two replicas of a
 slowly changing tree share almost everything.
@@ -3061,7 +3089,7 @@ at the trust boundary.
 \section{Proofs}
 
 A proof lets a party who does \emph{not} have the tree verify a claim about it,
-given only the root digest. The canonical \code{MSP2} format carries three kinds:
+given only the root digest.\index{proof} The canonical \code{MSP2} format carries three kinds:
 
 \begin{description}
 \item[Membership] --- this key maps to this value in the tree named by this
@@ -3082,7 +3110,7 @@ answer. The test suites verify this adversarially rather than by inspection.
 \section{Synchronisation}
 
 Synchronisation answers: \emph{I have root $A$, you have root $B$, send me what I
-am missing.} The mechanism is a frontier walk. Compare digests from the root
+am missing.} The mechanism is a frontier walk.\index{synchronisation} Compare digests from the root
 down; wherever they agree, an entire region is already shared and the walk stops;
 wherever they differ, descend. The blocks the destination lacks form the
 frontier, and the resulting sync pack is closure-pruned so that nothing already
@@ -3097,7 +3125,7 @@ complete restart.
 
 The final operation is the one that turns an authenticated map into a version
 control system: given a common ancestor and two descendants, produce a merged
-tree.
+tree.\index{three-way merge}
 
 \begin{contractbox}[Merge obligations]
 The merge is typed and \emph{present-null aware}: a key that was deleted in one
@@ -3126,6 +3154,602 @@ explicit hashing, encoding, verification-budget, and trust-boundary contracts;
 the prerequisites are not negotiable per family.
 \end{asidebox}
 
-%%APPEND-HERE%%
+% ===========================================================================
+%  PART VI -- CURSORS
+% ===========================================================================
+\part{Navigation}
+\label{part:navigation}
+
+\chapter{Cursors}
+\label{ch:cursors}
+
+\motto{A position that remembers which version it belongs to.}
+
+\noindent
+Persistent collections are excellent at whole-collection operations and
+awkward at local editing. Inserting one character at position 4{,}000 of a rope
+is a logarithmic descent; inserting sixteen characters one at a time is sixteen
+logarithmic descents, and every one of them re-walks the same path.
+
+A cursor fixes this by being what an iterator is not: an immutable value that
+owns one collection version \emph{and} a position within it, from which both
+navigation and editing are cheap and which can be retained and branched like any
+other persistent value.\index{cursor}
+
+\begin{contractbox}[What a cursor is, and is not]
+Every initialised cursor owns or retains one immutable logical version and a
+valid gap, rank, or measure boundary. Navigation returns a cursor over the
+\emph{same} version. Editing returns a cursor over \emph{one new} version and
+never changes the receiver, a retained ancestor, or a sibling branch. Snapshot
+is non-consuming.
+
+A cursor is not a detachable position, a mutable iterator, a builder, a
+transient, a bookmark, a rebase operation, or a live concurrent view. There is
+no implicit redirection to a later version and no cross-version application.
+\end{contractbox}
+
+\section{Gap semantics}
+
+A positional cursor denotes a \emph{boundary}, not an element --- one of the
+$n+1$ gaps in a sequence of length $n$ (Figure~\ref{fig:gap}).\index{cursor!gap semantics} This is the same
+model a text editor's caret uses, and it is chosen for the same reason: an
+insertion point between two elements is a first-class thing, and a cursor that
+denoted an element could not represent ``before everything'' and ``after
+everything'' without special cases.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \foreach \i/\c in {0/a,1/b,2/c,3/d}
+    {\node[d7cell, minimum width=17pt, minimum height=17pt, fill=d7mist,
+           font=\ttfamily\small] at (12+\i*16,0) {\c};}
+  \foreach \i in {0,1,2,3,4}
+    {\draw[d7copper,thick] (4+\i*16,-7) -- (4+\i*16,7);
+     \node[d7label,below=4pt,text=d7copper] at (4+\i*16,-7) {\i};}
+  \node[d7label,anchor=west,text width=52mm,align=left] at (78,0)
+    {\textbf{previous} peek, move, backspace address $p-1$;\\
+     \textbf{next} peek, move, delete, replace address $p$.};
+  \node[d7label,anchor=west,text width=52mm,align=left] at (78,-14)
+    {Insertion returns the gap \emph{after} the inserted values; backspace
+     returns $p-1$; forward deletion and replacement keep $p$.};
+\end{tikzpicture}
+\caption{Gap semantics. Empty, start, and end gaps are ordinary first-class
+states rather than special cases.}
+\label{fig:gap}
+\end{figure}
+
+Ordered cursors use the analogous idea over comparer order: the gap before the
+next ordered candidate. A lower-bound miss leaves a \emph{usable} cursor rather
+than an error, exact search carries a separate hit discriminator, and an edit
+validates that the key or value actually belongs at the current gap. Nested
+Ordered multimap cursors keep group and value positions explicit rather than
+inventing a private flattened order that would not correspond to anything the
+collection promises.
+
+\section{Which families have one}
+
+Not every collection has a meaningful ``next''. The library's rule is that a
+cursor requires a stable \emph{semantic} neighbour axis, and hash traversal order
+is not one.
+
+\begin{d7table}{0.30}
+\toprule
+\thead{Family group} & \thead{Semantic axis} \\
+\midrule
+Patricia integer maps and sets & Ascending signed 32/64-bit key order, with rank
+gaps. \\
+Measured sequences, deques, reversible deques, RRB vectors, range-update
+sequences, ropes and text & Position, or an ordered measure boundary. Text units
+remain language-local. \\
+Sorted bags, sets, and maps; canonical sorted sets; priority search queues;
+interval trees and maps; chunked bit sets & Comparer order, interval order, key
+order, or population-rank gaps, as owned by the family. \\
+Neutral Ordered sets, maps, multimaps & Explicit position; the multimap
+additionally exposes nested group and value positions. \\
+Merkle search trees & Policy comparer order, with authenticated persistent
+edits. \\
+\midrule
+CHAMP maps, sets, and their derived facades & \emph{No public cursor.} The
+lookup and edit path is private, because hash enumeration is not semantic order. \\
+Ctrie live views, graphs, heaps without a stable order, builders, sessions,
+stores, proofs, packs, \code{DabaLite} & \emph{No persistent cursor.} No stable
+neighbour axis, or not a persistent aggregate at all. \\
+\bottomrule
+\end{d7table}
+
+\section{One focused representation, many checkpoints}
+
+Here, once more, is the reference-versus-checkpoint pattern --- and this is its
+most consequential instance, because the difference is a complexity claim rather
+than an implementation detail.
+
+The C\# positional rope cursor uses the \term{focused} representation selected
+after an explicit design comparison: a readonly struct over immutable version and
+navigation-context references, holding a bounded 16-element active focus with at
+most one partial carry of fewer than 256 elements on each side.\index{cursor!focused representation} Movement and
+edits return cursor values; navigation shares the logical version and its
+snapshot memo; an edit creates a new version state. The measured cursor extends
+the same model with exact ordered \code{MeasureBefore} and \code{MeasureAfter}
+and an absolute measure seek, preparing element measures in the cursor lineage
+and sharing them with descendants.
+
+\begin{contractbox}[Snapshots and racing readers]
+A cursor created from a rope starts with that exact rope as its clean cached
+snapshot. A dirty first \code{Snapshot()} performs bounded focus and carry
+packing plus a canonical tree join, and publishes one winner through an
+interlocked compare-exchange --- racing callers all receive that same rope
+reference. A failed candidate publishes nothing, so the cursor stays reusable.
+Later snapshots from any navigation cursor over the same logical version are
+\bigoh{1} and reference-identical. Initialised cursor values are immutable and
+safe for concurrent reads, including concurrent first snapshots.
+\end{contractbox}
+
+\begin{caveatbox}[The proven complexity scope is a \emph{lineage}, not a DAG]
+Creation and arbitrary seek are \bigoh{\log n}. Focus-local peeks, movement, and
+single-element edits are \bigoh{1} amortised \emph{along one linear version
+lineage}, with \bigoh{\log n} worst-case boundary repair. Range insertion of $m$
+elements is \bigoh{m + \log n} amortised. A dirty snapshot is bounded packing
+plus an \bigoh{\log n} join; clean repeated snapshots are \bigoh{1}.
+
+There is no arbitrary-version-DAG amortised bound. Editing $b$ independently
+retained cursors at a carry, chunk, or lazy-spine boundary carries the
+conservative \bigoh{b \log n} aggregate bound plus bounded per-branch copying,
+because potential consumed by one child cannot pay for a sibling. This is
+Chapter~\ref{ch:persistence}'s branching caveat, arriving exactly where it was
+predicted to.
+\end{caveatbox}
+
+The other eight ports ship \term{snapshot-plus-gap} checkpoints: an
+already-canonical retained collection plus a validated position, delegating edits
+to ordinary persistent operations.\index{cursor!snapshot-plus-gap} Creation, navigation, positional seek, and
+snapshot are \bigoh{1}; measures, peeks, point edits, and search are
+\bigoh{\log n} plus bounded chunk work; range insertion is \bigoh{m + \log n}.
+They preserve every observable behaviour --- gap semantics, branching,
+unconditional replacement, retained snapshots, presence-safe peeks, ordered
+before/after measures, absolute prefix search --- and they claim no focused
+representation, no snapshot memo, no allocation or callback ceiling, no
+amortised locality, and no benchmark parity. Their API notes say so in those
+words.
+
+\begin{contractbox}[Measured cursor result semantics, everywhere]
+\code{MeasureBefore} aggregates $[0, p)$ and \code{MeasureAfter} aggregates
+$[p, n)$; combining them \emph{in that order} yields the whole version's measure
+--- without assuming an inverse, commutativity, element equality, or a
+default-value identity.
+
+Absolute measure seek selects the gap before the first element whose inclusive
+prefix satisfies a lawful monotone predicate. A predicate already true at the
+identity selects zero for a non-empty collection; misses and empty collections
+return false together with an end cursor whose before-measure is the whole
+measure.
+
+A same-position seek and an empty range insertion preserve the exact stored
+version state. \code{ReplaceNext} deliberately does \emph{not} consult element
+equality: it always creates a new logical version, and measured replacement
+invokes the element-measure callback for the supplied replacement even when the
+object is identical.
+\end{contractbox}
+
+\begin{asidebox}[Why cursors instead of self-adjusting structures]
+The classical answer to ``make repeated local access cheap'' is a self-adjusting
+structure --- a splay tree, a move-to-front list. Both are rejected here for two
+independent reasons worth recording so the idea is not re-litigated.
+
+First, \textbf{reads would allocate}. Adapting on read means path-copying on
+read: every lookup produces a new version or mutates shared state, destroying
+both the allocation-free read contract and thread-safe sharing of versions.
+
+Second, \textbf{shared versions have contradictory access patterns}. Two
+consumers holding the same version would each want it shaped for \emph{their}
+access sequence, and the amortised potential argument assumes one linear
+history --- the same failure mode as the branching caveat above.
+
+The cursor is the substitute: per-consumer locality, held by the consumer,
+without ever reshaping shared state.
+\end{asidebox}
+
+% ===========================================================================
+%  APPENDICES
+% ===========================================================================
+\appendix
+\part{Reference}
+\label{part:reference}
+
+\chapter{Complexity at a Glance}
+\label{app:complexity}
+
+\noindent
+Bounds are for the mature reference ports unless noted. Where a port ships a
+checkpoint with a weaker asymptotic claim, its own API notes are authoritative
+--- see the checkpoint caveats in the relevant chapter. Throughout, $n$ is the
+receiver's size, $m$ the argument's, $c$ a collision-bucket or chunk count, and
+$d$ a distance from the nearer end.
+
+\begin{d7tablethree}{0.29}{0.30}
+\toprule
+\thead{Structure} & \thead{Operation} & \thead{Bound} \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{\color{d7slate}Hash tries}}\\
+\code{PersistentHashMap} / \code{Set} & lookup, insert, remove &
+\bigoh{\log_{32} n}, $+$ \bigoh{c} on collision \\
+ & \code{GetOrAdd} / \code{AddOrUpdate} & one hash, one descent \\
+ & equality / diff, shared ancestry & visited non-shared regions $+$ differences \\
+ & equality / diff, independent & \bigoh{n+m}; \bigoh{c^2} per bucket \\
+\code{PersistentHashBag} & point ops, algebra & as the underlying map \\
+\code{PersistentBiMap} & add, set, remove & two map operations \\
+ & \code{Inverse} & \bigoh{1} \\
+\code{PersistentHashMultimap} & pair add / remove & \bigoh{\log_{32} n} \\
+\code{PersistentRelation} & \code{Inverse} & \bigoh{1} index swap \\
+\code{PersistentChunkedBitSet} & membership, rank, select & \bigoh{\log c} \\
+ & algebra & sparse word-stream merge \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{\color{d7slate}Integer tries}}\\
+\code{PersistentIntMap} / \code{Set} & point operations & \bigoh{\min(n, W)} \\
+ & union / intersect / except & visited non-shared prefixes; \bigoh{n+m} worst
+case \\
+ & no-op merge & reference identity preserved \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{\color{d7slate}Sequences}}\\
+\code{FingerTreeDeque} & push / pop at either end & \bigoh{1} amortised \\
+ & index, split at position & \bigoh{\log d} \\
+ & concat & \bigoh{\log \min(n,m)} \\
+\code{RrbVector} & index & \bigoh{\log_{32} n}, uniform \\
+ & endpoint operations & \bigoh{\log_{32} n} (no persistent tail) \\
+ & concat & \bigoh{\log_{32}(n+m)} \\
+\code{Rope} / \code{MeasuredRope} & index, point edit & \bigoh{\log n} $+$
+bounded chunk work \\
+ & concat / split & \bigoh{\log \min} / \bigoh{\log n} \\
+\code{RangeUpdateSequence} & whole-sequence tag & \bigoh{1}, one new root \\
+ & subrange tag, range measure & \bigoh{\log n} \\
+ & point edit, split, concat & \bigoh{\log n} \\
+\code{ReversibleDeque} & \code{Reverse} & \bigoh{1} \\
+\code{DabaLite} & insert / evict / query & \bigoh{1} worst case; $\leq 3/2/1$
+combines \\
+ & \code{Clear} & \bigoh{1} managed; \bigoh{n+c} native \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{\color{d7slate}Ordered and priority}}\\
+\code{SortedBag} / \code{Set} / \code{Dictionary} & lookup, insert, remove &
+\bigoh{\log n} \\
+ & rank, select & \bigoh{\log n} \\
+\code{CanonicalSortedSet} & insert, remove & expected \bigoh{\log n} path copy;
+\bigoh{n} adversarial \\
+ & inequality via digest & \bigoh{1} in the usual case \\
+ & equality, independent sets & \bigoh{n} \\
+\code{PersistentOrderedSet} / \code{Map} & membership, append & \bigoh{\log_{32}
+n} $+$ sequence cost \\
+ & positional read, move & \bigoh{\log n} \\
+\code{PriorityQueue} & peek & \bigoh{1} amortised \\
+ & enqueue, dequeue & \bigoh{\log n} amortised \\
+ & meld & \bigoh{\log \min} amortised \\
+\code{BrodalOkasakiHeap} & minimum, insert, meld & \bigoh{1} \textbf{worst case} \\
+ & delete-minimum & \bigoh{\log n} worst case \\
+\code{PrioritySearchQueue} & minimum & \bigoh{1} \\
+ & keyed update, remove, delete-min & \bigoh{\log n} \\
+ & key-range $+$ priority query & \bigoh{\log n + v}, $v \leq n$ \\
+\code{IntervalTree} / \code{PersistentIntervalMap} & insert, remove, exact
+lookup & \bigoh{\log n} \\
+ & stabbing / overlap & \bigoh{\log n + \text{reported}}, with subtree pruning \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{\color{d7slate}Authenticated}}\\
+\code{MerkleSearchTree} & lookup, insert, remove & \bigoh{\log_{16} n} \\
+ & root digest & \bigoh{1} cached \\
+ & \code{Save} / \code{Load} & \bigoh{\text{blocks}}, fully re-verified \\
+ & synchronise & frontier blocks only \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{\color{d7slate}Lifecycle and navigation}}\\
+Bulk builder & per entry & unpublished in-place node mutation \\
+Editing session & adopt, publish & \bigoh{1} trie work \\
+ & per edit (C\# owner-token) & owned-node mutation, no path copy \\
+ & per edit (sibling ports) & ordinary persistent path copy \\
+Cursor (focused, C\# rope) & local move, single edit & \bigoh{1} amortised, one
+lineage \\
+ & arbitrary seek & \bigoh{\log n} \\
+ & $b$ retained branches at a boundary & \bigoh{b \log n} aggregate \\
+Cursor (checkpoint ports) & create, navigate, seek, snapshot & \bigoh{1} \\
+ & peek, point edit, measure, search & \bigoh{\log n} $+$ chunk work \\
+ & range insert of $m$ & \bigoh{m + \log n} \\
+\bottomrule
+\end{d7tablethree}
+
+\chapter{The Same Structure in Nine Languages}
+\label{app:names}
+
+\noindent
+Names are idiomatic per port; semantics are not. Where a port's spelling differs
+structurally --- a nested type, a module, a handle --- the difference is
+notational.
+
+\begin{d7table}{0.26}
+\toprule
+\thead{Family} & \thead{Spellings} \\
+\midrule
+Persistent hash map &
+\code{PersistentHashMap<TKey, TValue>} (C\#, Kotlin, TypeScript, Python);
+\code{PersistentHashMap<K, V, S>} (Rust);
+\code{persistent\_hash\_map<Key, T, Hash, KeyEqual, ValueEqual>} (C\texttt{++});
+\code{HashMap k v} (Haskell);
+\code{d7\_hamt\_map} (C);
+\code{Persistent\_hamt} (OCaml). \\
+Persistent hash set &
+\code{PersistentHashSet<T>}; \code{persistent\_hash\_set<T, Hash, KeyEqual>};
+\code{HashSet a}; \code{d7\_hamt\_set}; \code{Persistent\_hash\_set}. \\
+Editing session &
+nested \code{Transient} (C\#, Kotlin, C\texttt{++}, OCaml);
+\code{TransientHashMap}/\code{Set} (Rust, TypeScript, Python);
+\code{MapTransient}/\code{SetTransient} (Haskell);
+\code{d7\_hamt\_map\_transient} (C). \\
+Hash bag &
+\code{PersistentHashBag}; \code{persistent\_hash\_bag}; \code{HashBag a};
+\code{d7\_hamt\_bag}; \code{Persistent\_hash\_bag}. \\
+Bidirectional map &
+\code{PersistentBiMap}; \code{persistent\_bi\_map}; \code{BiMap k v};
+\code{d7\_hamt\_bi\_map}; \code{Persistent\_bi\_map}. \\
+Integer Patricia &
+\code{PersistentIntMap}/\code{IntSet}/\code{LongMap}/\code{LongSet};
+\code{persistent\_int\_map} etc.; \code{IntMap32}/\code{IntMap64}/
+\code{IntSet32}/\code{IntSet64} (Haskell); \code{d7\_int\_map} etc.;
+\code{Persistent\_patricia}. \\
+Concurrent trie &
+\code{ConcurrentHashTrie} (C\#, Kotlin --- full protocol; TypeScript, Python ---
+facade); \code{Concurrent\_hash\_trie} (OCaml facade). \\
+Merkle search tree &
+\code{MerkleSearchTree<TKey, TValue>}; \code{merkle\_search\_tree};
+\code{MerkleSearchTree k v}; \code{d7\_merkle\_search\_tree}; \code{Merkle\_*}
+modules (OCaml). \\
+Persistent deque &
+\code{FingerTreeDeque<T>} (C\#); \code{PersistentDeque<T>} (Kotlin, Rust,
+TypeScript, Python); \code{persistent\_deque<T>} (C\texttt{++});
+\code{Deque a} (Haskell); \code{ft\_persistent\_deque} (C);
+\code{Persistent\_deque} (OCaml). \\
+Measured tree &
+\code{FingerTree<TElement, TMeasure, TMeasureOps>} (C\#);
+\code{FingerTree<T, M>} / \code{FingerTree<T, P>} (Kotlin, TypeScript, Rust);
+\code{finger\_tree<Element, MeasurePolicy>} (C\texttt{++});
+\code{FingerTree v a} (Haskell); \code{ft\_tree} (C);
+\code{Measured\_tree} / \code{Measured\_sequence} (OCaml). \\
+RRB vector &
+\code{RrbVector<T>} and builder; \code{rrb\_vector<T>} /
+\code{rrb\_vector\_builder<T>}; \code{RrbVector a};
+\code{ft\_rrb\_vector} / \code{ft\_rrb\_builder}; \code{Rrb\_vector}. \\
+Reversible deque &
+\code{ReversibleDeque<T>}; \code{reversible\_deque<T>};
+\code{ReversibleDeque a}; \code{ft\_reversible\_deque}; \code{Reversible\_deque}. \\
+Range-update sequence &
+\code{RangeUpdateSequence<TElement, TMeasure, TTag, TOps>} (C\#);
+\code{RangeUpdateSequence<T, M, Tag>} (Kotlin, TypeScript);
+\code{range\_update\_sequence<Element, Algebra>} (C\texttt{++});
+\code{RangeUpdateSequence} (Haskell, Rust, Python);
+\code{ft\_range\_update\_sequence} (C); \code{Range\_update\_sequence} (OCaml). \\
+Ropes and text &
+\code{Rope<T>}, \code{MeasuredRope<\ldots>}, \code{TextRope} / \code{RopeText};
+\code{rope<T>}, \code{measured\_rope<\ldots>}, \code{text\_rope};
+\code{Rope a}, \code{MeasuredRope v a}, \code{TextRope};
+\code{ft\_rope}, \code{ft\_measured\_rope}, \code{ft\_text\_rope};
+\code{Rope}, \code{Measured\_rope}, \code{Text\_rope}. \\
+Sorted collections &
+\code{SortedBag<T>}, \code{SortedSet<T>}, \code{SortedDictionary<TKey, TValue>}
+(C\#); \code{SortedMap<K, V>} elsewhere; \code{sorted\_bag}/\code{sorted\_set}/
+\code{sorted\_map} (C\texttt{++}); \code{ft\_sorted\_multiset}/\code{\_set}/
+\code{\_map} (C); \code{Sorted\_bag}/\code{Sorted\_set}/\code{Sorted\_map}
+(OCaml). \\
+Canonical sorted set &
+\code{CanonicalSortedSet<T>} and \code{ZipTreeRankPolicy<T>};
+\code{canonical\_sorted\_set<T>} and \code{zip\_tree\_rank\_policy<T>};
+\code{ft\_canonical\_sorted\_set} and \code{ft\_canonical\_policy} (C);
+\code{Canonical\_sorted\_set} (OCaml). \\
+Priority queue &
+\code{PriorityQueue<TElement, TPriority>};
+\code{priority\_queue<Element, Priority, Comparison>};
+\code{PriorityQueue p a} (Haskell); \code{ft\_priority\_queue};
+\code{Priority\_queue}. \\
+Brodal--Okasaki heap &
+\code{BrodalOkasakiHeap<T>}; \code{brodal\_okasaki\_heap<T, Less>};
+\code{BrodalOkasakiHeap a}; \code{ft\_brodal\_heap};
+\code{Brodal\_okasaki\_heap}. \\
+Priority search queue &
+\code{PrioritySearchQueue<TKey, TPriority, TValue>};
+\code{priority\_search\_queue<K, P, V, KeyLess, PriorityLess>};
+\code{PrioritySearchQueue k p v}; \code{ft\_priority\_search\_queue};
+\code{Priority\_search\_queue}. \\
+Interval tree and map &
+\code{IntervalTree<T>}, \code{Interval<T>},
+\code{PersistentIntervalMap}; \code{interval\_tree<T, Comparison>};
+\code{IntervalTree a}; \code{ft\_interval\_tree},
+\code{ft\_persistent\_interval\_map}; \code{Interval\_tree},
+\code{Persistent\_interval\_map}. \\
+Sliding-window aggregator &
+\code{DabaLite<T, TMonoid>} (C\#); \code{DabaLite<T>} / \code{DabaLite<T, M>};
+\code{daba\_lite<T, P>}; \code{ft\_daba\_lite}; \code{Daba\_lite}. \\
+Derived compositions &
+\code{PersistentHashMultimap}, \code{PersistentRelation},
+\code{PersistentOrderedMap}, \code{PersistentOrderedMultimap},
+\code{PersistentMapPatch}, \code{PersistentDirectedGraph},
+\code{PersistentIndexedMap}, \code{PersistentChunkedBitSet} --- with
+\code{snake\_case} in C\texttt{++}/OCaml/Python, \code{d7\_}/\code{ft\_} prefixes
+in C, and bare names in Haskell. \\
+\bottomrule
+\end{d7table}
+
+\chapter{Roads Not Taken}
+\label{app:roads}
+
+\noindent
+A library is defined as much by what it declines to build. These decisions are
+recorded so that they are not silently re-litigated, and each carries the reason
+that would have to change for the answer to change.
+
+\section{Rejected outright}
+
+\begin{description}
+\item[Self-adjusting structures.] Splay trees, move-to-front lists, and their
+relatives fight persistence twice over: adapting on read means path-copying on
+read, destroying the allocation-free read contract; and two consumers sharing a
+version want it shaped for two different access sequences, so the amortised
+potential argument has no single history to be proved over. The substitutes are
+cursors and the planned frozen read-phase optimisation.
+
+\item[Strict Fibonacci and hollow heaps.] Both achieve optimal decrease-key
+bounds through aggressive pointer mutation, which is precisely the surgery
+persistent path copying destroys.
+
+\item[Kaplan--Tarjan real-time deques.] Their \bigoh{1} \emph{worst-case}
+endpoints and catenation are genuinely attractive, but the shipped deque's
+amortisation spikes are already rare and logarithmic --- memoised suspensions
+spread the debt --- and the implementation is notoriously intricate (redundant
+counting systems, multiple bootstrapping layers) with constants that typically
+lose on real workloads. The useful deliverable instead is to \emph{measure and
+publish} the shipped deque's worst observed pause, so a future latency-critical
+consumer can decide with data.
+\end{description}
+
+\section{Postponed, with a named gate}
+
+\begin{description}
+\item[Size-tiered small representations.] Below a threshold, represent the
+collection as a flat array; promote at the threshold; demote with hysteresis.
+Clojure's \code{PersistentArrayMap} and Rust's \code{im::Vector} both do it, and
+it targets exactly the regime where persistent maps lose worst --- the
+three-entry map that most programs hold thousands of. It is classified as
+\emph{strong but postponed}: thresholds must be benchmark-derived rather than
+guessed, hysteresis must prevent flapping, and representation dispatch must not
+tax the large case. Two supporting arguments are already recorded: a
+general-purpose library owns its own equality, enumeration, and no-op identity
+contracts and can therefore guarantee representation-blindness; and a
+\emph{constant} promotion threshold costs \bigoh{1} worst case, so unlike an
+\bigoh{n}-at-threshold scheme it survives branching persistence.
+
+\item[The frozen collection tier.] Designed, prototyped, and gated on lookup,
+enumeration, memory, and realistic construction break-even evidence
+(Chapter~\ref{ch:lifecycle}).
+
+\item[Key-type-specialised map construction.] A factory that routes integer keys
+to the Patricia trie, byte-comparable keys to an adaptive radix tree, and
+everything else to the hash trie. The honest counterpoint is that one facade
+unifying three cores costs either virtual dispatch or a fat discriminated union
+on \emph{every} operation, and the cheaper design is separate public types plus a
+documentation-level decision table. Postponed in the separate-types form; the ART
+core itself is a real project, gated on a consumer with genuine prefix-query or
+byte-ordered-key needs.
+
+\item[The order-maintenance list.] The Dietz--Sleator structure that answers
+``does $A$ precede $B$?'' in \bigoh{1} with amortised \bigoh{1} insertion, via
+two-level integer labels and local relabelling. Plausible, and waiting for a
+named general consumer --- dependency graphs, document anchors, CRDT position
+identifiers. The honest caveat is already written: relabelling amortisation is a
+linear-history argument, so a version branched before a relabel can re-pay it,
+and the public type would have to state its worst case per produced version.
+
+\item[\code{MerkleHamt}.] Content addressing over the unordered hash trie. The
+ordered Merkle search tree subsumes most of its uses and adds range queries and
+range synchronisation; if revived, it must reuse equally explicit hashing,
+encoding, verification-budget, and trust-boundary contracts.
+\end{description}
+
+\section{Shipped as documentation rather than as a type}
+
+\begin{description}
+\item[The styled-text rope.] A text rope carrying formatting runs --- a measured
+rope for content plus a run sequence (ideally the range-update sequence, so
+``bold lines 10--500'' is one logarithmic tag) keeping style spans aligned under
+edits. This is a composition showcase, and by the repository's own
+parity-economics rule it ships as a \emph{sample plus documentation pattern}
+rather than as a tenth family in nine languages. The editor samples are its
+natural home.
+\end{description}
+
+\chapter{Further Reading}
+\label{app:reading}
+
+\noindent
+The papers behind the structures, roughly in the order the book meets them.
+
+\begin{d7table}{0.34}
+\toprule
+\thead{Topic} & \thead{Source} \\
+\midrule
+Persistence, formally & Driscoll, Sarnak, Sleator \& Tarjan, ``Making Data
+Structures Persistent'', \textit{JCSS}, 1989. \\
+The functional canon & Okasaki, \textit{Purely Functional Data Structures},
+Cambridge University Press, 1998. \\
+Hash array mapped tries & Bagwell, ``Ideal Hash Trees'', EPFL technical report,
+2001. \\
+CHAMP & Steindorfer \& Vinju, ``Optimizing Hash-Array Mapped Tries for Fast and
+Lean Immutable JVM Collections'', \textit{OOPSLA}, 2015. \\
+Mergeable integer maps & Okasaki \& Gill, ``Fast Mergeable Integer Maps'',
+\textit{ML Workshop}, 1998. \\
+Concurrent hash tries & Prokopec, Bronson, Bagwell \& Odersky, ``Concurrent
+Tries with Efficient Non-Blocking Snapshots'', \textit{PPoPP}, 2012. \\
+Finger trees & Hinze \& Paterson, ``Finger Trees: A Simple General-Purpose Data
+Structure'', \textit{JFP}, 2006. \\
+RRB trees & Bagwell \& Rompf, ``RRB-Trees: Efficient Immutable Vectors'', EPFL
+technical report, 2011; Stucki, Rompf, Ureche \& Bagwell, ``RRB Vector: A
+Practical General Purpose Immutable Sequence'', \textit{ICFP}, 2015. \\
+Zip trees & Tarjan, Levy \& Timmel, ``Zip Trees'', 2018/2019. \\
+Zip-zip trees & Gila, Goodrich \& Tarjan, ``Zip-Zip Trees: Making Zip Trees More
+Balanced, Biased, Compact, or Persistent'', 2023. \\
+Worst-case meldable heaps & Brodal \& Okasaki, ``Optimal Purely Functional
+Priority Queues'', \textit{JFP}, 1996. \\
+Strict Fibonacci heaps & Brodal, Lagogiannis \& Tarjan, \textit{STOC}, 2012.
+\emph{(Recorded rejection.)} \\
+Hollow heaps & Hansen, Kaplan, Tarjan \& Zwick, \textit{ICALP}, 2015.
+\emph{(Recorded rejection.)} \\
+Priority search queues & Hinze, ``A Simple Implementation Technique for Priority
+Search Queues'', \textit{ICFP}, 2001. \\
+Sliding-window aggregation & Tangwongsan, Hirzel \& Schneider, \textit{DEBS},
+2017; and the \textit{VLDB Journal}, 2021, article introducing the Lite
+representation. \\
+Merkle search trees & Auvolat \& Taïani, ``Merkle Search Trees: Efficient
+State-Based CRDTs in Open Networks'', \textit{SRDS}, 2019. \\
+Real-time deques & Kaplan \& Tarjan, ``Purely Functional, Real-Time Deques with
+Catenation'', \textit{JACM}, 1999. \emph{(Recorded rejection.)} \\
+Order maintenance & Dietz \& Sleator, 1987; Bender et al., ``Two Simplified
+Algorithms for Maintaining Order in a List'', 2002. \emph{(Postponed.)} \\
+Adaptive radix trees & Leis, Kemper \& Neumann, ``The Adaptive Radix Tree'',
+\textit{ICDE}, 2013. \emph{(Postponed.)} \\
+\bottomrule
+\end{d7table}
+
+\bigskip
+\noindent
+Within the repository itself, the authoritative documents are the
+\textit{data-structure catalog}, the \textit{semantic contracts reference}, the
+\textit{frontier} and \textit{derived structure catalogs}, and each workspace's
+own API specification, header, and validation guide.
+
+% ===========================================================================
+%  BACK MATTER
+% ===========================================================================
+\backmatter
+
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{Index}
+\markboth{\textsc{index}}{\textsc{index}}
+{\small
+ \setlength{\columnsep}{18pt}
+ \renewcommand{\indexname}{Index}
+ \printindex}
+
+\cleardoublepage
+\thispagestyle{empty}
+\null\vfill
+\begin{center}
+\begin{tikzpicture}[scale=0.8]
+  \foreach \x/\y in {0/0, -1.1/-0.9, 1.1/-0.9, -1.9/-1.8, -0.3/-1.8, 1.9/-1.8}
+    {\node[circle, draw=d7rule, fill=white, line width=0.6pt,
+           minimum size=2.4mm, inner sep=0pt] at (\x,\y) {};}
+  \draw[draw=d7rule] (0,0) -- (-1.1,-0.9) -- (-1.9,-1.8);
+  \draw[draw=d7rule] (-1.1,-0.9) -- (-0.3,-1.8);
+  \draw[draw=d7rule] (0,0) -- (1.1,-0.9) -- (1.9,-1.8);
+  \draw[draw=d7rule] (1.1,-0.9) -- (-0.3,-1.8);
+\end{tikzpicture}
+
+\vspace{22pt}
+{\sffamily\footnotesize\color{d7slate}
+ \textsc{the durable7 field guide}\par
+ \vspace{4pt}
+ Every operation returns a new version\\and leaves the old one untouched.\par}
+\end{center}
+\vfill
 
 \end{document}
