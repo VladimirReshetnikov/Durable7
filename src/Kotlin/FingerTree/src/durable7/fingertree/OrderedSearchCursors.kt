@@ -24,35 +24,66 @@ public class SortedBagCursor<T> private constructor(
             SortedBagCursor(value, position)
     }
 
+    /** Number of elements in the bag version this cursor is positioned in. */
     public val size: Int get() = value.size
+    /** Whether the gap precedes the first element. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final element. */
     public val isAtEnd: Boolean get() = position == size
 
+    /** The element before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): SequenceCursorPeek<T>? =
         if (isAtStart) null else SequenceCursorPeek(value.cursorItemAt(position - 1))
 
+    /** The element after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): SequenceCursorPeek<T>? =
         if (isAtEnd) null else SequenceCursorPeek(value.cursorItemAt(position))
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same bag version.
+     */
     public fun movePrevious(): SortedBagCursor<T>? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): SortedBagCursor<T>? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given rank gap of the same bag version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Int): SortedBagCursor<T>? = value.cursorAt(rank)
 
+    /**
+     * Add [item] and return a cursor just after it. The gap moves to the item's sorted position
+     * rather than staying where it was, because placement is decided by the ordering and not by
+     * the cursor. A bag admits duplicates, so this always adds.
+     */
     public fun add(item: T): SortedBagCursor<T> {
         val insertionRank = value.countAtMost(item)
         return create(value.add(item), Math.addExact(insertionRank, 1))
     }
 
+    /**
+     * Remove the element before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): SortedBagCursor<T>? =
         if (isAtStart) null else create(value.cursorRemoveAt(position - 1), position - 1)
 
+    /**
+     * Remove the element after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): SortedBagCursor<T>? =
         if (isAtEnd) null else create(value.cursorRemoveAt(position), position)
 
+    /**
+     * The bag version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): SortedBag<T> = value
 }
 
@@ -85,39 +116,70 @@ public class SortedSetCursor<T> private constructor(
             SortedSetCursor(value, position)
     }
 
+    /** Number of elements in the set version this cursor is positioned in. */
     public val size: Int get() = value.size
+    /** Whether the gap precedes the first element. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final element. */
     public val isAtEnd: Boolean get() = position == size
 
+    /** The element before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): SequenceCursorPeek<T>? =
         if (isAtStart) null else SequenceCursorPeek(value.cursorItemAt(position - 1))
 
+    /** The element after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): SequenceCursorPeek<T>? =
         if (isAtEnd) null else SequenceCursorPeek(value.cursorItemAt(position))
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same set version.
+     */
     public fun movePrevious(): SortedSetCursor<T>? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): SortedSetCursor<T>? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given rank gap of the same set version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Int): SortedSetCursor<T>? = value.cursorAt(rank)
 
+    /**
+     * Add [item] and return a cursor just after it. The gap moves to the item's sorted position,
+     * because placement is decided by the ordering and not by the cursor. Adding an element
+     * already present keeps the stored representative and leaves the set unchanged.
+     */
     public fun add(item: T): SortedSetCursor<T> {
         val location = value.cursorAtLowerBound(item)
         return create(value.add(item), Math.addExact(location.position, 1))
     }
 
+    /**
+     * Remove the element before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): SortedSetCursor<T>? {
         val item = peekPrevious() ?: return null
         return create(value.remove(item.value), position - 1)
     }
 
+    /**
+     * Remove the element after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): SortedSetCursor<T>? {
         val item = peekNext() ?: return null
         return create(value.remove(item.value), position)
     }
 
+    /**
+     * The set version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): SortedSet<T> = value
 }
 
@@ -150,29 +212,52 @@ public class SortedMapCursor<K, V> private constructor(
             SortedMapCursor(value, position)
     }
 
+    /** Number of entrys in the map version this cursor is positioned in. */
     public val size: Int get() = value.size
+    /** Whether the gap precedes the first entry. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final entry. */
     public val isAtEnd: Boolean get() = position == size
 
+    /** The entry before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): SequenceCursorPeek<SortedMapEntry<K, V>>? =
         if (isAtStart) null else SequenceCursorPeek(checkNotNull(value.entryAt(position - 1)))
 
+    /** The entry after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): SequenceCursorPeek<SortedMapEntry<K, V>>? =
         if (isAtEnd) null else SequenceCursorPeek(checkNotNull(value.entryAt(position)))
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same map version.
+     */
     public fun movePrevious(): SortedMapCursor<K, V>? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): SortedMapCursor<K, V>? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given key-order rank gap of the same map version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Int): SortedMapCursor<K, V>? = value.cursorAt(rank)
 
+    /**
+     * Insert [key] with [item] and return a cursor just after the entry. The gap moves to the
+     * key's sorted position. An existing key is overwritten; use [tryInsert] to detect that
+     * instead.
+     */
     public fun insert(key: K, item: V): SortedMapCursor<K, V> {
         val location = value.cursorAtLowerBound(key)
         return create(value.insert(key, item), Math.addExact(location.position, 1))
     }
 
+    /**
+     * Insert [key] with [item] only when the key is absent, reporting whether it was added. On a
+     * collision the returned cursor sits at the existing entry and the map is unchanged.
+     */
     public fun tryInsert(key: K, item: V): OrderedCursorInsert<SortedMapCursor<K, V>> {
         val location = value.cursorAtLowerBound(key)
         val result = value.tryInsert(key, item)
@@ -182,6 +267,7 @@ public class SortedMapCursor<K, V> private constructor(
         )
     }
 
+    /** Bind [key] to [item], adding or replacing as needed, and return a cursor after the entry. */
     public fun setItem(key: K, item: V): SortedMapCursor<K, V> {
         val location = value.findCursor(key)
         return create(
@@ -190,21 +276,37 @@ public class SortedMapCursor<K, V> private constructor(
         )
     }
 
+    /**
+     * Replace the value of the entry after the gap, keeping its key and the gap position, or
+     * `null` at the end.
+     */
     public fun setNextValue(item: V): SortedMapCursor<K, V>? {
         val entry = peekNext()?.value ?: return null
         return create(value.setItem(entry.key, item), position)
     }
 
+    /**
+     * Remove the entry before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): SortedMapCursor<K, V>? {
         val entry = peekPrevious()?.value ?: return null
         return create(value.remove(entry.key), position - 1)
     }
 
+    /**
+     * Remove the entry after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): SortedMapCursor<K, V>? {
         val entry = peekNext()?.value ?: return null
         return create(value.remove(entry.key), position)
     }
 
+    /**
+     * The map version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): SortedMap<K, V> = value
 }
 
@@ -236,39 +338,70 @@ public class CanonicalSortedSetCursor<T> private constructor(
             CanonicalSortedSetCursor(value, position)
     }
 
+    /** Number of elements in the set version this cursor is positioned in. */
     public val size: Int get() = value.size
+    /** Whether the gap precedes the first element. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final element. */
     public val isAtEnd: Boolean get() = position == size
 
+    /** The element before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): SequenceCursorPeek<T>? =
         if (isAtStart) null else SequenceCursorPeek(value.cursorItemAt(position - 1))
 
+    /** The element after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): SequenceCursorPeek<T>? =
         if (isAtEnd) null else SequenceCursorPeek(value.cursorItemAt(position))
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same set version.
+     */
     public fun movePrevious(): CanonicalSortedSetCursor<T>? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): CanonicalSortedSetCursor<T>? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given rank gap of the same set version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Int): CanonicalSortedSetCursor<T>? = value.cursorAt(rank)
 
+    /**
+     * Add [item] and return a cursor just after it. The gap moves to the item's sorted position,
+     * because placement is decided by the ordering and not by the cursor. The resulting topology
+     * depends only on the contents and the policy, never on the order the elements arrived in.
+     */
     public fun add(item: T): CanonicalSortedSetCursor<T> {
         val location = value.cursorAtLowerBound(item)
         return create(value.add(item), Math.addExact(location.position, 1))
     }
 
+    /**
+     * Remove the element before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): CanonicalSortedSetCursor<T>? {
         val item = peekPrevious() ?: return null
         return create(value.remove(item.value), position - 1)
     }
 
+    /**
+     * Remove the element after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): CanonicalSortedSetCursor<T>? {
         val item = peekNext() ?: return null
         return create(value.remove(item.value), position)
     }
 
+    /**
+     * The set version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): CanonicalSortedSet<T> = value
 }
 
@@ -307,30 +440,56 @@ public class PrioritySearchQueueCursor<K, P, V> private constructor(
         ): PrioritySearchQueueCursor<K, P, V> = PrioritySearchQueueCursor(value, position)
     }
 
+    /** Number of entrys in the queue version this cursor is positioned in. */
     public val size: Int get() = value.size
+    /** Whether the gap precedes the first entry. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final entry. */
     public val isAtEnd: Boolean get() = position == size
 
+    /** The entry before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): SequenceCursorPeek<PrioritySearchEntry<K, P, V>>? =
         if (isAtStart) null else SequenceCursorPeek(checkNotNull(value.cursorEntryAt(position - 1)))
 
+    /** The entry after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): SequenceCursorPeek<PrioritySearchEntry<K, P, V>>? =
         if (isAtEnd) null else SequenceCursorPeek(checkNotNull(value.cursorEntryAt(position)))
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same queue version.
+     */
     public fun movePrevious(): PrioritySearchQueueCursor<K, P, V>? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): PrioritySearchQueueCursor<K, P, V>? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given key-order rank gap of the same queue version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Int): PrioritySearchQueueCursor<K, P, V>? = value.cursorAt(rank)
 
+    /**
+     * Insert [key] with [priority] and [item] and return a cursor just after the entry. The gap
+     * moves to the key's sorted position.
+     *
+     * @throws IllegalArgumentException if an equivalent key is already present; use [tryInsert]
+     * to detect that without an exception.
+     */
     public fun insert(key: K, priority: P, item: V): PrioritySearchQueueCursor<K, P, V> {
         val result = tryInsert(key, priority, item)
         if (!result.added) throw IllegalArgumentException("An equivalent key is already present.")
         return result.cursor
     }
 
+    /**
+     * Insert [key] with [priority] and [item] only when the key is absent, reporting whether it
+     * was added. On a collision the returned cursor sits at the existing entry and the queue is
+     * unchanged.
+     */
     public fun tryInsert(key: K, priority: P, item: V): OrderedCursorInsert<PrioritySearchQueueCursor<K, P, V>> {
         val location = value.cursorAtLowerBound(key)
         val result = value.tryAdd(key, priority, item)
@@ -340,6 +499,10 @@ public class PrioritySearchQueueCursor<K, P, V> private constructor(
         )
     }
 
+    /**
+     * Bind [key] to [priority] and [item], adding or replacing as needed, and return a cursor
+     * after the entry.
+     */
     public fun setItem(key: K, priority: P, item: V): PrioritySearchQueueCursor<K, P, V> {
         val location = value.findCursor(key)
         return create(
@@ -348,21 +511,37 @@ public class PrioritySearchQueueCursor<K, P, V> private constructor(
         )
     }
 
+    /**
+     * Replace the priority and value of the entry after the gap, keeping its key and the gap
+     * position, or `null` at the end.
+     */
     public fun setNext(priority: P, item: V): PrioritySearchQueueCursor<K, P, V>? {
         val entry = peekNext()?.value ?: return null
         return create(value.setItem(entry.key, priority, item), position)
     }
 
+    /**
+     * Remove the entry before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): PrioritySearchQueueCursor<K, P, V>? {
         val entry = peekPrevious()?.value ?: return null
         return create(value.remove(entry.key), position - 1)
     }
 
+    /**
+     * Remove the entry after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): PrioritySearchQueueCursor<K, P, V>? {
         val entry = peekNext()?.value ?: return null
         return create(value.remove(entry.key), position)
     }
 
+    /**
+     * The queue version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): PrioritySearchQueue<K, P, V> = value
 }
 
@@ -406,50 +585,96 @@ public class IntervalTreeCursor<T : Comparable<T>> private constructor(
             IntervalTreeCursor(value, position)
     }
 
+    /** Number of intervals in the tree version this cursor is positioned in. */
     public val size: Int get() = value.size
+    /** Whether the gap precedes the first interval. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final interval. */
     public val isAtEnd: Boolean get() = position == size
 
+    /** The interval before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): Interval<T>? =
         if (isAtStart) null else value.cursorIntervalAt(position - 1)
 
+    /** The interval after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): Interval<T>? =
         if (isAtEnd) null else value.cursorIntervalAt(position)
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same tree version.
+     */
     public fun movePrevious(): IntervalTreeCursor<T>? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): IntervalTreeCursor<T>? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given low-endpoint rank gap of the same tree version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Int): IntervalTreeCursor<T>? = value.cursorAt(rank)
 
+    /**
+     * The next interval strictly after the gap that overlaps [probe], with whether one was found.
+     * A miss leaves the cursor at the end, so repeated calls enumerate every overlap exactly once
+     * without rescanning from the start.
+     */
     public fun seekNextOverlap(probe: Interval<T>): OrderedCursorSearch<IntervalTreeCursor<T>> =
         value.findOverlapCursorFrom(if (isAtEnd) size else position + 1, probe)
 
+    /**
+     * Insert [interval] and return a cursor just after it. The gap moves to the interval's
+     * position in low-endpoint order.
+     */
     public fun insert(interval: Interval<T>): IntervalTreeCursor<T> {
         val location = value.cursorAtLowerBound(interval.low)
         return create(value.insert(interval), Math.addExact(location.position, 1))
     }
 
+    /**
+     * Remove the interval before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): IntervalTreeCursor<T>? =
         if (isAtStart) null else create(value.cursorRemoveAt(position - 1), position - 1)
 
+    /**
+     * Remove the interval after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): IntervalTreeCursor<T>? =
         if (isAtEnd) null else create(value.cursorRemoveAt(position), position)
 
+    /**
+     * The tree version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): IntervalTree<T> = value
 }
 
+/**
+ * A cursor at the given low-endpoint-rank gap of the tree, or `null` when the position lies
+ * outside `0..size`.
+ */
 public fun <T : Comparable<T>> IntervalTree<T>.cursorAt(position: Int): IntervalTreeCursor<T>? =
     if (position in 0..size) IntervalTreeCursor.create(this, position) else null
 
+/** A cursor before the first interval whose low endpoint is not less than [low]. */
 public fun <T : Comparable<T>> IntervalTree<T>.cursorAtLowerBound(low: T): IntervalTreeCursor<T> =
     checkNotNull(cursorAt(cursorLowerBound(low)))
 
+/** A cursor after the last interval whose low endpoint is not greater than [low]. */
 public fun <T : Comparable<T>> IntervalTree<T>.cursorAtUpperBound(low: T): IntervalTreeCursor<T> =
     checkNotNull(cursorAt(cursorUpperBound(low)))
 
+/**
+ * A cursor at [interval] together with whether that exact interval is present; on a miss the
+ * cursor sits at the insertion point. Matching is by both endpoints, so this is exact identity
+ * rather than overlap - use [findOverlapCursor] for the latter.
+ */
 public fun <T : Comparable<T>> IntervalTree<T>.findCursor(
     interval: Interval<T>,
 ): OrderedCursorSearch<IntervalTreeCursor<T>> {
@@ -466,10 +691,18 @@ public fun <T : Comparable<T>> IntervalTree<T>.findCursor(
     return OrderedCursorSearch(false, checkNotNull(cursorAt(start)))
 }
 
+/**
+ * A cursor at the first interval overlapping [probe], with whether one was found. Scans from
+ * the start; use the cursor's own `seekNextOverlap` to continue from where this stopped.
+ */
 public fun <T : Comparable<T>> IntervalTree<T>.findOverlapCursor(
     probe: Interval<T>,
 ): OrderedCursorSearch<IntervalTreeCursor<T>> = findOverlapCursorFrom(0, probe)
 
+/**
+ * A cursor at the first interval containing [point], with whether one was found. Equivalent to
+ * an overlap query against the degenerate interval `[point, point]`.
+ */
 public fun <T : Comparable<T>> IntervalTree<T>.findContainingCursor(
     point: T,
 ): OrderedCursorSearch<IntervalTreeCursor<T>> = findOverlapCursor(Interval(point, point))
@@ -499,32 +732,62 @@ public class PersistentIntervalMapCursor<T : Comparable<T>, V> private construct
         ): PersistentIntervalMapCursor<T, V> = PersistentIntervalMapCursor(value, position)
     }
 
+    /** Number of entrys in the map version this cursor is positioned in. */
     public val size: Int get() = value.size
+    /** Whether the gap precedes the first entry. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final entry. */
     public val isAtEnd: Boolean get() = position == size
 
+    /** The entry before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): IntervalMapEntry<T, V>? =
         if (isAtStart) null else value.entryAt(position - 1)
 
+    /** The entry after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): IntervalMapEntry<T, V>? =
         if (isAtEnd) null else value.entryAt(position)
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same map version.
+     */
     public fun movePrevious(): PersistentIntervalMapCursor<T, V>? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): PersistentIntervalMapCursor<T, V>? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given interval-key rank gap of the same map version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Int): PersistentIntervalMapCursor<T, V>? = value.cursorAt(rank)
 
+    /**
+     * The next entry strictly after the gap whose interval overlaps [probe], with whether one was
+     * found. A miss leaves the cursor at the end, so repeated calls enumerate every overlap
+     * exactly once without rescanning from the start.
+     */
     public fun seekNextOverlap(probe: Interval<T>): OrderedCursorSearch<PersistentIntervalMapCursor<T, V>> =
         value.findOverlapCursorFrom(if (isAtEnd) size else position + 1, probe)
 
+    /**
+     * Insert [interval] with [item] and return a cursor just after the entry. The gap moves to
+     * the interval's key position. An existing interval key is overwritten; use [tryInsert] to
+     * detect that instead.
+     */
     public fun insert(interval: Interval<T>, item: V): PersistentIntervalMapCursor<T, V> {
         val location = value.cursorAtLowerBound(interval)
         return create(value.add(interval, item), Math.addExact(location.position, 1))
     }
 
+    /**
+     * Insert [interval] with [item] only when that exact interval key is absent, reporting
+     * whether it was added. On a collision the returned cursor sits at the existing entry and the
+     * map is unchanged. Exact interval identity is distinct from overlap: an interval that
+     * overlaps others still counts as absent here.
+     */
     public fun tryInsert(interval: Interval<T>, item: V): OrderedCursorInsert<PersistentIntervalMapCursor<T, V>> {
         val location = value.cursorAtLowerBound(interval)
         val result = value.tryAdd(interval, item)
@@ -534,46 +797,82 @@ public class PersistentIntervalMapCursor<T : Comparable<T>, V> private construct
         )
     }
 
+    /**
+     * Replace the value of the entry after the gap, keeping its interval key and the gap
+     * position, or `null` at the end.
+     */
     public fun setNextValue(item: V): PersistentIntervalMapCursor<T, V>? {
         val entry = peekNext() ?: return null
         return create(value.set(entry.interval, item), position)
     }
 
+    /**
+     * Remove the entry before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): PersistentIntervalMapCursor<T, V>? {
         val entry = peekPrevious() ?: return null
         return create(value.remove(entry.interval), position - 1)
     }
 
+    /**
+     * Remove the entry after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): PersistentIntervalMapCursor<T, V>? {
         val entry = peekNext() ?: return null
         return create(value.remove(entry.interval), position)
     }
 
+    /**
+     * The map version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): PersistentIntervalMap<T, V> = value
 }
 
+/**
+ * A cursor at the given interval-key-rank gap of the map, or `null` when the position lies
+ * outside `0..size`.
+ */
 public fun <T : Comparable<T>, V> PersistentIntervalMap<T, V>.cursorAt(
     position: Int,
 ): PersistentIntervalMapCursor<T, V>? =
     if (position in 0..size) PersistentIntervalMapCursor.create(this, position) else null
 
+/** A cursor before the first entry whose interval key is not less than [interval]. */
 public fun <T : Comparable<T>, V> PersistentIntervalMap<T, V>.cursorAtLowerBound(
     interval: Interval<T>,
 ): PersistentIntervalMapCursor<T, V> = checkNotNull(cursorAt(cursorLowerBound(interval)))
 
+/** A cursor after the last entry whose interval key is not greater than [interval]. */
 public fun <T : Comparable<T>, V> PersistentIntervalMap<T, V>.cursorAtUpperBound(
     interval: Interval<T>,
 ): PersistentIntervalMapCursor<T, V> = checkNotNull(cursorAt(cursorUpperBound(interval)))
 
+/**
+ * A cursor at [interval] together with whether that exact interval key is present; on a miss
+ * the cursor sits at the insertion point. Matching is by both endpoints, so this is exact
+ * identity rather than overlap - use [findOverlapCursor] for the latter.
+ */
 public fun <T : Comparable<T>, V> PersistentIntervalMap<T, V>.findCursor(
     interval: Interval<T>,
 ): OrderedCursorSearch<PersistentIntervalMapCursor<T, V>> =
     OrderedCursorSearch(containsKey(interval), cursorAtLowerBound(interval))
 
+/**
+ * A cursor at the first entry whose interval overlaps [probe], with whether one was found.
+ * Scans from the start; use the cursor's own `seekNextOverlap` to continue from where this
+ * stopped.
+ */
 public fun <T : Comparable<T>, V> PersistentIntervalMap<T, V>.findOverlapCursor(
     probe: Interval<T>,
 ): OrderedCursorSearch<PersistentIntervalMapCursor<T, V>> = findOverlapCursorFrom(0, probe)
 
+/**
+ * A cursor at the first entry whose interval contains [point], with whether one was found.
+ * Equivalent to an overlap query against the degenerate interval `[point, point]`.
+ */
 public fun <T : Comparable<T>, V> PersistentIntervalMap<T, V>.findContainingCursor(
     point: T,
 ): OrderedCursorSearch<PersistentIntervalMapCursor<T, V>> = findOverlapCursor(Interval(point, point))
@@ -601,37 +900,67 @@ public class PersistentChunkedBitSetCursor private constructor(
             PersistentChunkedBitSetCursor(value, position)
     }
 
+    /** Number of set bits in the bit set version this cursor is positioned in. */
     public val count: Long get() = value.count
+    /** Whether the gap precedes the first set bit. */
     public val isAtStart: Boolean get() = position == 0L
+    /** Whether the gap follows the final set bit. */
     public val isAtEnd: Boolean get() = position == count
 
+    /** The set bit before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): Int? = if (isAtStart) null else value.select(position - 1)
+    /** The set bit after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): Int? = if (isAtEnd) null else value.select(position)
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged;
+     * movement produces a new cursor over the same bit set version.
+     */
     public fun movePrevious(): PersistentChunkedBitSetCursor? =
         if (isAtStart) null else create(value, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): PersistentChunkedBitSetCursor? =
         if (isAtEnd) null else create(value, position + 1)
 
+    /**
+     * A cursor at the given population rank gap of the same bit set version, or `null` when the
+     * rank lies outside the collection's bounds.
+     */
     public fun seekRank(rank: Long): PersistentChunkedBitSetCursor? = value.cursorAt(rank)
 
+    /**
+     * Set [bitIndex] and return a cursor just after it in population order. Returns this cursor
+     * by identity when the bit is already set.
+     */
     public fun add(bitIndex: Int): PersistentChunkedBitSetCursor {
         if (value.contains(bitIndex)) return this
         val insertionRank = if (bitIndex == 0) 0L else value.rank(bitIndex - 1)
         return create(value.add(bitIndex), Math.addExact(insertionRank, 1))
     }
 
+    /**
+     * Remove the set bit before the gap and return a cursor in its place, or `null` at
+     * the start.
+     */
     public fun deletePrevious(): PersistentChunkedBitSetCursor? {
         val bit = peekPrevious() ?: return null
         return create(value.remove(bit), position - 1)
     }
 
+    /**
+     * Remove the set bit after the gap and return a cursor in its place, or `null` at
+     * the end.
+     */
     public fun deleteNext(): PersistentChunkedBitSetCursor? {
         val bit = peekNext() ?: return null
         return create(value.remove(bit), position)
     }
 
+    /**
+     * The bit set version this cursor is positioned in. Edits made through other cursors
+     * are not visible here.
+     */
     public fun snapshot(): PersistentChunkedBitSet = value
 }
 
