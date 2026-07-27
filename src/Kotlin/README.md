@@ -56,16 +56,19 @@ equality can reject unequal digests before a lockstep structural comparison.
 ## Documentation coverage
 
 Kotlin has no compiler gate for missing KDoc, unlike C# where `CS1591` is an error, so coverage here
-is a convention rather than a guarantee. As of 2026-07-27, 750 of 1,313 public functions and
-properties carry a KDoc comment. The cursor surfaces are complete: `SequenceCursors.kt` and
-`OrderedSearchCursors.kt` document every member, which matters most because the null-at-boundary
-contract, the gap-moves-to-sorted-position behavior of `add`/`insert`, and the exact-key versus
-overlap distinction in the interval collections are not visible in a signature.
+is a convention rather than a guarantee. As of 2026-07-27 it is complete: all 1,313 public functions
+and properties across the three workspaces carry a KDoc comment.
 
-The remaining gap is concentrated in `Sorted.kt`, `Core.kt`, `PersistentPatricia.kt`, `Rope.kt`, and
-`PersistentHamt.kt`. Prefer documenting a member when its contract is not evident from the type -
-what a `null` return means, which version an edit lands in, what an exception signals - over
-restating the signature in prose.
+Keep it that way when adding a member, and aim the comment at what the signature does not already
+say. The contracts that repeatedly need stating in this port are: which `null` return means a
+boundary and which means a stored `null`; which operations return the receiver unchanged rather than
+allocating; which throw rather than coerce when two operands carry different policies; which
+retain the first stored representative instead of the argument just passed in; and, where it is the
+reason a type exists at all, the cost — `ReversibleDeque.reverse` is O(1) and
+`PersistentDeque.reverse` is not.
+
+To check coverage, look for a `public fun`/`val`/`var` at class or top level whose preceding line
+does not end a KDoc block.
 
 Use the repository [semantic contracts reference](../../docs/reference/semantic-contracts.md) when
 checking which persistence, ordering, policy, and representation obligations should align with sibling

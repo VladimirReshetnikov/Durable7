@@ -72,6 +72,7 @@ public class MerkleEncodedBlock(
 ) {
     private val content: ByteArray = bytes.copyOf()
 
+    /** Encoded size of the block in bytes. */
     public val length: Int get() = content.size
 
     /** Returns a newly owned byte copy. */
@@ -191,10 +192,22 @@ public class MerkleSearchTree<K, V> private constructor(
             mergeMerkleTrees(baseTree, left, right, resolver, valuesEqual)
     }
 
+    /** Number of entries. */
     public val size: Int get() = root?.count ?: 0
+    /** Whether the tree holds no entries. */
     public val isEmpty: Boolean get() = root == null
+    /**
+     * Height of the tree. Determined by the entries' hashed levels rather than by insertion order, which is what
+     * makes the shape - and therefore the root hash - depend only on the contents.
+     */
     public val height: Int get() = root?.height ?: 0
+    /** Number of blocks the tree encodes to. */
     public val blockCount: Int get() = root?.blockCount ?: 0
+    /**
+     * The root digest, which identifies the tree's contents. Two trees under the same policy have the same root
+     * hash exactly when they hold the same entries. An empty tree has the policy's designated empty digest rather
+     * than an absent one.
+     */
     public val rootHash: MerkleDigest get() = root?.digest ?: policy.emptyDigest
 
     /** Creates a cursor at the gap before the first entry. */
@@ -253,6 +266,7 @@ public class MerkleSearchTree<K, V> private constructor(
         }
     }
 
+    /** Whether an entry for [key] is present. */
     public fun containsKey(key: K): Boolean = getEntry(key) != null
 
     /** Returns the retained entry, preserving the first equivalent key representative. */

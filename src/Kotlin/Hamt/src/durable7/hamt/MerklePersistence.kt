@@ -131,9 +131,13 @@ public class MerkleBlockPack(
     public val rootHash: MerkleDigest,
     blocks: Iterable<MerkleBlock>,
 ) {
+    /** The blocks in the pack, in the order they were collected. */
     public val blocks: List<MerkleBlock>
+    /** Total encoded size of every block, for budgeting a transfer before making it. */
     public val totalByteCount: Long
+    /** Whether the pack includes the root block. A pack without it cannot be verified on its own. */
     public val containsRootBlock: Boolean
+    /** Number of blocks in the pack. */
     public val blockCount: Int get() = blocks.size
 
     init {
@@ -183,8 +187,14 @@ public class MerkleSyncPlan(
     public val examinedBlockCount: Int,
     public val examinedByteCount: Long,
 ) {
+    /**
+     * The digests the local side must fetch before it can reconstruct the target tree. Empty when nothing is
+     * missing.
+     */
     public val requestedBlocks: List<MerkleDigest>
+    /** Whether the two sides already agree, in which case no transfer is needed at all. */
     public val rootsMatch: Boolean get() = localRootHash == targetRootHash
+    /** Whether any block still has to be fetched; the negation of an empty [requestedBlocks]. */
     public val requiresBlocks: Boolean get() = requestedBlocks.isNotEmpty()
 
     init {
@@ -231,6 +241,10 @@ public class MerkleProofStep(
     public val block: MerkleBlock,
     expandedChildIndexes: Iterable<Int>,
 ) {
+    /**
+     * Which children of this step's block the proof expands, by index. The unexpanded siblings are covered by their
+     * digests alone, which is what keeps a proof smaller than the subtree it attests to.
+     */
     public val expandedChildIndexes: List<Int>
 
     init {
@@ -258,7 +272,9 @@ public class MerkleProof(
     steps: Iterable<MerkleProofStep>,
 ) {
     private val queryBytes: ByteArray = query.copyOf()
+    /** The proof's steps, ordered from the root downwards. */
     public val steps: List<MerkleProofStep>
+    /** Total encoded size of the proof, for budgeting verification against a resource limit before starting it. */
     public val totalByteCount: Long
 
     init {
@@ -446,8 +462,13 @@ public class MerkleThreeWayMergeResult<K, V> private constructor(
     public val mergedTree: MerkleSearchTree<K, V>?,
     unresolvedConflicts: List<MerkleThreeWayMergeConflict<K, V>>,
 ) {
+    /**
+     * The conflicts the merge could not resolve. Empty on success; a non-empty list is the reason [mergedTree] is
+     * `null`.
+     */
     public val unresolvedConflicts: List<MerkleThreeWayMergeConflict<K, V>> =
         immutablePersistenceList(unresolvedConflicts)
+    /** Whether the merge produced a tree. Equivalent to [unresolvedConflicts] being empty. */
     public val isSuccess: Boolean get() = mergedTree != null
 
     internal companion object {

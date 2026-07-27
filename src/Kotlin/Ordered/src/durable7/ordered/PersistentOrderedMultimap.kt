@@ -29,12 +29,17 @@ public class PersistentOrderedMultimap<K, V> private constructor(
     public val pairCount: Long,
 ) : Iterable<OrderedMultimapEntry<K, V>> {
     public companion object {
+        /** An empty multimap. The key and value policies are independent and both are retained by identity. */
         public fun <K, V> empty(
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
             valuePolicy: HashPolicy<V> = defaultHashPolicy(),
         ): PersistentOrderedMultimap<K, V> =
             PersistentOrderedMultimap(PersistentOrderedMap.empty(keyPolicy), valuePolicy, 0L)
 
+        /**
+         * A multimap holding every pair, keys in first-arrival order and each key's values in arrival order.
+         * Duplicate pairs collapse, since a key's values form a set.
+         */
         public fun <K, V> from(
             entries: Iterable<Pair<K, V>>,
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
@@ -46,18 +51,40 @@ public class PersistentOrderedMultimap<K, V> private constructor(
         }
     }
 
+    /** The hash policy governing key identity. */
     public val keyPolicy: HashPolicy<K> get() = groups.policy
+    /** Number of distinct keys. */
     public val keyCount: Int get() = groups.size
+    /** Whether the multimap holds no pairs. */
     public val isEmpty: Boolean get() = pairCount == 0L
 
+    /**
+     * Whether [key] has at least one value. A key never remains with an empty group: removing its last value
+     * removes the key.
+     */
     public fun containsKey(key: K): Boolean = groups.containsKey(key)
+    /** Whether the pair is present. */
     public fun contains(key: K, value: V): Boolean = groups[key]?.contains(value) == true
+    /** How many values [key] has; zero when the key is absent. */
     public fun countValues(key: K): Int = groups[key]?.size ?: 0
+    /**
+     * The values for [key], in their own insertion order, or `null` when the key is absent. Never an empty set.
+     */
     public fun valuesFor(key: K): PersistentOrderedSet<V>? = groups[key]
+    /** The *stored* key representative equal to [key], or `null` when absent. */
     public fun actualKey(key: K): K? = groups.tryGet(key).let { if (it.found) it.key else null }
+    /**
+     * The *stored* value representative equal to [value] within [key]'s group, or `null` when the key or the value
+     * is absent.
+     */
     public fun actualValue(key: K, value: V): V? =
         groups[key]?.tryGetValue(value)?.let { if (it.found) it.value else null }
 
+    /**
+     * A multimap with the pair added: a new key goes to the end of the key order, and a new value to the end of its
+     * key's group. Returns the receiver unchanged when the pair is already present, so neither order is disturbed
+     * by a repeat.
+     */
     public fun add(key: K, value: V): PersistentOrderedMultimap<K, V> {
         val indexed = groups.tryGet(key)
         if (!indexed.found) {
@@ -74,6 +101,10 @@ public class PersistentOrderedMultimap<K, V> private constructor(
         )
     }
 
+    /**
+     * A multimap without the pair. Removing a key's last value removes the key itself, so no empty group is left
+     * behind. Returns the receiver unchanged when the pair is absent.
+     */
     public fun remove(key: K, value: V): PersistentOrderedMultimap<K, V> {
         val indexed = groups.tryGet(key)
         if (!indexed.found) return this
@@ -84,6 +115,7 @@ public class PersistentOrderedMultimap<K, V> private constructor(
         return PersistentOrderedMultimap(nextGroups, valuePolicy, pairCount - 1L)
     }
 
+    /** A multimap without [key] and all of its values. Returns the receiver unchanged when the key is absent. */
     public fun removeKey(key: K): PersistentOrderedMultimap<K, V> {
         val indexed = groups.tryGet(key)
         if (!indexed.found) return this
@@ -91,14 +123,25 @@ public class PersistentOrderedMultimap<K, V> private constructor(
         return PersistentOrderedMultimap(groups.remove(indexed.key), valuePolicy, pairCount - group.size.toLong())
     }
 
+    /** An empty multimap retaining both policies. */
     public fun clear(): PersistentOrderedMultimap<K, V> =
         if (isEmpty) this else empty(keyPolicy, valuePolicy)
 
+    /** Every pair, in key order and then in each key's value order. */
     public fun toList(): List<OrderedMultimapEntry<K, V>> = iterator().asSequence().toList()
 
+    /**
+     * Whether this multimap and [other] share the storage of their key index, in both its order and value halves.
+     */
     public fun sharesGroupsWith(other: PersistentOrderedMultimap<K, V>): Boolean =
         groups.sharesOrderWith(other.groups) && groups.sharesValuesWith(other.groups)
 
+    /**
+     * Walk the whole multimap and check its invariants - the cached pair count and that no group is empty -
+     * returning its shape measurements. A defensive audit for tests, not a routine operation.
+     *
+     * @throws IllegalStateException on the first violation found.
+     */
     public fun validateStructure(): PersistentOrderedMultimapStatistics {
         groups.validateStructure()
         var counted = 0L

@@ -149,6 +149,10 @@ public class PersistentHashMap<K, V> private constructor(
     public val policy: HashPolicy<K>,
 ) : Iterable<HamtEntry<K, V>> {
     public companion object {
+        /**
+         * An empty map using [policy] for hashing and equality, which the map retains by identity. Operations
+         * between two maps require the same policy object.
+         */
         public fun <K, V> empty(policy: HashPolicy<K> = defaultHashPolicy()): PersistentHashMap<K, V> =
             PersistentHashMap(null, 0, policy)
 
@@ -157,12 +161,14 @@ public class PersistentHashMap<K, V> private constructor(
             policy: HashPolicy<K> = defaultHashPolicy(),
         ): Transient<K, V> = Transient(empty(policy))
 
+        /** A map holding every pair, using [policy]. Later pairs replace earlier ones with an equal key. */
         public fun <K, V> from(
             items: Iterable<Pair<K, V>>,
             policy: HashPolicy<K> = defaultHashPolicy(),
         ): PersistentHashMap<K, V> = empty<K, V>(policy).setItems(items)
     }
 
+    /** Whether the map holds no entries. */
     public val isEmpty: Boolean get() = size == 0
 
     /**
@@ -173,15 +179,33 @@ public class PersistentHashMap<K, V> private constructor(
      */
     public fun toTransient(): Transient<K, V> = Transient(this)
 
+    /**
+     * Whether this map and [other] share a root, meaning one was derived from the other with no intervening change.
+     * A cheap sufficient test for equality, not a necessary one: two equal maps built independently do not share a
+     * root.
+     */
     public fun sharesRootWith(other: PersistentHashMap<K, V>): Boolean = root === other.root
+    /** Whether an entry with a key equal to [key] under the policy is present. */
     public fun containsKey(key: K): Boolean = getEntry(key) != null
+    /**
+     * The value stored for [key], or `null` when absent. A stored `null` value is therefore indistinguishable from
+     * a miss here; use [getEntry] or [containsKey] when that matters.
+     */
     public operator fun get(key: K): V? = getEntry(key)?.value
 
+    /**
+     * The stored entry for [key], or `null` when absent. The entry carries the *stored* key representative, which
+     * may not be the instance passed in: the first representative of each equivalence class is the one kept.
+     */
     public fun getEntry(key: K): HamtEntry<K, V>? {
         val current = root ?: return null
         return getInNode(current, policy.hash(key), key, 0, policy)
     }
 
+    /**
+     * A map with [key] bound to [value], adding or replacing as needed. Returns the receiver unchanged when the
+     * binding is already present and equal.
+     */
     public fun put(key: K, value: V): PersistentHashMap<K, V> {
         val hash = policy.hash(key)
         val current = root ?: return PersistentHashMap(Leaf(hash, key, value), 1, policy)
@@ -190,12 +214,22 @@ public class PersistentHashMap<K, V> private constructor(
         return PersistentHashMap(result.node, size + if (result.added) 1 else 0, policy)
     }
 
+    /**
+     * A map with the entry added.
+     *
+     * @throws DuplicateKeyException if an equal key is already present; use [tryAdd] to detect that without an
+     * exception, or [put] to overwrite.
+     */
     public fun add(key: K, value: V): PersistentHashMap<K, V> {
         val result = tryAdd(key, value)
         if (!result.added) throw DuplicateKeyException()
         return result.value
     }
 
+    /**
+     * Add the entry only when [key] is absent, reporting whether it was added. On a collision the result carries
+     * the receiver unchanged.
+     */
     public fun tryAdd(key: K, value: V): AddResult<PersistentHashMap<K, V>> {
         val hash = policy.hash(key)
         val current = root
@@ -244,18 +278,31 @@ public class PersistentHashMap<K, V> private constructor(
         return MapValueResult(PersistentHashMap(result.node, nextSize, policy), result.selected)
     }
 
+    /** A map with every pair applied in order, each adding or replacing as [put] does. */
     public fun setItems(items: Iterable<Pair<K, V>>): PersistentHashMap<K, V> {
         var result = this
         for ((key, value) in items) result = result.put(key, value)
         return result
     }
 
+    /**
+     * A map without the entry for [key]. Returns the receiver unchanged when absent; use [tryRemove] to recover the
+     * removed value.
+     */
     public fun remove(key: K): PersistentHashMap<K, V> = tryRemove(key)?.map ?: this
+    /**
+     * Remove the entry for [key], returning the resulting map together with the value that was removed, or `null`
+     * when the key is absent. The `null` here means "no such key" and is unaffected by a stored `null` value.
+     */
     public fun tryRemove(key: K): MapRemoveResult<K, V>? {
         val entry = tryRemoveEntry(key) ?: return null
         return MapRemoveResult(entry.map, entry.entry.value)
     }
 
+    /**
+     * Like [tryRemove], but returns the whole removed entry, so the stored key representative is recoverable and
+     * not just the value.
+     */
     public fun tryRemoveEntry(key: K): MapRemoveEntryResult<K, V>? {
         val current = root ?: return null
         val result = removeNode(current, policy.hash(key), key, 0, policy)
@@ -266,11 +313,33 @@ public class PersistentHashMap<K, V> private constructor(
         )
     }
 
+    /** An empty map retaining the same policy. Returns the receiver when it is already empty. */
     public fun clear(): PersistentHashMap<K, V> = if (isEmpty) this else PersistentHashMap(null, 0, policy)
 
+    /**
+     * The entries of both maps, with [other]'s values winning on an equal key.
+     *
+     * @throws IllegalArgumentException if the two maps do not retain the same policy object. Set algebra over maps
+     * hashed under different policies would compare keys inconsistently, so it is rejected rather than coerced.
+     */
     public fun union(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> = combine(other, ChampOperation.UNION)
+    /**
+     * The entries whose keys appear in both maps.
+     *
+     * @throws IllegalArgumentException if the two maps do not retain the same policy object.
+     */
     public fun intersect(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> = combine(other, ChampOperation.INTERSECT)
+    /**
+     * The entries of this map whose keys are absent from [other].
+     *
+     * @throws IllegalArgumentException if the two maps do not retain the same policy object.
+     */
     public fun except(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> = combine(other, ChampOperation.EXCEPT)
+    /**
+     * The entries whose keys appear in exactly one of the two maps.
+     *
+     * @throws IllegalArgumentException if the two maps do not retain the same policy object.
+     */
     public fun symmetricExcept(other: PersistentHashMap<K, V>): PersistentHashMap<K, V> =
         combine(other, ChampOperation.SYMMETRIC_EXCEPT)
 
@@ -301,11 +370,17 @@ public class PersistentHashMap<K, V> private constructor(
         diffChampNodes(root, other.root, 0, policy)
     }
 
+    /**
+     * The entries, in an order determined by the trie shape rather than by insertion or key order. Lazy: nodes are
+     * visited as the sequence is consumed.
+     */
     public fun entries(): Sequence<HamtEntry<K, V>> = sequence {
         val current = root ?: return@sequence
         yieldEntries(current)
     }
+    /** The stored key representatives, in the same order as [entries]. */
     public fun keys(): Sequence<K> = entries().map { it.key }
+    /** The values, in the same order as [entries]. */
     public fun values(): Sequence<V> = entries().map { it.value }
     override fun iterator(): Iterator<HamtEntry<K, V>> = entries().iterator()
 
@@ -323,12 +398,26 @@ public class PersistentHashMap<K, V> private constructor(
         private var version: Int = 0
         private var mutationInProgress: Boolean = false
 
+        /**
+         * Number of entries currently in the session.
+         *
+         * @throws IllegalStateException if the session has already been published.
+         */
         public val size: Int get() = active().size
+        /**
+         * Whether the session holds no entries.
+         *
+         * @throws IllegalStateException if the session has already been published.
+         */
         public val isEmpty: Boolean get() = active().isEmpty
+        /** The hash policy the session inherited from the map it was created over. */
         public val policy: HashPolicy<K> get() = active().policy
 
+        /** Whether an entry with a key equal to [key] is present in the session. */
         public fun containsKey(key: K): Boolean = active().containsKey(key)
+        /** The value stored for [key] in the session, or `null` when absent or stored as `null`. */
         public operator fun get(key: K): V? = active()[key]
+        /** The stored entry for [key] in the session, or `null` when absent. */
         public fun getEntry(key: K): HamtEntry<K, V>? = active().getEntry(key)
 
         /** Sets a key/value pair and reports whether the logical map changed. */
@@ -368,6 +457,11 @@ public class PersistentHashMap<K, V> private constructor(
             publish(before, before.clear())
         }
 
+        /**
+         * The session's entries. The returned sequence is bound to the session version current when it was created,
+         * so an edit made while it is being consumed fails the iteration rather than yielding a mixture of two
+         * versions.
+         */
         public fun entries(): Sequence<HamtEntry<K, V>> {
             val snapshot = active()
             val expectedVersion = version
@@ -375,7 +469,9 @@ public class PersistentHashMap<K, V> private constructor(
                 VersionBoundIterator(snapshot.iterator()) { validateIterator(expectedVersion) }
             }
         }
+        /** The stored key representatives, in the same order as [entries]. */
         public fun keys(): Sequence<K> = entries().map { it.key }
+        /** The values, in the same order as [entries]. */
         public fun values(): Sequence<V> = entries().map { it.value }
 
         override fun iterator(): Iterator<HamtEntry<K, V>> {
@@ -434,6 +530,10 @@ public class PersistentHashMap<K, V> private constructor(
  */
 public class PersistentHashSet<T> private constructor(private val map: PersistentHashMap<T, Unit>) : Iterable<T> {
     public companion object {
+        /**
+         * An empty set using [policy] for hashing and equality, which the set retains by identity. Operations
+         * between two sets require the same policy object.
+         */
         public fun <T> empty(policy: HashPolicy<T> = defaultHashPolicy()): PersistentHashSet<T> =
             PersistentHashSet(PersistentHashMap.empty(policy))
 
@@ -442,6 +542,10 @@ public class PersistentHashSet<T> private constructor(private val map: Persisten
             policy: HashPolicy<T> = defaultHashPolicy(),
         ): Transient<T> = Transient(empty(policy))
 
+        /**
+         * A set holding the distinct values, using [policy]. The first representative of each equivalence class is
+         * the one kept.
+         */
         public fun <T> from(values: Iterable<T>, policy: HashPolicy<T> = defaultHashPolicy()): PersistentHashSet<T> =
             empty<T>(policy).union(values)
     }

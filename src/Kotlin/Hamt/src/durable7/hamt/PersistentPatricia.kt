@@ -437,7 +437,9 @@ public data class PatriciaCursorSearch<C>(public val cursor: C, public val found
 /** A persistent Patricia map over signed 32-bit keys, bounded by key width rather than entry count. */
 public class PersistentIntMap<V> private constructor(private val core: PatriciaCore<Int, V>) : Iterable<Pair<Int, V>> {
     public companion object {
+        /** An empty map. */
         public fun <V> empty(): PersistentIntMap<V> = PersistentIntMap(PatriciaCore(null, 0) { (it xor Int.MIN_VALUE).toUInt().toULong() })
+        /** A map holding every pair. Later pairs replace earlier ones with an equal key. */
         public fun <V> from(items: Iterable<Pair<Int, V>>): PersistentIntMap<V> {
             var result = empty<V>(); for ((key, value) in items) result = result.put(key, value); return result
         }
@@ -522,7 +524,9 @@ public class PersistentIntMap<V> private constructor(private val core: PatriciaC
 /** A persistent Patricia map over signed 64-bit keys, bounded by key width rather than entry count. */
 public class PersistentLongMap<V> private constructor(private val core: PatriciaCore<Long, V>) : Iterable<Pair<Long, V>> {
     public companion object {
+        /** An empty map. */
         public fun <V> empty(): PersistentLongMap<V> = PersistentLongMap(PatriciaCore(null, 0) { (it xor Long.MIN_VALUE).toULong() })
+        /** A map holding every pair. Later pairs replace earlier ones with an equal key. */
         public fun <V> from(items: Iterable<Pair<Long, V>>): PersistentLongMap<V> { var result = empty<V>(); for ((k, v) in items) result = result.put(k, v); return result }
     }
 
@@ -616,27 +620,62 @@ public class PersistentIntMapCursor<V> private constructor(
         require(position >= 0 && position <= map.size) { "Cursor position must be in 0..map.size." }
     }
 
+    /** Number of entries in the map version this cursor is positioned in. */
     public val size: Int get() = map.size
+    /** Whether the gap precedes the first entry. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final entry. */
     public val isAtEnd: Boolean get() = position == size
+    /**
+     * The entry before the gap, or `null` at the start. The carrier keeps a stored `null` value distinct from a
+     * boundary. Does not move the cursor.
+     */
     public fun peekPrevious(): PatriciaMapEntry<Int, V>? =
         if (isAtStart) null else map.entryAtForCursor(position - 1)
+    /**
+     * The entry after the gap, or `null` at the end. The carrier keeps a stored `null` value distinct from a
+     * boundary. Does not move the cursor.
+     */
     public fun peekNext(): PatriciaMapEntry<Int, V>? = map.entryAtForCursor(position)
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged; movement produces a new cursor
+     * over the same map version.
+     */
     public fun movePrevious(): PersistentIntMapCursor<V>? =
         if (isAtStart) null else create(map, position - 1)
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): PersistentIntMapCursor<V>? =
         if (isAtEnd) null else create(map, position + 1)
+    /**
+     * A cursor at the given rank gap of the same map version, or `null` when the position lies outside `0..size`.
+     * Seeking to the current position returns this cursor by identity.
+     */
     public fun seek(position: Int): PersistentIntMapCursor<V>? = when {
         position < 0 || position > size -> null
         position == this.position -> this
         else -> create(map, position)
     }
+    /**
+     * Insert a new entry at the gap and return a cursor after it.
+     *
+     * @throws IllegalArgumentException if the key is already present - use [put] to replace - or if it does not
+     * sort to the current gap. Order is decided by the key, so placing it elsewhere would silently contradict the
+     * caller; the message names both the expected gap and the current one.
+     */
     public fun insert(key: Int, value: V): PersistentIntMapCursor<V> {
         val (expected, found) = map.lowerBoundRankForCursor(key)
         require(!found) { "The key '$key' is already present." }
         ensureCurrentGap(expected, key)
         return create(map.put(key, value), Math.addExact(position, 1))
     }
+    /**
+     * Insert or replace an entry that sorts to this gap and return a cursor after it. Unlike [insert], an existing
+     * key is replaced rather than rejected, and a no-op write returns this cursor by identity.
+     *
+     * @throws IllegalArgumentException if the key does not sort to the current gap. Order is decided by the key, so
+     * placing it elsewhere would silently contradict the caller; the message names both the expected gap and the
+     * current one.
+     */
     public fun put(key: Int, value: V): PersistentIntMapCursor<V> {
         val (expected, found) = map.lowerBoundRankForCursor(key)
         ensureCurrentGap(expected, key)
@@ -644,19 +683,26 @@ public class PersistentIntMapCursor<V> private constructor(
         if (edited === map) return this
         return create(edited, if (found) position else Math.addExact(position, 1))
     }
+    /**
+     * Replace the value of the entry after the gap, keeping its key and the gap position, or `null` at the end. A
+     * no-op write returns this cursor by identity.
+     */
     public fun setNextValue(value: V): PersistentIntMapCursor<V>? {
         val next = peekNext() ?: return null
         val edited = map.put(next.key, value)
         return if (edited === map) this else create(edited, position)
     }
+    /** Remove the entry before the gap and return a cursor in its place, or `null` at the start. */
     public fun deletePrevious(): PersistentIntMapCursor<V>? {
         val previous = peekPrevious() ?: return null
         return create(map.remove(previous.key), position - 1)
     }
+    /** Remove the entry after the gap and return a cursor in its place, or `null` at the end. */
     public fun deleteNext(): PersistentIntMapCursor<V>? {
         val next = peekNext() ?: return null
         return create(map.remove(next.key), position)
     }
+    /** The map version this cursor is positioned in. Edits made through other cursors are not visible here. */
     public fun snapshot(): PersistentIntMap<V> = map
 
     private fun ensureCurrentGap(expected: Int, key: Int) {
@@ -680,27 +726,62 @@ public class PersistentLongMapCursor<V> private constructor(
         require(position >= 0 && position <= map.size) { "Cursor position must be in 0..map.size." }
     }
 
+    /** Number of entries in the map version this cursor is positioned in. */
     public val size: Int get() = map.size
+    /** Whether the gap precedes the first entry. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final entry. */
     public val isAtEnd: Boolean get() = position == size
+    /**
+     * The entry before the gap, or `null` at the start. The carrier keeps a stored `null` value distinct from a
+     * boundary. Does not move the cursor.
+     */
     public fun peekPrevious(): PatriciaMapEntry<Long, V>? =
         if (isAtStart) null else map.entryAtForCursor(position - 1)
+    /**
+     * The entry after the gap, or `null` at the end. The carrier keeps a stored `null` value distinct from a
+     * boundary. Does not move the cursor.
+     */
     public fun peekNext(): PatriciaMapEntry<Long, V>? = map.entryAtForCursor(position)
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged; movement produces a new cursor
+     * over the same map version.
+     */
     public fun movePrevious(): PersistentLongMapCursor<V>? =
         if (isAtStart) null else create(map, position - 1)
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): PersistentLongMapCursor<V>? =
         if (isAtEnd) null else create(map, position + 1)
+    /**
+     * A cursor at the given rank gap of the same map version, or `null` when the position lies outside `0..size`.
+     * Seeking to the current position returns this cursor by identity.
+     */
     public fun seek(position: Int): PersistentLongMapCursor<V>? = when {
         position < 0 || position > size -> null
         position == this.position -> this
         else -> create(map, position)
     }
+    /**
+     * Insert a new entry at the gap and return a cursor after it.
+     *
+     * @throws IllegalArgumentException if the key is already present - use [put] to replace - or if it does not
+     * sort to the current gap. Order is decided by the key, so placing it elsewhere would silently contradict the
+     * caller; the message names both the expected gap and the current one.
+     */
     public fun insert(key: Long, value: V): PersistentLongMapCursor<V> {
         val (expected, found) = map.lowerBoundRankForCursor(key)
         require(!found) { "The key '$key' is already present." }
         ensureCurrentGap(expected, key)
         return create(map.put(key, value), Math.addExact(position, 1))
     }
+    /**
+     * Insert or replace an entry that sorts to this gap and return a cursor after it. Unlike [insert], an existing
+     * key is replaced rather than rejected, and a no-op write returns this cursor by identity.
+     *
+     * @throws IllegalArgumentException if the key does not sort to the current gap. Order is decided by the key, so
+     * placing it elsewhere would silently contradict the caller; the message names both the expected gap and the
+     * current one.
+     */
     public fun put(key: Long, value: V): PersistentLongMapCursor<V> {
         val (expected, found) = map.lowerBoundRankForCursor(key)
         ensureCurrentGap(expected, key)
@@ -708,19 +789,26 @@ public class PersistentLongMapCursor<V> private constructor(
         if (edited === map) return this
         return create(edited, if (found) position else Math.addExact(position, 1))
     }
+    /**
+     * Replace the value of the entry after the gap, keeping its key and the gap position, or `null` at the end. A
+     * no-op write returns this cursor by identity.
+     */
     public fun setNextValue(value: V): PersistentLongMapCursor<V>? {
         val next = peekNext() ?: return null
         val edited = map.put(next.key, value)
         return if (edited === map) this else create(edited, position)
     }
+    /** Remove the entry before the gap and return a cursor in its place, or `null` at the start. */
     public fun deletePrevious(): PersistentLongMapCursor<V>? {
         val previous = peekPrevious() ?: return null
         return create(map.remove(previous.key), position - 1)
     }
+    /** Remove the entry after the gap and return a cursor in its place, or `null` at the end. */
     public fun deleteNext(): PersistentLongMapCursor<V>? {
         val next = peekNext() ?: return null
         return create(map.remove(next.key), position)
     }
+    /** The map version this cursor is positioned in. Edits made through other cursors are not visible here. */
     public fun snapshot(): PersistentLongMap<V> = map
 
     private fun ensureCurrentGap(expected: Int, key: Long) {
@@ -874,31 +962,56 @@ public class PersistentIntSetCursor private constructor(
         require(position >= 0 && position <= set.size) { "Cursor position must be in 0..set.size." }
     }
 
+    /** Number of elements in the set version this cursor is positioned in. */
     public val size: Int get() = set.size
+    /** Whether the gap precedes the first element. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final element. */
     public val isAtEnd: Boolean get() = position == size
+    /** The element before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): Int? = if (isAtStart) null else set.itemAtForCursor(position - 1)
+    /** The element after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): Int? = set.itemAtForCursor(position)
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged; movement produces a new cursor
+     * over the same set version.
+     */
     public fun movePrevious(): PersistentIntSetCursor? = if (isAtStart) null else create(set, position - 1)
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): PersistentIntSetCursor? = if (isAtEnd) null else create(set, position + 1)
+    /**
+     * A cursor at the given rank gap of the same set version, or `null` when the position lies outside `0..size`.
+     * Seeking to the current position returns this cursor by identity.
+     */
     public fun seek(position: Int): PersistentIntSetCursor? = when {
         position < 0 || position > size -> null
         position == this.position -> this
         else -> create(set, position)
     }
+    /**
+     * Add an element that sorts to this gap and return a cursor after it. Adding an element already present returns
+     * this cursor by identity and leaves the set unchanged.
+     *
+     * @throws IllegalArgumentException if the element does not sort to the current gap. Order is decided by the
+     * value, so placing it elsewhere would silently contradict the caller; the message names both the expected gap
+     * and the current one.
+     */
     public fun add(value: Int): PersistentIntSetCursor {
         val (expected, found) = set.lowerBoundRankForCursor(value)
         ensureCurrentGap(expected, value)
         return if (found) this else create(set.add(value), Math.addExact(position, 1))
     }
+    /** Remove the element before the gap and return a cursor in its place, or `null` at the start. */
     public fun deletePrevious(): PersistentIntSetCursor? {
         val previous = peekPrevious() ?: return null
         return create(set.remove(previous), position - 1)
     }
+    /** Remove the element after the gap and return a cursor in its place, or `null` at the end. */
     public fun deleteNext(): PersistentIntSetCursor? {
         val next = peekNext() ?: return null
         return create(set.remove(next), position)
     }
+    /** The set version this cursor is positioned in. Edits made through other cursors are not visible here. */
     public fun snapshot(): PersistentIntSet = set
 
     private fun ensureCurrentGap(expected: Int, value: Int) {
@@ -922,31 +1035,56 @@ public class PersistentLongSetCursor private constructor(
         require(position >= 0 && position <= set.size) { "Cursor position must be in 0..set.size." }
     }
 
+    /** Number of elements in the set version this cursor is positioned in. */
     public val size: Int get() = set.size
+    /** Whether the gap precedes the first element. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final element. */
     public val isAtEnd: Boolean get() = position == size
+    /** The element before the gap, or `null` at the start. Does not move the cursor. */
     public fun peekPrevious(): Long? = if (isAtStart) null else set.itemAtForCursor(position - 1)
+    /** The element after the gap, or `null` at the end. Does not move the cursor. */
     public fun peekNext(): Long? = set.itemAtForCursor(position)
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged; movement produces a new cursor
+     * over the same set version.
+     */
     public fun movePrevious(): PersistentLongSetCursor? = if (isAtStart) null else create(set, position - 1)
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): PersistentLongSetCursor? = if (isAtEnd) null else create(set, position + 1)
+    /**
+     * A cursor at the given rank gap of the same set version, or `null` when the position lies outside `0..size`.
+     * Seeking to the current position returns this cursor by identity.
+     */
     public fun seek(position: Int): PersistentLongSetCursor? = when {
         position < 0 || position > size -> null
         position == this.position -> this
         else -> create(set, position)
     }
+    /**
+     * Add an element that sorts to this gap and return a cursor after it. Adding an element already present returns
+     * this cursor by identity and leaves the set unchanged.
+     *
+     * @throws IllegalArgumentException if the element does not sort to the current gap. Order is decided by the
+     * value, so placing it elsewhere would silently contradict the caller; the message names both the expected gap
+     * and the current one.
+     */
     public fun add(value: Long): PersistentLongSetCursor {
         val (expected, found) = set.lowerBoundRankForCursor(value)
         ensureCurrentGap(expected, value)
         return if (found) this else create(set.add(value), Math.addExact(position, 1))
     }
+    /** Remove the element before the gap and return a cursor in its place, or `null` at the start. */
     public fun deletePrevious(): PersistentLongSetCursor? {
         val previous = peekPrevious() ?: return null
         return create(set.remove(previous), position - 1)
     }
+    /** Remove the element after the gap and return a cursor in its place, or `null` at the end. */
     public fun deleteNext(): PersistentLongSetCursor? {
         val next = peekNext() ?: return null
         return create(set.remove(next), position)
     }
+    /** The set version this cursor is positioned in. Edits made through other cursors are not visible here. */
     public fun snapshot(): PersistentLongSet = set
 
     private fun ensureCurrentGap(expected: Int, value: Long) {

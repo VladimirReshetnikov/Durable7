@@ -23,12 +23,14 @@ public class PersistentHashMultimap<K, V> private constructor(
     public val pairCount: Long,
 ) : Iterable<MultimapEntry<K, V>> {
     public companion object {
+        /** An empty multimap. The key and value policies are independent and both are retained by identity. */
         public fun <K, V> empty(
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
             valuePolicy: HashPolicy<V> = defaultHashPolicy(),
         ): PersistentHashMultimap<K, V> =
             PersistentHashMultimap(PersistentHashMap.empty(keyPolicy), valuePolicy, 0L)
 
+        /** A multimap holding every pair. Duplicate pairs collapse, since the values for a key form a set. */
         public fun <K, V> from(
             entries: Iterable<Pair<K, V>>,
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
@@ -40,15 +42,35 @@ public class PersistentHashMultimap<K, V> private constructor(
         }
     }
 
+    /** The hash policy used for keys. */
     public val keyPolicy: HashPolicy<K> get() = groups.policy
+    /** Number of distinct keys, which is fewer than [pairCount] whenever any key has several values. */
     public val keyCount: Int get() = groups.size
+    /** Whether the multimap holds no pairs. */
     public val isEmpty: Boolean get() = pairCount == 0L
 
+    /**
+     * Whether [key] has at least one value. A key never remains with an empty group: removing its last value
+     * removes the key.
+     */
     public fun containsKey(key: K): Boolean = groups.containsKey(key)
+    /** Whether the pair is present. */
     public fun contains(key: K, value: V): Boolean = groups.getEntry(key)?.value?.contains(value) == true
+    /**
+     * The *stored* key representative equal to [key], or `null` when absent. The first representative of each
+     * equivalence class is the one kept, so this need not be the instance passed in.
+     */
     public fun actualKey(key: K): K? = groups.getEntry(key)?.key
+    /**
+     * The values for [key] as a set, or `null` when the key is absent. Never an empty set: absence and emptiness
+     * are the same state here.
+     */
     public fun valuesFor(key: K): PersistentHashSet<V>? = groups.getEntry(key)?.value
 
+    /**
+     * A multimap with the pair added. Returns the receiver unchanged when the pair is already present, since the
+     * values for a key form a set.
+     */
     public fun add(key: K, value: V): PersistentHashMultimap<K, V> {
         val indexed = groups.getEntry(key)
         if (indexed == null) {
@@ -64,6 +86,10 @@ public class PersistentHashMultimap<K, V> private constructor(
         )
     }
 
+    /**
+     * A multimap without the pair. Removing a key's last value removes the key itself, so no empty group is left
+     * behind. Returns the receiver unchanged when the pair is absent.
+     */
     public fun remove(key: K, value: V): PersistentHashMultimap<K, V> {
         val indexed = groups.getEntry(key) ?: return this
         val removed = indexed.value.tryRemove(value) ?: return this
@@ -71,11 +97,13 @@ public class PersistentHashMultimap<K, V> private constructor(
         return PersistentHashMultimap(nextGroups, valuePolicy, pairCount - 1L)
     }
 
+    /** A multimap without [key] and all of its values. Returns the receiver unchanged when the key is absent. */
     public fun removeKey(key: K): PersistentHashMultimap<K, V> {
         val indexed = groups.getEntry(key) ?: return this
         return PersistentHashMultimap(groups.remove(indexed.key), valuePolicy, pairCount - indexed.value.size.toLong())
     }
 
+    /** An empty multimap retaining both policies. */
     public fun clear(): PersistentHashMultimap<K, V> =
         if (isEmpty) this else empty(keyPolicy, valuePolicy)
 
@@ -86,6 +114,7 @@ public class PersistentHashMultimap<K, V> private constructor(
         return result
     }
 
+    /** The pairs present in both multimaps, compared under the receiver's policies. */
     public fun intersect(other: PersistentHashMultimap<K, V>): PersistentHashMultimap<K, V> {
         val normalized = clear().union(other)
         var result = clear()
@@ -93,6 +122,7 @@ public class PersistentHashMultimap<K, V> private constructor(
         return result
     }
 
+    /** The pairs of this multimap absent from [other], compared under the receiver's policies. */
     public fun except(other: PersistentHashMultimap<K, V>): PersistentHashMultimap<K, V> {
         val normalized = clear().union(other)
         var result = this
@@ -100,8 +130,15 @@ public class PersistentHashMultimap<K, V> private constructor(
         return result
     }
 
+    /** Every pair, as a flat list. */
     public fun toList(): List<MultimapEntry<K, V>> = iterator().asSequence().toList()
 
+    /**
+     * Walk the whole multimap and check its invariants - the cached pair count, the key count, and that no group is
+     * empty - returning its shape measurements. A defensive audit for tests, not a routine operation.
+     *
+     * @throws IllegalStateException on the first violation found.
+     */
     public fun validateStructure(): PersistentHashMultimapStatistics {
         var counted = 0L
         var countedKeys = 0
@@ -132,6 +169,7 @@ public class PersistentRelation<L, R> private constructor(
     private val reverse: PersistentHashMultimap<R, L>,
 ) : Iterable<Pair<L, R>> {
     public companion object {
+        /** An empty relation. The left and right policies are independent and both are retained by identity. */
         public fun <L, R> empty(
             leftPolicy: HashPolicy<L> = defaultHashPolicy(),
             rightPolicy: HashPolicy<R> = defaultHashPolicy(),
@@ -141,23 +179,39 @@ public class PersistentRelation<L, R> private constructor(
         )
     }
 
+    /** Number of related pairs. */
     public val pairCount: Long get() = forward.pairCount
+    /** Number of distinct left values that relate to something. */
     public val leftCount: Int get() = forward.keyCount
+    /** Number of distinct right values that relate to something. */
     public val rightCount: Int get() = reverse.keyCount
+    /** Whether the relation holds no pairs. */
     public val isEmpty: Boolean get() = forward.isEmpty
 
+    /** Whether [left] and [right] are related. */
     public fun contains(left: L, right: R): Boolean = forward.contains(left, right)
+    /** The right values related to [left], or `null` when it relates to nothing. Never an empty set. */
     public fun rightsFor(left: L): PersistentHashSet<R>? = forward.valuesFor(left)
+    /**
+     * The left values related to [right], or `null` when it relates to nothing. Costs the same as [rightsFor],
+     * since both directions are indexed.
+     */
     public fun leftsFor(right: R): PersistentHashSet<L>? = reverse.valuesFor(right)
 
+    /**
+     * A relation with the pair added to both directions. Returns the receiver unchanged when the pair is already
+     * present.
+     */
     public fun add(left: L, right: R): PersistentRelation<L, R> =
         if (contains(left, right)) this
         else PersistentRelation(forward.add(left, right), reverse.add(right, left))
 
+    /** A relation without the pair, removed from both directions. Returns the receiver unchanged when absent. */
     public fun remove(left: L, right: R): PersistentRelation<L, R> =
         if (!contains(left, right)) this
         else PersistentRelation(forward.remove(left, right), reverse.remove(right, left))
 
+    /** A relation without [left] and every pair it participates in. */
     public fun removeLeft(left: L): PersistentRelation<L, R> {
         val rights = rightsFor(left)?.toList() ?: return this
         var result = this
@@ -165,6 +219,7 @@ public class PersistentRelation<L, R> private constructor(
         return result
     }
 
+    /** A relation without [right] and every pair it participates in. */
     public fun removeRight(right: R): PersistentRelation<L, R> {
         val lefts = leftsFor(right)?.toList() ?: return this
         var result = this
@@ -172,11 +227,22 @@ public class PersistentRelation<L, R> private constructor(
         return result
     }
 
+    /** An empty relation retaining both policies. */
     public fun clear(): PersistentRelation<L, R> =
         if (isEmpty) this else PersistentRelation(forward.clear(), reverse.clear())
 
+    /**
+     * The relation with its two sides exchanged. O(1): both directions are already indexed, so this swaps them
+     * rather than rebuilding.
+     */
     public fun inverse(): PersistentRelation<R, L> = PersistentRelation(reverse, forward)
 
+    /**
+     * Walk both directions and check that they agree - matching pair counts, and every forward pair present in
+     * reverse - returning shape measurements. A defensive audit for tests, not a routine operation.
+     *
+     * @throws IllegalStateException on the first violation found.
+     */
     public fun validateStructure(): PersistentRelationStatistics {
         forward.validateStructure()
         reverse.validateStructure()

@@ -32,6 +32,14 @@ public class PersistentIndexedMap<K, V, I> private constructor(
     private data class Entry<V, I>(val value: V, val indexKey: I)
 
     public companion object {
+        /**
+         * An empty map with one automatically maintained secondary index.
+         *
+         * [indexSelector] derives each entry's index key from its key and value, and is invoked on every insertion
+         * and on every value change. It must be a pure function of its arguments: the map re-derives the index key
+         * rather than storing what it was told, so a selector that returns different results for the same input
+         * leaves the index disagreeing with the primary map.
+         */
         public fun <K, V, I> empty(
             indexSelector: (K, V) -> I,
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
@@ -44,6 +52,10 @@ public class PersistentIndexedMap<K, V, I> private constructor(
             valuePolicy,
         )
 
+        /**
+         * A map holding every pair, with the secondary index derived by [indexSelector]. Later pairs replace
+         * earlier ones with an equal key.
+         */
         public fun <K, V, I> from(
             items: Iterable<Pair<K, V>>,
             indexSelector: (K, V) -> I,
@@ -57,20 +69,41 @@ public class PersistentIndexedMap<K, V, I> private constructor(
         }
     }
 
+    /** Number of entries in the primary map. */
     public val size: Int get() = primary.size
+    /** Whether the map holds no entries. */
     public val isEmpty: Boolean get() = primary.isEmpty
+    /** The hash policy governing primary keys. */
     public val keyPolicy: HashPolicy<K> get() = primary.policy
+    /** The hash policy governing index keys. */
     public val indexPolicy: HashPolicy<I> get() = index.keyPolicy
+    /** Number of distinct index keys, which is at most [size] and is fewer whenever entries share an index key. */
     public val indexKeyCount: Int get() = index.keyCount
 
+    /** Whether an entry keyed by [key] is present. */
     public fun containsKey(key: K): Boolean = primary.containsKey(key)
+    /** The value stored for [key], or `null` when absent or stored as `null`. */
     public operator fun get(key: K): V? = primary.getEntry(key)?.value?.value
+    /** The *stored* key representative equal to [key], or `null` when absent. */
     public fun actualKey(key: K): K? = primary.getEntry(key)?.key
+    /** The index key currently derived for [key]'s entry, or `null` when the key is absent. */
     public fun indexKeyFor(key: K): I? = primary.getEntry(key)?.value?.indexKey
+    /** Whether any entry currently has [indexKey]. */
     public fun containsIndexKey(indexKey: I): Boolean = index.containsKey(indexKey)
+    /**
+     * How many entries currently have [indexKey]. Zero when none do; the index is nonunique, so this may exceed
+     * one.
+     */
     public fun countByIndex(indexKey: I): Int = index.valuesFor(indexKey)?.size ?: 0
+    /** The primary keys of the entries with [indexKey], or `null` when none has it. */
     public fun keysByIndex(indexKey: I): PersistentHashSet<K>? = index.valuesFor(indexKey)
 
+    /**
+     * A map with the entry added and indexed.
+     *
+     * @throws DuplicateKeyException if an equal key is already present; use [tryAdd] to detect that without an
+     * exception, or [set] to overwrite.
+     */
     public fun add(key: K, value: V): PersistentIndexedMap<K, V, I> {
         if (primary.containsKey(key)) throw DuplicateKeyException()
         val selected = indexSelector(key, value)
@@ -79,10 +112,22 @@ public class PersistentIndexedMap<K, V, I> private constructor(
         return PersistentIndexedMap(primary.add(key, Entry(value, actualIndex)), nextIndex, indexSelector, valuePolicy)
     }
 
+    /**
+     * Add the entry only when [key] is absent, reporting whether it was added. On a collision the result carries
+     * the receiver unchanged.
+     */
     public fun tryAdd(key: K, value: V): IndexedMapAddResult<K, V, I> =
         if (primary.containsKey(key)) IndexedMapAddResult(this, false)
         else IndexedMapAddResult(add(key, value), true)
 
+    /**
+     * A map binding [key] to [value], adding or replacing as needed and moving the entry between index buckets when
+     * its derived index key changes. Returns the receiver unchanged when the value is equivalent under the value
+     * policy, and keeps the stored key representative rather than adopting the one passed in.
+     *
+     * [indexSelector] runs before either index is rebuilt, so a selector that throws leaves the receiver untouched
+     * rather than half-updated.
+     */
     public fun set(key: K, value: V): PersistentIndexedMap<K, V, I> {
         val current = primary.getEntry(key) ?: return add(key, value)
         if (valuePolicy.equivalent(current.value.value, value)) return this
@@ -105,6 +150,10 @@ public class PersistentIndexedMap<K, V, I> private constructor(
         )
     }
 
+    /**
+     * A map without the entry keyed by [key], removing it from the secondary index as well. Returns the receiver
+     * unchanged when absent.
+     */
     public fun remove(key: K): PersistentIndexedMap<K, V, I> {
         val current = primary.getEntry(key) ?: return this
         return PersistentIndexedMap(
@@ -115,10 +164,17 @@ public class PersistentIndexedMap<K, V, I> private constructor(
         )
     }
 
+    /** An empty map retaining the same selector and policies. */
     public fun clear(): PersistentIndexedMap<K, V, I> = if (isEmpty) this else PersistentIndexedMap(
         primary.clear(), index.clear(), indexSelector, valuePolicy,
     )
 
+    /**
+     * Walk both indexes and check that they agree - matching counts, and every primary entry present under its
+     * currently derived index key. A defensive audit for tests, not a routine operation.
+     *
+     * @throws IllegalStateException on the first violation found.
+     */
     public fun validateStructure(): PersistentIndexedMapStatistics {
         index.validateStructure()
         check(index.pairCount == size.toLong()) { "PersistentIndexedMap primary and index counts disagree." }

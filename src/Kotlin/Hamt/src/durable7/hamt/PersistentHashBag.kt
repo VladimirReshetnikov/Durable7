@@ -39,12 +39,18 @@ public class PersistentHashBag<T> private constructor(
     /** Number of policy equivalence classes. */
     public val distinctCount: Int get() = counts.size
 
+    /** Whether the bag holds no items. */
     public val isEmpty: Boolean get() = counts.isEmpty
 
+    /** The hash policy the bag retains, used for hashing and equality. */
     public val policy: HashPolicy<T> get() = counts.policy
 
+    /**
+     * Whether this bag and [other] share a root, meaning one was derived from the other with no intervening change.
+     */
     public fun sharesRootWith(other: PersistentHashBag<T>): Boolean = counts.sharesRootWith(other.counts)
 
+    /** Whether at least one copy of [item] is present. */
     public fun contains(item: T): Boolean = counts.containsKey(item)
 
     /** Returns the multiplicity of [item]'s equivalence class, or zero when absent. */
@@ -56,6 +62,10 @@ public class PersistentHashBag<T> private constructor(
      */
     public fun get(item: T): T? = counts.getEntry(item)?.key
 
+    /**
+     * A bag with one more copy of [item]. The first representative of each equivalence class is the one stored, so
+     * adding an equal item keeps the original instance.
+     */
     public fun add(item: T): PersistentHashBag<T> = addCopies(item, 1)
 
     /**
@@ -74,6 +84,10 @@ public class PersistentHashBag<T> private constructor(
         return withCounts(update.map, nextTotal)
     }
 
+    /**
+     * A bag with one copy of [item] removed. Returns the receiver unchanged when none is present; removing an
+     * absent item is not an error.
+     */
     public fun remove(item: T): PersistentHashBag<T> = removeCopies(item, 1)
 
     /** Removes up to [copyCount] occurrences, saturating at zero. */
@@ -98,6 +112,7 @@ public class PersistentHashBag<T> private constructor(
         return withCounts(removed.map, totalCount - removed.entry.value.toLong())
     }
 
+    /** An empty bag retaining the same policy. */
     public fun clear(): PersistentHashBag<T> = withCounts(counts.clear(), 0L)
 
     /** Multiset union: maximum multiplicity per receiver-policy class. */

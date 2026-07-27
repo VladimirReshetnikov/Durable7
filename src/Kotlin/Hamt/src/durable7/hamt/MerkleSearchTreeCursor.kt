@@ -25,8 +25,11 @@ public class MerkleSearchTreeCursor<K, V> private constructor(
         require(position >= 0 && position <= tree.size) { "Cursor position must be in 0..tree.size." }
     }
 
+    /** Number of entries in the tree version this cursor is positioned in. */
     public val size: Int get() = tree.size
+    /** Whether the gap precedes the first entry. */
     public val isAtStart: Boolean get() = position == 0
+    /** Whether the gap follows the final entry. */
     public val isAtEnd: Boolean get() = position == size
 
     /** Returns the retained entry immediately before the gap. */
@@ -36,12 +39,21 @@ public class MerkleSearchTreeCursor<K, V> private constructor(
     /** Returns the retained entry immediately after the gap. */
     public fun peekNext(): MerkleEntry<K, V>? = tree.entryAtForCursor(position)
 
+    /**
+     * A cursor one gap earlier, or `null` at the start. The receiver is unchanged; movement produces a new cursor
+     * over the same tree version.
+     */
     public fun movePrevious(): MerkleSearchTreeCursor<K, V>? =
         if (isAtStart) null else create(tree, position - 1)
 
+    /** A cursor one gap later, or `null` at the end. The receiver is unchanged. */
     public fun moveNext(): MerkleSearchTreeCursor<K, V>? =
         if (isAtEnd) null else create(tree, position + 1)
 
+    /**
+     * A cursor at the given rank gap of the same tree version, or `null` when the position lies outside `0..size`.
+     * Seeking to the current position returns this cursor by identity.
+     */
     public fun seek(position: Int): MerkleSearchTreeCursor<K, V>? = when {
         position < 0 || position > size -> null
         position == this.position -> this

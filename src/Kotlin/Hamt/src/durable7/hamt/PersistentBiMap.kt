@@ -49,6 +49,10 @@ public class PersistentBiMap<K, V> private constructor(
     private var inverseView: PersistentBiMap<V, K>? = null
 
     public companion object {
+        /**
+         * An empty bidirectional map. The two policies are independent - keys and values are hashed and compared
+         * separately - and both are retained by identity.
+         */
         public fun <K, V> empty(
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
             valuePolicy: HashPolicy<V> = defaultHashPolicy(),
@@ -57,6 +61,12 @@ public class PersistentBiMap<K, V> private constructor(
             PersistentHashMap.empty(valuePolicy),
         )
 
+        /**
+         * A bidirectional map holding every pair.
+         *
+         * @throws BiMapConflictException if the entries do not form a bijection, that is, if a key or a value
+         * repeats.
+         */
         public fun <K, V> from(
             entries: Iterable<Pair<K, V>>,
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
@@ -68,9 +78,13 @@ public class PersistentBiMap<K, V> private constructor(
         }
     }
 
+    /** Number of pairs. Both directions always hold the same count. */
     public val size: Int get() = forward.size
+    /** Whether the map holds no pairs. */
     public val isEmpty: Boolean get() = forward.isEmpty
+    /** The hash policy used for keys. */
     public val keyPolicy: HashPolicy<K> get() = forward.policy
+    /** The hash policy used for values, independent of the key policy. */
     public val valuePolicy: HashPolicy<V> get() = backward.policy
 
     /** Cached O(1) inverse facade whose own inverse is this exact object. */
@@ -85,15 +99,32 @@ public class PersistentBiMap<K, V> private constructor(
             }
         }
 
+    /** Whether [key] is present in the forward direction. */
     public fun containsKey(key: K): Boolean = forward.containsKey(key)
+    /** Whether [value] is present in the inverse direction. */
     public fun containsValue(value: V): Boolean = backward.containsKey(value)
 
+    /**
+     * The value paired with [key], as a presence-discriminated result. Unlike a nullable return this keeps a stored
+     * `null` value distinct from a miss.
+     */
     public fun lookup(key: K): BiMapLookup<V> =
         forward.getEntry(key)?.let { BiMapLookup.Found(it.value) } ?: BiMapLookup.Missing
 
+    /**
+     * The key paired with [value], as a presence-discriminated result. The inverse lookup costs the same as the
+     * forward one, since both directions are indexed.
+     */
     public fun lookupKey(value: V): BiMapLookup<K> =
         backward.getEntry(value)?.let { BiMapLookup.Found(it.value) } ?: BiMapLookup.Missing
 
+    /**
+     * A map with the pair added.
+     *
+     * @throws BiMapConflictException if the key or the value is already present. A bijection cannot absorb the pair
+     * by displacing an existing one, so this is strict rather than overwriting; use [tryAdd] to detect the conflict
+     * without an exception.
+     */
     public fun add(key: K, value: V): PersistentBiMap<K, V> {
         val result = tryAdd(key, value)
         if (!result.added) throw BiMapConflictException(checkNotNull(result.conflict))
@@ -127,8 +158,13 @@ public class PersistentBiMap<K, V> private constructor(
         )
     }
 
+    /** A map without the pair keyed by [key]. Returns the receiver unchanged when absent. */
     public fun removeKey(key: K): PersistentBiMap<K, V> = tryRemoveKey(key).map
 
+    /**
+     * Remove the pair keyed by [key], reporting whether anything was removed and, if so, the value that went with
+     * it.
+     */
     public fun tryRemoveKey(key: K): BiMapRemoveResult<K, V, V> {
         val entry = forward.getEntry(key) ?: return BiMapRemoveResult(this, false, null)
         checkNotNull(backward.getEntry(entry.value)) { "PersistentBiMap invariant failure." }
@@ -139,8 +175,13 @@ public class PersistentBiMap<K, V> private constructor(
         )
     }
 
+    /** A map without the pair whose value is [value]. Returns the receiver unchanged when absent. */
     public fun removeValue(value: V): PersistentBiMap<K, V> = tryRemoveValue(value).map
 
+    /**
+     * Remove the pair whose value is [value], reporting whether anything was removed and, if so, the key that went
+     * with it.
+     */
     public fun tryRemoveValue(value: V): BiMapRemoveResult<K, V, K> {
         val entry = backward.getEntry(value) ?: return BiMapRemoveResult(this, false, null)
         checkNotNull(forward.getEntry(entry.value)) { "PersistentBiMap invariant failure." }
@@ -151,16 +192,24 @@ public class PersistentBiMap<K, V> private constructor(
         )
     }
 
+    /** An empty map retaining both policies. Returns the receiver when it is already empty. */
     public fun clear(): PersistentBiMap<K, V> =
         if (isEmpty) this else empty(keyPolicy, valuePolicy)
 
     override fun iterator(): Iterator<HamtEntry<K, V>> = forward.iterator()
+    /** The keys, in the forward index's iteration order. */
     public fun keys(): Sequence<K> = forward.entries().map { it.key }
+    /** The values, in the same order as [keys]. */
     public fun values(): Sequence<V> = forward.entries().map { it.value }
 
     internal fun sharesRootsWith(other: PersistentBiMap<K, V>): Boolean =
         forward.sharesRootWith(other.forward) && backward.sharesRootWith(other.backward)
 
+    /**
+     * Walk both indexes and check that they agree - equal sizes, and every forward pair present in the inverse. A
+     * defensive audit for tests and for data arriving from outside the process, not a routine operation: it visits
+     * every entry.
+     */
     public fun validateStructure(): Boolean {
         if (forward.size != backward.size) return false
         for (entry in forward) {

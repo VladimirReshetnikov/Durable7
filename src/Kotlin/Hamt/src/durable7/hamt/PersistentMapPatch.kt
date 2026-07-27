@@ -9,6 +9,10 @@ package durable7.hamt
 
 /** A caller-supplied equality policy deciding whether two values count as equal. */
 public fun interface EqualityPolicy<T> {
+    /**
+     * Whether the two values count as equal. Must be reflexive, symmetric, and transitive; a patch relies on it to
+     * decide whether a change is a semantic no-op.
+     */
     public fun equivalent(left: T, right: T): Boolean
 }
 
@@ -26,7 +30,9 @@ public class MapPatchValue<V> private constructor(
     public val value: V?,
 ) {
     public companion object {
+        /** The state of a key that is not present. */
         public fun <V> absent(): MapPatchValue<V> = MapPatchValue(false, null)
+        /** The state of a key bound to [value]. Distinct from [absent] even when [value] is `null`. */
         public fun <V> present(value: V): MapPatchValue<V> = MapPatchValue(true, value)
     }
 }
@@ -55,11 +61,21 @@ public class PersistentMapPatch<K, V> private constructor(
     private data class Change<V>(val before: MapPatchValue<V>, val after: MapPatchValue<V>)
 
     public companion object {
+        /**
+         * An empty patch. The key policy governs which keys a patch entry addresses; the value policy decides
+         * whether two states count as the same.
+         */
         public fun <K, V> empty(
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
             valuePolicy: EqualityPolicy<V> = defaultEqualityPolicy(),
         ): PersistentMapPatch<K, V> = PersistentMapPatch(PersistentHashMap.empty(keyPolicy), valuePolicy)
 
+        /**
+         * A patch holding every entry.
+         *
+         * @throws DuplicateKeyException if two entries address an equal key, since a patch records at most one
+         * change per key.
+         */
         public fun <K, V> from(
             entries: Iterable<MapPatchEntry<K, V>>,
             keyPolicy: HashPolicy<K> = defaultHashPolicy(),
@@ -70,6 +86,10 @@ public class PersistentMapPatch<K, V> private constructor(
             return result
         }
 
+        /**
+         * The patch that turns [source] into [target]: one entry per key whose state differs under [valuePolicy].
+         * Applying the result to [source] yields [target].
+         */
         public fun <K, V> between(
             source: PersistentHashMap<K, V>,
             target: PersistentHashMap<K, V>,
@@ -100,27 +120,46 @@ public class PersistentMapPatch<K, V> private constructor(
         }
     }
 
+    /** Number of recorded changes. */
     public val size: Int get() = changes.size
+    /** Whether the patch records no changes. */
     public val isEmpty: Boolean get() = changes.isEmpty
+    /** The hash policy governing patch keys. */
     public val keyPolicy: HashPolicy<K> get() = changes.policy
 
+    /**
+     * The recorded change for [key], or `null` when the patch says nothing about it. Saying nothing is distinct
+     * from recording a change to absence.
+     */
     public fun get(key: K): MapPatchEntry<K, V>? {
         val indexed = changes.getEntry(key) ?: return null
         return MapPatchEntry(indexed.key, indexed.value.before, indexed.value.after)
     }
 
+    /**
+     * A patch with the entry added. An entry whose before and after states are equal is a semantic no-op and is
+     * dropped rather than stored.
+     *
+     * @throws DuplicateKeyException if the patch already addresses an equal key; use [tryAdd] to detect that
+     * without an exception.
+     */
     public fun add(entry: MapPatchEntry<K, V>): PersistentMapPatch<K, V> {
         if (statesEqual(entry.before, entry.after)) return this
         if (changes.containsKey(entry.key)) throw DuplicateKeyException("An equivalent patch key already exists.")
         return PersistentMapPatch(changes.add(entry.key, Change(entry.before, entry.after)), valuePolicy)
     }
 
+    /**
+     * Add the entry only when the patch does not already address its key, reporting whether it was added. A no-op
+     * entry reports `false` and leaves the patch unchanged, the same as a collision does.
+     */
     public fun tryAdd(entry: MapPatchEntry<K, V>): MapPatchAddResult<K, V> {
         if (statesEqual(entry.before, entry.after)) return MapPatchAddResult(this, false)
         if (changes.containsKey(entry.key)) return MapPatchAddResult(this, false)
         return MapPatchAddResult(add(entry), true)
     }
 
+    /** A patch that no longer addresses [key]. Returns the receiver unchanged when it did not. */
     public fun remove(key: K): PersistentMapPatch<K, V> =
         if (!changes.containsKey(key)) this else PersistentMapPatch(changes.remove(key), valuePolicy)
 
@@ -144,6 +183,10 @@ public class PersistentMapPatch<K, V> private constructor(
         return result
     }
 
+    /**
+     * The patch that undoes this one, with every entry's before and after states exchanged. Applying a patch and
+     * then its inverse returns the original map.
+     */
     public fun invert(): PersistentMapPatch<K, V> {
         var result = empty<K, V>(keyPolicy, valuePolicy)
         for (entry in this) result = result.add(MapPatchEntry(entry.key, entry.after, entry.before))
@@ -176,6 +219,12 @@ public class PersistentMapPatch<K, V> private constructor(
         return result
     }
 
+    /**
+     * Check that no entry records a semantic no-op and return the number of changes. A defensive audit for tests,
+     * not a routine operation.
+     *
+     * @throws IllegalStateException on the first violation found.
+     */
     public fun validateStructure(): Int {
         for (entry in this) check(!statesEqual(entry.before, entry.after)) { "Patch stores a semantic no-op." }
         return size

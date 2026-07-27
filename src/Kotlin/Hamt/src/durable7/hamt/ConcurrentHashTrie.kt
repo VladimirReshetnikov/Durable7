@@ -36,23 +36,50 @@ public class ConcurrentHashTrie<K, V>(
         )
     }
 
+    /**
+     * A counter incremented by every successful mutation. Two reads returning the same generation observed the same
+     * logical contents.
+     */
     public val generation: Long get() = revision.get()
+    /**
+     * Number of entries, counted by walking a snapshot. O(n), and only as current as the instant the snapshot was
+     * taken - unlike the persistent collections, whose size is O(1).
+     */
     public val size: Int get() = snapshot().count()
+    /** Whether the trie held no entries at the instant a snapshot was taken. */
     public val isEmpty: Boolean get() = snapshot().none()
 
+    /**
+     * The value for [key], or `null` when absent or stored as `null`. Lock-free: readers never block and never see
+     * a partially applied update.
+     */
     public operator fun get(key: K): V? = getEntry(key)?.value
+    /** The stored entry for [key], or `null` when absent. Keeps a stored `null` value distinct from a miss. */
     public fun getEntry(key: K): HamtEntry<K, V>? = getEntry(readRoot(), key)
+    /** Whether an entry for [key] is present. */
     public fun containsKey(key: K): Boolean = getEntry(key) != null
 
+    /**
+     * Bind [key] to [value], replacing any existing binding. A write of an already-equal value is skipped, so it
+     * neither advances [generation] nor invalidates a reader.
+     */
     public fun set(key: K, value: V) {
         mutate(key) { exists, current ->
             if (exists && valuesEqual(current, value)) Decision.none() else Decision.set(value)
         }
     }
 
+    /** Bind [key] to [value] only when absent, reporting whether the trie changed. */
     public fun tryAdd(key: K, value: V): Boolean =
         mutate(key) { exists, _ -> if (exists) Decision.none() else Decision.set(value) }.changed
 
+    /**
+     * The value for [key], invoking [factory] and storing its result when absent.
+     *
+     * [factory] may be invoked and its result discarded if another thread wins the race to install a value for the
+     * same key; the value returned is always the one actually stored. Do not rely on it running exactly once, and
+     * do not let it reenter this trie.
+     */
     public fun getOrPut(key: K, factory: (K) -> V): V {
         val result = mutate(key) { exists, current ->
             if (exists) Decision.returning(current) else Decision.set(factory(key))
@@ -72,6 +99,7 @@ public class ConcurrentHashTrie<K, V>(
         return result.value as V
     }
 
+    /** Remove [key], returning the entry that was removed or `null` when it was absent. */
     public fun remove(key: K): HamtEntry<K, V>? {
         var removedKey: K? = null
         val result = mutate(key) { exists, current, storedKey ->
@@ -86,6 +114,7 @@ public class ConcurrentHashTrie<K, V>(
         return HamtEntry(removedKey as K, result.value as V)
     }
 
+    /** Remove every entry by publishing a fresh empty root. Snapshots taken beforehand are unaffected. */
     public fun clear() {
         while (true) {
             val observed = readRoot()
@@ -601,10 +630,21 @@ public class ConcurrentHashTrie<K, V>(
         private val owner: ConcurrentHashTrie<K, V>,
         private val root: Root<K, V>,
     ) : Iterable<HamtEntry<K, V>> {
+        /**
+         * Number of entries in this snapshot. O(n): the snapshot was captured in constant time, so the count is
+         * deferred to whoever asks for it.
+         */
         public val size: Int get() = count()
+        /** The value for [key] in this snapshot, or `null` when absent or stored as `null`. */
         public operator fun get(key: K): V? = owner.getEntry(root, key)?.value
+        /** The stored entry for [key] in this snapshot, or `null` when absent. */
         public fun getEntry(key: K): HamtEntry<K, V>? = owner.getEntry(root, key)
+        /** Whether an entry for [key] is present in this snapshot. */
         public fun containsKey(key: K): Boolean = getEntry(key) != null
+        /**
+         * A persistent map holding this snapshot's entries. O(n): the entries are rebuilt into a CHAMP under the
+         * trie's policy rather than shared.
+         */
         public fun toPersistentHashMap(): PersistentHashMap<K, V> =
             PersistentHashMap.from(map { it.key to it.value }, owner.policy)
         override fun iterator(): Iterator<HamtEntry<K, V>> = owner.entries(root).iterator()
