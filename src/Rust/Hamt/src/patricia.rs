@@ -1012,6 +1012,18 @@ impl std::error::Error for PatriciaCursorEditError {}
 
 macro_rules! map_type {
     ($name:ident, $cursor:ident, $key:ty, $encode:expr) => {
+        #[doc = concat!(
+            "Persistent big-endian Patricia map from `", stringify!($key), "` keys to values."
+        )]
+        ///
+        /// Every operation is bounded by the key width rather than by the number of entries, and
+        /// needs no hashing, no rebalancing, and no comparison policy. Updates are persistent: the
+        /// receiver is left intact and the returned map shares every subtree the edit did not
+        /// touch, so cloning is `O(1)` and holding many versions is cheap.
+        ///
+        /// Keys are stored under a sign-flipped encoding, so iteration, cursor rank, and set
+        /// algebra are ascending by **signed** key value, with negative keys ordered before
+        /// non-negative ones.
         pub struct $name<V> {
             core: Core<$key, V>,
         }
@@ -1375,6 +1387,17 @@ map_cursor_type!(PersistentLongMapCursor, PersistentLongMap, i64);
 
 macro_rules! set_type {
     ($name:ident, $cursor:ident, $map:ident, $key:ty) => {
+        #[doc = concat!(
+            "Persistent big-endian Patricia set of `", stringify!($key), "` keys."
+        )]
+        ///
+        #[doc = concat!("A thin wrapper over [`", stringify!($map), "`] with `()` values, so it")]
+        /// inherits that type's guarantees exactly: every operation is bounded by the key width
+        /// rather than by cardinality, updates leave the receiver intact and share untouched
+        /// subtrees, and cloning is `O(1)`.
+        ///
+        /// Iteration and cursor rank are ascending by **signed** key value, with negative keys
+        /// ordered before non-negative ones.
         #[derive(Clone, Default)]
         pub struct $name {
             map: $map<()>,

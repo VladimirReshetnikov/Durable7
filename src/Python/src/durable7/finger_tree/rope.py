@@ -811,8 +811,8 @@ class RopeCursor(Generic[T]):
         return None if self.is_at_end else RopeCursorPeek(cast(T, self.rope.get(self.position)))
 
     def move_previous(self) -> RopeCursor[T]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -820,14 +820,18 @@ class RopeCursor(Generic[T]):
         return RopeCursor(self.rope, self.position - 1)
 
     def move_next(self) -> RopeCursor[T]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return RopeCursor(self.rope, self.position + 1)
 
     def seek(self, position: int) -> RopeCursor[T]:
-        """A cursor at ``position`` within the same rope version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same rope version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return self if position == self.position else RopeCursor(self.rope, position)
 
@@ -855,8 +859,8 @@ class RopeCursor(Generic[T]):
         return RopeCursor(rope, self.position + len(materialized))
 
     def delete_previous(self) -> RopeCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the element before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         if self.is_at_start:
@@ -867,8 +871,8 @@ class RopeCursor(Generic[T]):
         return RopeCursor(rope, self.position - 1)
 
     def delete_next(self) -> RopeCursor[T]:
-        """Remove the element after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the element after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -879,8 +883,8 @@ class RopeCursor(Generic[T]):
         return RopeCursor(rope, self.position)
 
     def replace_next(self, value: T) -> RopeCursor[T]:
-        """Replace the element after the gap, keeping the gap where it is, or return ``None`` at the
-        end.
+        """Replace the element after the gap, keeping the gap where it is, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -972,8 +976,8 @@ class MeasuredRopeCursor(Generic[T, M]):
         return None if self.is_at_end else RopeCursorPeek(cast(T, self.rope.get(self.position)))
 
     def move_previous(self) -> MeasuredRopeCursor[T, M]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -981,14 +985,18 @@ class MeasuredRopeCursor(Generic[T, M]):
         return MeasuredRopeCursor(self.rope, self.position - 1)
 
     def move_next(self) -> MeasuredRopeCursor[T, M]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return MeasuredRopeCursor(self.rope, self.position + 1)
 
     def seek(self, position: int) -> MeasuredRopeCursor[T, M]:
-        """A cursor at ``position`` within the same rope version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same rope version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return self if position == self.position else MeasuredRopeCursor(self.rope, position)
 
@@ -1030,8 +1038,8 @@ class MeasuredRopeCursor(Generic[T, M]):
         return MeasuredRopeCursor(rope, self.position + len(materialized))
 
     def delete_previous(self) -> MeasuredRopeCursor[T, M]:
-        """Remove the element before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the element before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         if self.is_at_start:
@@ -1042,8 +1050,8 @@ class MeasuredRopeCursor(Generic[T, M]):
         return MeasuredRopeCursor(rope, self.position - 1)
 
     def delete_next(self) -> MeasuredRopeCursor[T, M]:
-        """Remove the element after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the element after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -1054,8 +1062,8 @@ class MeasuredRopeCursor(Generic[T, M]):
         return MeasuredRopeCursor(rope, self.position)
 
     def replace_next(self, value: T) -> MeasuredRopeCursor[T, M]:
-        """Replace the element after the gap, keeping the gap where it is, or return ``None`` at the
-        end.
+        """Replace the element after the gap, keeping the gap where it is, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -1137,19 +1145,23 @@ class TextRopeCursor:
         return self.cursor.peek_next()
 
     def move_previous(self) -> TextRopeCursor:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         return TextRopeCursor(self.cursor.move_previous(), self._snapshot)
 
     def move_next(self) -> TextRopeCursor:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         return TextRopeCursor(self.cursor.move_next(), self._snapshot)
 
     def seek(self, position: int) -> TextRopeCursor:
-        """A cursor at ``position`` within the same rope version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same rope version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return (
             self
@@ -1158,8 +1170,8 @@ class TextRopeCursor:
         )
 
     def seek_line_column(self, line: int, column: int) -> TextRopeCursor:
-        """A cursor at the given zero-based line and column, or ``None`` when that position does not
-        exist.
+        """A cursor at the given zero-based line and column, raising :class:`ValueError` when
+        that position does not exist.
         """
 
         offset = self.snapshot().offset_of(line, column)
@@ -1168,32 +1180,32 @@ class TextRopeCursor:
         return self.seek(offset)
 
     def insert(self, text: str) -> TextRopeCursor:
-        # Empty text is an identity no-op in the measured cursor; returning this receiver preserves
-        # the memoized snapshot instead of rewrapping the same measured cursor in a fresh facade.
-        """Insert ``value`` at the gap and return a cursor positioned after it. The receiver keeps
+        """Insert ``text`` at the gap and return a cursor positioned after it. The receiver keeps
         its own version, so cursors retained beforehand never see it.
         """
 
+        # Empty text is an identity no-op in the measured cursor; returning this receiver preserves
+        # the memoized snapshot instead of rewrapping the same measured cursor in a fresh facade.
         inserted = self.cursor.insert_range(text)
         return self if inserted is self.cursor else TextRopeCursor(inserted)
 
     def delete_previous(self) -> TextRopeCursor:
-        """Remove the character before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the character before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         return TextRopeCursor(self.cursor.delete_previous())
 
     def delete_next(self) -> TextRopeCursor:
-        """Remove the character after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the character after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         return TextRopeCursor(self.cursor.delete_next())
 
     def replace_next(self, value: str) -> TextRopeCursor:
-        """Replace the character after the gap, keeping the gap where it is, or return ``None`` at
-        the end.
+        """Replace the character after the gap, keeping the gap where it is, raising
+        :class:`IndexError` at the end.
         """
 
         if len(value) != 1:

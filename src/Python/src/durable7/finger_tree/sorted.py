@@ -858,8 +858,8 @@ class SortedBagCursor(Generic[T]):
         return None if self.is_at_end else OrderedCursorPeek(cast(T, self.bag.get(self.position)))
 
     def move_previous(self) -> SortedBagCursor[T]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -867,14 +867,18 @@ class SortedBagCursor(Generic[T]):
         return SortedBagCursor(self.bag, self.position - 1)
 
     def move_next(self) -> SortedBagCursor[T]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return SortedBagCursor(self.bag, self.position + 1)
 
     def seek_rank(self, position: int) -> SortedBagCursor[T]:
-        """A cursor at ``position`` within the same bag version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same bag version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return self if position == self.position else SortedBagCursor(self.bag, position)
 
@@ -893,8 +897,8 @@ class SortedBagCursor(Generic[T]):
         return SortedBagCursor(SortedBag(items, self.bag.comparator), position)
 
     def delete_previous(self) -> SortedBagCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the element before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         if self.is_at_start:
@@ -902,8 +906,8 @@ class SortedBagCursor(Generic[T]):
         return self._delete_at(self.position - 1, self.position - 1)
 
     def delete_next(self) -> SortedBagCursor[T]:
-        """Remove the element after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the element after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -961,8 +965,8 @@ class SortedSetCursor(Generic[T]):
         return None if self.is_at_end else OrderedCursorPeek(cast(T, self.set.get(self.position)))
 
     def move_previous(self) -> SortedSetCursor[T]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -970,14 +974,18 @@ class SortedSetCursor(Generic[T]):
         return SortedSetCursor(self.set, self.position - 1)
 
     def move_next(self) -> SortedSetCursor[T]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return SortedSetCursor(self.set, self.position + 1)
 
     def seek_rank(self, position: int) -> SortedSetCursor[T]:
-        """A cursor at ``position`` within the same set version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same set version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return self if position == self.position else SortedSetCursor(self.set, position)
 
@@ -990,8 +998,8 @@ class SortedSetCursor(Generic[T]):
         return SortedSetCursor(self.set.add(value), location.position + 1)
 
     def delete_previous(self) -> SortedSetCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the element before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         item = self.peek_previous()
@@ -1000,8 +1008,8 @@ class SortedSetCursor(Generic[T]):
         return SortedSetCursor(self.set.remove(item.value), self.position - 1)
 
     def delete_next(self) -> SortedSetCursor[T]:
-        """Remove the element after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the element after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         item = self.peek_next()
@@ -1064,8 +1072,8 @@ class SortedMapCursor(Generic[K, V]):
         )
 
     def move_previous(self) -> SortedMapCursor[K, V]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -1073,14 +1081,18 @@ class SortedMapCursor(Generic[K, V]):
         return SortedMapCursor(self.map, self.position - 1)
 
     def move_next(self) -> SortedMapCursor[K, V]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("Cursor is already at the end.")
         return SortedMapCursor(self.map, self.position + 1)
 
     def seek_rank(self, position: int) -> SortedMapCursor[K, V]:
-        """A cursor at ``position`` within the same map version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same map version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return self if position == self.position else SortedMapCursor(self.map, position)
 
@@ -1119,8 +1131,8 @@ class SortedMapCursor(Generic[K, V]):
         )
 
     def set_next_value(self, value: V) -> SortedMapCursor[K, V]:
-        """Replace the value of the entry after the gap, keeping its key and position. ``None`` at
-        the end.
+        """Replace the value of the entry after the gap, keeping its key and position, raising
+        :class:`IndexError` at the end.
         """
 
         entry = self.peek_next()
@@ -1129,8 +1141,8 @@ class SortedMapCursor(Generic[K, V]):
         return SortedMapCursor(self.map.set_item(entry.value.key, value), self.position)
 
     def delete_previous(self) -> SortedMapCursor[K, V]:
-        """Remove the entry before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the entry before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         entry = self.peek_previous()
@@ -1139,7 +1151,8 @@ class SortedMapCursor(Generic[K, V]):
         return SortedMapCursor(self.map.remove(entry.value.key), self.position - 1)
 
     def delete_next(self) -> SortedMapCursor[K, V]:
-        """Remove the entry after the gap and return a cursor in its place, or ``None`` at the end.
+        """Remove the entry after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         entry = self.peek_next()

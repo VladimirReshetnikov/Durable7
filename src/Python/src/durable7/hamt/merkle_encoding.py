@@ -118,6 +118,8 @@ class MerkleDigest:
         return self._bytes
 
     def __bytes__(self) -> bytes:
+        """Return the 32 raw digest bytes, so ``bytes(digest)`` works directly."""
+
         return self._bytes
 
     def __str__(self) -> str:

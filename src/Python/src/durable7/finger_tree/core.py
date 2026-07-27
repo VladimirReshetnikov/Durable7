@@ -716,8 +716,8 @@ class PersistentDequeCursor(Generic[T]):
         return None if self.is_at_end else SequenceCursorPeek(self._snapshot[self.position])
 
     def move_previous(self) -> PersistentDequeCursor[T]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -725,14 +725,18 @@ class PersistentDequeCursor(Generic[T]):
         return PersistentDequeCursor(self._snapshot, self.position - 1)
 
     def move_next(self) -> PersistentDequeCursor[T]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("deque cursor is already at the end")
         return PersistentDequeCursor(self._snapshot, self.position + 1)
 
     def seek(self, position: int) -> PersistentDequeCursor[T]:
-        """A cursor at ``position`` within the same deque version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same deque version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return (
             self if position == self.position else PersistentDequeCursor(self._snapshot, position)
@@ -765,8 +769,8 @@ class PersistentDequeCursor(Generic[T]):
         )
 
     def delete_previous(self) -> PersistentDequeCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the element before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         if self.is_at_start:
@@ -777,8 +781,8 @@ class PersistentDequeCursor(Generic[T]):
         return PersistentDequeCursor(snapshot, self.position - 1)
 
     def delete_next(self) -> PersistentDequeCursor[T]:
-        """Remove the element after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the element after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -789,8 +793,8 @@ class PersistentDequeCursor(Generic[T]):
         return PersistentDequeCursor(snapshot, self.position)
 
     def replace_next(self, value: T) -> PersistentDequeCursor[T]:
-        """Replace the element after the gap, keeping the gap where it is, or return ``None`` at the
-        end.
+        """Replace the element after the gap, keeping the gap where it is, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -856,8 +860,8 @@ class ReversibleDequeCursor(Generic[T]):
         return SequenceCursorPeek(cast(T, self._snapshot.get(self.position)))
 
     def move_previous(self) -> ReversibleDequeCursor[T]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -865,14 +869,18 @@ class ReversibleDequeCursor(Generic[T]):
         return ReversibleDequeCursor(self._snapshot, self.position - 1)
 
     def move_next(self) -> ReversibleDequeCursor[T]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("reversible-deque cursor is already at the end")
         return ReversibleDequeCursor(self._snapshot, self.position + 1)
 
     def seek(self, position: int) -> ReversibleDequeCursor[T]:
-        """A cursor at ``position`` within the same deque version, or ``None`` when out of range."""
+        """A cursor at ``position`` within the same deque version, raising
+        :class:`IndexError` when it is out of range.
+        """
 
         return (
             self if position == self.position else ReversibleDequeCursor(self._snapshot, position)
@@ -905,8 +913,8 @@ class ReversibleDequeCursor(Generic[T]):
         return ReversibleDequeCursor(snapshot, self.position + len(materialized))
 
     def delete_previous(self) -> ReversibleDequeCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the element before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         if self.is_at_start:
@@ -920,8 +928,8 @@ class ReversibleDequeCursor(Generic[T]):
         return ReversibleDequeCursor(first[0].concat(second[1]), self.position - 1)
 
     def delete_next(self) -> ReversibleDequeCursor[T]:
-        """Remove the element after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the element after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -935,8 +943,8 @@ class ReversibleDequeCursor(Generic[T]):
         return ReversibleDequeCursor(first[0].concat(second[1]), self.position)
 
     def replace_next(self, value: T) -> ReversibleDequeCursor[T]:
-        """Replace the element after the gap, keeping the gap where it is, or return ``None`` at the
-        end.
+        """Replace the element after the gap, keeping the gap where it is, raising
+        :class:`IndexError` at the end.
         """
 
         return self.delete_next().insert(value).move_previous()
@@ -1010,8 +1018,8 @@ class FingerTreeCursor(Generic[T, M]):
         return SequenceCursorPeek(cast(T, self._snapshot.get(self._position)))
 
     def move_previous(self) -> FingerTreeCursor[T, M]:
-        """A cursor one position earlier, or ``None`` at the start. The receiver is unchanged;
-        movement produces a new cursor over the same version.
+        """A cursor one position earlier, raising :class:`IndexError` at the start. The receiver is
+        unchanged; movement produces a new cursor over the same version.
         """
 
         if self.is_at_start:
@@ -1019,7 +1027,9 @@ class FingerTreeCursor(Generic[T, M]):
         return FingerTreeCursor(self._snapshot, self._position - 1)
 
     def move_next(self) -> FingerTreeCursor[T, M]:
-        """A cursor one position later, or ``None`` at the end. The receiver is unchanged."""
+        """A cursor one position later, raising :class:`IndexError` at the end. The receiver is
+        unchanged.
+        """
 
         if self.is_at_end:
             raise IndexError("finger-tree cursor is already at the end")
@@ -1045,8 +1055,8 @@ class FingerTreeCursor(Generic[T, M]):
         return FingerTreeCursor(snapshot, self._position + 1)
 
     def delete_previous(self) -> FingerTreeCursor[T, M]:
-        """Remove the element before the gap and return a cursor in its place, or ``None`` at the
-        start.
+        """Remove the element before the gap and return a cursor in its place, raising
+        :class:`IndexError` at the start.
         """
 
         if self.is_at_start:
@@ -1057,8 +1067,8 @@ class FingerTreeCursor(Generic[T, M]):
         return FingerTreeCursor(snapshot, self._position - 1)
 
     def delete_next(self) -> FingerTreeCursor[T, M]:
-        """Remove the element after the gap and return a cursor in its place, or ``None`` at the
-        end.
+        """Remove the element after the gap and return a cursor in its place, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
@@ -1069,8 +1079,8 @@ class FingerTreeCursor(Generic[T, M]):
         return FingerTreeCursor(snapshot, self._position)
 
     def replace_next(self, value: T) -> FingerTreeCursor[T, M]:
-        """Replace the element after the gap, keeping the gap where it is, or return ``None`` at the
-        end.
+        """Replace the element after the gap, keeping the gap where it is, raising
+        :class:`IndexError` at the end.
         """
 
         if self.is_at_end:
