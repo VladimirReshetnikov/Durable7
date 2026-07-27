@@ -150,13 +150,19 @@
 \newcommand{\term}[1]{\textit{#1}}
 \newcommand{\bigoh}[1]{$\mathrm{O}(#1)$}
 
-% Chapter epigraph
+% Chapter epigraphs. \motto has no attribution line; \epigraph has one.
+\newcommand{\motto}[1]{%
+  \begingroup
+  \vspace{-4pt}\hfill\begin{minipage}{0.80\textwidth}
+    \raggedleft\itshape\color{d7slate}\small #1\par
+  \end{minipage}\par\vspace{18pt}
+  \endgroup}
 \newcommand{\epigraph}[2]{%
   \begingroup
-  \vspace{-6pt}\hfill\begin{minipage}{0.82\textwidth}
+  \vspace{-4pt}\hfill\begin{minipage}{0.80\textwidth}
     \raggedleft\itshape\color{d7slate}\small #1\par
     \vspace{3pt}\normalfont\sffamily\scriptsize\upshape --- #2\par
-  \end{minipage}\par\vspace{16pt}
+  \end{minipage}\par\vspace{18pt}
   \endgroup}
 
 % --- Code listings ---------------------------------------------------------
@@ -216,27 +222,25 @@
 % --- Callout boxes ---------------------------------------------------------
 \newtcolorbox{contractbox}[1][The contract]{
   enhanced, breakable,
-  colback=d7mist, colframe=d7teal,
+  colback=d7mist, colframe=d7teal, colbacktitle=d7mist,
   boxrule=0pt, leftrule=2.6pt,
   arc=0pt, outer arc=0pt,
-  left=10pt, right=10pt, bottom=8pt, top=14pt,
+  left=11pt, right=11pt, bottom=9pt, top=3pt,
+  toptitle=7pt, bottomtitle=1pt, lefttitle=11pt,
   fonttitle=\sffamily\bfseries\footnotesize,
   coltitle=d7teal,
-  title={\MakeUppercase{#1}},
-  attach boxed title to top left={xshift=10pt, yshift=-2pt},
-  boxed title style={colback=d7mist, boxrule=0pt, arc=0pt, left=2pt, right=2pt},
+  title={#1},
 }
 \newtcolorbox{caveatbox}[1][Caveat]{
   enhanced, breakable,
-  colback=d7sun, colframe=d7copper,
+  colback=d7sun, colframe=d7copper, colbacktitle=d7sun,
   boxrule=0pt, leftrule=2.6pt,
   arc=0pt, outer arc=0pt,
-  left=10pt, right=10pt, top=14pt, bottom=8pt,
+  left=11pt, right=11pt, bottom=9pt, top=3pt,
+  toptitle=7pt, bottomtitle=1pt, lefttitle=11pt,
   fonttitle=\sffamily\bfseries\footnotesize,
   coltitle=d7copper,
-  title={\MakeUppercase{#1}},
-  attach boxed title to top left={xshift=10pt, yshift=-2pt},
-  boxed title style={colback=d7sun, boxrule=0pt, arc=0pt, left=2pt, right=2pt},
+  title={#1},
 }
 \newtcolorbox{glancebox}[1][At a glance]{
   enhanced, breakable,
@@ -246,28 +250,56 @@
   left=11pt, right=11pt, top=15pt, bottom=9pt,
   fonttitle=\sffamily\bfseries\footnotesize,
   coltitle=d7slate,
-  title={\MakeUppercase{#1}},
+  title={#1},
   attach boxed title to top left={xshift=11pt, yshift=-7pt},
   boxed title style={colback=white, boxrule=0pt, arc=0pt, left=3pt, right=3pt},
 }
 \newtcolorbox{asidebox}[1][Aside]{
   enhanced, breakable,
-  colback=d7paper, colframe=d7paper,
+  colback=d7paper, colframe=d7paper, colbacktitle=d7paper,
   boxrule=0pt, arc=2pt,
-  left=12pt, right=12pt, top=14pt, bottom=9pt,
+  left=12pt, right=12pt, bottom=10pt, top=3pt,
+  toptitle=8pt, bottomtitle=1pt, lefttitle=12pt,
   fonttitle=\sffamily\bfseries\footnotesize,
   coltitle=d7slate,
-  title={\MakeUppercase{#1}},
-  attach boxed title to top left={xshift=12pt, yshift=-2pt},
-  boxed title style={colback=d7paper, boxrule=0pt, arc=0pt, left=2pt, right=2pt},
+  title={#1},
 }
 
+% --- Reference tables that must break across pages --------------------------
+% tabularx cannot break; longtable can. First argument is the fraction of
+% \textwidth given to the label column.
+\newenvironment{d7table}[1]
+  {\par\vspace{3pt}\small
+   \setlength{\LTpre}{4pt}\setlength{\LTpost}{4pt}
+   \begin{longtable}{@{}%
+     >{\raggedright\arraybackslash}p{#1\textwidth}%
+     @{\hspace{10pt}}%
+     >{\raggedright\arraybackslash}p{\dimexpr\textwidth-#1\textwidth-10pt\relax}@{}}}
+  {\end{longtable}}
+
+\newenvironment{d7tablethree}[2]
+  {\par\vspace{3pt}\small
+   \setlength{\LTpre}{4pt}\setlength{\LTpost}{4pt}
+   \begin{longtable}{@{}%
+     >{\raggedright\arraybackslash}p{#1\textwidth}%
+     @{\hspace{8pt}}>{\raggedright\arraybackslash}p{#2\textwidth}%
+     @{\hspace{8pt}}>{\raggedright\arraybackslash}p{\dimexpr\textwidth-#1\textwidth-#2\textwidth-16pt\relax}@{}}}
+  {\end{longtable}}
+
 % A compact "specimen card" used to open each structure's section.
+% A specimen card is a run of label/value rows. Two side-by-side \parbox[t]es
+% rather than a tabular: p-columns of differing font size do not reliably share
+% a first baseline, and the label must sit level with the first line of prose.
+\newcommand{\spec}[2]{%
+  \par\noindent
+  \parbox[t]{0.21\linewidth}{\raggedright\sffamily\bfseries\footnotesize
+    \color{d7slate}\strut #1}%
+  \hspace{9pt}%
+  \parbox[t]{\dimexpr0.79\linewidth-9pt\relax}{\raggedright\strut #2}%
+  \par\vspace{3.5pt}}
 \newenvironment{specimen}[1][Specimen]
-  {\begin{glancebox}[#1]\small
-   \setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.14}
-   \begin{tabularx}{\linewidth}{@{}>{\sffamily\bfseries\color{d7slate}\footnotesize\raggedright\arraybackslash}p{0.21\linewidth}X@{}}}
-  {\end{tabularx}\end{glancebox}}
+  {\begin{glancebox}[#1]\small\setlength{\parindent}{0pt}}
+  {\end{glancebox}}
 
 % Table helpers
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
@@ -451,8 +483,8 @@ good news would be a worse guide.
 \chapter{What Persistence Buys}
 \label{ch:persistence}
 
-\epigraph{The old version is still there. That one sentence is the whole
-library, and everything else is an argument about how to afford it.}{}
+\motto{The old version is still there. That one sentence is the whole
+library, and everything else is an argument about how to afford it.}
 
 \noindent
 Here is a small program, and a large idea hiding inside it.
@@ -651,7 +683,7 @@ part of shipping, not as an admission of failure.
 \chapter{The Shared Contract}
 \label{ch:contract}
 
-\epigraph{A contract that only one implementation upholds is a comment.}{}
+\motto{A contract that only one implementation upholds is a comment.}
 
 \noindent
 Before the structures, the rules they all obey. This chapter is short, dense,
@@ -660,9 +692,7 @@ of something defined here.
 
 \section{Vocabulary}
 
-\begin{center}
-\small
-\begin{tabularx}{\linewidth}{@{}L{0.27\linewidth}Y@{}}
+\begin{d7table}{0.27}
 \toprule
 \thead{Term} & \thead{Meaning in this library} \\
 \midrule
@@ -698,8 +728,7 @@ documenting a remaining representation or asymptotic parity boundary. \\
 Facade & A public collection built on a shared core engine --- sorted sets on
 measured trees, text ropes on measured ropes. \\
 \bottomrule
-\end{tabularx}
-\end{center}
+\end{d7table}
 
 \section{Policies are values, and they are retained}
 
@@ -785,9 +814,7 @@ be rejected before any of it runs.
 Three different order contracts appear in this library, and conflating them is
 the most common way to write code that breaks on an unrelated change.
 
-\begin{center}
-\small
-\begin{tabularx}{\linewidth}{@{}L{0.24\linewidth}Y@{}}
+\begin{d7table}{0.24}
 \toprule
 \thead{Contract} & \thead{Who has it, and what you may rely on} \\
 \midrule
@@ -802,17 +829,14 @@ Comparer order & Sorted collections, canonical sets, priority search queues,
 interval structures, Patricia tries (ascending signed key order), Merkle trees
 (policy comparer order). Fully specified and safe to depend on. \\
 \bottomrule
-\end{tabularx}
-\end{center}
+\end{d7table}
 
 \section{Ownership, nine ways}
 
 The same semantic contract lands in nine memory models. This table is the
 translation key for the rest of the book.
 
-\begin{center}
-\small
-\begin{tabularx}{\linewidth}{@{}L{0.13\linewidth}Y@{}}
+\begin{d7table}{0.13}
 \toprule
 \thead{Language} & \thead{Ownership model, and what its docs must pin down} \\
 \midrule
@@ -843,8 +867,7 @@ Python      & GC objects, immutable versions, retained policies, dynamically
 consumed sessions. Typing and runtime validation, \code{None} versus absence,
 equality/hash coherence, iterator invalidation, code-point indexing. \\
 \bottomrule
-\end{tabularx}
-\end{center}
+\end{d7table}
 
 \begin{caveatbox}[Presence versus null]
 Every port has to distinguish ``the key is absent'' from ``the key is present and
@@ -856,6 +879,468 @@ presence-bearing result wrappers rather than a bare nullable return. The
 authenticated three-way merge takes this furthest: it distinguishes a deleted key
 from a key whose merged value is present-and-null, because on the wire those are
 different facts.
+\end{caveatbox}
+
+% ===========================================================================
+%  PART II -- HASHING
+% ===========================================================================
+\part{The Unordered World}
+\label{part:hash}
+
+\chapter{CHAMP: The Hash Trie at the Centre}
+\label{ch:champ}
+
+\motto{Every third structure in this library is a hash trie wearing a
+different hat.}
+
+\begin{specimen}[Specimen --- persistent hash map and set]
+\spec{Purpose}{Unordered key/value and membership collections with structural sharing, policy-defined equality, and structural equality/diff.}
+\spec{Core}{CHAMP: a 32-way bitmap-indexed prefix tree with split data/node bitmaps and canonical deletion topology.}
+\spec{Lookup}{\bigoh{\log_{32} n} --- at most seven levels for 32-bit hashes, plus bucket work on a full-hash collision.}
+\spec{Update}{\bigoh{\log_{32} n} path copy.}
+\spec{Equality/diff}{Lockstep slot alignment with reference pruning where policy identity is witnessed; \bigoh{n+m} for independently built operands.}
+\spec{Order}{Stable but unspecified. Never sorted, never insertion order.}
+\spec{Ports}{\code{PersistentHashMap}/\code{PersistentHashSet} (C\#, Kotlin, Rust, TypeScript, Python), \code{persistent\_hash\_map}/\code{\_set} (C\texttt{++}), \code{HashMap}/\code{HashSet} (Haskell), \code{d7\_hamt\_map}/\code{d7\_hamt\_set} (C), \code{Persistent\_hamt} / \code{Persistent\_hash\_set} (OCaml).}
+\end{specimen}
+
+\noindent
+Start here, because a surprising amount of the library is downstream of this one
+structure. The hash bag, the bidirectional map, the set-valued multimap, the
+relation, the map patch, the directed graph, the indexed map, and the
+insertion-ordered set are all --- in whole or in part --- compositions over the
+persistent hash map. Understand its representation and you have understood the
+substrate for a third of the collections in this book.
+
+\section{From HAMT to CHAMP}
+
+Bagwell's hash array mapped trie is the classic design: consume five bits of the
+hash per level, use a 32-bit bitmap to record which of the 32 slots are
+occupied, and store only the occupied slots in a compact array. Population count
+on the bitmap below the slot's bit gives the array index. Lookup is a handful of
+hops; the tree is shallow because $32^7 > 2^{32}$.
+
+CHAMP --- the Compressed Hash-Array Mapped Prefix-tree, from Steindorfer and
+Vinju's OOPSLA 2015 paper --- keeps that skeleton and changes two things.
+
+\subsection{The bitmap split}
+
+A CHAMP node keeps \emph{two} bitmaps: a \code{datamap} recording which slots
+hold an inline key/value payload, and a \code{nodemap} recording which slots
+hold a pointer to a sub-node. The single backing array is then divided into two
+regions: payloads packed at the front, sub-node references packed at the back
+(Figure~\ref{fig:champnode}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  % --- the two bitmaps: eight of the thirty-two logical slots shown ---------
+  \node[d7label,anchor=east] at (0,0) {\code{datamap}};
+  \foreach \i/\b in {0/0,1/1,2/0,3/0,4/1,5/0,6/0,7/1}
+    {\node[d7cell, fill={\ifnum\b=1 d7mist\else white\fi}] at (4+\i*5.2,0) {\b};}
+  \node[d7label,anchor=east] at (0,-6.5) {\code{nodemap}};
+  \foreach \i/\b in {0/1,1/0,2/0,3/1,4/0,5/0,6/0,7/0}
+    {\node[d7cell, fill={\ifnum\b=1 d7sun\else white\fi}] at (4+\i*5.2,-6.5) {\b};}
+  \node[d7label,anchor=west,font=\sffamily\scriptsize] at (46,-3.2) {slots $0\ldots7$};
+
+  % --- the single backing array --------------------------------------------
+  \node[d7label,anchor=east] at (0,-19) {one array};
+  \foreach \i/\t in {0/{$k_1v_1$},1/{$k_4v_4$},2/{$k_7v_7$}}
+    {\node[d7cell, minimum width=32pt, fill=d7mist] at (10+\i*12.2,-19) {\t};}
+  \foreach \i/\t in {0/{$\to n_3$},1/{$\to n_0$}}
+    {\node[d7cell, minimum width=32pt, fill=d7sun] at (52+\i*12.2,-19) {\t};}
+
+  \draw[decorate,decoration={brace,mirror,amplitude=3.5pt},d7slate,thin]
+    (3.8,-23.5) -- (40.4,-23.5)
+    node[midway,below=3pt,d7label] {inline payloads};
+  \draw[decorate,decoration={brace,mirror,amplitude=3.5pt},d7slate,thin]
+    (45.8,-23.5) -- (70.4,-23.5)
+    node[midway,below=3pt,d7label] {sub-nodes};
+\end{tikzpicture}
+\caption{A CHAMP node. Two bitmaps classify each of the 32 logical slots as
+empty, inline payload, or sub-node. The payloads live contiguously at the front
+of one array and the sub-node references at the back, so iteration over entries
+never has to step past pointers.}
+\label{fig:champnode}
+\end{figure}
+
+The immediate win is layout. Iteration touches payload runs contiguously instead
+of interleaving pointers and payloads, and a lookup that lands on a data slot
+reads the entry directly rather than dereferencing a leaf object. The deeper win
+is the second change.
+
+\subsection{Canonical deletion topology}
+
+In a plain HAMT, deletion leaves scar tissue. A sub-node that shrinks to a single
+entry stays a sub-node, so the tree's shape encodes its update history: two maps
+with identical contents can have different skeletons depending on what was
+inserted and removed along the way.
+
+CHAMP normalises on the way out. When a sub-node shrinks to a single payload, it
+is collapsed into its parent's data region; when a wrapper node ends up holding
+nothing but a single child, the wrapper is removed (Figure~\ref{fig:champdelete}).
+Bitmap topology is therefore determined by the hashes that remain, not by the
+order in which they arrived.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \begin{scope}
+    \node[d7label] at (1.1,0.75) {before removing $k_9$};
+    \node[d7node] (p) at (1.1,0) {parent: \code{data}=\{$k_1$\} \code{node}=\{$\bullet$\}};
+    \node[d7node] (c) at (1.1,-1.3) {child: \code{data}=\{$k_5$, $k_9$\}};
+    \draw[d7edge] (p) -- (c);
+  \end{scope}
+  \begin{scope}[xshift=5.6cm]
+    \node[d7label,text=d7copper] at (1.1,0.75) {after --- child collapses};
+    \node[d7newnode] (p2) at (1.1,0) {parent: \code{data}=\{$k_1$, $k_5$\}};
+    \node[d7ghost] (c2) at (1.1,-1.3) {\emph{no wrapper node}};
+    \draw[d7edge,draw=d7rule,dashed] (p2) -- (c2);
+  \end{scope}
+\end{tikzpicture}
+\caption{Canonical deletion. A sub-node that would be left holding one payload is
+promoted into its parent, so shape depends on contents rather than on history.}
+\label{fig:champdelete}
+\end{figure}
+
+That canonicalisation is what makes the interesting operations possible.
+
+\section{Equality and diff without a lookup pass}
+
+If two maps with equal contents have the same skeleton, then comparing them does
+not require looking every key of one up in the other. You can walk both trees in
+lockstep, aligning logical bitmap slots, and compare structure directly.
+Better: when two versions share ancestry --- which they will, constantly, in a
+persistent library --- entire subtrees are \emph{reference-identical}, and a
+reference comparison prunes them without touching a single key.
+
+\begin{contractbox}[Structural equality and diff]
+Where the implementation has a positive witness that both operands retain one
+hash-policy identity, \code{MapEquals} and \code{Diff} traverse aligned logical
+slots using stored hashes and prune every reference-identical descendant. Work
+then tracks the visited non-shared regions plus the reported differences.
+Independently created but compatible policies fall back to lookup-based
+comparison, because their coherent hash states may differ.
+\end{contractbox}
+
+\begin{caveatbox}[Identical topology is not reference identity]
+Two maps built independently --- same entries, same policy, different
+allocations --- share nothing. Comparing them is an honest \bigoh{n+m}
+traversal, and CHAMP by itself does \emph{not} guarantee work proportional to
+logical divergence. The benchmark suite deliberately separates
+``shared ancestry, one change'' from ``independent histories, equal contents'',
+because those two cost profiles are different and a single number would hide it.
+
+Collision buckets add their own asymmetry. Their internal order is insertion
+order, so equality has to match keys as an unordered set, costing up to
+\bigoh{c^2} comparisons for a bucket of size $c$. Equal maps may also retain
+different concrete key objects, because ``first representative wins'' is
+per-history.
+\end{caveatbox}
+
+Structural algebra --- union, intersection, difference over two same-type maps or
+sets --- uses the same machinery: align slots, prune shared descendants, and
+build the result bottom-up.
+
+\section{Collisions}
+
+Two keys whose \emph{entire} 32-bit hash is equal cannot be separated by any
+number of levels. CHAMP handles this with an immutable collision bucket: a small
+array of entries that share a hash, searched linearly under the equality policy.
+This is strictly better than the alternative of extending the trie past the hash
+--- there is nothing left to extend it with --- and it degrades gracefully,
+because a pathological hash function turns the map into an association list
+rather than into an infinite loop.
+
+Unary bitmap chains are a related and often-misunderstood shape. Even under
+canonical deletion, a node can legitimately have exactly one child: two keys
+whose hashes agree on the first several five-bit groups must be separated deeper
+down, and the intervening nodes have nothing else to hold. Canonical here means
+\emph{canonical topology given the hashes present}, not ``no node ever has one
+child''.
+
+\section{Single-descent factories}
+
+Two operations recur so often in real code that all nine ports expose them
+directly rather than making callers compose lookup with update:
+
+\begin{lstlisting}[language={[Sharp]C}]
+var withThree = map.GetOrAdd(
+    3,
+    key => $"value-{key}",
+    out string threeValue);
+
+var counted = PersistentHashMap<string, int>.Empty.AddOrUpdate(
+    "requests",
+    _ => 1,                                 // absent: seed
+    (_, current) => checked(current + 1),   // present: update
+    out int requestCount);
+\end{lstlisting}
+
+Both hash once and descend once. That is the point: the naive composition
+(\code{TryGetValue} then \code{SetItem}) hashes twice and walks the trie twice.
+The contract around them is tight, and worth stating in full because it is easy
+to get subtly wrong.
+
+\begin{contractbox}[One descent, one factory, no retry]
+Delegates are validated \emph{before} hashing. Exactly one factory is selected
+and invoked exactly once; \code{GetOrAdd} invokes none on a hit. There is no
+retry loop --- unlike a mutable concurrent map, a persistent update has no
+competing writer to lose a race to. An update factory receives the caller's
+lookup key and the stored value, while the map retains the originally stored key
+object. If the produced value compares equal to the stored one, the source map
+and the stored value object are both retained. Any factory or comparer exception
+leaves the source unchanged and publishes nothing.
+\end{contractbox}
+
+\section{Sets, and what changes}
+
+\code{PersistentHashSet} is the same trie with payloads that carry no value. Its
+distinctive surface is set algebra and the six set relations --- subset, proper
+subset, superset, proper superset, overlap, and set equality --- all of which
+preserve the receiver's policy and normalise the argument under it first.
+
+Set algebra benefits from the same reference pruning as map equality: unioning a
+set with a descendant of itself skips every shared subtrie. Unioning two
+unrelated sets does not, and the API notes say so.
+
+\section{Nine ports, one representation}
+
+Every port ships canonical split-bitmap CHAMP nodes, collision buckets,
+persistent path copying, retained hash policies, and stored representatives.
+Where they differ is in the optimisation tier layered on top:
+
+\begin{d7table}{0.15}
+\toprule
+\thead{Port} & \thead{Notes beyond the shared representation} \\
+\midrule
+C\#      & The reference implementation, and the only one with the owner-token
+transient kernel (Chapter~\ref{ch:lifecycle}). Lockstep reference-pruned
+\code{MapEquals}, bitmap-aligned structural \code{Diff}. \\
+Kotlin   & Same split bitmaps and canonical promotion; exact-policy
+\code{mapEquals} and typed \code{diff} traverse logical slots in lockstep using
+stored hashes. \\
+Rust     & Safe \code{Arc} nodes, \code{\#![forbid(unsafe\_code)]}. Both path
+copying and \code{BulkBuilder} freezing produce canonical nodes. Independently
+created hasher policies keep semantic lookup fallback. \\
+Haskell  & Strict split data/node maps, inline \code{(hash,key,value)} runs,
+typed \code{MapDifference} values, and indirection-aware pointer pruning.
+\code{validStructure} checks the CHAMP invariants. \\
+C\texttt{++} & Header-first C\texttt{++}20, move-only bulk builder, compact
+inline payload vectors. Independently created stateful hash policies retain
+semantic equality/diff. \\
+C        & C17, split maps, inline type-erased payloads, flexible-array child
+runs, retain/release policy balance, allocation-failure rollback. Diff is
+visitor-based so it does not impose an allocator on callers. \\
+TypeScript & Canonical CHAMP with reusable public bulk builders; retains the
+structural reference-pruning checkpoint. \\
+Python   & Canonical CHAMP with the same public semantics, but deliberately
+performs semantic lookup-based equality and diff (with exact-policy fast paths)
+rather than claiming the lockstep descendant-pruning optimisation. \\
+OCaml    & Immutable 32-way CHAMP with the same public semantics;
+descendant-pruning is implementation-specific and not claimed. \\
+\bottomrule
+\end{d7table}
+
+\begin{asidebox}[Why enumeration order is a tested non-promise]
+It would be easy, and wrong, to let consumers depend on the current trie order.
+Durable7 has tests whose entire purpose is to stop that: they assert that
+independently built equal maps may enumerate differently, and they exist so that
+a future representation change --- a size-tiered small layout, say --- cannot
+break downstream code that quietly assumed otherwise. The one place a hash trie
+\emph{does} promise an order is Ctrie snapshot conversion
+(Chapter~\ref{ch:ctrie}), which fixes canonical data-run-before-node-run order
+precisely so that snapshot-to-persistent conversion preserves the captured
+sequence.
+\end{asidebox}
+
+\chapter{Companions of the Trie}
+\label{ch:derived}
+
+\motto{The cheapest new data structure is two old ones that agree with each
+other.}
+
+\noindent
+Nine families in this library are built by composing existing substrates rather
+than by introducing a new core tree. That is a deliberate rule, not an accident
+of laziness: a new core is a new set of invariants, a new validator, a new
+adversarial test suite, and nine new implementations. A composition inherits all
+of that from its parts, and the only genuinely new obligation is keeping the
+parts consistent with each other.
+
+\begin{contractbox}[The composite rule]
+A composite publishes \emph{all} of its constituent indexes together or
+publishes nothing. Counts agree across indexes; no entry exists in only one of
+them. Policy-bearing composites retain independent key/value, left/right, or
+equality/ordering policies as appropriate, and every mutation preserves retained
+versions and returns the receiver for documented logical no-ops.
+\end{contractbox}
+
+\section{Persistent hash bag}
+
+\begin{specimen}[Specimen --- \code{PersistentHashBag}]
+\spec{Purpose}{Unordered multiset: one representative and one positive multiplicity per equality class.}
+\spec{Built from}{One CHAMP map from representative to count.}
+\spec{Counts}{Distinct-class count and expanded total count are separate values. No ambiguous single ``count'' is exposed.}
+\spec{Algebra}{Maximum union, minimum intersection, saturated difference, checked additive sum.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+The bag stores multiplicities in $1 \dots 2^{31}-1$ per class --- never zero,
+because a zero-multiplicity class is an absent class. The expanded total is
+carried in a wider checked integer, and the choice of type is a small tour of the
+nine runtimes: C\# uses a checked \code{long}, TypeScript a \code{bigint},
+Python an unbounded \code{int}, OCaml a checked native \code{int}, and the native
+ports their corresponding bounded wide integer.
+
+Bag algebra is where the receiver-policy rule earns its keep. A
+reference-different argument comparer is normalised eagerly under the receiver's
+policy \emph{before} any operation-specific shortcut, and collapsed argument
+multiplicities are checked for overflow and use the first representative
+observed in that argument version's trie order. Expanded enumeration repeats each
+representative contiguously; distinct-item and entry views enumerate one class
+each, in the usual stable-but-unspecified order.
+
+\section{Persistent bidirectional map}
+
+\begin{specimen}[Specimen --- \code{PersistentBiMap}]
+\spec{Purpose}{A strict bijection: each key class and each value class appears at most once.}
+\spec{Built from}{A forward CHAMP $K \to V$ and an inverse CHAMP $V \to K$, with independently retained policies.}
+\spec{Inverse}{\bigoh{1} in pair count; enumerates nothing.}
+\spec{Storage}{Approximately two map entries per logical pair --- stated plainly rather than hidden.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+The bimap is the clearest illustration of the composite rule, because its
+consistency obligation is symmetric and total: both maps have the same count,
+every forward entry has exactly one equivalent inverse entry, and every inverse
+entry has exactly one forward entry. There is no operation that can be halfway
+done.
+
+The interesting decisions are in the update semantics.
+
+\begin{itemize}
+\item \textbf{Strict add rejects both ways.} Adding a pair whose key class is
+occupied fails; so does adding one whose value class is occupied --- even when
+the complete pair is equivalent to one already present. The key domain is
+checked first, so a result-bearing API reports key conflict before value
+conflict. (C\# deliberately keeps its established boolean \code{TryAdd} shape
+rather than growing a richer result.)
+\item \textbf{Set is not force-put.} Setting adds a missing free pair; treats a
+policy-equivalent value update as a no-op that retains both representatives;
+replaces a present key's value \emph{only} when the new value class is free; and
+never displaces another key. There is no displacing mode, deliberately.
+\item \textbf{Replacement goes the long way round.} It removes and reinserts both
+directions rather than using the ordinary map's value-equality shortcut, because
+that shortcut consults a different policy than the one that governs the inverse
+domain.
+\item \textbf{Double inversion is free and exact.} C\#, Kotlin, TypeScript, and
+Python cache reciprocal facade objects, so \code{map.Inverse.Inverse} is the
+original object. The value-semantic ports (C, C\texttt{++}, Haskell, Rust)
+guarantee the analogue: double inversion shares the original two immutable roots.
+\end{itemize}
+
+The family intentionally exposes no algebra, no builder, no transient, and no
+force-put. Each of those would need a bijection-preserving story, and none has a
+consumer asking for it.
+
+\section{Set-valued multimap and relation}
+
+\begin{specimen}[Specimen --- \code{PersistentHashMultimap} and \code{PersistentRelation}]
+\spec{Purpose}{One key to many values (multimap); many-to-many with cheap inverse traversal (relation).}
+\spec{Built from}{Multimap: CHAMP map from key to non-empty CHAMP set. Relation: two multimaps, forward and reverse.}
+\spec{Counts}{Distinct-key count and checked pair count are separate.}
+\spec{Inverse}{\code{Inverse} swaps the relation's two persistent indexes without scanning the pair set.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+A multimap stores \emph{only} non-empty value sets: removing the last pair for a
+key removes the key. That single invariant is what makes ``does this key have
+any values'' a membership test rather than a set-emptiness test, and it is why
+duplicate pair insertion and removal of an absent pair are identity no-ops.
+
+The relation adds the reverse index, so asking ``which lefts point at this
+right'' is a lookup rather than a scan. Adding or removing a pair updates both
+directions atomically; on failure, both indexes and every retained version remain
+mutually consistent.
+
+\section{Map patch}
+
+\begin{specimen}[Specimen --- \code{PersistentMapPatch}]
+\spec{Purpose}{A first-class, invertible, composable description of a change to a map.}
+\spec{Semantics}{Distinguishes absence from every present value, including null-like ones.}
+\spec{Apply}{Validates \emph{all} before-states before applying \emph{any} edit; preserves the source map on conflict.}
+\spec{Invert}{Swaps before- and after-states.}
+\spec{Compose}{Only through equal intermediate states.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+The patch is the library's answer to ``I want to describe a change, inspect it,
+send it somewhere, and maybe undo it''. Its preflight discipline is the whole
+design: a patch either applies completely or does not apply at all, and it will
+refuse rather than apply half of itself to a map whose before-state has drifted.
+The absence-versus-null distinction matters here more than almost anywhere else,
+because ``set this key to null'' and ``delete this key'' are different patches
+that a sloppier encoding would conflate.
+
+\section{Directed graph}
+
+\begin{specimen}[Specimen --- \code{PersistentDirectedGraph}]
+\spec{Purpose}{Explicit vertices and unique directed edges with forward and reverse adjacency.}
+\spec{Built from}{A vertex set plus two adjacency multimaps.}
+\spec{Vertices}{Stored explicitly, so an isolated vertex is a real vertex. Adding an edge adds any missing endpoints.}
+\spec{Removal}{Removing a vertex removes every incident edge.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+Storing vertices separately from edges is the design decision worth noticing.
+An edge-list-only graph cannot represent an isolated vertex, which means it
+cannot represent ``I have declared this node but not yet connected it'' --- a
+state that occurs constantly in dependency graphs and build systems.
+
+\section{Indexed map}
+
+\begin{specimen}[Specimen --- \code{PersistentIndexedMap}]
+\spec{Purpose}{A primary map with one automatically maintained non-unique secondary index.}
+\spec{Built from}{The primary CHAMP map plus a secondary multimap keyed by a selector result.}
+\spec{Invariant}{Exactly one secondary pair per primary key; changing a row's selector class moves its membership atomically.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+This is the ``find all users in this city'' structure. The selector is applied on
+insertion, and the composite's job is to keep the derived index honest across
+every edit --- including the awkward one, where updating a row changes which
+secondary bucket it belongs to.
+
+\section{Persistent chunked bit set}
+
+\begin{specimen}[Specimen --- \code{PersistentChunkedBitSet}]
+\spec{Purpose}{A sparse set of non-negative 32-bit integers with population rank and select.}
+\spec{Core}{64-bit words at the leaves of a measured tree, with a popcount sum measure.}
+\spec{Membership}{\bigoh{\log c} for $c$ represented chunks.}
+\spec{Rank/select}{Inclusive rank and zero-based select by measured descent.}
+\spec{Algebra}{Word-wise merge over sparse streams --- never a scan to the largest index.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+The chunked bit set is filed with the trie companions because it plays the same
+role --- a set --- but its representation belongs to the sequence world: 64-bit
+words at the leaves of a measured tree whose measure is the population count of
+its subtree. That measure is what turns \code{Rank} and \code{Select} into
+descents rather than scans, and it is a small, satisfying demonstration of how
+much the measure framework (Chapter~\ref{ch:measures}) buys.
+
+Zero words are never stored, so storage is proportional to represented chunks
+rather than to the largest bit index, and set algebra walks two sparse word
+streams rather than iterating a dense range.
+
+\begin{caveatbox}[Which set do you actually want?]
+Three families in this library can represent ``a set of integers'', and they are
+good at different things. \code{PersistentHashSet} is the general answer with no
+ordering. \code{PersistentIntSet} (Chapter~\ref{ch:patricia}) gives ascending
+signed order and \emph{structural} merge. \code{PersistentChunkedBitSet} gives
+rank and select, and wins hardest when the integers are dense within clusters
+and the workload is set algebra. Reach for the third only when rank/select or
+word-wise algebra is the reason you are here.
 \end{caveatbox}
 
 %%APPEND-HERE%%
