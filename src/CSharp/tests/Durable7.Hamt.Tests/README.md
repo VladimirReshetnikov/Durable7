@@ -60,6 +60,9 @@ and Merkle families. It targets the workspace defaults from
   conflicts, symmetric removal, cached inverse identity, nullable representatives, enumerator
   behavior, comparer failure atomicity, a 1,000-command retained-version model, concurrent readers,
   recursive bijection validation, and the closed immutable API shape.
+- `PersistentAncestralConnectionForestTests.cs` covers the experimental insertion-only connectivity
+  forest, branching history versions, earliest-connection queries, redundant links, retained
+  versions, randomized model parity, structural bounds, failure atomicity, and concurrent readers.
 - `PersistentHashMapContractOracleTests.cs` and `PersistentHashSetContractOracleTests.cs` are the Axis 2
   executable semantic baseline for comparer identity, stored representatives, collisions, nullable keys/items,
   stable enumeration, no-op identity, retained versions, and callback-exception atomicity.

@@ -1,6 +1,6 @@
-using Durable7.FingerTree;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using Durable7.FingerTree.Experimental;
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

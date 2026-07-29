@@ -1,3 +1,4 @@
+using Durable7.FingerTree.Experimental;
 using Xunit;
 using BclIntMap = System.Collections.Generic.SortedDictionary<int, int>;
 

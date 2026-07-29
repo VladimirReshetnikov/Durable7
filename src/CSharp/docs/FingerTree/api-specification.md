@@ -14,7 +14,7 @@
 
 ## Summary
 
-This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, rope, and range-update sequence contracts in the same library. For first-use examples and facade selection, start with the [usage guide](usage.md).
+This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, rope, and range-update sequence contracts in the same library. Stable surfaces live in `Durable7.FingerTree`; every research prototype identified as experimental below lives in `Durable7.FingerTree.Experimental`. For first-use examples and facade selection, start with the [usage guide](usage.md).
 
 ## Scope And Non-Goals
 

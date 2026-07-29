@@ -8,6 +8,9 @@
 
 `src/CSharp/src/Durable7.FingerTree` contains the .NET 10 C# preview workspace for `Durable7.FingerTree`, a persistent collection library built around tuned and general-purpose finger trees.
 
+Stable collection surfaces use the `Durable7.FingerTree` namespace. Research prototypes use the
+deliberately explicit `Durable7.FingerTree.Experimental` namespace.
+
 This workspace provides two public finger-tree types. `FingerTree<TElement, TMeasure, TMeasureOps>` is the general Hinze–Paterson **measured** finger tree — a persistent sequence annotated by an arbitrary monoidal measure (supplied through the static-abstract `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` interfaces), whose monotone-predicate `Split` specializes it into a positional sequence (`SizeMeasure<T>`), a mergeable priority queue (`MaxMeasure<T>`/`MinMeasure<T>`), an ordered search tree (`KeyMeasure<T>`), an order-statistic tree (`OrderStatisticMeasure<T>`), or a persistent Fenwick-style cumulative-weight structure (`SumMeasure<T>`, for weighted selection and sampling) — all shipped ready-made with named operations in `FingerTreeMeasureExtensions` and `FingerTreeSumExtensions`, with any two of them composable through the `ProductMeasure<…>` combinator (e.g. size+sum for a tree that is positional *and* Fenwick, or size+max for a priority queue with positional access), and any custom measure expressible by implementing the interfaces. A full Hinze–Paterson interval tree (`IntervalTree<T>`) and payload-bearing `PersistentIntervalMap<TEndpoint, TValue>` provide logarithmic stabbing/overlap queries; a sorted multiset (`SortedBag<T>`) with ranking and order-statistic indexing, a sorted set (`SortedSet<T>`) with navigable-set queries and set algebra, a sorted dictionary (`SortedDictionary<TKey, TValue>`) with navigable-map queries and order-statistic access, and a meldable `PriorityQueue<TElement, TPriority>` are built on the same core. `PersistentDeltaMap<TKey, TValue>` is a C# research prototype over the sorted dictionary that additionally retains a designated checkpoint and its coalesced ordered net-change index; see the [research proposal](../../../../docs/proposals/persistent-delta-map-2026-07-25.md). Each deep node holds its middle subtree behind a memoized suspension and computes its measure lazily — Hinze–Paterson's lazy finger tree realized in a strict language — so the amortized bounds hold under fully persistent (branching) histories; the only consequence versus the deque is that `Measure` is O(1) amortized rather than worst-case (a general monoid has no inverse, so a popped subtree's measure is recovered by forcing, not subtraction). See [docs/api-specification.md](api-specification.md#the-general-measured-finger-tree) for its contract.
 
 `ReversibleDeque<T>` is a sibling deque that adds **O(1) `Reverse`** while preserving all of the deque's bounds (including mixed-orientation `Concat` at O(log min)), via per-node reversal bits read through orientation-aware accessors — at a constant-factor cost, so it is a separate opt-in type rather than a change to the tuned deque.
@@ -178,9 +181,8 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   and the complete FingerTree project passes 692/692 tests in Debug and Release. At the pre-bimap
   Range shipment checkpoint, the full serialized C# solution passed 1,417/1,417 tests with zero
   build warnings or errors in both configurations.
-  The 2026-07-25 bilateral-ancestral-deque experiment passes its 15/15 focused tests, the complete
-  FingerTree project's 739/739 tests, and the full C# solution's 1,545/1,545 tests in both Debug and
-  Release, with zero build warnings or errors.
+  The consolidated experimental lanes pass 70/70 focused tests, the complete FingerTree project
+  passes 794/794 tests, and the full C# solution passes 1,240/1,240 tests in both Debug and Release.
 - `benchmarks/Durable7.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
   the C# persistent-collections workspace. Alongside the deque, ropes, measures, sorted collections,
   and measured priority queue, it now contains RRB-vector, DABA Lite, canonical zip-set,

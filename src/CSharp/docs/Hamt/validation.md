@@ -119,11 +119,21 @@ The focused lane currently passes 23/23 tests: 8 patch, 7 graph, and 8 indexed-m
 
 ### Current Derived-Structure Integration Evidence
 
-On 2026-07-17 UTC, the complete HAMT project passed 347/347 tests in both the full serialized Debug
-and Release solution gates. The focused new lanes pass 7/7 `PersistentHashMultimapTests`, 9/9
-`PersistentRelationTests`, and 23/23 derived-structure tests. Both complete solution builds finish
-with zero warnings and zero errors, and both full C# gates currently pass 1,158/1,158 tests, of
-which the HAMT project contributes 354. Benchmarks were not run.
+On 2026-07-29 UTC, the complete HAMT project passed 366/366 tests and the serialized full C# solution
+passed 1,240/1,240 tests in both Debug and Release. The focused experimental
+`PersistentAncestralConnectionForestTests` lane passed 12/12 tests. The full breakdown is 366 HAMT +
+794 FingerTree + 80 Ordered. Solution builds completed in both configurations; the rebased base
+currently emits pre-existing XML-documentation warnings. Benchmarks were not run.
+
+For historical comparison, the pre-experiment checkpoint contributed 354 HAMT tests to a
+1,158-test full-solution gate. The consolidated totals above supersede that snapshot.
+
+Run the forest lane with:
+
+```powershell
+.\test.ps1 -Project .\tests\Durable7.Hamt.Tests\Durable7.Hamt.Tests.csproj `
+    -Filter FullyQualifiedName~PersistentAncestralConnectionForestTests
+```
 
 `PersistentBiMapTests` provides the bimap shipment gate: strict two-domain uniqueness, independent
 policy retention, configured-value-comparer replacement, first representatives, inverse identity,

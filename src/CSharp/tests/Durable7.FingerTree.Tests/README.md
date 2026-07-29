@@ -32,6 +32,9 @@ reasonable oracle.
   cancellation, comparer-equivalent representative episodes, retained branches, O(1) root-sharing
   checkpoint/rollback, randomized model parity, callback failure atomicity, and a baseline-independent
   change-enumeration comparison-count guard.
+- `PersistentMonotoneActionHeapTests.cs` covers the experimental clamp-action algebra, ordinary heap
+  semantics, lazy whole-heap transforms, meld compatibility, retained and randomized branching
+  histories, exact callback/allocation ceilings, failure atomicity, and concurrent readers.
 - `BilateralAncestralDequeTests.cs` covers the experimental two-oriented-ancestry-interval deque and
   Myers reference arena: endpoint contracts, reverse/slice closure, exhaustive and randomized
   retained branches, exact ancestor-query ceilings, irregular-tree ancestry oracles, square block
@@ -152,6 +155,11 @@ Filter a class while developing a focused change:
 .\test.ps1 -Filter FullyQualifiedName~RopePropertyTests
 ```
 
+On 2026-07-29 UTC, the six consolidated experimental classes passed 70/70 focused tests in both
+Debug and Release. The complete FingerTree project passed 794/794 tests, and the serialized full C#
+solution passed 1,240/1,240 in both configurations: 366 HAMT + 794 FingerTree + 80 Ordered. These
+consolidated totals supersede the isolated branch snapshots.
+
 The checkpoint-differential map lane uses:
 
 ```powershell
@@ -176,6 +184,16 @@ The bilateral ancestral deque research lane is:
 ```
 
 That lane passes 15/15 tests in Debug and Release.
+
+The remaining experimental lanes can be selected by class name:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~ContextualRankSequenceTests
+.\test.ps1 -Filter FullyQualifiedName~PersistentMonotoneActionHeapTests
+.\test.ps1 -Filter FullyQualifiedName~PersistentRunDeltaVectorTests
+```
+
+They pass 7/7, 11/11, and 7/7 tests respectively in both Debug and Release.
 
 The range-update integration lane uses the same serialized launcher:
 

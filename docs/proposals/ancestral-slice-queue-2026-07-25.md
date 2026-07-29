@@ -4,6 +4,7 @@
 - Status: Experimental, C# reference implementation; not a cross-language shipment commitment
 - Audience: Maintainers evaluating persistent sequence designs and future backend work
 - Scope: Restricted append/drop/slice persistence over an incremental ancestor index
+- Namespace: `Durable7.FingerTree.Experimental`
 
 ## Decision
 

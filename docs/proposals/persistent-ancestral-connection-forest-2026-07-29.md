@@ -1,9 +1,11 @@
 # Persistent ancestral connection forest
 
 **Status:** experimental design selected for implementation on
-`experimental/persistent-ancestral-connection-forest`
+`experimental`
 
 **Date:** 2026-07-29
+
+**Namespace:** `Durable7.Hamt.Experimental`
 
 **Scope:** an immutable, fully branching, insertion-only connectivity structure over a fixed vertex
 universe

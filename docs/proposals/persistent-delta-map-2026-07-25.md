@@ -5,6 +5,7 @@
 - Created: 2026-07-25
 - Repository HEAD at drafting: `67a67f9f553a9194db9d8dd3cf9c7bd670f9b981`
 - Prototype: [`PersistentDeltaMap.cs`](../../src/CSharp/src/Durable7.FingerTree/PersistentDeltaMap.cs)
+- Namespace: `Durable7.FingerTree.Experimental`
 - Focused tests:
   [`PersistentDeltaMapTests.cs`](../../src/CSharp/tests/Durable7.FingerTree.Tests/PersistentDeltaMapTests.cs)
 - Shipment boundary: C# reference prototype only; this note is **not** a nine-language shipment or

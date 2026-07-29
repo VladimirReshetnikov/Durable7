@@ -12,10 +12,12 @@ code shapes callers use first.
 
 ## Namespace, Build, And Samples
 
-The public types live in the `Durable7.FingerTree` namespace:
+The stable public types live in `Durable7.FingerTree`. The research prototypes described in this
+guide live in the explicit `Durable7.FingerTree.Experimental` namespace:
 
 ```csharp
 using Durable7.FingerTree;
+using Durable7.FingerTree.Experimental;
 ```
 
 Some names intentionally match BCL collection names. Use namespace aliases when a file also imports

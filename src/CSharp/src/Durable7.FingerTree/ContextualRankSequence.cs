@@ -1,7 +1,8 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using Durable7.FingerTree;
 
-namespace Durable7.FingerTree;
+namespace Durable7.FingerTree.Experimental;
 
 /// <summary>Describes one transition of a deterministic additive event machine.</summary>
 /// <param name="NextState">The state after consuming the element.</param>

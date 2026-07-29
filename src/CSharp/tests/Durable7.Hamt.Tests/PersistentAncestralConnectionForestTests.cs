@@ -1,3 +1,4 @@
+using Durable7.Hamt.Experimental;
 using Xunit;
 
 namespace Durable7.Hamt.Tests;

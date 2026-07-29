@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using Durable7.FingerTree;
 
-namespace Durable7.FingerTree;
+namespace Durable7.FingerTree.Experimental;
 
 /// <summary>Describes one maximal half-open run of checkpoint-relative changes.</summary>
 /// <param name="Start">The zero-based first changed position.</param>

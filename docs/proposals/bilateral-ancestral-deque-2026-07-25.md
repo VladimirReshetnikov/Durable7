@@ -4,6 +4,7 @@
 - Status: Experimental C# reference and proved reduction; not a broad priority claim
 - Audience: Maintainers evaluating persistent sequence designs and level-ancestor backends
 - Scope: Fully persistent deque ends, reverse, indexing, slicing, and splitting over two oriented ancestry intervals
+- Namespace: `Durable7.FingerTree.Experimental`
 
 ## Decision
 

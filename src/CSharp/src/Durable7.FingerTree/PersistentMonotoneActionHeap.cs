@@ -2,7 +2,7 @@ using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Durable7.FingerTree;
+namespace Durable7.FingerTree.Experimental;
 
 /// <summary>
 /// Defines a constant-time-composable monotone action on heap priorities.

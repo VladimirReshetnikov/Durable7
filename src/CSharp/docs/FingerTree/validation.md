@@ -75,18 +75,18 @@ Release configuration is required for meaningful benchmark numbers.
 
 ### Current Derived-Structure Integration Evidence
 
-On 2026-07-17 UTC, the focused `PersistentIntervalMapTests` and `PersistentChunkedBitSetTests` lanes
-passed 9/9 and 8/8 tests, and the complete FingerTree project passed 709/709 tests in both full
-serialized Debug and Release solution gates.
-Both complete solution builds finish with zero warnings and zero errors, and both full C# gates
-currently pass 1,158/1,158 tests, of which the FingerTree project contributes 724. Benchmarks were
-not run.
+On 2026-07-29 UTC, the six consolidated experimental FingerTree lanes passed 70/70 tests in both
+Debug and Release: 15 delta-map + 15 ancestral-slice-queue + 15 bilateral-ancestral-deque + 7
+contextual-rank-sequence + 11 monotone-action-heap + 7 run-delta-vector. The complete FingerTree
+project passed 794/794 tests, and the serialized full C# solution passed 1,240/1,240 in both
+configurations: 366 HAMT + 794 FingerTree + 80 Ordered. The separate experimental
+ancestral-connection-forest lane contributed 12 of the HAMT tests. Benchmarks were not run because
+no empirical performance claim is part of this integration gate. Solution builds completed in both
+configurations; the rebased base currently emits pre-existing XML-documentation warnings.
 
-On 2026-07-25, the experimental ancestral-slice-queue lane passed 15/15 tests in Debug and Release.
-
-On 2026-07-29 UTC, the experimental `PersistentRunDeltaVectorTests` lane passed 7/7 tests in Debug
-and Release. Benchmarks were not run because no empirical performance claim is part of the
-experiment.
+For historical comparison, the pre-experiment checkpoint passed 1,158/1,158 full-solution
+tests, including 724 FingerTree tests. The consolidated totals above supersede the isolated
+per-branch snapshots recorded while the prototypes were developed.
 
 `tests/Durable7.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
 [tests README](../../tests/Durable7.FingerTree.Tests/README.md) for source-file grouping, filter examples,
@@ -104,11 +104,9 @@ For the checkpoint-differential ordered-map research prototype, run:
 .\test.ps1 -Filter FullyQualifiedName~PersistentDeltaMapTests
 ```
 
-The 2026-07-25 focused lane passes 15/15 cases covering endpoint classification, cancellation,
-representative policy, retained branches, randomized model parity, callback failures, and the
-`Θ(k + 1)` enumeration guard. The complete FingerTree project passes 739/739 tests and the serialized C#
-solution passes 1,545/1,545 tests in both Debug and Release. The broader proposal and scoped novelty
-audit are recorded in the
+The focused lane passes 15/15 cases covering endpoint classification, cancellation, representative
+policy, retained branches, randomized model parity, callback failures, and the `Θ(k + 1)`
+enumeration guard. The broader proposal and scoped novelty audit are recorded in the
 [research note](../../../../docs/proposals/persistent-delta-map-2026-07-25.md).
 
 For the sparse chunked bit set, run:
@@ -157,6 +155,16 @@ than default equality, every local run merge/split/shrink/cancellation case, zer
 selected-run acceptance and reversion, 5,000 randomized retained-version operations against an
 independent model, the clustered `k >> r` witness, comparer failure atomicity, and concurrent
 readers with independent branch writers.
+
+For the experimental persistent monotone-action heap, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentMonotoneActionHeapTests
+```
+
+The focused lane contains 11 tests covering the clamp-action algebra, ordinary heap semantics,
+lazy whole-heap transforms, meld compatibility, retained branching versions, randomized model
+parity, structural and callback ceilings, failure atomicity, and concurrent readers.
 
 The suite covers:
 
@@ -313,9 +321,8 @@ full C# solution in Debug and Release, formatting, Markdown-link validation, and
 The [research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md) is the
 authoritative home for the proof and novelty boundary.
 
-On 2026-07-25 the serialized branch gate passed 7/7 focused tests, 731/731 complete FingerTree
-tests, and 1,537/1,537 full-solution tests in both Debug and Release. Both changed C# files passed
-`dotnet format`, every repository-owned Markdown link resolved, and `git diff --check` passed.
+The focused lane passes 7/7 tests in both Debug and Release. Its complete integration totals are
+recorded in the consolidated gate above.
 
 ## Stress Controls
 

@@ -1,8 +1,9 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using Durable7.Hamt;
 
-namespace Durable7.Hamt;
+namespace Durable7.Hamt.Experimental;
 
 /// <summary>
 /// Represents a fully branching persistent insertion-only connectivity forest that can report the

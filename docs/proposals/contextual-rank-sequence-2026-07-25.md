@@ -3,7 +3,8 @@
 - Status: Experimental C# reference prototype; scoped novelty candidate, not a priority claim
 - Created: 2026-07-25
 - Base repository HEAD: `67a67f9f553a9194db9d8dd3cf9c7bd670f9b981`
-- Branch: `experimental/contextual-rank-sequence`
+- Branch: `experimental`
+- Namespace: `Durable7.FingerTree.Experimental`
 - Prototype:
   [`ContextualRankSequence.cs`](../../src/CSharp/src/Durable7.FingerTree/ContextualRankSequence.cs)
 - Tests:

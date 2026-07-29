@@ -1,7 +1,8 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using Durable7.FingerTree;
 
-namespace Durable7.FingerTree;
+namespace Durable7.FingerTree.Experimental;
 
 /// <summary>A presence-safe endpoint value in a persistent-map change.</summary>
 /// <typeparam name="T">Value type.</typeparam>
