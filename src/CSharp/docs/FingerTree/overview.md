@@ -12,6 +12,16 @@ This workspace provides two public finger-tree types. `FingerTree<TElement, TMea
 
 `ReversibleDeque<T>` is a sibling deque that adds **O(1) `Reverse`** while preserving all of the deque's bounds (including mixed-orientation `Concat` at O(log min)), via per-node reversal bits read through orientation-aware accessors — at a constant-factor cost, so it is a separate opt-in type rather than a change to the tuned deque.
 
+`BilateralAncestralDeque<T>` is an experimental, restricted persistent-deque Pareto point. A
+constant-sized handle denotes a reversed left ancestry interval followed by a forward right ancestry
+interval in one append-only manager. The representation is closed under both-end edits, O(1)
+reverse, indexing, arbitrary slice, and split using at most two incremental level-ancestor queries;
+it deliberately omits concat and middle edits. With an optimal incremental-level-ancestor backend,
+all scalar operations are O(1) worst case and enumeration is linear. The shipped Myers reference
+backend instead has O(1)-amortized pushes and O(log M) queries after M historical pushes; it exists
+to validate the reduction and extension seam, not to claim the optimal backend's bound. See the
+[research proposal](../../../../docs/proposals/bilateral-ancestral-deque-2026-07-25.md).
+
 `RrbVector<T>` is the random-access sibling: a persistent relaxed radix-balanced vector with
 32-element leaves, 32-way regular radix branches, and cumulative size tables only on relaxed
 branches. It provides uniform O(log32 n) indexing and path-copying updates, O(log32(n + m))
@@ -130,6 +140,10 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   - `MeasurePredicate.cs` — the public `IMeasurePredicate<TMeasure>` value-type predicate strategy interface (a sibling of `IMonoid`/`IMeasure`/`IComparison`), so callers can write their own **zero-allocation** queries over a raw tree through the public generic `FingerTree.TryLocate<TPredicate>`.
   - `Internal/MeasurePredicates.cs` — the library's own non-capturing struct predicates (`CountAbovePredicate`, `KeyAtLeast`/`KeyAbovePredicate`, `PriorityFrontPredicate`, `MaxHighAtLeastPredicate`, and the `FuncMeasurePredicate` delegate adapter) that route the sorted/order-statistic/priority/interval collections' hot reads through `TryLocate` with zero allocation.
   - `ReversibleDeque.cs` + `Internal/Reversible/` — `ReversibleDeque<T>`, the reversible sibling of `FingerTreeDeque<T>`: the same deque/index/split/concat bounds plus O(1) `Reverse` (every node carries a reversal bit and an O(1) `Mirror`; operations read through orientation-aware accessors so even mixed-orientation `Concat` stays O(log min)). Strict, with higher constant factors — use it when O(1) reverse is needed.
+  - `BilateralAncestralDeque.cs` — the experimental two-oriented-ancestry-interval deque, its
+    incremental-level-ancestor backend contract, and the shipped Myers jump-link reference arena.
+    The proposal keeps optimal-backend and shipped-reference bounds separate and records the
+    restricted algebra and manager-retention caveats.
   - `FingerTreeDeque.cs` — public deque type, argument validation, and the struct enumerator.
   - `FingerTreeDequeResults.cs` — split and pop result record structs.
   - `Internal/` — the deque's tuned finger-tree core: `TreeElement.cs` (measured-element contract and the struct `Leaf<T>`), `Digit.cs`, `Node.cs`, `Tree.cs` (empty/single/deep levels), `MiddleTree.cs` (memoized middle-subtree suspensions and their pending operations), and `TreeOperations.cs` (smart deep constructors, pulls with the paper's `chop`, and concatenation).
@@ -140,6 +154,9 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   and the complete FingerTree project passes 692/692 tests in Debug and Release. At the pre-bimap
   Range shipment checkpoint, the full serialized C# solution passed 1,417/1,417 tests with zero
   build warnings or errors in both configurations.
+  The 2026-07-25 bilateral-ancestral-deque experiment passes its 15/15 focused tests, the complete
+  FingerTree project's 739/739 tests, and the full C# solution's 1,545/1,545 tests in both Debug and
+  Release, with zero build warnings or errors.
 - `benchmarks/Durable7.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
   the C# persistent-collections workspace. Alongside the deque, ropes, measures, sorted collections,
   and measured priority queue, it now contains RRB-vector, DABA Lite, canonical zip-set,

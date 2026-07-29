@@ -126,9 +126,21 @@ Its focused lane covers the empty/singleton contract, every subrange of a repres
 appendable empty anchors, split boundaries, retained branching versions, deterministic randomized
 model histories, odd-block square seams, a direct ancestor oracle, traversal-hop guardrails,
 explicit/custom factories, per-operation backend-counter deltas, synchronized concurrent
-branches/readers, enumeration, and invalid ranges. It passes 15/15 in both Debug and Release; the
-current complete-gate totals are recorded above rather than inferred from older shipment checkpoints
-below.
+branches/readers, enumeration, and invalid ranges. It passes 15/15 in both Debug and Release.
+
+For the experimental bilateral ancestral deque and its Myers reference arena, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~BilateralAncestralDequeTests
+```
+
+This lane is required to cover the two-arm invariant, all slice/split boundaries, retained branching
+models, exact level-ancestor call ceilings, direct irregular-tree arena oracles, odd-block seams, and
+concurrent reads. The optimal Alstrup--Holm instantiation remains a proved backend reduction rather
+than a shipped implementation, so tests must report Myers bounds separately.
+
+The bilateral lane passes 15/15 tests in Debug and Release. Benchmarks are not evidence for its
+asymptotic theorem.
 
 The suite covers:
 
@@ -139,6 +151,9 @@ The suite covers:
 - derived sorted bag/set/dictionary, sorted mutable builders, priority queue, interval tree,
   persistent interval map, persistent chunked bit set, and reversible deque
   behavior against BCL or brute-force models where appropriate;
+- `BilateralAncestralDeque<T>` empty/end/reverse/index/slice/split behavior, exhaustive and randomized
+  retained-version models, query-routing ceilings, Myers branch ancestry, allocation seams, and
+  lock-safe concurrent use;
 - `Rope<T>`, its public immutable `RopeCursor<T>` gap editor, `MeasuredRope<T, TMeasure, TMeasureOps>`,
   text helpers, editor-grade Unicode/newline helpers, `RopeBuilder`, and nested append-only rope builders;
 - `RopeCursorTests.cs` locks default-value rejection, gap and edit semantics, no-op/version/context/snapshot

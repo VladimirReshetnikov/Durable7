@@ -32,6 +32,10 @@ reasonable oracle.
   cancellation, comparer-equivalent representative episodes, retained branches, O(1) root-sharing
   checkpoint/rollback, randomized model parity, callback failure atomicity, and a baseline-independent
   change-enumeration comparison-count guard.
+- `BilateralAncestralDequeTests.cs` covers the experimental two-oriented-ancestry-interval deque and
+  Myers reference arena: endpoint contracts, reverse/slice closure, exhaustive and randomized
+  retained branches, exact ancestor-query ceilings, irregular-tree ancestry oracles, square block
+  seams, enumeration routing, and concurrent branching/reads.
 - `PersistentIntervalMapTests.cs` covers strict and replacing updates, lexicographic interval-key
   order, configured payload equality, first interval representatives, reversed-endpoint rejection,
   point and overlap queries against a brute-force model, removal, policy-preserving clear,
@@ -154,6 +158,14 @@ The experimental ancestral-slice queue lane is:
 
 This lane passes 15/15 tests in Debug and Release. No benchmark result is part of this experimental
 gate.
+
+The bilateral ancestral deque research lane is:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~BilateralAncestralDequeTests
+```
+
+That lane passes 15/15 tests in Debug and Release.
 
 The range-update integration lane uses the same serialized launcher:
 

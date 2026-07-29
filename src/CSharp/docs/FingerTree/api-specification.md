@@ -523,6 +523,44 @@ The implementation should keep XML documentation aligned with this file. XML sum
 - **Bounds preserved.** O(1) endpoint reads; O(log n) worst / O(1) amortized (linear-use) endpoint insert/remove; indexing, `SetItem`, `InsertAt`, `RemoveAt`, and `SplitAt` logarithmic in the distance from the nearer end; `Concat` O(log(min(n, m))). Crucially, **concatenation stays O(log(min)) even across mixed orientations** (e.g. `a.Reverse().Concat(b)`): `glue` reads each operand through its logical accessors, so a reversed operand never needs reifying. This is the "full-bounds" property that distinguishes this type from a cheaper root-flag design whose mixed-orientation concat would degrade to O(n).
 - **Cost.** Relative to `FingerTreeDeque<T>`: a reversal-bit branch on every internal access, and small orientation-adjusted digit-array copies along reversed paths. Forward-only usage takes the fast path. Choose `FingerTreeDeque<T>` unless O(1) reverse is required.
 
+## The Experimental Bilateral Ancestral Deque
+
+`BilateralAncestralDeque<T>` is a restricted immutable `IReadOnlyList<T>` over an append-only
+`IIncrementalLevelAncestorArena<T>`. A handle denotes
+`reverse(path(leftAnchor,leftTail)) ++ path(rightAnchor,rightTail)`. Each arm also caches its first
+physical node, so `First` and `Last` never need an ancestor query. Public factories are
+`Create(arena)`, `CreateMyers()`, and `CreateRange(values)`; the value operations are `AddFirst`,
+`AddLast`, `RemoveFirst`, `RemoveLast`, their `TryRemove*` forms, `Take`, `Drop`, `Slice`, `SplitAt`,
+`Reverse`, `Clear`, `ToArray`, indexing, and enumeration.
+
+- **Semantics.** All producing operations return an immutable handle and preserve every source
+  version; identity cases may return the source reference.
+  Either end can be extended from an arbitrary retained handle. Negative/out-of-range indices and
+  counts throw `ArgumentOutOfRangeException`; empty endpoint reads/removals throw
+  `InvalidOperationException`; `TryRemove*` returns `false`, default value, and the same source.
+  `CreateRange` always owns a fresh Myers arena and consumes its source once. No exact internal
+  anchor provenance is promised for extensionally empty values.
+- **Closed representation.** End pushes add one arena leaf. Pops move one arm tail or advance the
+  other arm anchor. Reverse swaps the arms. A contiguous slice intersects each oriented ancestry
+  interval at most once, so `Slice` and both halves of `SplitAt` remain constant-sized handles and
+  use at most two total level-ancestor queries.
+- **Parameterized bounds.** If arena leaf addition costs `U(M)` and level ancestor costs `Q(M)`
+  after `M` historical pushes, end addition costs `U(M)`; end removal and index cost at most one
+  `Q(M)`; slice/split cost at most two `Q(M)`; count, endpoints, reverse, and clear are O(1).
+  Enumeration is Theta(n). Alstrup--Holm's incremental-tree result supplies `U=Q=O(1)` worst case
+  and O(M) arena space, yielding O(1) worst-case time for every scalar operation.
+- **Shipped backend.** `MyersLevelAncestorArena<T>` is a semantic/reference implementation, not the
+  optimal instantiation. It gives O(1)-amortized leaf addition, O(log M) worst-case ancestor
+  queries, and O(M) retained records. `MyersLevelAncestorStatistics` exposes publication,
+  odd-block allocation, query, and hop counters. All arena calls are serialized by one lock.
+- **Lifetime and omissions.** A handle retains its arena, which retains every historical pushed
+  payload until collection; storage is O(M+H), not current-length-only. The API intentionally has
+  no unrelated `Concat`, `SetItem`, `InsertAt`, `RemoveAt`, or cursor. It is an experimental
+  reduction/ADT synthesis and does not replace the general deque.
+
+The complete invariant, slice proof, separated complexity tables, and novelty limits are in the
+[research proposal](../../../../docs/proposals/bilateral-ancestral-deque-2026-07-25.md).
+
 ## The Rope
 
 `Rope<T>` is a general-purpose persistent **chunked** sequence — a rope — built on the measured finger tree. It is element-agnostic: `Rope<char>` is a text buffer, `Rope<byte>` a binary buffer, `Rope<T>` a large editable list. It is the canonical application of the measured finger tree.
