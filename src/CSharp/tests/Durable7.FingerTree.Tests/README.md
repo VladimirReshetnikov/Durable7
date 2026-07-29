@@ -113,6 +113,11 @@ reasonable oracle.
   `RangeUpdateDiagnosticsAdapter.cs` exposes the
   internal deterministic counters to this test assembly without adding diagnostics to the public
   collection API.
+- `ContextualRankSequenceTests.cs` covers the experimental finite-context event sequence: quoted
+  delimiters, exhaustive short words from every start state, randomized retained branches against
+  a direct scanner, multi-event transitions, split/concat boundaries, cached-query callback counts,
+  invalid policies, overflow atomicity, and concurrent readers with independent branch writers.
+  The focused lane passes 7/7 in both Debug and Release on the experimental branch.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts, including
   the Axis 2 C3 retained measured-cursor history, cadence-sixteen snapshot policy, localized Unicode
   editing, line/column result, and alternate branch transcript.

@@ -1391,3 +1391,25 @@ complete 692-test FingerTree project suite passes in Debug and Release. At the p
 shipment checkpoint, the full serialized C# solution built with zero warnings or errors and passed
 1,417/1,417 tests in both configurations: 319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52
 Tungsten. No benchmark result is part of the shipment evidence.
+
+## Contextual Rank Sequence (Experimental)
+
+`ContextualRankSequence<TElement, TMachine>` lifts a deterministic additive event machine into the
+general measured finger tree. `TMachine` declares a positive fixed state count and returns a valid
+next state plus a nonnegative `long` event count for each state/element pair. Every subtree stores
+the outgoing state and total events for every incoming state. Ordered composition feeds the left
+outgoing state into the right summary.
+
+The public contextual queries are `Evaluate(initialState)`,
+`EvaluatePrefix(elementCount, initialState)`, `EventRank(elementCount, initialState)`, and
+`TrySelectEvent(eventIndex, initialState, out location)`. Select returns the emitting element index,
+event ordinal within that transition, before/after states, and transition event count. Positional
+updates are `Prepend`, `Append`, `Insert`, `SetItem`, `RemoveAt`, `Concat`, `SplitAt`, and
+`GetRange`; values are fully persistent.
+
+For `n` elements and `s` states, full evaluation is O(1); prefix evaluation, rank, select, indexed
+access, and arbitrary edits are O(s log n) amortized; endpoint edits are O(s) amortized; concat is
+O(s log(min(n,m))) amortized; and storage is O(s n). Transition weights must be nonnegative, totals
+are checked against `long.MaxValue`, and invalid policies fail before a successor facade is
+published. The complete experimental proof, comparison, and novelty scope are in the
+[Contextual Rank Sequence research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md).

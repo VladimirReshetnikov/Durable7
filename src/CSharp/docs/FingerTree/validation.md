@@ -279,6 +279,25 @@ Benchmarks are explicitly outside this integration gate. They remain postponed u
 can run the benchmark harness in isolation; no wall-clock result gathered under current CPU,
 memory, or I/O contention is acceptable as validation evidence.
 
+## Contextual Rank Sequence Experimental Gate
+
+Run the focused finite-context rank/select lane while iterating:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~ContextualRankSequence
+```
+
+The experimental lane covers an independently scanned semantic model, exhaustive short inputs,
+retained branching histories, cached-query callback counts, transition-policy failures, and checked
+event-total overflow. Before publishing the branch, also run the complete FingerTree project and
+full C# solution in Debug and Release, formatting, Markdown-link validation, and `git diff --check`.
+The [research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md) is the
+authoritative home for the proof and novelty boundary.
+
+On 2026-07-25 the serialized branch gate passed 7/7 focused tests, 731/731 complete FingerTree
+tests, and 1,537/1,537 full-solution tests in both Debug and Release. Both changed C# files passed
+`dotnet format`, every repository-owned Markdown link resolved, and `git diff --check` passed.
+
 ## Stress Controls
 
 `TearableConcurrencyStressTests` honors `FINGERTREE_STRESS_SECONDS`. The default is short enough for ordinary

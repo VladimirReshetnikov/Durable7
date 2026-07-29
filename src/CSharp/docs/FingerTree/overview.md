@@ -82,6 +82,14 @@ passes 692/692 tests in Debug and Release. At the pre-bimap Range shipment check
 serialized C# solution passed 1,417/1,417 tests with zero build warnings or errors in both
 configurations. No benchmark result is part of that shipment evidence.
 
+`ContextualRankSequence<TElement, TMachine>` is an experimental measured-sequence facade for
+context-dependent events. Each subtree caches the deterministic machine's outgoing state and
+nonnegative event count for every possible incoming state. For a fixed finite machine, full
+evaluation is O(1), contextual prefix rank and event select are O(log n) amortized, and ordinary
+persistent sequence edits retain the underlying finger-tree asymptotics. The
+[research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md) records the lifted
+monoid, strict comparison boundary, literature audit, and limitations.
+
 `PersistentChunkedBitSet` stores ascending nonzero 64-bit words in a measured finger tree whose
 annotation caches population and word boundaries. It provides sparse point edits, inclusive rank,
 zero-based select, ascending enumeration, and chunk-stream set algebra over the full nonnegative
@@ -128,6 +136,9 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
     and cached ordered measures; the generic algebra, structural bounds, enumeration, failure, and
     concurrency contracts are specified in the
     [range-update sequence reference](range-update-sequence.md).
+  - `ContextualRankSequence.cs` — the experimental finite-context event sequence, including its
+    static machine policy, lifted all-start-state summaries, prefix evaluation, and contextual
+    event rank/select surface.
   - `FingerTree.cs` — the public general measured finger tree `FingerTree<TElement, TMeasure, TMeasureOps>`.
   - `Rope.cs` / `Rope.Builder.cs` + `Internal/RopeChunk.cs` — `Rope<T>`, a general-purpose persistent **chunked** sequence (rope): elements live in bounded array chunks (`Chunk<T>`, measured by `ChunkLengthMeasure<T>`) at the leaves of a count-measured finger tree, giving cache-friendly storage and O(log n) indexed insert/remove/split/slice with O(log min) concat and structural-sharing persistence. Element-agnostic (`Rope<char>` is a text buffer, `Rope<byte>` a binary buffer); positional reads/splits use the zero-allocation `ElementIndexPredicate` over `TryLocate`; the nested append-only builder uses frozen-prefix snapshots for incremental construction.
   - `Rope.Cursor.cs` + `Internal/RopeCursorPrototype.cs` — the public immutable `RopeCursor<T>` positional edit cursor and its shared focused cursor engine. A cursor is a gap in `0 .. Count`; movement and edits return branchable cursor values over a 16-element focus with sub-256-element carries, while a winner-returning memo cell materializes one canonical `Rope<T>` snapshot per logical edit version. Linear local-edit histories are O(1) amortized per operation and O(log n) worst-case; arbitrary fan-out retains the honest O(b log n) bound for b branches. See the [C0 decision](rope-cursor-c0-decision.md) for the selected proof scope and the [API specification](api-specification.md#positional-edit-cursor) for the shipped contract.
