@@ -18,6 +18,15 @@ branches. It provides uniform O(log32 n) indexing and path-copying updates, O(lo
 concatenation by merging and repartitioning only the two boundary spines, and an append-only builder
 with immutable cached snapshots.
 
+`AncestralSliceQueue<T>` is an experimental, manager-backed persistent queue for branching append
+histories. A handle is an appendable interval on one root-to-node path, so dequeue, suffix drop, and
+tail removal change only constant-sized boundaries. Indexed access, prefix/slice construction, and
+split reduce to an incremental level-ancestor query. The shipped Myers arena provides O(1)-amortized
+append and O(log M) navigation after M historical appends; the all-O(1)-worst-case scalar bound is a
+proved reduction to an Alstrup--Holm backend that is not implemented here. The
+[research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md) records the proof,
+prior-art boundary, rootish allocator, and retained-history limitations.
+
 `DabaLite<T, TMonoid>` is the family's deliberately mutable streaming member. It reuses
 `IMonoid<T>` to maintain a FIFO window aggregate through the VLDB Journal 2021 six-cursor DABA Lite
 schedule. Insert, eviction, and query make at most three, two, and one `Combine` calls respectively;
@@ -94,6 +103,8 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   - `RrbVector.cs` — a 32-way relaxed radix-balanced persistent vector with radix-indexed regular
     nodes, relaxed-node size tables, an append-only builder, structural split/edit, and
     boundary-spine concatenation.
+  - `AncestralSliceQueue.cs` — the experimental append-tree interval queue, its incremental-ancestor
+    backend contract, and a Myers jump-link reference arena stored in odd-sized square-boundary blocks.
   - `DabaLite.cs` — a six-cursor, chunk-queue-backed FIFO sliding-window aggregator over any monoid,
     with bounded callback counts, strong callback exception safety, and structural statistics.
   - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the policy-canonical, stack-safe

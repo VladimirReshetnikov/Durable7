@@ -82,6 +82,8 @@ Both complete solution builds finish with zero warnings and zero errors, and bot
 currently pass 1,158/1,158 tests, of which the FingerTree project contributes 724. Benchmarks were
 not run.
 
+On 2026-07-25, the experimental ancestral-slice-queue lane passed 15/15 tests in Debug and Release.
+
 `tests/Durable7.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
 [tests README](../../tests/Durable7.FingerTree.Tests/README.md) for source-file grouping, filter examples,
 sample-smoke hooks, and stress controls.
@@ -113,6 +115,20 @@ For the sparse chunked bit set, run:
 
 The focused lane currently passes 8/8 tests covering domain boundaries, word seams, rank/select,
 algebra, receiver identity, retained branches, randomized model parity, and measured invariants.
+
+For the experimental ancestral slice queue, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~AncestralSliceQueue
+```
+
+Its focused lane covers the empty/singleton contract, every subrange of a representative history,
+appendable empty anchors, split boundaries, retained branching versions, deterministic randomized
+model histories, odd-block square seams, a direct ancestor oracle, traversal-hop guardrails,
+explicit/custom factories, per-operation backend-counter deltas, synchronized concurrent
+branches/readers, enumeration, and invalid ranges. It passes 15/15 in both Debug and Release; the
+current complete-gate totals are recorded above rather than inferred from older shipment checkpoints
+below.
 
 The suite covers:
 
@@ -147,6 +163,9 @@ The suite covers:
 - `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
   leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;
+- `AncestralSliceQueue<T>` queue/slice semantics, appendable anchored empties, direct Myers ancestor
+  correctness, odd-block square boundaries, retained branches, randomized models, factory validation,
+  operation-routing/traversal counters, and synchronized concurrent publication/read behavior;
 - `DabaLiteTests.cs` covers noncommutative FIFO ordering, a 100,000-operation randomized window
   model, empty/clear behavior, and the three/two/at-most-one worst-case `Combine` ceilings;
 - `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a
