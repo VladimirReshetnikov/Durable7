@@ -18,6 +18,17 @@ branches. It provides uniform O(log32 n) indexing and path-copying updates, O(lo
 concatenation by merging and repartitioning only the two boundary spines, and an append-only builder
 with immutable cached snapshots.
 
+`PersistentRunDeltaVector<T>` is the experimental fixed-length checkpoint sibling. It retains
+current and checkpoint RRB roots plus an exact persistent maximal-interval index of positions that
+differ under one stable equality policy. Point edits update one RRB path and at most two neighboring
+run records; whole checkpoint and rollback are root changes. If `k` dirty positions form `r`
+maximal runs, descriptors enumerate in output-optimal Theta(r), improving worst-case Theta(n)
+discovery from unindexed current/checkpoint roots. It also avoids the straightforward Theta(k)
+linear scan used to coalesce point records, although that scan is not a lower bound for every
+order-statistic point index. The
+[research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md) states the
+restricted RRB comparison, DIET prior art, sublogarithmic-array caveat, and deliberate limits.
+
 `DabaLite<T, TMonoid>` is the family's deliberately mutable streaming member. It reuses
 `IMonoid<T>` to maintain a FIFO window aggregate through the VLDB Journal 2021 six-cursor DABA Lite
 schedule. Insert, eviction, and query make at most three, two, and one `Combine` calls respectively;
@@ -93,6 +104,8 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   - `RrbVector.cs` — a 32-way relaxed radix-balanced persistent vector with radix-indexed regular
     nodes, relaxed-node size tables, an append-only builder, structural split/edit, and
     boundary-spine concatenation.
+  - `PersistentRunDeltaVector.cs` — a fixed-length persistent current/checkpoint vector with exact
+    equality-relative dirty runs and selected-run accept/revert.
   - `DabaLite.cs` — a six-cursor, chunk-queue-backed FIFO sliding-window aggregator over any monoid,
     with bounded callback counts, strong callback exception safety, and structural statistics.
   - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the policy-canonical, stack-safe

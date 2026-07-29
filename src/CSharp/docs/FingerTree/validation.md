@@ -82,6 +82,10 @@ Both complete solution builds finish with zero warnings and zero errors, and bot
 currently pass 1,158/1,158 tests, of which the FingerTree project contributes 724. Benchmarks were
 not run.
 
+On 2026-07-29 UTC, the experimental `PersistentRunDeltaVectorTests` lane passed 7/7 tests in Debug
+and Release. Benchmarks were not run because no empirical performance claim is part of the
+experiment.
+
 `tests/Durable7.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
 [tests README](../../tests/Durable7.FingerTree.Tests/README.md) for source-file grouping, filter examples,
 sample-smoke hooks, and stress controls.
@@ -100,6 +104,18 @@ For the sparse chunked bit set, run:
 
 The focused lane currently passes 8/8 tests covering domain boundaries, word seams, rank/select,
 algebra, receiver identity, retained branches, randomized model parity, and measured invariants.
+
+For the experimental persistent run-delta vector, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentRunDeltaVectorTests
+```
+
+The focused lane contains 7 tests covering factories and equality policies both coarser and finer
+than default equality, every local run merge/split/shrink/cancellation case, zero-comparer-call
+selected-run acceptance and reversion, 5,000 randomized retained-version operations against an
+independent model, the clustered `k >> r` witness, comparer failure atomicity, and concurrent
+readers with independent branch writers.
 
 The suite covers:
 
@@ -134,6 +150,9 @@ The suite covers:
 - `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
   leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;
+- `PersistentRunDeltaVector<T>` exact equality-relative dirty runs, current/checkpoint parity,
+  interval locality and maximality, cancellation, whole and selected-run accept/revert, retained
+  branches, comparer failures, clustered descriptors, and concurrent snapshots;
 - `DabaLiteTests.cs` covers noncommutative FIFO ordering, a 100,000-operation randomized window
   model, empty/clear behavior, and the three/two/at-most-one worst-case `Combine` ceilings;
 - `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a
