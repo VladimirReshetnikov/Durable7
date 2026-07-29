@@ -392,9 +392,9 @@ public sealed partial class SortedDictionary<TKey, TValue> : IReadOnlyDictionary
         }
     }
 
+    /// <summary>Splits at the first point where the accumulated measure reaches the threshold.</summary>
     private (FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> Less,
         FingerTree<KeyValuePair<TKey, TValue>, RankedKey<TKey>, EntryMeasure<TKey, TValue>> AtLeast)
-        /// <summary>Splits at the first point where the accumulated measure reaches the threshold.</summary>
         SplitAtLeast(TKey key) =>
         _tree.Split(new KeyAtLeastPredicate<TKey>(_comparer, key));
 

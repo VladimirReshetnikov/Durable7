@@ -377,11 +377,11 @@ public sealed class RangeUpdateFailureAndConcurrencyTests
             RangeUpdateAssert.Matches(version.Model, version.Sequence);
     }
 
+    /// <summary>Creates the throwing.</summary>
     private static RangeUpdateSequence<
         int,
         RangeUpdateMeasure,
         RangeUpdateTag,
-        /// <summary>Creates the throwing.</summary>
         RangeUpdateThrowingAlgebra> CreateThrowing(params int[] values) =>
         RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateThrowingAlgebra>
             .Create(values.AsSpan());
@@ -433,12 +433,12 @@ public sealed class RangeUpdateFailureAndConcurrencyTests
         }
     }
 
+    /// <summary>Finds the tagged insertion with rotation count.</summary>
     private static (
         RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateThrowingAlgebra> Source,
         int[] ExpectedSource,
         int[] ExpectedResult,
         Func<RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateThrowingAlgebra>> Operation)
-        /// <summary>Finds the tagged insertion with rotation count.</summary>
         FindTaggedInsertionWithRotationCount(long desiredRotationCount)
     {
         RangeUpdateThrowingAlgebra.Disable();

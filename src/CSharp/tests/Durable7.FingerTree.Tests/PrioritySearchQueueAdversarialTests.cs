@@ -446,7 +446,7 @@ public sealed class PrioritySearchQueueAdversarialTests
         /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is PriorityProbe other && Equals(other);
 
-        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
+        /// <summary>Returns a hash consistent with <see cref="Equals(PriorityProbe)"/>.</summary>
         public override int GetHashCode() => EqualityClass;
     }
 

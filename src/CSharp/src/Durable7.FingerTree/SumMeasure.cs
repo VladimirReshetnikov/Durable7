@@ -58,7 +58,6 @@ public static class FingerTreeSumExtensions
     /// <param name="threshold">The cumulative-weight threshold.</param>
     /// <exception cref="ArgumentNullException"><paramref name="tree"/> is <see langword="null"/>.</exception>
     public static (FingerTree<T, T, SumMeasure<T>> Left, FingerTree<T, T, SumMeasure<T>> Right)
-        /// <summary>Splits at the first point where the accumulated weight passes the threshold.</summary>
         SplitByCumulativeWeight<T>(this FingerTree<T, T, SumMeasure<T>> tree, T threshold)
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T>, IComparisonOperators<T, T, bool>
     {

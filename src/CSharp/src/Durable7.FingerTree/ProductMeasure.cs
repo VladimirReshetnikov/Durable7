@@ -102,7 +102,6 @@ public static class ProductMeasures
     /// <param name="values">Elements to store, in order.</param>
     /// <returns>A tree measured by size and running sum.</returns>
     public static FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>>
-        /// <summary>Creates the size and sum.</summary>
         CreateSizeAndSum<T>(params ReadOnlySpan<T> values)
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T> =>
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>>.Create(values);
@@ -113,7 +112,6 @@ public static class ProductMeasures
     /// <returns>A tree measured by size and running sum.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> is <see langword="null"/>.</exception>
     public static FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>>
-        /// <summary>Creates the size and sum range.</summary>
         CreateSizeAndSumRange<T>(IEnumerable<T> values)
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T> =>
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>>.CreateRange(values);
@@ -122,7 +120,6 @@ public static class ProductMeasures
     /// <typeparam name="T">A numeric element/weight type (generic math).</typeparam>
     /// <returns>The empty tree measured by size and running sum.</returns>
     public static FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>>
-        /// <summary>Gets the identity of the size-and-sum product measure.</summary>
         EmptySizeAndSum<T>()
         where T : IAdditionOperators<T, T, T>, IAdditiveIdentity<T, T> =>
         FingerTree<T, MeasurePair<int, T>, ProductMeasure<T, int, T, SizeMeasure<T>, SumMeasure<T>>>.Empty;
@@ -135,7 +132,6 @@ public static class ProductMeasures
     /// <param name="values">Elements to store, in order.</param>
     /// <returns>A tree measured by size and maximum.</returns>
     public static FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MaxMeasure<T>>>
-        /// <summary>Creates the size and max.</summary>
         CreateSizeAndMax<T>(params ReadOnlySpan<T> values) =>
         FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MaxMeasure<T>>>.Create(values);
 
@@ -145,7 +141,6 @@ public static class ProductMeasures
     /// <returns>A tree measured by size and maximum.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> is <see langword="null"/>.</exception>
     public static FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MaxMeasure<T>>>
-        /// <summary>Creates the size and max range.</summary>
         CreateSizeAndMaxRange<T>(IEnumerable<T> values) =>
         FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MaxMeasure<T>>>.CreateRange(values);
 
@@ -153,7 +148,6 @@ public static class ProductMeasures
     /// <typeparam name="T">Element type, ordered by <see cref="Comparer{T}.Default"/> for the maximum.</typeparam>
     /// <returns>The empty tree measured by size and maximum.</returns>
     public static FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MaxMeasure<T>>>
-        /// <summary>Gets the identity of the size-and-maximum product measure.</summary>
         EmptySizeAndMax<T>() =>
         FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MaxMeasure<T>>>.Empty;
 
@@ -165,7 +159,6 @@ public static class ProductMeasures
     /// <param name="values">Elements to store, in order.</param>
     /// <returns>A tree measured by size and minimum.</returns>
     public static FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MinMeasure<T>>>
-        /// <summary>Creates the size and min.</summary>
         CreateSizeAndMin<T>(params ReadOnlySpan<T> values) =>
         FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MinMeasure<T>>>.Create(values);
 
@@ -175,7 +168,6 @@ public static class ProductMeasures
     /// <returns>A tree measured by size and minimum.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="values"/> is <see langword="null"/>.</exception>
     public static FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MinMeasure<T>>>
-        /// <summary>Creates the size and min range.</summary>
         CreateSizeAndMinRange<T>(IEnumerable<T> values) =>
         FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MinMeasure<T>>>.CreateRange(values);
 
@@ -183,7 +175,6 @@ public static class ProductMeasures
     /// <typeparam name="T">Element type, ordered by <see cref="Comparer{T}.Default"/> for the minimum.</typeparam>
     /// <returns>The empty tree measured by size and minimum.</returns>
     public static FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MinMeasure<T>>>
-        /// <summary>Gets the identity of the size-and-minimum product measure.</summary>
         EmptySizeAndMin<T>() =>
         FingerTree<T, MeasurePair<int, Optional<T>>, ProductMeasure<T, int, Optional<T>, SizeMeasure<T>, MinMeasure<T>>>.Empty;
 }

@@ -301,7 +301,7 @@ public sealed class PersistentHashMapContractOracleTests
         /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is SwitchableThrowingValue other && Equals(other);
 
-        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
+        /// <summary>Returns a hash consistent with <see cref="Equals(SwitchableThrowingValue)"/>.</summary>
         public override int GetHashCode() => value.GetHashCode(StringComparison.Ordinal);
 
         private string Value => value;

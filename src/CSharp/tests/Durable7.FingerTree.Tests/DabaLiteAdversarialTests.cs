@@ -486,9 +486,9 @@ public sealed class DabaLiteAdversarialTests
         return new WeakReference(block);
     }
 
+    /// <summary>Creates the prompt release scenario.</summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static (DabaLite<ReferenceAggregate, FirstReferenceMonoid> Daba, WeakReference Token)
-        /// <summary>Creates the prompt release scenario.</summary>
         CreatePromptReleaseScenario()
     {
         var daba = new DabaLite<ReferenceAggregate, FirstReferenceMonoid>();

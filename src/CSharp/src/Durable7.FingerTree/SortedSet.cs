@@ -404,8 +404,8 @@ public sealed partial class SortedSet<T> : IReadOnlyCollection<T>
         return before.Count;
     }
 
+    /// <summary>Splits at the first point where the accumulated measure reaches the threshold.</summary>
     private (FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> Less, FingerTree<T, RankedKey<T>, OrderStatisticMeasure<T>> AtLeast)
-        /// <summary>Splits at the first point where the accumulated measure reaches the threshold.</summary>
         SplitAtLeast(T item) =>
         _tree.Split(new KeyAtLeastPredicate<T>(_comparer, item));
 

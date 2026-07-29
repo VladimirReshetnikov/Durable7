@@ -124,7 +124,7 @@ public sealed partial class PersistentLongSet : IReadOnlySet<long>
         /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is Unit;
 
-        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
+        /// <summary>Returns a hash consistent with <see cref="Equals(Unit)"/>.</summary>
         public override int GetHashCode() => 0;
     }
 }

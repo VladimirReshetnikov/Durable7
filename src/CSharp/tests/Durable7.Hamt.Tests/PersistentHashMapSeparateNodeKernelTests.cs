@@ -1237,7 +1237,7 @@ public sealed class PersistentHashMapSeparateNodeKernelTests
         /// <summary>Determines whether both values hold the same elements.</summary>
         public override bool Equals(object? obj) => obj is ThrowingValue other && Equals(other);
 
-        /// <summary>Returns a hash consistent with <see cref="Equals"/>.</summary>
+        /// <summary>Returns a hash consistent with <see cref="Equals(ThrowingValue)"/>.</summary>
         public override int GetHashCode() => Text.GetHashCode(StringComparison.Ordinal);
     }
 

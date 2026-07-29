@@ -255,8 +255,8 @@ internal readonly struct RangeUpdateThrowingAlgebra
 /// <summary>Shared model and assertion helpers for range-update tests.</summary>
 internal static class RangeUpdateAssert
 {
+    /// <summary>Creates an element collection using the supplied policies, which it retains.</summary>
     internal static RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateAffineAlgebra>
-        /// <summary>Creates an element collection using the supplied policies, which it retains.</summary>
         Create(params int[] items) =>
         RangeUpdateSequence<int, RangeUpdateMeasure, RangeUpdateTag, RangeUpdateAffineAlgebra>
             .Create(items.AsSpan());
