@@ -916,6 +916,86 @@ payload until the arena becomes unreachable. The complete invariant, preservatio
 arithmetic, prior-art audit, and precise shipped/theoretical distinction are normative in the
 [research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md).
 
+## Persistent Run-Delta Vector
+
+`PersistentRunDeltaVector<T>` is an immutable fixed-length `IReadOnlyList<T>` with a current RRB
+root, a checkpoint RRB root, and an exact ordered index of maximal positions at which the roots
+differ under `ValueComparer`. `PersistentDirtyRun` describes one half-open interval by `Start`,
+`Length`, and checked `EndExclusive`.
+
+```csharp
+public static PersistentRunDeltaVector<T> Empty { get; }
+public static PersistentRunDeltaVector<T> Create(IEqualityComparer<T>? valueComparer = null);
+public static PersistentRunDeltaVector<T> CreateRange(
+    IEnumerable<T> items,
+    IEqualityComparer<T>? valueComparer = null);
+
+public int Count { get; }
+public bool IsEmpty { get; }
+public IEqualityComparer<T> ValueComparer { get; }
+public T this[int index] { get; }
+public T GetCheckpointValue(int index);
+
+public int DirtyCount { get; }
+public int DirtyRunCount { get; }
+public bool HasChanges { get; }
+public bool IsDirty(int index);
+public bool TryGetDirtyRunContaining(int index, out PersistentDirtyRun run);
+public PersistentDirtyRun GetDirtyRunAt(int rank);
+public IEnumerable<PersistentDirtyRun> EnumerateDirtyRuns();
+
+public PersistentRunDeltaVector<T> SetItem(int index, T value);
+public PersistentRunDeltaVector<T> ResetItem(int index);
+public PersistentRunDeltaVector<T> Checkpoint();
+public PersistentRunDeltaVector<T> Rollback();
+public PersistentRunDeltaVector<T> AcceptDirtyRunAt(int rank);
+public PersistentRunDeltaVector<T> RevertDirtyRunAt(int rank);
+```
+
+The dirty set is exactly
+`{ i | !ValueComparer.Equals(this[i], GetCheckpointValue(i)) }`. Its run index is ordered,
+nonoverlapping, nonadjacent, and maximal. A clean position reuses its exact checkpoint cell; a clean
+vector reuses its exact checkpoint root. `SetItem` retains the receiver for a comparer-equal current
+value. Returning to the checkpoint equality class cancels that point and restores its checkpoint
+representative. `ResetItem` performs that cancellation directly.
+
+`Checkpoint` accepts all current values as the new checkpoint, while `Rollback` restores all
+current values from the checkpoint. Both are O(1), return the receiver when clean, and clear the
+dirty index. `AcceptDirtyRunAt` copies the selected current slice into the checkpoint;
+`RevertDirtyRunAt` copies the selected checkpoint slice into the current values. Run ranks are
+ascending by start position, and a selected operation leaves every other dirty run unchanged.
+
+Let `n` be `Count`, `k` the dirty-position count, and `r` the dirty-run count:
+
+| Operation | Bound |
+| --- | ---: |
+| `CreateRange` | Theta(n) |
+| current or checkpoint indexer | O(log n) |
+| `SetItem`, `ResetItem` | O(log n) amortized time and fresh nodes |
+| `Checkpoint`, `Rollback`, retaining/forking a version | O(1) |
+| `DirtyCount`, `HasChanges` | O(1) |
+| `DirtyRunCount` | O(1) amortized |
+| `IsDirty`, `TryGetDirtyRunContaining` | O(log(r + 2)) amortized |
+| `GetDirtyRunAt` | O(log(r + 2)) amortized |
+| `EnumerateDirtyRuns` | Theta(r) |
+| `AcceptDirtyRunAt`, `RevertDirtyRunAt` | O(log n) amortized |
+| enumerate current values | Theta(n) |
+
+The Theta(r) descriptor bound does not include changed payload emission, which is Omega(k). The
+strict discovery improvement and no-regression theorem compare against state-only RRB checkpoints;
+Theta(k) is only the cost of a straightforward linear point-delta coalescing scan, not a lower bound
+for every order-statistic point index. The exact comparison is in the
+[research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md). A
+persistent RRB plus balanced DIET matches this construction, and faster general fully persistent
+arrays exist; no universal optimality is claimed.
+
+All producing operations leave every input version usable. Comparer calls that can affect
+`SetItem` occur before successor construction, so a thrown comparer publishes no partial version.
+The comparer must remain a stable equivalence relation and be safe for overlapping calls when
+versions are used concurrently. Values retained in any version must not mutate state observed by
+that comparer. The type deliberately provides no length changes, concat, range update, unrelated
+rebase, or branch merge.
+
 ## DABA Lite Sliding-Window Aggregator
 
 `DabaLite<T, TMonoid>` is a mutable FIFO sliding-window aggregator over the existing static

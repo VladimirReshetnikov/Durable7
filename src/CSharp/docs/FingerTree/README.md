@@ -18,6 +18,10 @@ project.
 - [C# FingerTree API Specification](api-specification.md) defines the normative public C# API shape, semantic contracts, and complexity targets for the implementation in `src/Durable7.FingerTree/`.
 - [Persistent chunked bit set](persistent-chunked-bit-set.md) specifies the sparse nonnegative-int
   domain, inclusive rank, zero-based select, chunk-stream algebra, API, and complexity contract.
+- [Persistent run-delta vector research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md)
+  specifies the experimental fixed-length checkpoint vector, exact maximal-dirty-run invariant,
+  output-optimal run discovery bound, RRB comparator family, prior-art boundary, and validation
+  evidence.
 - [Range-update sequence contract](range-update-sequence.md) specifies the static tag/action algebra,
   `Compose(newer, older)` direction, implicit-AVL lazy-tag invariant, exact public API, structural
   bounds, affine assign/add example, and deterministic validation boundary for

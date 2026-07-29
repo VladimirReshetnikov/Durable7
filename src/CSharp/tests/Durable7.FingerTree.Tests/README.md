@@ -77,6 +77,11 @@ reasonable oracle.
   retained and randomized branching histories, direct Myers ancestor-oracle parity, odd-block square
   seams and capacity arithmetic, traversal-hop and operation-routing guardrails, explicit/custom
   factory validation, enumeration, and synchronized concurrent branches/readers.
+- `PersistentRunDeltaVectorTests.cs` covers factories, equality policies both coarser and finer than
+  default equality, exact representatives and maximal dirty runs, every point-induced
+  merge/split/shrink/cancellation case, whole and zero-comparer-call selected-run accept/revert,
+  5,000 randomized retained branches against an independent model, the clustered `k >> r` witness,
+  comparer failure atomicity, structural invariants, and concurrent readers/writers.
 - `DabaLiteTests.cs` covers noncommutative FIFO order, a 100,000-operation randomized variable
   window model, empty/clear contracts, and the three/two/at-most-one worst-case `Combine` limits.
   `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a

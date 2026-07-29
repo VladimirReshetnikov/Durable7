@@ -701,6 +701,45 @@ theoretical instantiation rather than shipped code. See the
 [research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md) for the invariant,
 proof, scoped novelty claim, and comparison table.
 
+## Persistent Run-Delta Vectors
+
+Use `PersistentRunDeltaVector<T>` when a fixed-length persistent state needs a branch-local
+checkpoint and callers review contiguous change regions:
+
+```csharp
+var baseline = PersistentRunDeltaVector<int>.CreateRange(new int[12]);
+var edited = baseline
+    .SetItem(2, 20)
+    .SetItem(3, 30)
+    .SetItem(4, 40)
+    .SetItem(9, 90);
+
+foreach (var run in edited.EnumerateDirtyRuns())
+    Console.WriteLine($"[{run.Start}, {run.EndExclusive})");
+// [2, 5)
+// [9, 10)
+
+var partiallyAccepted = edited.AcceptDirtyRunAt(0);
+// Positions 2..4 now belong to the checkpoint; position 9 remains dirty.
+
+var rejected = edited.RevertDirtyRunAt(1);
+// Position 9 is restored from the checkpoint; positions 2..4 remain dirty.
+
+var alternate = baseline.SetItem(7, 70); // independent retained branch
+```
+
+`Checkpoint()` accepts every current value and `Rollback()` rejects every change in O(1).
+`ResetItem(i)` cancels one position exactly when it becomes comparer-equal to its checkpoint value.
+If `k` dirty positions form `r` maximal runs, descriptor enumeration is Theta(r); reading or
+emitting all changed payloads still costs at least Omega(k). Reads, point edits, and selected-run
+accept/revert are O(log n), and complete current-value enumeration is Theta(n).
+
+The vector length and equality policy are fixed. Retained reference values must not mutate state
+observed by that comparer. This experimental surface intentionally omits insertion, deletion,
+concat, unrelated rebase, range updates, and branch merge. See the
+[research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md) for the
+exact comparison class and novelty boundary.
+
 ## Range-Update Sequence
 
 Use `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` when a persistent indexed sequence must
@@ -811,6 +850,7 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
 | Branching append history with appendable persistent slices | `AncestralSliceQueue<T>` (experimental) |
+| Fixed-length branchable checkpoint state with contiguous dirty-hunk review | `PersistentRunDeltaVector<T>` (experimental) |
 | Persistent indexed sequence with logarithmic range actions and aggregate queries | `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` |
 | Persistent rank/select for events depending on finite left context | `ContextualRankSequence<TElement, TMachine>` (experimental) |
 | Sparse nonnegative integer set with population rank/select | `PersistentChunkedBitSet` |
