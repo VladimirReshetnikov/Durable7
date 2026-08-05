@@ -37,7 +37,13 @@ import qualified Durable7.FingerTree.RangeUpdateSequence as RangeUpdate
 import qualified Durable7.FingerTree.SortedBag as SortedBag
 import qualified Durable7.FingerTree.SortedMap as SortedMap
 import qualified Durable7.FingerTree.SortedSet as SortedSet
+import qualified AncestralSliceQueueTests
+import qualified BilateralAncestralDequeTests
 import qualified CanonicalSortedSetTests
+import qualified ContextualRankSequenceTests
+import qualified PersistentDeltaMapTests
+import qualified PersistentMonotoneActionHeapTests
+import qualified PersistentRunDeltaVectorTests
 import qualified RangeUpdateSequenceTests
 import qualified OrderedSearchCursorTests
 
@@ -67,6 +73,12 @@ main = do
   testRopeCursor
   testMeasuredRopeCursor
   testTextRope
+  AncestralSliceQueueTests.run
+  BilateralAncestralDequeTests.run
+  ContextualRankSequenceTests.run
+  PersistentDeltaMapTests.run
+  PersistentRunDeltaVectorTests.run
+  PersistentMonotoneActionHeapTests.run
   testConcurrentReads
   putStrLn "durable7-fingertree tests passed"
 
@@ -313,6 +325,27 @@ testSortedCollections = do
   assertEqual "map entryAt" (Just (2, "bb")) (SortedMap.index 1 dict)
   assertEqual "map floor" (Just (2, "bb")) (SortedMap.floorEntry 2 dict)
   assertEqual "map overflowing slice rejected" Nothing (SortedMap.slice 1 maxBound dict)
+  assertEqual "map slice selects a rank window" [(2, "bb")]
+    (maybe [] SortedMap.toList (SortedMap.slice 1 1 dict))
+  let ranged = SortedMap.fromList [(key, show key) | key <- [0, 10 .. 90 :: Int]]
+  assertEqual "map key range is inclusive at both ends" [20, 30, 40]
+    (SortedMap.keys (SortedMap.keyRange 20 40 ranged))
+  assertEqual "map key range accepts probes between stored keys" [30, 40]
+    (SortedMap.keys (SortedMap.keyRange 25 45 ranged))
+  assertEqual "map key range yields nothing when inverted" []
+    (SortedMap.keys (SortedMap.keyRange 40 20 ranged))
+  assertEqual "map key range yields nothing for an empty window" []
+    (SortedMap.keys (SortedMap.keyRange 21 29 ranged))
+  assertEqual "map key range spanning past both ends keeps everything" 10
+    (SortedMap.count (SortedMap.keyRange (-5) 500 ranged))
+  assertEqual "map key range of a single stored key" [(30, "30")]
+    (SortedMap.toList (SortedMap.keyRange 30 30 ranged))
+  -- The probes select boundaries and are never stored, so a comparison coarser than equality still
+  -- sees the representatives the map retained.
+  let keyedMap = SortedMap.fromList [(Keyed (1 :: Int) "one", 'x'), (Keyed 2 "two", 'y')]
+  assertEqual "map key range retains stored key representatives" ["one", "two"]
+    (map keyedLabel
+      (SortedMap.keys (SortedMap.keyRange (Keyed 1 "probe") (Keyed 2 "probe") keyedMap)))
   -- Comparer-equal-but-distinct elements: the set keeps the first stored
   -- instance, and the bag retains every instance (new after existing).
   let firstWins = SortedSet.insert (Keyed 1 "new") (SortedSet.fromList [Keyed (1 :: Int) "old"])

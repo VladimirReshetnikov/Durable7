@@ -14,10 +14,19 @@ the *sharing* discipline: an update copies a path, not a structure, and the cach
 make a finger tree logarithmic are forced rather than left as thunks that would defer the cost to an
 unpredictable later read.
 
+Haskell is also where the seven research-derived collections shed the most machinery. The managed
+and native ports of the two ancestry-backed sequences own a mutable, lock-serialized arena of
+integer handles; here a node is its own handle and the arena disappears into ordinary immutable heap
+structure, which removes the backend-injection seam and the arena statistics while improving leaf
+addition from O(1) amortized to O(1) worst case. Everywhere those ports pass a comparer or action
+interface, this one retains a record of functions, so the policy is a value rather than a class
+constraint — the same choice the Rust port makes, and for the same reason: the value relation is
+what decides which writes are semantic no-ops.
+
 | Workspace | Package | Public modules |
 | --- | --- | --- |
-| [Hamt](Hamt/README.md) | `durable7-hamt` | `Durable7.Hamt`; CHAMP map/set/bag/bimap/multimap/relation, strict map patches, directed graphs, indexed maps, transients, Patricia, and Merkle families |
-| [FingerTree](FingerTree/README.md) | `durable7-fingertree` | `Durable7.FingerTree`, genuine measured-tree deque/core, sparse chunked bit set, ropes/cursors, interval and sorted collections, and priority cores |
+| [Hamt](Hamt/README.md) | `durable7-hamt` | `Durable7.Hamt`; CHAMP map/set/bag/bimap/multimap/relation, strict map patches, directed graphs, indexed maps, transients, Patricia, Merkle families, and the ancestral connection forest |
+| [FingerTree](FingerTree/README.md) | `durable7-fingertree` | `Durable7.FingerTree`, genuine measured-tree deque/core, sparse chunked bit set, ropes/cursors, interval and sorted collections, priority cores, the level-ancestor seam, and six of the seven research-derived collections |
 | [Ordered](Ordered/README.md) | `durable7-ordered` | Neutral persistent ordered set, map, and grouped multimap over the public CHAMP and finger-tree substrates |
 
 `durable7-hamt` and `durable7-fingertree` are independent of each other; `durable7-ordered` depends

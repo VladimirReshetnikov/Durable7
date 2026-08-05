@@ -26,6 +26,7 @@ module Durable7.FingerTree.SortedMap
   , indexOfKey
   , countKeysLessThan
   , countKeysAtMost
+  , keyRange
   , slice
   , keys
   , elems
@@ -136,11 +137,24 @@ countKeysLessThan key (SortedMap values) = Map.size lower
 countKeysAtMost :: Ord k => k -> SortedMap k v -> Int
 countKeysAtMost key mapValue = countKeysLessThan key mapValue + if member key mapValue then 1 else 0
 
--- | The entries in the given range.
+-- | The entries whose keys lie in the inclusive range @[low, high]@, sharing the source's untouched
+-- subtrees.  An inverted range (@low > high@) yields the empty map.
+--
+-- O(log n), independent of how many entries the range selects or excludes: each boundary is one
+-- ordered descent that keeps the satisfying side whole.  Stored key representatives are preserved
+-- exactly — the probes select boundaries and are never stored — so a caller whose comparison is
+-- coarser than equality still sees the keys the map retained.
+keyRange :: Ord k => k -> k -> SortedMap k v -> SortedMap k v
+keyRange low high (SortedMap values)
+  | low > high = empty
+  | otherwise =
+      SortedMap (Map.takeWhileAntitone (<= high) (Map.dropWhileAntitone (< low) values))
+
+-- | The entries in the given rank range, sharing the source's untouched subtrees. O(log n).
 slice :: Ord k => Int -> Int -> SortedMap k v -> Maybe (SortedMap k v)
-slice position lengthValue mapValue
+slice position lengthValue mapValue@(SortedMap values)
   | not (isValidRange position lengthValue (count mapValue)) = Nothing
-  | otherwise = Just (fromList (take lengthValue (drop position (toList mapValue))))
+  | otherwise = Just (SortedMap (Map.take lengthValue (Map.drop position values)))
 
 -- | The keys, in the map's own order.
 keys :: SortedMap k v -> [k]

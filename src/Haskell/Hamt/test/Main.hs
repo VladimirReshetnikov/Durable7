@@ -45,6 +45,7 @@ import qualified Durable7.Hamt.PersistentIndexedMap as IndexedMap
 import qualified Durable7.Hamt.PersistentMapPatch as MapPatch
 import PersistenceTests (runPersistenceTests)
 import BiMapTests (runBiMapTests)
+import qualified PersistentAncestralConnectionForestTests
 
 data CountedValue = CountedValue !(IORef Int) !Int !Int
 
@@ -102,6 +103,7 @@ main = do
   testLargeFromList
   testMerkleEncodingAndCore
   runPersistenceTests
+  PersistentAncestralConnectionForestTests.run
   testConcurrentReads
   putStrLn "durable7-hamt tests passed"
 

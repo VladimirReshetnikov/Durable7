@@ -22,6 +22,7 @@ library
     Durable7.Hamt.MerklePersistence
     Durable7.Hamt.MerkleSearchTree
     Durable7.Hamt.Patricia
+    Durable7.Hamt.PersistentAncestralConnectionForest
     Durable7.Hamt.PersistentDirectedGraph
     Durable7.Hamt.PersistentIndexedMap
     Durable7.Hamt.PersistentMapPatch
@@ -42,6 +43,7 @@ test-suite hamt-test
   other-modules:
     BiMapTests
     PersistenceTests
+    PersistentAncestralConnectionForestTests
   hs-source-dirs: test
   build-depends:
     base >=4.21 && <4.22,

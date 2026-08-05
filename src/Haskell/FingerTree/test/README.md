@@ -73,3 +73,32 @@ colliding 4,096-node chain exercises stack-safe deletion, reinsertion, enumerati
 validation. Algebra and all set relations cover policy gating plus receiver-defined cross-policy
 asymmetry. `StableName` diagnostics require at least 90 percent off-path node retention for edits,
 and a hostile mutable test hash proves the validator detects non-reproducible ranks.
+
+The seven research-derived collections add six groups to this executable. Ancestral slice queue
+coverage exercises the anchored-empty rule at every boundary, front- versus back-drained empties
+keeping different anchors, all 2,211 ranges of a 65-element source, every take/drop/split boundary of
+a 257-element source with branching from both sides, the odd-block square seams through 128 squared,
+and an ancestor-query discipline built on hop counts: suffix slices, whole prefixes, zero drops, and
+a split at the count are proved query-free while a split at zero is proved to query. Bilateral
+ancestral deque coverage asserts exact query profiles rather than ceilings alone - the four cached
+endpoints index for free, the slice ceiling of two is reached and never exceeded across all 45
+range pairs, both split endpoints and the centre boundary are free, and a cross-centre drain
+exercises the count-equals-two shortcut - plus reversal laws, exhaustive construction words for
+lengths zero through eight, and a five-seed randomized model with retained-version re-checks.
+
+Contextual rank sequence coverage pins explicit composition order through a non-commutative pair,
+exhaustive words of length zero through seven over a three-symbol alphabet, and a counting machine
+that proves construction costs exactly s times n transitions, ranks cost none, and each select costs
+exactly one. Delta map coverage pins every checkpoint-differential rule: policy-equal writes sharing
+every root, first-write before-capture and coalescing, set-then-restore and add-then-remove
+cancellation, snap-back to the checkpoint root, representative retention across delete and re-add,
+and a callback budget showing full enumeration of a 16,384-entry index costs no policy calls. A
+3,000-step randomized history checks both models at every step. Run-delta vector coverage proves the
+splice is comparison-free under a counting policy with a positive control, that cancellation
+restores the exact checkpoint representative under both token and StableName identity, all five
+run-index transitions, the runs-versus-dirty-positions gap over 8,192 positions, and the
+non-reflexive NaN hazard the reflexive-IEEE policy exists to avoid. Monotone action heap coverage
+pins the clamp algebra's collapse cases and boundary representatives, composition direction and
+associativity over an eight-action cross product, the temporal rule that an insertion after a
+transform is not retroactively transformed, tie-breaking, deeply tagged structural validation, and a
+randomized retained-branch model.

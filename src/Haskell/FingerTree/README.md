@@ -12,7 +12,9 @@ priority-search queue, interval tree and payload-bearing interval-map helpers, p
 helpers, immutable positional/measured/text rope cursors, a persistent RRB vector, a policy-canonical
 zip-zip-tree sorted set, a persistent lazy range-update sequence, and
 `PersistentChunkedBitSet`, a measured sparse sequence of nonzero 64-bit words with logarithmic
-membership, inclusive rank/select, and sparse linear algebra.
+membership, inclusive rank/select, and sparse linear algebra. It also carries six of the seven
+research-derived collections described below, together with the append-only level-ancestor seam two
+of them share.
 
 `IntervalMap a v` composes the augmented low-sorted `IntervalTree` with an ordered exact-key map.
 It provides unique closed-interval keys, strict addition, payload replacement, exact and indexed
@@ -30,6 +32,100 @@ tags retain the source root. As with `MeasuredRope`, operands passed to `append`
 extensionally identical policy functions because Haskell functions have no decidable equality.
 The port uses `Maybe` for invalid indices and ranges and the package's checked-`Int` pure exception
 for count overflow.
+
+## The seven research-derived collections
+
+`AncestralSliceQueue`, `BilateralAncestralDeque`, `ContextualRankSequence`, `PersistentDeltaMap`,
+`PersistentRunDeltaVector`, and `PersistentMonotoneActionHeap` are the finger-tree members of the
+seven collections that originated as scoped design studies; the seventh,
+`PersistentAncestralConnectionForest`, lives in `durable7-hamt`. Each is reachable only through its
+own module: several of them export a `ValidationStatistics` type, so re-exporting them from the
+`Durable7.FingerTree` umbrella would be ambiguous, the same reason `RangeUpdateSequence` is not
+re-exported there either.
+
+`IncrementalAncestor` is the append-only level-ancestor seam the first two share, and it is where
+this port diverges most from the managed and native ones. Those own a mutable arena of integer
+handles behind a lock, injected through a `Create(arena)` factory and observed through arena
+statistics. Here a `Node a` *is* its own handle: the forest is ordinary immutable heap structure, so
+there is no arena object, no lock, no handle-recycling question, no backend-injection seam, and no
+way to present a node to the wrong forest. The two managed factories collapse into one `empty`, and
+leaf addition improves from O(1) amortized to **O(1) worst case** because there is no block store to
+grow. Ancestor queries still follow the Myers two-link scheme in O(log M) parent/jump hops. The one
+capability that genuinely does not survive is the arena's retained query counters, which have no
+pure analogue; `ancestorAtDepthHops` returns the hop count to the caller that caused it instead, and
+`BilateralAncestralDeque` builds its `QueryCost`-returning `indexCost`/`sliceCost`/`splitAtCost`/
+`removeFirstCost`/`removeLastCost` siblings on top of that, which is what makes the query ceilings
+testable rather than merely asserted.
+
+`AncestralSliceQueue a` is the triple `(tail node, low depth, count)` naming an interval of one
+root-to-tail path. Its anchored-empty rule is preserved exactly: an empty value retains the node
+immediately before its window, so appending to any empty slice yields exactly the new value, and a
+queue drained from the front and one drained from the back keep different anchors. Suffix slices,
+`take count`, `drop 0`, and a split at `count` are query-free; a split at `0` is not, because the
+anchor one level above the window can only be named by an ancestor query.
+
+`BilateralAncestralDeque a` holds a reversed left interval and a forward right interval, which makes
+`reverse` an O(1) exchange. The at-most-two-query ceiling for `slice` and `splitAt` holds including
+cross-arm cases, removals on the owning arm are query-free, and the four cached endpoints index
+without a query. Its `sharesRootWith` compares the retained interval *nodes* rather than the outer
+handle: the handle is a small all-strict record, so GHC's CPR analysis unboxes and rebuilds it
+around unchanged endpoints and a facade-level `StableName` comparison fails under `-O2`. Any future
+structure whose sharing diagnostic compares a small strict facade record rather than an inner node
+inherits that hazard.
+
+`ContextualRankSequence element` lifts a finite deterministic event machine into an all-start-state
+summary monoid over the package's measured core. Because that core is a genuine Hinze-Paterson tree
+with digits and a lazy middle, this port keeps the reference's *edit* bounds exactly — O(1)
+whole-sequence evaluation from the cached root summary, O(s log n) prefix evaluation, indexing,
+rank, select and edits, O(s) amortized endpoint updates, and O(s log(min(n, m))) concatenation —
+rather than the weaker endpoint and concatenation bounds the Rust port has to state for its
+join-tree substrate. Enumeration is the one figure that does not carry over: it is Θ(s·n) here
+rather than the reference's O(n), because the substrate's left-view fold rebuilds a spine node per
+step and each rebuild reforces one O(s) effect-table composition, where the reference instead walks
+a traversal stack and combines no measures. The
+machine is a retained `ContextualEventMachine` record instead of a static-abstract interface, so
+`stateCount` is instance-level; `append` cannot compare two records for identity, so it checks the
+one thing that is observable and would silently corrupt summaries — a declared state-count mismatch
+— and documents operand compatibility as a caller precondition. Event counts are `Integer`, so the
+reference's overflow contract is vacuous, while its negative-event-count rejection is kept and the
+element count remains a checked `Int`. Query results are forced before return.
+
+`PersistentDeltaMap key value` pairs current state with a designated checkpoint and a coalesced
+exact net-change index. Every load-bearing rule survives: a policy-equal write is a no-op returning a
+version that shares every root, the first effective write captures `before`, repeated writes
+coalesce, returning a key to its checkpoint state removes its record, and emptying the change index
+snaps the current root back onto the checkpoint root. `Maybe` replaces the presence-safe
+`DeltaMapValue` wrapper, which the reference needs only because `null` is a valid value. Enumeration
+is a lazy list, which matches the reference's lazy `GetChanges()` more closely than the Rust port's
+eager materialization. Range-restricted enumeration goes through `SortedMap.keyRange`, an ordered
+inclusive restriction built from two antitone boundary descents, so `changesInRange` and
+`entriesInRange` cost O(log(k + 1)) to restrict and Θ(1) amortized per yielded record — the
+reference's bound, not a weakened one. One substrate limit remains and is stated rather than papered
+over: `SortedMap` caches no extremes, so `minEntry`/`maxEntry` are Θ(log N) instead of O(1).
+
+`PersistentRunDeltaVector a` keeps current and checkpoint RRB roots plus an ordered index of the
+maximal runs of differing positions. Accepting or reverting one run is four splits and two concats,
+so it costs O(log n) independently of the run's length and performs no value comparisons. The
+reference identity that the "a clean position reuses its exact checkpoint cell" invariant depends on
+is carried by an internal cell wearing a globally unique token, drawn from an atomic counter through
+the same `unsafePerformIO`/`NOINLINE` device `Data.Unique` uses; that makes the identity test
+available to the pure `validateStructure` and turns `RrbVector.setAt`'s `Eq` no-op check into
+exactly the identity short circuit `Arc::ptr_eq` gives the Rust port. `StableName`-based diagnostics
+confirm the same fact independently in the tests. Its `EqualityPolicy` is a retained value because
+the value relation decides which writes are semantic no-ops; the caller must supply a true
+equivalence relation, and `reflexiveIeeeEquality` is the canonical exit for floating payloads,
+because a naive `(==)` on `Double` is not reflexive on `NaN` while `EqualityComparer<double>.Default`
+is, and a non-reflexive relation corrupts run accounting in a way no invariant check can see.
+
+`PersistentMonotoneActionHeap element priority action` is the action-tagged sibling of
+`BrodalOkasakiHeap`, carrying one immutable pending action per tree and forest spine so a whole-heap
+priority transform is O(1) worst case while insert, meld, and minimum stay O(1) and delete-minimum
+stays O(log n). `actionCompose outer inner` means `outer (inner p)`, so the newer action is the outer
+one at every pushdown site, and the `OrderClamp` algebra pins that direction: a cap composed after a
+floor collapses to the cap's boundary. The old root is exposed before a losing child is skew-inserted,
+so a later insertion is never retroactively transformed. The action policy is a retained record, so
+melding operands built from different policies is a documented caller obligation rather than a
+detected error.
 
 [`CanonicalSortedSet`](docs/canonical-sorted-set.md) derives exact HMAC-SHA-256 ranks from a caller's
 equivalence-class hash and a retained seeded, keyed, or fresh-random policy. Policy creation is an
