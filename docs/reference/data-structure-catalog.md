@@ -345,6 +345,39 @@ serialized C# Release build had zero warnings and zero errors and the complete g
 structure gate recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 
+## Research-Derived Collections
+
+Seven collections originated as scoped design studies, each with a normative proposal under
+[`docs/proposals`](../proposals/) recording its claims, prior-art boundary, and deliberate
+limitations. They were promoted out of the former `*.Experimental` namespaces into the ordinary
+family namespaces and ported to Rust. Coverage is **C# and Rust only** — the remaining seven
+languages are deliberately unported pending a named consumer, so absence elsewhere is a scheduling
+decision rather than a gap. Every one of them separates shipped bounds from theoretical
+instantiations; read the proposal before relying on a headline complexity.
+
+| Collection | Role | Proposal |
+| --- | --- | --- |
+| `AncestralSliceQueue<T>` | Persistent queue whose handle is an appendable interval of one root-to-node path in an append-only arena | [ASQ](../proposals/ancestral-slice-queue-2026-07-25.md) |
+| `BilateralAncestralDeque<T>` | Restricted persistent deque as two oppositely oriented ancestry intervals, with O(1) reverse | [BAD](../proposals/bilateral-ancestral-deque-2026-07-25.md) |
+| `ContextualRankSequence<TElement, TMachine>` | Measured sequence lifting a finite event machine into an all-start-state summary for contextual rank/select | [CRS](../proposals/contextual-rank-sequence-2026-07-25.md) |
+| `PersistentDeltaMap<TKey, TValue>` | Sorted map with a designated checkpoint and a coalesced exact net-change index | [PDM](../proposals/persistent-delta-map-2026-07-25.md) |
+| `PersistentRunDeltaVector<T>` | Fixed-length current/checkpoint vector with an exact maximal dirty-run index | [PRDV](../proposals/persistent-run-delta-vector-2026-07-29.md) |
+| `PersistentMonotoneActionHeap<TElement, TPriority, TAction>` | Brodal-Okasaki heap with lazily composed monotone priority actions | [PMAH](../proposals/persistent-monotone-action-heap-2026-07-29.md) |
+| `PersistentAncestralConnectionForest` | Branching insertion-only union-find answering first-connected-at-which-version | [PACF](../proposals/persistent-ancestral-connection-forest-2026-07-29.md) |
+
+| Language | Public entry points | Primary references |
+| --- | --- | --- |
+| C# | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IIncrementalAncestorArena<T>`, `IIncrementalLevelAncestorArena<T>`, `ContextualRankSequence<TElement, TMachine>`, `IContextualEventMachine<TElement>`, `PersistentDeltaMap<TKey, TValue>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<TElement, TPriority, TAction>`, `IMonotoneHeapAction<TPriority, TAction>`, `OrderClampPolicy<T>` (FingerTree); `PersistentAncestralConnectionForest`, `AncestralConnectionVersion` (Hamt) | [FingerTree API spec](../../src/CSharp/docs/FingerTree/api-specification.md), [FingerTree usage](../../src/CSharp/docs/FingerTree/usage.md), [Hamt API spec](../../src/CSharp/docs/Hamt/api-specification.md), [Hamt usage](../../src/CSharp/docs/Hamt/usage.md) |
+| Rust | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IncrementalAncestorArena<T>`, `MyersAncestorArena<T>`, `ContextualRankSequence<T, M>`, `ContextualEventMachine<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>`, `MonotoneHeapAction<P, A>`, `ActionPolicy<P, A>`, `OrderClampPolicy<T>`, `EqualityPolicy<T>` (FingerTree); `PersistentAncestralConnectionForest`, `AncestralConnectionVersion` (Hamt) | [FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md), [Hamt API notes](../../src/Rust/Hamt/docs/api-notes.md), [FingerTree README](../../src/Rust/FingerTree/README.md), [Hamt README](../../src/Rust/Hamt/README.md) |
+
+The Rust port makes three intentional, documented divergences, all recorded in the local API notes:
+it consolidates C#'s two duplicate level-ancestor arenas into one shared backend; it replaces the
+presence-safe `DeltaMapValue<T>` wrapper with `Option`, which C# needs only because `null` is a
+valid present value; and it replaces the run-delta vector's private reference-identity `Cell` class
+with `Arc<T>` plus `Arc::ptr_eq`. Value equality is taken from a retained `EqualityPolicy<T>`, the
+equality counterpart of `OrderPolicy<T>`, because that policy defines semantic no-ops and change
+cancellation and so must be remembered rather than taken as a `PartialEq` bound.
+
 ## Persistent Cursor Availability
 
 All nine language ports ship the repository-wide semantic cursor tier. Concrete names follow each

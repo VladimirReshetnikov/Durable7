@@ -25,7 +25,13 @@ family. It exposes Rust-native names for the same public families:
 - `PersistentChunkedBitSet` over the shared measured tree;
 - `Rope<T>` and its immutable positional `RopeCursor<T>`, `MeasuredRope<T, P>` and
   `MeasuredRopeCursor<T, P>`, `MeasuredRopeBuilder<T, P>`, `TextRope` and `TextRopeCursor`, and
-  `RopeBuilder`, including Unicode text extras and newline-style classification.
+  `RopeBuilder`, including Unicode text extras and newline-style classification;
+- `PersistentMonotoneActionHeap<E, P, A>` over a retained `ActionPolicy<P, A>`, with the shipped
+  `OrderClampPolicy<T>`/`OrderClamp<T>` action family;
+- `AncestralSliceQueue<T>` and `BilateralAncestralDeque<T>` over the shared
+  `IncrementalAncestorArena<T>` seam and its `MyersAncestorArena<T>` reference backend;
+- `ContextualRankSequence<T, M>` over a `ContextualEventMachine<T>` policy; and
+- `PersistentDeltaMap<K, V>` and `PersistentRunDeltaVector<T>` over a retained `EqualityPolicy<T>`.
 
 This checkpoint preserves immutable snapshot semantics and the observable behavior covered by the
 crate tests for its persistent families. `DabaLite<T, M>` is the deliberate mutable exception: it
@@ -111,6 +117,24 @@ intersection, difference, and symmetric difference.
 order-statistic measured tree storage with cached count plus last-key measures. The crate still does
 not claim the C#/C++ lazy finger-tree asymptotic profile overall; derived algorithms remain
 semantic-checkpoint implementations until the lazy measured spine is ported through the whole family.
+
+`PersistentMonotoneActionHeap<E, P, A>` is the action-tagged sibling of the Brodal-Okasaki heap: it
+carries one immutable pending action per tree and forest spine, so `transform_all` retimes every
+current priority in worst-case O(1) while insert, minimum, and meld stay worst-case O(1) and
+delete-min stays worst-case O(log n). Tags compose only through the exposing accessors, so heaps
+carrying different pending actions meld without cross-applying them, and later insertions are never
+retroactively transformed. `AncestralSliceQueue<T>` and `BilateralAncestralDeque<T>` are restricted
+persistent sequences whose constant-sized handles denote intervals on the paths of one append-only
+arena; the Rust port consolidates the two duplicate C# arenas into a single
+`IncrementalAncestorArena<T>` seam. Their bounds are parameterized by that backend, and the shipped
+`MyersAncestorArena<T>` supplies O(1)-amortized addition with O(log M) ancestor queries — the
+all-O(1)-worst-case statement in the design proposals is a reduction to an unimplemented
+Alstrup-Holm backend. `ContextualRankSequence<T, M>` caches, for every machine state, the outgoing
+state and event count of every subtree, giving O(1) whole-sequence evaluation and O(s log n)
+contextual rank and select. `PersistentDeltaMap<K, V>` and `PersistentRunDeltaVector<T>` pair current
+state with a checkpoint and an exact difference index, making checkpoint and rollback O(1) root
+swaps while change enumeration stays output-optimal — Θ(k + 1) net-changed keys for the map and
+Θ(r) maximal runs for the vector.
 
 See the [Brodal-Okasaki heap notes](docs/brodal-okasaki-heap.md), the
 [priority-search queue notes](docs/priority-search-queue.md), [API notes](docs/api-notes.md),

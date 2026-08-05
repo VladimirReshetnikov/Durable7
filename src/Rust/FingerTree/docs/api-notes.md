@@ -418,6 +418,115 @@ skew-forest rank rules, parent/child order, logical count, maximum rank, and max
 audits. See [Brodal-Okasaki heap](brodal-okasaki-heap.md) for the representation and validation
 contract in one place.
 
+## Monotone-action heap
+
+`PersistentMonotoneActionHeap<E, P, A>` is the action-tagged sibling of `BrodalOkasakiHeap`. It
+reuses the same fused bootstrapped skew-binomial representation and adds one immutable pending
+action to every tree and every forest spine, so `transform_all` adjusts every current priority by
+composing a single tag at the root: worst-case O(1) time and O(1) new structure. Insert, minimum,
+and meld stay worst-case O(1); delete-min stays worst-case O(log n).
+
+Tag composition is load-bearing rather than an optimization. Every traversal reaches children
+through the tag-composing accessors, so each comparison sees a fully composed logical priority.
+That is what lets two heaps carrying *different* pending actions meld without cross-applying either
+heap's actions to the other's entries, and it holds for non-invertible actions such as clamps.
+`transform_all` has temporal semantics: it transforms exactly the priorities present at the call,
+and entries inserted or melded in afterwards join untransformed.
+
+`MonotoneHeapAction<P, A>` is the policy trait — `identity`, `is_identity`,
+`compose(outer, inner)` denoting `outer(inner(priority))`, and `apply`. It is retained inside an
+`ActionPolicy<P, A>` that carries identity the same way `OrderPolicy` does, so `meld` rejects
+operands whose policies are not compatible with `MonotoneActionMeldError`. The policy is trusted:
+violating its identity, associativity, monotonicity, or O(1)-operation contract invalidates both the
+semantic and the complexity guarantees.
+
+`OrderClampPolicy<T>` supplies the shipped closed family `x -> clamp(x, lower, upper)` over
+`OrderClamp<T>` values (floor, cap, validated two-sided clamp, and exact constant). Composition
+returns one clamp or an explicit constant, so representative distinctions survive a coarse comparer.
+The policy names the exact comparer it is monotone for, and heap construction rejects any other
+comparer — the Rust form of the C# comparer-object pairing contract.
+
+## Ancestral slice queue and bilateral ancestral deque
+
+`AncestralSliceQueue<T>` and `BilateralAncestralDeque<T>` are restricted persistent sequences whose
+handles are constant-sized intervals on the paths of one append-only ancestry arena. The queue's
+handle is a single interval of a root-to-node path; the deque's handle is a reversed left interval
+followed by a forward right interval, which makes `reverse` an O(1) exchange of the two intervals.
+Both deliberately omit prepend-into-the-middle, point replacement, unrelated concatenation, and
+confluent merging; those omissions are what buy the interval-level bounds.
+
+**Deliberate divergence from C#.** The managed reference ships two near-identical copies of the
+arena machinery, one per consumer. The Rust port consolidates them into a single
+`IncrementalAncestorArena<T>` trait with one `MyersAncestorArena<T>` implementation serving both
+collections, merging the two C# interface contracts into the stricter of the two. This was
+recommended by the
+[2026-07-29 review](../../../../docs/reviews/experimental-collections-review-2026-07-29.md) as a
+promotion prerequisite. The observable per-collection contract is unchanged.
+
+Bounds are parameterized by the backend: with `U` the leaf-add cost and `Q` the level-ancestor query
+cost, appending costs `U`; indexed access, prefix selection, slicing, and a boundary-moving split
+cost `Q`; endpoint reads and the handle-only removals are O(1). The shipped `MyersAncestorArena`
+gives `U` = O(1) amortized and `Q` = O(log M) after `M` historical additions, using one parent link
+plus one coalesced jump link per node in odd-sized blocks whose square boundaries give O(1)
+addressing and O(sqrt(M)) slack. The all-O(1)-worst-case scalar statement in the design proposals is
+a reduction to an Alstrup–Holm incremental level-ancestor backend that is **not** implemented here.
+
+Arena state is serialized by one `Mutex`, matching the managed reference's single private lock:
+published nodes are immutable so retained handles stay semantically stable, but neither port claims
+lock-free or wait-free progress. Space is charged to history rather than to one handle — the arena
+retains every successful addition and its payload until the arena itself is dropped. Node values are
+retained as `Arc<T>`, so no operation imposes a `T: Clone` bound.
+
+## Contextual rank sequence
+
+`ContextualRankSequence<T, M>` lifts a finite deterministic event machine into the measured finger
+tree: every subtree caches, for *every* possible incoming state, the outgoing state and the number
+of events that subtree emits, and ordered composition feeds the left summary's outgoing state into
+the right summary. That turns a context-dependent scan into an associative measure.
+
+C# expresses the machine as a static-abstract interface implemented by a phantom policy type; Rust
+uses a trait with an associated constant and an associated function, `ContextualEventMachine<T>`
+with `STATE_COUNT` and `transition`. With `n` elements and `s` machine states, whole-sequence
+evaluation is O(1); contextual prefix evaluation, event rank, event select, indexing, and arbitrary
+persistent edits are O(s log n); summaries occupy O(s·n). For a fixed machine `s` is constant, so
+the contextual operations are O(log n) against the Θ(n) replay a state-free sequence would require.
+
+**Two bounds differ from the managed reference because the substrate differs.** C# sits on a lazy
+finger tree; this crate's measured core is a height-balanced join tree with no finger. Endpoint
+updates are therefore Θ(s log n) per operation here rather than the C# reference's O(s) amortized,
+and concatenation costs Θ(s·|h_left − h_right|) in the operand height difference rather than
+O(s log(min(n, m))). The algorithm is the same; only the substrate's locality guarantees are
+weaker, which is the same checkpoint boundary the rest of this crate records for its derived
+sequence facades.
+
+## Persistent delta map and run-delta vector
+
+`PersistentDeltaMap<K, V>` and `PersistentRunDeltaVector<T>` both pair current state with a
+designated checkpoint plus an exact index of the differences, and both make whole-checkpoint and
+whole-rollback O(1) root swaps that return the receiver when already clean.
+
+The delta map keeps a persistent sorted map of current state, a shared checkpoint root, and a second
+sorted map holding one before/after record per net-changed key class. Repeated writes to a key
+coalesce and returning a key to its checkpoint state removes its record, so fully consuming the
+change enumeration is output-optimal Θ(k + 1) in the number of net-changed keys. Point operations
+are O(log N).
+
+The run-delta vector keeps current and checkpoint RRB roots plus an ordered index of the *maximal*
+runs of differing positions, which stays non-overlapping, non-adjacent, and maximal. Run descriptors
+therefore enumerate in output-optimal Θ(r) for `r` runs rather than Θ(k) for `k` dirty positions, and
+accepting or reverting one indexed run costs O(log n) through structural RRB splicing, independently
+of that run's length.
+
+**Deliberate divergences from C#.** Both take value equality from a retained
+`EqualityPolicy<T>` (`equality.rs`), the equality counterpart of `OrderPolicy`, because the value
+comparer defines which writes are semantic no-ops and when a recorded change cancels — it determines
+the observable change set and so must be remembered rather than taken as a `PartialEq` bound. Two
+managed constructs disappear as redundant in Rust: the delta map's presence-safe `DeltaMapValue<T>`
+becomes `Option`, since C# needs the wrapper only because `null` is a valid present value; and the
+run-delta vector's private `Cell` class becomes `Arc<T>` with `Arc::ptr_eq`, which supplies the same
+reference identity the "a clean position reuses its exact checkpoint cell" invariant depends on,
+without the extra allocation layer.
+
 ## Priority-search queue
 
 `PrioritySearchQueue<K, P, V>` is an immutable AVL ordered map with one entry per key-policy

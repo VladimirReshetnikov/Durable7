@@ -33,6 +33,7 @@ use std::iter::FusedIterator;
 use std::ops::Index;
 use std::sync::Arc;
 
+mod ancestral_connection_forest;
 mod bi_map;
 mod directed_graph;
 mod hash_bag;
@@ -43,6 +44,11 @@ mod merkle_encoding;
 mod merkle_persistence;
 mod merkle_search_tree;
 mod patricia;
+pub use ancestral_connection_forest::{
+    AncestralConnectionError, AncestralConnectionForestInvariantError,
+    AncestralConnectionForestStatistics, AncestralConnectionVersion,
+    PersistentAncestralConnectionForest,
+};
 pub use bi_map::{BiMapAddResult, BiMapConflict, BiMapRemoveResult, PersistentBiMap};
 pub use directed_graph::{
     DirectedGraphInvariantError, DirectedGraphStatistics, PersistentDirectedGraph,

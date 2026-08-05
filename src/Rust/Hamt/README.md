@@ -60,6 +60,12 @@ The trie follows the existing ports:
 - `PersistentIndexedMap` composes a primary CHAMP and nonunique secondary multimap. Its retained
   `Arc<F>` selector runs only for new or genuinely value-changing rows; removals use the exact
   stored index key and never invoke the selector;
+- `PersistentAncestralConnectionForest` stores sparse union-by-size parent cells in a CHAMP map, so
+  an absent cell denotes a singleton root and construction is O(1) for any vertex universe. Every
+  `link` publishes a distinct `AncestralConnectionVersion` token — a redundant one shares the whole
+  connectivity index — and a successful union labels its single new root edge with that token.
+  `first_connected` reports the earliest ancestor version connecting a pair in O(w log n) from the
+  two current parent paths, without searching the version history;
 - map equality and diff traverse same-policy CHAMP nodes in lockstep, use stored hashes, and prune
   every `Arc`-identical descendant before key or value comparison. Diff returns owned typed
   additions, removals, and changes. Across distinct `BuildHasher` policy identities both operations
