@@ -106,3 +106,13 @@ For the stricter compiler gate used during persistence work, compile the same `H
 The current serialized Kotlin 2.4.0/JVM 21 gate compiles with one backend thread, runs with one
 active processor and the serial GC, and passes all 69 registered groups. Benchmarks are excluded
 and remain postponed until an isolated run.
+
+Ancestral connection forest coverage adds seventeen cases: link producing a distinct version whose
+connectivity cells are shared when the endpoints were already connected, self-link as a redundant
+link, first-connected of a vertex with itself returning the history root, disconnected pairs,
+out-of-universe rejection on every entry point, union-by-size with the first endpoint kept on a tie,
+the `floor(log2 n)` height bound over 1,024 balanced unions, an `Int.MAX_VALUE` sparse universe that
+stores only touched vertices, a 50,000-deep redundant history proving every version and parent-path
+walk is iterative rather than recursive, a reflection-driven negative test proving the validator
+actually fires on a corrupted cached count, a 250-operation branching model checked against a naive
+ancestor scan, and a four-thread concurrent-reader check over 32 retained versions.

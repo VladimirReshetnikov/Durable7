@@ -80,3 +80,11 @@ Coverage groups:
 - closure-pruned complete packs and iterative frontier synchronization; and
 - typed three-way merge across disjoint, identical, unresolved, resolver-selected, deletion, and
   present-null cases, with complete-output withholding and canonical-entry reuse.
+
+## Ancestral connection forest
+
+`persistentAncestralConnectionForestTestCases()` registers seventeen cases covering redundant-link
+cell sharing, the union-by-size first-endpoint tie rule, the `floor(log2 n)` height bound, a sparse
+`Int.MAX_VALUE` universe, a 50,000-deep history that proves every walk is iterative, a
+reflection-driven corrupt-cache negative test that proves the validator fires, a branching model
+checked against a naive ancestor scan, and concurrent readers over retained versions.

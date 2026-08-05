@@ -2180,7 +2180,7 @@ public fun main() {
         "patriciaCursorsPreserveOrderedGapSemantics" to ::patriciaCursorsPreserveOrderedGapSemantics,
         "merkleSearchTreeCoreAndWire" to ::runMerkleSearchTreeTests,
         "merklePersistenceProofSyncAndMerge" to ::runMerklePersistenceTests,
-    )
+    ) + persistentAncestralConnectionForestTestCases()
 
     for ((name, test) in tests) {
         test()

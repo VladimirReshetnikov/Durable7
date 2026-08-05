@@ -24,6 +24,13 @@ Current public families:
 - `ZipTreeRankPolicy<T>`, `CanonicalSortedSet<T>`, `CanonicalSetLookup<T>`, and
   `CanonicalSortedSetStatistics`;
 - `Monoid<T>`, `DabaLite<T>`, and `DabaLiteStatistics`;
+- the append-only level-ancestor seam `IncrementalAncestorArena<T>` with its shipped
+  `MyersIncrementalAncestorArena<T>` and `MyersIncrementalAncestorStatistics`, plus the six
+  finger-tree members of the seven research-derived collections that build on it and on the measured
+  substrate: `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `ContextualRankSequence<T>`,
+  `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, and
+  `PersistentMonotoneActionHeap<E, P, A>`, together with their result carriers and the shared
+  `ValueEqualityComparer<T>`/`ValueEqualityPolicy<T>`;
 - `RangeUpdateAlgebra<T, M, Tag>`, `RangeUpdateSequence<T, M, Tag>`,
   `RangeUpdateSplit<T, M, Tag>`, and `RangeUpdateValidationStatistics`;
 - `Rope<T>`, positional `RopeCursor<T>`, nullable-safe `RopeCursorPeek<T>`, `MeasuredRope<T, M>`,
@@ -574,3 +581,89 @@ unwraps a root in O(1), `concat` joins logical roots without materializing eithe
 views, indexing, and splits navigate logical orientation. The general engine is a strict measured AVL
 sequence rather than the C#/C++ lazy Hinze–Paterson digit spine; consequently its endpoint operations
 are O(log n), not amortized O(1). No public facade retains the former flat-`List` representation.
+
+## The seven research-derived collections
+
+Six of the seven live here; the seventh, `PersistentAncestralConnectionForest`, is in
+`durable7-hamt`. They are reachable through the ordinary `durable7.fingertree` package alongside the
+rest of the family.
+
+`IncrementalAncestorArena<T>` is the append-only level-ancestor seam that `AncestralSliceQueue<T>`
+and `BilateralAncestralDeque<T>` share, with `MyersIncrementalAncestorArena<T>` as the shipped
+two-link jump-pointer backend and `MyersIncrementalAncestorStatistics` as its counter snapshot. This
+is a **faithful** port rather than a reinterpretation: the JVM supplies the mutable state, the
+integer handles, and the monitor the managed reference assumes, so the arena keeps its object
+identity, its `synchronized` serialization, its odd-block store with square-boundary addressing and
+O(sqrt(M)) slack, and its saturating hop counters. Leaf addition is O(1) amortized and an ancestor
+query follows O(log M) parent/jump links. The Haskell port is the one that dissolves this seam into
+immutable heap structure; Kotlin does not need to. C#'s `GetDepth`/`GetParent`/`GetValue` are spelled
+`depthOf`/`parentOf`/`valueAt`, because Kotlin reserves `get`-prefixed names for property accessors.
+
+`AncestralSliceQueue<T>` is a queue whose every version is one interval of a root-to-tail ancestry
+path, carried as `(tail, low depth, count)`. Its anchored-empty rule is preserved exactly: an empty
+value retains the node immediately before its window, so appending to any empty slice yields exactly
+the new value, and a queue drained from the front and one drained from the back keep different
+anchors. Suffix slices, `take(size)`, `drop(0)`, and a split at `size` are query-free; a split at `0`
+of a non-empty queue is not, because the anchor one level above the window can only be named by an
+ancestor query, while on an empty queue the two boundaries coincide and no query happens.
+
+`BilateralAncestralDeque<T>` holds a reversed left interval and a forward right interval, making
+`reverse()` an O(1) exchange. The at-most-two-query ceiling for `slice` and `splitAt` holds including
+cross-arm cases, removals on the owning arm are query-free, and the four cached endpoints index with
+no query. The suites assert exact query profiles rather than ceilings, so a regression that stayed
+under the ceiling would still fail.
+
+`ContextualRankSequence<T>` lifts a finite deterministic event machine into an all-start-state
+summary monoid. The machine is a retained `ContextualEventMachine<T>` policy object rather than C#'s
+static-abstract type parameter, so `stateCount` is instance-level and is read once per lineage.
+Each element is stored wrapped with its own cached effect table, which is what keeps rank, select,
+and indexed descent free of machine invocations on this node-oriented substrate. **Two bounds are
+weaker than the managed reference and are stated as such:** endpoint updates are Θ(s log n) rather
+than O(s) amortized, and concatenation is Θ(s·(log m + |h − h′|)) — that is O(s log(n + m)) — rather
+than O(s log(min(n, m))). Both follow from the strict measured AVL engine: it has no digits to give
+amortized endpoints, and `concatNodes` walks the right operand's left spine unconditionally before
+joining by height difference, so the `log(min(n, m))` form fails in both directions here rather than
+only for asymmetric operands as in the Rust port.
+
+`PersistentDeltaMap<K, V>` pairs current state with a designated checkpoint and a coalesced exact
+net-change index. Every load-bearing rule survives: a policy-equal write is a no-op returning a
+version that shares every root, the first effective write captures `before`, repeated writes
+coalesce, returning a key to its checkpoint state removes its record, and emptying the change index
+snaps the current root back onto the checkpoint root. Presence-safe endpoints are `DeltaMapValue<V>?`
+rather than a bare `V?`, so an absent entry and a stored `null` stay distinguishable. Range-restricted
+change enumeration uses `SortedMap.getKeyRange`, a genuine ordered restriction, so it never filters
+over all changes. One bound is honestly weaker than the reference: `minEntry`/`maxEntry` are
+Θ(log N) rather than O(1), because the substrate caches subtree sizes but no extremes.
+
+`PersistentRunDeltaVector<T>` keeps current and checkpoint RRB roots plus an ordered index of the
+maximal runs of differing positions. Accepting or reverting one run is a structural splice costing
+O(log n) independently of the run's length and performing no value comparisons. Values are boxed in a
+private identity-only cell, which is what makes `RrbVector.setItem`'s `l === r || l == r`
+short-circuit collapse to the identity test the "a clean position reuses its exact checkpoint cell"
+invariant needs; storing raw payloads would let an equal-but-distinct value satisfy that short
+circuit and silently retain the wrong object.
+
+`PersistentMonotoneActionHeap<E, P, A>` is the action-tagged sibling of `BrodalOkasakiHeap<T>`,
+carrying one immutable pending action per tree and forest spine so a whole-heap priority transform is
+O(1) while insert, meld, and minimum stay O(1) and delete-minimum stays O(log n). `compose(outer,
+inner)` means `outer` applied after `inner`, so the newer action is the outer one at every pushdown
+site, and the `OrderClamp` algebra pins that direction. The old root is exposed before a losing child
+is skew-inserted, so a later insertion is never retroactively transformed.
+
+Both checkpoint-differential structures take value equality from one shared retained
+`ValueEqualityPolicy<T>` over a `ValueEqualityComparer<in T>`, rather than each shipping its own
+abstraction — the same single-policy shape the Rust port uses, because the value relation is what
+decides which writes are semantic no-ops and when a recorded change cancels. Canonical policies
+(`natural`, `reflexiveIeeeDouble`, `reflexiveIeeeFloat`) are shared singletons, so independently
+obtained instances of one canonical kind are compatible, while a `custom` policy carries its own
+identity. The floating-point situation differs from every sibling port and is worth stating: Kotlin's
+`==` on statically typed `Double`/`Float` is the primitive IEEE comparison and is **not** reflexive
+on `NaN`, but the natural policy is generic, so it boxes and reaches `java.lang.Double.equals`, which
+compares raw bits and **is** reflexive on `NaN`. Kotlin therefore needs no equivalent of Rust's `Eq`
+bound excluding raw floats. The residual difference from .NET is signed zero: the boxed comparison
+separates `-0.0` from `+0.0` where `EqualityComparer<double>.Default` does not, and
+`reflexiveIeeeDouble`/`reflexiveIeeeFloat` are the canonical .NET-matching relations.
+
+Melding heaps or concatenating sequences whose retained policies differ is gated on the policy being
+the same object or value-equal, following `RangeUpdateSequence.concat`'s existing precedent rather
+than C#'s reference-identity-only check.

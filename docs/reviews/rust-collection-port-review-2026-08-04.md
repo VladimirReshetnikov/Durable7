@@ -1,5 +1,13 @@
 # Rust Collection Port Review — 2026-08-04
 
+> **Current-state note (2026-08-05).** The language-coverage decision recorded below has since been
+> superseded repeatedly: the seven collections were ported to C on 2026-08-04, and to Haskell and
+> Kotlin on 2026-08-05. Coverage is now **C#, Rust, C, Haskell, and Kotlin**, with the remaining four
+> workspaces still unported pending a named consumer. The Haskell port removes the level-ancestor arena entirely — a
+> node is its own handle — so the "consolidated arena backend" divergence recorded here has no
+> Haskell counterpart to consolidate. Everything else below still describes the Rust port as
+> shipped.
+
 - Created (UTC): 2026-08-04
 - Repository HEAD (reviewed): `experimental` branch, post-promotion
 - Audience: Maintainers reviewing the two-language shipment of the seven research-derived collections

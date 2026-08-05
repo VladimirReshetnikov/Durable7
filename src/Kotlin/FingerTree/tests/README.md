@@ -74,3 +74,27 @@ Coverage groups:
   sorted-map replacement, text-column overflow, and range-overflow rejection;
 - JVM concurrent readers over shared immutable deque, reversible deque, rope, positional/measured/text
   cursors, and measured-rope snapshots.
+
+## Research-derived collections
+
+Six groups cover the finger-tree members of the seven research-derived collections, registered
+through `ancestralSliceQueueTestCases()`, `bilateralAncestralDequeTestCases()`,
+`contextualRankSequenceTestCases()`, `persistentDeltaMapTestCases()`,
+`persistentRunDeltaVectorTestCases()`, and `persistentMonotoneActionHeapTestCases()`.
+
+Their distinguishing feature is that the ancestry-backed cases assert **exact** backend query counts
+taken from `MyersIncrementalAncestorArena.statistics()` rather than upper bounds, so a regression
+that stayed under a documented ceiling would still fail. The remaining groups use counting policies
+with live-counter positive controls, so a zero-callback assertion is evidence about the code rather
+than about an idle counter. The monotone-action-heap cases for composition direction, minimum
+tie-breaking, and expose-before-attach ordering were each confirmed to fail against a deliberately
+mutated kernel.
+
+`incrementalAncestorArenaTestCases()` covers the shared level-ancestor seam directly rather than
+through its two consumers. Its load-bearing case bounds `maximumAncestorHopCount` by
+`4 * ceil(log2(M + 1))` over a 32,768-node chain, which is the assertion that keeps Myers' coalesced
+jump links from silently degenerating into a linear parent walk: an arena built without coalescing
+answers every query correctly and fails only this bound, at 32,768 hops against a limit of 64. That
+was confirmed by mutation rather than assumed. The remaining cases pin the exact odd-block square
+layout and slack, the primitives' rejection of unpublished handles and out-of-ancestry depths, and
+the interface guarantee that a failed addition publishes no node and leaves every counter untouched.

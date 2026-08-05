@@ -994,7 +994,11 @@ public fun main() {
         "concurrentReadersObserveConsistentSnapshots" to ::concurrentReadersObserveConsistentSnapshots,
     ) + measuredRopeCursorTestCases() + rrbVectorTestCases() + dabaLiteTestCases() +
         canonicalSortedSetTestCases() + priorityCoreTestCases() + rangeUpdateSequenceTestCases() +
-        sequenceCursorTestCases() + orderedSearchCursorTestCases()
+        sequenceCursorTestCases() + orderedSearchCursorTestCases() +
+        incrementalAncestorArenaTestCases() +
+        ancestralSliceQueueTestCases() + bilateralAncestralDequeTestCases() +
+        contextualRankSequenceTestCases() + persistentDeltaMapTestCases() +
+        persistentRunDeltaVectorTestCases() + persistentMonotoneActionHeapTestCases()
 
     for ((name, test) in tests) {
         test()

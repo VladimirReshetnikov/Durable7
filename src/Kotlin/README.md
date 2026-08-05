@@ -11,8 +11,8 @@ where the language surfaces line up.
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Hamt](Hamt/README.md) | Persistent CHAMP collections plus strict patches, directed graphs, indexed maps, Ctrie, Patricia, and Merkle | `PersistentHashMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap` | `.\build.ps1 -Workspace Hamt` |
-| [FingerTree](FingerTree/README.md) | Persistent measured-tree family, sparse chunked bit set, cursors, RRB, priority cores, and DABA Lite | `durable7.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
+| [Hamt](Hamt/README.md) | Persistent CHAMP collections plus strict patches, directed graphs, indexed maps, Ctrie, Patricia, Merkle, and the ancestral connection forest | `PersistentHashMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, `PersistentAncestralConnectionForest` | `.\build.ps1 -Workspace Hamt` |
+| [FingerTree](FingerTree/README.md) | Persistent measured-tree family, sparse chunked bit set, cursors, RRB, priority cores, DABA Lite, the level-ancestor seam, and six of the seven research-derived collections | `durable7.fingertree.*` | `.\build.ps1 -Workspace FingerTree` |
 | [Ordered](Ordered/README.md) | Neutral persistent insertion-ordered set, map, and grouped multimap | `PersistentOrderedSet`, `PersistentOrderedMap`, `PersistentOrderedMultimap` | `.\build.ps1 -Workspace Ordered` |
 
 Run the full Kotlin validation from this directory:
@@ -46,6 +46,18 @@ immutable gap/edit/branch and absolute measure-search semantics through exact re
 without claiming the C# focused cursor representation, caches, or focus-local complexity. Its separate `DabaLite<T>`
 member is deliberately mutable: a six-cursor, chunk-backed schedule maintains a FIFO monoid aggregate
 with bounded callback counts and requires external serialization.
+
+The seven research-derived collections ship here too, six in FingerTree and the ancestral connection
+forest in Hamt. Kotlin is the port that needs the fewest concessions: the JVM supplies the mutable
+state, integer handles, and monitor the managed reference assumes, so `IncrementalAncestorArena<T>`
+and its `MyersIncrementalAncestorArena<T>` are a faithful arena port rather than a reinterpretation —
+the Haskell port is the one that had to dissolve that seam. What does change is the error channel
+(fallible boundaries return `null`, per this workspace's convention), the policy shape (runtime
+objects instead of static-abstract interfaces), and two honest complexity concessions to the strict
+measured-AVL engine: `ContextualRankSequence`'s endpoint updates and concatenation are weaker than
+the managed reference's, for the same reason `ReversibleDeque`'s endpoints are. Both
+checkpoint-differential structures share one retained `ValueEqualityPolicy<T>`, matching the Rust
+port's single-policy shape.
 
 `CanonicalSortedSet<T>` is a separate immutable Cartesian-tree core for workloads that need
 policy-scoped, insertion-order-independent topology. `ZipTreeRankPolicy<T>` combines a JVM
