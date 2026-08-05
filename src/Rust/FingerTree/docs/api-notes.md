@@ -511,11 +511,21 @@ coalesce and returning a key to its checkpoint state removes its record, so full
 change enumeration is output-optimal Θ(k + 1) in the number of net-changed keys. Point operations
 are O(log N).
 
+The delta map's `changes_in_range` restricts change enumeration to an inclusive key range by seeking
+the change index's boundaries rather than filtering, costing O(log(k + 1)) plus output. `set_items`
+applies a sequence exactly as if each entry went through the single-entry assignment, so every
+coalescing, cancellation, and representative rule holds verbatim; it is a convenience, not a better
+bound.
+
 The run-delta vector keeps current and checkpoint RRB roots plus an ordered index of the *maximal*
 runs of differing positions, which stays non-overlapping, non-adjacent, and maximal. Run descriptors
 therefore enumerate in output-optimal Θ(r) for `r` runs rather than Θ(k) for `k` dirty positions, and
 accepting or reverting one indexed run costs O(log n) through structural RRB splicing, independently
-of that run's length.
+of that run's length. Runs are addressable two ways: `accept_dirty_run_at`/`revert_dirty_run_at` take
+an ascending run rank, while `accept_dirty_run_containing`/`revert_dirty_run_containing` take any
+position the run contains, so a caller holding a descriptor from `dirty_run_containing` need not
+rediscover its rank. A position outside the vector yields `None`; a clean position is a no-op that
+returns an equal value sharing every root.
 
 **Deliberate divergences from C#.** Both take value equality from a retained
 `EqualityPolicy<T>` (`equality.rs`), the equality counterpart of `OrderPolicy`, because the value

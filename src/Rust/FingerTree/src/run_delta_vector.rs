@@ -481,15 +481,29 @@ impl<T> PersistentRunDeltaVector<T> {
     #[must_use]
     pub fn accept_dirty_run_at(&self, rank: usize) -> Option<Self> {
         let run = self.dirty_run_at(rank)?;
-        if self.dirty_runs.len() == 1 {
-            return Some(self.checkpoint());
+        Some(self.accept_run(run))
+    }
+
+    /// Accepts the maximal dirty run *containing the position* `index` into the checkpoint, or
+    /// `None` when `index` falls outside the vector.
+    ///
+    /// The argument is a zero-based position, not a run rank, so a run descriptor obtained from
+    /// [`Self::dirty_run_containing`] can be acted on without rediscovering its rank. A clean
+    /// position is vacuous rather than an error: the receiver's contents are returned unchanged,
+    /// sharing every root. A dirty position behaves exactly as [`Self::accept_dirty_run_at`] on the
+    /// containing run.
+    ///
+    /// `O(log n)` amortized, *independent of that run's length*: locating the containing run is
+    /// `O(log(r + 2))` through the start-keyed run index, never a scan, and the splice itself makes
+    /// no value-policy call at all.
+    #[must_use]
+    pub fn accept_dirty_run_containing(&self, index: usize) -> Option<Self> {
+        if index >= self.len() {
+            return None;
         }
-        Some(Self {
-            current: self.current.clone(),
-            checkpoint: replace_range(&self.checkpoint, &self.current, run),
-            dirty_runs: self.dirty_runs.remove(&run.start),
-            dirty_count: self.dirty_count - run.length,
-            policy: self.policy.clone(),
+        Some(match self.find_dirty_run(index) {
+            Some(run) => self.accept_run(run),
+            None => self.clone(),
         })
     }
 
@@ -502,15 +516,29 @@ impl<T> PersistentRunDeltaVector<T> {
     #[must_use]
     pub fn revert_dirty_run_at(&self, rank: usize) -> Option<Self> {
         let run = self.dirty_run_at(rank)?;
-        if self.dirty_runs.len() == 1 {
-            return Some(self.rollback());
+        Some(self.revert_run(run))
+    }
+
+    /// Reverts the maximal dirty run *containing the position* `index` to the checkpoint, or `None`
+    /// when `index` falls outside the vector.
+    ///
+    /// The argument is a zero-based position, not a run rank, so a run descriptor obtained from
+    /// [`Self::dirty_run_containing`] can be acted on without rediscovering its rank. A clean
+    /// position is vacuous rather than an error: the receiver's contents are returned unchanged,
+    /// sharing every root. A dirty position behaves exactly as [`Self::revert_dirty_run_at`] on the
+    /// containing run.
+    ///
+    /// `O(log n)` amortized, *independent of that run's length*: locating the containing run is
+    /// `O(log(r + 2))` through the start-keyed run index, never a scan, and the splice itself makes
+    /// no value-policy call at all.
+    #[must_use]
+    pub fn revert_dirty_run_containing(&self, index: usize) -> Option<Self> {
+        if index >= self.len() {
+            return None;
         }
-        Some(Self {
-            current: replace_range(&self.current, &self.checkpoint, run),
-            checkpoint: self.checkpoint.clone(),
-            dirty_runs: self.dirty_runs.remove(&run.start),
-            dirty_count: self.dirty_count - run.length,
-            policy: self.policy.clone(),
+        Some(match self.find_dirty_run(index) {
+            Some(run) => self.revert_run(run),
+            None => self.clone(),
         })
     }
 
@@ -602,6 +630,39 @@ impl<T> PersistentRunDeltaVector<T> {
             dirty_runs: SortedMap::new(),
             dirty_count: 0,
             policy,
+        }
+    }
+
+    /// Splices one indexed run's current values into the checkpoint, leaving every other run alone.
+    ///
+    /// `O(log n)` amortized and comparison-free; `run` must be a record of this version's index.
+    fn accept_run(&self, run: PersistentDirtyRun) -> Self {
+        if self.dirty_runs.len() == 1 {
+            return self.checkpoint();
+        }
+        Self {
+            current: self.current.clone(),
+            checkpoint: replace_range(&self.checkpoint, &self.current, run),
+            dirty_runs: self.dirty_runs.remove(&run.start),
+            dirty_count: self.dirty_count - run.length,
+            policy: self.policy.clone(),
+        }
+    }
+
+    /// Splices one indexed run's checkpoint values back over the current root, leaving every other
+    /// run alone.
+    ///
+    /// `O(log n)` amortized and comparison-free; `run` must be a record of this version's index.
+    fn revert_run(&self, run: PersistentDirtyRun) -> Self {
+        if self.dirty_runs.len() == 1 {
+            return self.rollback();
+        }
+        Self {
+            current: replace_range(&self.current, &self.checkpoint, run),
+            checkpoint: self.checkpoint.clone(),
+            dirty_runs: self.dirty_runs.remove(&run.start),
+            dirty_count: self.dirty_count - run.length,
+            policy: self.policy.clone(),
         }
     }
 
@@ -761,10 +822,12 @@ fn add_dirty_position(runs: &SortedMap<usize, usize>, index: usize) -> SortedMap
         .map(|(start, end)| (*start, *end))
         .filter(|&(start, _)| start == index + 1);
     match (left, right) {
-        (Some((left_start, _)), Some((right_start, right_end))) => runs
-            .remove(&left_start)
-            .remove(&right_start)
-            .set_item(left_start, right_end),
+        // The left record is overwritten in place rather than removed and reinserted: `set_item`
+        // replaces a present key, so dropping the redundant `remove` saves one persistent
+        // rebuild without changing the resulting map.
+        (Some((left_start, _)), Some((right_start, right_end))) => {
+            runs.remove(&right_start).set_item(left_start, right_end)
+        }
         (Some((left_start, _)), None) => runs.set_item(left_start, index + 1),
         (None, Some((right_start, right_end))) => {
             runs.remove(&right_start).set_item(index, right_end)
@@ -1275,6 +1338,178 @@ mod tests {
         }
         assert!(edited.accept_dirty_run_at(3).is_none());
         assert!(edited.revert_dirty_run_at(3).is_none());
+    }
+
+    #[test]
+    fn position_addressed_run_operations_agree_with_rank_addressed_ones() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let policy = EqualityPolicy::custom(CountingComparer {
+            calls: Arc::clone(&calls),
+        });
+        let original = PersistentRunDeltaVector::from_values_with_policy(0..16i64, policy);
+        let mut edited = original.clone();
+        for index in (2..6).chain(9..12) {
+            edited = edited
+                .set_item(index, 1000 + index as i64)
+                .expect("position is in range");
+        }
+        let expected = vec![PersistentDirtyRun::new(2, 4), PersistentDirtyRun::new(9, 3)];
+        assert_eq!(edited.dirty_runs().collect::<Vec<_>>(), expected);
+
+        // A position outside the vector is out of range, matching the other position-addressed
+        // accessors.
+        assert!(edited.accept_dirty_run_containing(16).is_none());
+        assert!(edited.revert_dirty_run_containing(16).is_none());
+        let empty = PersistentRunDeltaVector::<i32>::new();
+        assert!(empty.accept_dirty_run_containing(0).is_none());
+        assert!(empty.revert_dirty_run_containing(0).is_none());
+
+        // A clean position is vacuous, not an error: the receiver's contents come back sharing
+        // every root, and consult no comparer.
+        for index in [0usize, 6, 8, 15] {
+            assert_eq!(edited.is_dirty(index), Some(false));
+            let before = calls.load(AtomicOrdering::Relaxed);
+            for unchanged in [
+                edited
+                    .accept_dirty_run_containing(index)
+                    .expect("position is in range"),
+                edited
+                    .revert_dirty_run_containing(index)
+                    .expect("position is in range"),
+            ] {
+                assert!(unchanged.shares_current_root_with(&edited));
+                assert!(unchanged.shares_checkpoint_root_with(&edited));
+                assert_eq!(unchanged.dirty_count(), edited.dirty_count());
+                assert_eq!(unchanged.dirty_runs().collect::<Vec<_>>(), expected);
+            }
+            assert_eq!(calls.load(AtomicOrdering::Relaxed), before);
+        }
+
+        // Every position inside a run acts exactly as the rank-addressed operation on that run.
+        for (rank, run) in expected.iter().enumerate() {
+            for index in run.start..run.end_exclusive() {
+                assert_eq!(edited.dirty_run_containing(index), Some(*run));
+                let before = calls.load(AtomicOrdering::Relaxed);
+                let accepted_by_position = edited
+                    .accept_dirty_run_containing(index)
+                    .expect("position is in range");
+                let reverted_by_position = edited
+                    .revert_dirty_run_containing(index)
+                    .expect("position is in range");
+                assert_eq!(calls.load(AtomicOrdering::Relaxed), before);
+                let accepted_by_rank = edited.accept_dirty_run_at(rank).expect("rank is in range");
+                let reverted_by_rank = edited.revert_dirty_run_at(rank).expect("rank is in range");
+                for (by_position, by_rank) in [
+                    (&accepted_by_position, &accepted_by_rank),
+                    (&reverted_by_position, &reverted_by_rank),
+                ] {
+                    assert_eq!(by_position.to_vec(), by_rank.to_vec());
+                    assert_eq!(by_position.dirty_count(), by_rank.dirty_count());
+                    assert_eq!(
+                        by_position.dirty_runs().collect::<Vec<_>>(),
+                        by_rank.dirty_runs().collect::<Vec<_>>()
+                    );
+                    for position in 0..edited.len() {
+                        assert_eq!(
+                            by_position.get_checkpoint(position),
+                            by_rank.get_checkpoint(position)
+                        );
+                    }
+                    by_position
+                        .validate_structure()
+                        .expect("a position-addressed successor is valid");
+                }
+            }
+        }
+
+        // The sole-run case still collapses onto the whole-checkpoint and whole-rollback paths.
+        let single = original
+            .set_item(4, 4_000)
+            .expect("position is in range")
+            .set_item(5, 5_000)
+            .expect("position is in range");
+        let accepted = single
+            .accept_dirty_run_containing(5)
+            .expect("position is in range");
+        assert!(!accepted.has_changes());
+        assert_eq!(accepted.get_checkpoint(4), Some(&4_000));
+        let reverted = single
+            .revert_dirty_run_containing(4)
+            .expect("position is in range");
+        assert!(!reverted.has_changes());
+        assert_eq!(reverted.to_vec(), (0..16i64).collect::<Vec<_>>());
+
+        // Every retained source version is untouched.
+        assert_eq!(edited.dirty_runs().collect::<Vec<_>>(), expected);
+        assert!(!original.has_changes());
+        for version in [&original, &edited, &single, &accepted, &reverted] {
+            version
+                .validate_structure()
+                .expect("every retained version is valid");
+        }
+    }
+
+    #[test]
+    fn randomized_position_addressed_run_operations_hold_across_retained_versions() {
+        const LENGTH: usize = 36;
+        let mut rng = Rng::new(0x0B5E_2026);
+        let initial: Vec<i32> = (0..LENGTH).map(|index| (index % 5) as i32).collect();
+        let mut versions = vec![(natural_vector(&initial), initial.clone(), initial)];
+
+        for _ in 0..600 {
+            let parent_index = rng.below(versions.len());
+            let (parent, parent_current, parent_checkpoint) = versions[parent_index].clone();
+            let mut current = parent_current.clone();
+            let mut checkpoint = parent_checkpoint.clone();
+            let mut result = parent.clone();
+            let index = rng.below(LENGTH);
+
+            match rng.below(4) {
+                // Seed dirtiness so the run set keeps churning between run operations.
+                0 | 1 => {
+                    let value = rng.in_range(-6, 7);
+                    result = result.set_item(index, value).expect("position is in range");
+                    current[index] = value;
+                }
+                2 => {
+                    result = result
+                        .accept_dirty_run_containing(index)
+                        .expect("position is in range");
+                    if let Some(run) = expected_runs(&current, &checkpoint)
+                        .into_iter()
+                        .find(|run| run.contains(index))
+                    {
+                        let range = run.start..run.end_exclusive();
+                        let slice = current[range.clone()].to_vec();
+                        checkpoint[range].copy_from_slice(&slice);
+                    }
+                }
+                _ => {
+                    result = result
+                        .revert_dirty_run_containing(index)
+                        .expect("position is in range");
+                    if let Some(run) = expected_runs(&current, &checkpoint)
+                        .into_iter()
+                        .find(|run| run.contains(index))
+                    {
+                        let range = run.start..run.end_exclusive();
+                        let slice = checkpoint[range.clone()].to_vec();
+                        current[range].copy_from_slice(&slice);
+                    }
+                }
+            }
+
+            versions.push((result, current, checkpoint));
+            if versions.len() > 12 {
+                let victim = 1 + rng.below(versions.len() - 2);
+                versions.remove(victim);
+            }
+            // Every retained branching version still reports its own values, dirty count, run set,
+            // and structural invariants after every step.
+            for (version, version_current, version_checkpoint) in &versions {
+                assert_matches_model(version, version_current, version_checkpoint);
+            }
+        }
     }
 
     #[test]

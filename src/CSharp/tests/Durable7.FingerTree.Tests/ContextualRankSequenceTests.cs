@@ -218,6 +218,52 @@ public sealed class ContextualRankSequenceTests
         Assert.Equal(long.MaxValue, source.Evaluate(0).EventCount);
     }
 
+    /// <summary>Verifies both endpoints and the interior insert report a full sequence identically.</summary>
+    [Fact]
+    public void InsertionAtMaximumCount_FailsUniformlyAtEveryEntryPoint()
+    {
+        // Structural sharing makes int.MaxValue reachable: doubling plus one element per round
+        // grows 2^k-1 to 2^(k+1)-1 in O(log n) work and O(log n) fresh nodes.
+        var sequence = ContextualRankSequence<byte, SilentMachine>.Create(new byte[] { 0 }.AsSpan());
+        for (var round = 0; round < 30; round++)
+            sequence = sequence.Concat(sequence).Append(0);
+        Assert.Equal(int.MaxValue, sequence.Count);
+
+        var prepend = Assert.Throws<OverflowException>(() => sequence.Prepend(0));
+        var append = Assert.Throws<OverflowException>(() => sequence.Append(0));
+        var insertAtStart = Assert.Throws<OverflowException>(() => sequence.Insert(0, 0));
+        var insertInside = Assert.Throws<OverflowException>(() => sequence.Insert(1, 0));
+        var insertAtEnd = Assert.Throws<OverflowException>(() => sequence.Insert(sequence.Count, 0));
+
+        Assert.Equal(insertInside.Message, prepend.Message);
+        Assert.Equal(insertInside.Message, append.Message);
+        Assert.Equal(insertInside.Message, insertAtStart.Message);
+        Assert.Equal(insertInside.Message, insertAtEnd.Message);
+        Assert.Equal(int.MaxValue, sequence.Count);
+
+        // Range validation still precedes the capacity guard.
+        Assert.Throws<ArgumentOutOfRangeException>(() => sequence.Insert(-1, 0));
+    }
+
+    /// <summary>Pins how a nonpositive machine state count surfaces through the static initializer.</summary>
+    [Fact]
+    public void NonPositiveStateCount_SurfacesAsWrappedTypeInitializationFailure()
+    {
+        var zero = Assert.Throws<TypeInitializationException>(
+            () => _ = ContextualRankSequence<int, ZeroStateMachine>.Empty);
+        var inner = Assert.IsType<InvalidOperationException>(zero.InnerException);
+        Assert.Contains("at least one state", inner.Message, StringComparison.Ordinal);
+
+        // A faulted type initializer is sticky: later members of the same constructed type report alike.
+        var again = Assert.Throws<TypeInitializationException>(
+            () => _ = ContextualRankSequence<int, ZeroStateMachine>.StateCount);
+        Assert.IsType<InvalidOperationException>(again.InnerException);
+
+        var negative = Assert.Throws<TypeInitializationException>(
+            () => _ = ContextualRankSequence<int, NegativeStateMachine>.Empty);
+        Assert.IsType<InvalidOperationException>(negative.InnerException);
+    }
+
     /// <summary>Exercises concurrent cached reads over a shared version while independent branches are built.</summary>
     [Fact]
     public void ConcurrentReadersAndIndependentWriters_ObserveStableVersions()
@@ -332,6 +378,24 @@ public sealed class ContextualRankSequenceTests
     {
         public static int StateCount => 1;
         public static ContextualEventTransition Transition(int state, int element) => new(0, -1);
+    }
+
+    private readonly struct SilentMachine : IContextualEventMachine<byte>
+    {
+        public static int StateCount => 1;
+        public static ContextualEventTransition Transition(int state, byte element) => new(0, 0);
+    }
+
+    private readonly struct ZeroStateMachine : IContextualEventMachine<int>
+    {
+        public static int StateCount => 0;
+        public static ContextualEventTransition Transition(int state, int element) => new(0, 0);
+    }
+
+    private readonly struct NegativeStateMachine : IContextualEventMachine<int>
+    {
+        public static int StateCount => -1;
+        public static ContextualEventTransition Transition(int state, int element) => new(0, 0);
     }
 
     private readonly struct HugeEventMachine : IContextualEventMachine<int>

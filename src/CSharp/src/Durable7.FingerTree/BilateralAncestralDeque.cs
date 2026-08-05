@@ -5,334 +5,6 @@ using System.Diagnostics.CodeAnalysis;
 namespace Durable7.FingerTree;
 
 /// <summary>
-/// Defines the append-only level-ancestor service used by
-/// <see cref="BilateralAncestralDeque{T}"/>.
-/// </summary>
-/// <typeparam name="T">The value stored in each non-bottom node.</typeparam>
-/// <remarks>
-/// <para>
-/// Node handles are stable integers owned by one arena. The distinguished <see cref="Bottom"/>
-/// node has depth -1 and no value. A leaf may be added below any previously published node, so
-/// old deque versions can grow into independent branches. A successful <see cref="AddLeaf"/> must
-/// publish a fresh, never-recycled handle whose immutable parent is the supplied handle and whose
-/// depth is exactly one greater. Parent, depth, value, and ancestor answers for a published node
-/// must never change. A failed addition must not publish a partially initialized node.
-/// <see cref="GetDepth"/>, <see cref="GetParent"/>, and <see cref="GetValue"/> must take O(1)
-/// time; the deque's parameterized bounds assume those primitive reads are constant-time.
-/// </para>
-/// <para>
-/// Arena implementations determine the bounds inherited by the deque. An incremental
-/// level-ancestor implementation with O(1) worst-case <see cref="AddLeaf"/> and
-/// <see cref="AncestorAtDepth"/> gives the deque its optimal bound. Binary lifting and the
-/// shipped Myers arena do not satisfy that stronger backend bound.
-/// Integer handles are arena-relative; passing a handle from another arena violates the contract.
-/// </para>
-/// </remarks>
-public interface IIncrementalLevelAncestorArena<T>
-{
-    /// <summary>Gets the distinguished unlabeled node at depth -1.</summary>
-    int Bottom { get; }
-
-    /// <summary>Gets the number of labeled nodes published by this arena.</summary>
-    int PublishedNodeCount { get; }
-
-    /// <summary>Adds a labeled leaf below a previously published node.</summary>
-    /// <param name="parent">The bottom node or a labeled node owned by this arena.</param>
-    /// <param name="value">The new node's value.</param>
-    /// <returns>A stable handle for the new leaf.</returns>
-    int AddLeaf(int parent, T value);
-
-    /// <summary>Gets a node's immutable absolute depth; the bottom node has depth -1.</summary>
-    /// <param name="node">A node owned by this arena.</param>
-    /// <returns>The node's depth.</returns>
-    int GetDepth(int node);
-
-    /// <summary>Gets a labeled node's parent, or bottom for a depth-zero node.</summary>
-    /// <param name="node">A labeled node owned by this arena.</param>
-    /// <returns>The parent handle.</returns>
-    int GetParent(int node);
-
-    /// <summary>Gets the unique ancestor of a node at an absolute depth.</summary>
-    /// <param name="node">A node owned by this arena.</param>
-    /// <param name="depth">A depth from -1 through the node's own depth.</param>
-    /// <returns>The ancestor handle.</returns>
-    int AncestorAtDepth(int node, int depth);
-
-    /// <summary>Gets the value stored in a labeled node's immutable slot.</summary>
-    /// <param name="node">A non-bottom node owned by this arena.</param>
-    /// <returns>The node value.</returns>
-    T GetValue(int node);
-}
-
-/// <summary>
-/// Implements an incremental level-ancestor arena with Myers's two-link applicative-stack scheme.
-/// </summary>
-/// <typeparam name="T">The value stored in each non-bottom node.</typeparam>
-/// <remarks>
-/// <para>
-/// Adding a leaf performs O(1) link work. Nodes live in blocks of sizes 1, 3, 5, ...; square
-/// boundaries give O(1) addressing and O(sqrt(M)) unused slots after M published nodes. Managed
-/// block and directory allocation makes addition O(1) amortized rather than worst case. An
-/// ancestor query follows O(log M) parent/jump links in the worst case. Total arena storage is
-/// O(M), and every published value remains reachable until the arena is collected.
-/// </para>
-/// <para>
-/// Operations are serialized by one private lock. Published nodes are immutable, so retained
-/// deque handles remain semantically stable, but this implementation makes no lock-free progress
-/// guarantee. Range validation cannot identify an in-range integer copied from another arena;
-/// direct backend callers must preserve arena ownership.
-/// </para>
-/// </remarks>
-public sealed class MyersLevelAncestorArena<T> : IIncrementalLevelAncestorArena<T>
-{
-    private readonly object _gate = new();
-    private readonly OddBlockStore<Node> _nodes = new();
-    private long _addLeafCount;
-    private long _ancestorQueryCount;
-    private long _totalAncestorHopCount;
-    private int _lastAncestorHopCount;
-    private int _maximumAncestorHopCount;
-
-    /// <summary>Initializes an empty arena containing only its unlabeled bottom node.</summary>
-    public MyersLevelAncestorArena()
-    {
-        var bottom = _nodes.Append(new Node(
-            Value: default!,
-            Parent: 0,
-            Depth: -1,
-            Skip: 0,
-            SkipDistance: 0));
-        Debug.Assert(bottom == Bottom);
-    }
-
-    /// <inheritdoc />
-    public int Bottom => 0;
-
-    /// <inheritdoc />
-    public int PublishedNodeCount
-    {
-        get
-        {
-            lock (_gate)
-                return _nodes.Count - 1;
-        }
-    }
-
-    /// <inheritdoc />
-    public int AddLeaf(int parent, T value)
-    {
-        lock (_gate)
-        {
-            var parentNode = GetNode(parent);
-            if (parentNode.Depth == int.MaxValue)
-                throw new OverflowException("The ancestry depth exceeds Int32.MaxValue.");
-
-            int skip;
-            int skipDistance;
-            if (parent == Bottom || parentNode.Skip == Bottom)
-            {
-                skip = parent;
-                skipDistance = 1;
-            }
-            else
-            {
-                var skippedNode = _nodes[parentNode.Skip];
-                if (skippedNode.SkipDistance <= parentNode.SkipDistance)
-                {
-                    skip = skippedNode.Skip;
-                    skipDistance = checked(1 + parentNode.SkipDistance + skippedNode.SkipDistance);
-                }
-                else
-                {
-                    skip = parent;
-                    skipDistance = 1;
-                }
-            }
-
-            var node = new Node(
-                value,
-                parent,
-                parentNode.Depth + 1,
-                skip,
-                skipDistance);
-            var handle = _nodes.Append(node);
-            _addLeafCount++;
-            return handle;
-        }
-    }
-
-    /// <inheritdoc />
-    public int GetDepth(int node)
-    {
-        lock (_gate)
-            return GetNode(node).Depth;
-    }
-
-    /// <inheritdoc />
-    public int GetParent(int node)
-    {
-        lock (_gate)
-        {
-            if (node == Bottom)
-                throw new ArgumentOutOfRangeException(nameof(node), "The bottom node has no parent.");
-            return GetNode(node).Parent;
-        }
-    }
-
-    /// <inheritdoc />
-    public int AncestorAtDepth(int node, int depth)
-    {
-        lock (_gate)
-        {
-            var current = GetNode(node);
-            if (depth < -1 || depth > current.Depth)
-                throw new ArgumentOutOfRangeException(nameof(depth));
-
-            var hops = 0;
-            while (current.Depth > depth)
-            {
-                var remaining = current.Depth - depth;
-                if (current.SkipDistance > 0 && current.SkipDistance <= remaining)
-                    node = current.Skip;
-                else
-                    node = current.Parent;
-
-                current = _nodes[node];
-                hops++;
-            }
-
-            if (_ancestorQueryCount != long.MaxValue)
-                _ancestorQueryCount++;
-            _lastAncestorHopCount = hops;
-            _totalAncestorHopCount = SaturatingAdd(_totalAncestorHopCount, hops);
-            if (hops > _maximumAncestorHopCount)
-                _maximumAncestorHopCount = hops;
-            return node;
-        }
-    }
-
-    /// <inheritdoc />
-    public T GetValue(int node)
-    {
-        lock (_gate)
-        {
-            if (node == Bottom)
-                throw new ArgumentOutOfRangeException(nameof(node), "The bottom node has no value.");
-            return GetNode(node).Value;
-        }
-    }
-
-    /// <summary>Returns deterministic representation and traversal counters.</summary>
-    /// <returns>A snapshot of the arena statistics.</returns>
-    public MyersLevelAncestorStatistics GetStatistics()
-    {
-        lock (_gate)
-        {
-            return new MyersLevelAncestorStatistics(
-                _nodes.Count - 1,
-                _nodes.BlockCount,
-                _nodes.AllocatedSlotCount,
-                _addLeafCount,
-                _ancestorQueryCount,
-                _lastAncestorHopCount,
-                _maximumAncestorHopCount,
-                _totalAncestorHopCount);
-        }
-    }
-
-    private Node GetNode(int node)
-    {
-        if ((uint)node >= (uint)_nodes.Count)
-            throw new ArgumentOutOfRangeException(nameof(node));
-        return _nodes[node];
-    }
-
-    private static long SaturatingAdd(long value, int increment) =>
-        value > long.MaxValue - increment ? long.MaxValue : value + increment;
-
-    private readonly record struct Node(
-        T Value,
-        int Parent,
-        int Depth,
-        int Skip,
-        int SkipDistance);
-
-    private sealed class OddBlockStore<TItem>
-    {
-        private readonly List<TItem[]> _blocks = [];
-
-        internal int Count { get; private set; }
-
-        internal int BlockCount => _blocks.Count;
-
-        internal long AllocatedSlotCount { get; private set; }
-
-        internal TItem this[int index]
-        {
-            get
-            {
-                if ((uint)index >= (uint)Count)
-                    throw new ArgumentOutOfRangeException(nameof(index));
-                var block = IntegerSquareRoot(index);
-                return _blocks[block][index - block * block];
-            }
-        }
-
-        internal int Append(TItem item)
-        {
-            if (Count == int.MaxValue)
-                throw new OverflowException("The arena contains Int32.MaxValue nodes.");
-
-            var index = Count;
-            var block = IntegerSquareRoot(index);
-            if (block == _blocks.Count)
-            {
-                var blockLength = checked(2 * block + 1);
-                _blocks.Add(new TItem[blockLength]);
-                AllocatedSlotCount += blockLength;
-            }
-
-            _blocks[block][index - block * block] = item;
-            Count = index + 1;
-            return index;
-        }
-
-        private static int IntegerSquareRoot(int value)
-        {
-            var root = (int)Math.Sqrt(value);
-            while ((long)(root + 1) * (root + 1) <= value)
-                root++;
-            while ((long)root * root > value)
-                root--;
-            return root;
-        }
-    }
-}
-
-/// <summary>Describes one snapshot of a Myers level-ancestor arena.</summary>
-/// <param name="PublishedNodeCount">The number of labeled nodes added to the arena.</param>
-/// <param name="BlockCount">The number of allocated odd-sized blocks, including the bottom block.</param>
-/// <param name="AllocatedSlotCount">The total slots in the odd-sized blocks.</param>
-/// <param name="AddLeafCount">The number of successful leaf additions.</param>
-/// <param name="AncestorQueryCount">
-/// The number of completed ancestor queries, saturated at <see cref="Int64.MaxValue"/>.
-/// </param>
-/// <param name="LastAncestorHopCount">The parent/jump hops made by the most recent query.</param>
-/// <param name="MaximumAncestorHopCount">The greatest parent/jump hop count observed.</param>
-/// <param name="TotalAncestorHopCount">
-/// The total parent/jump hops across all queries, saturated at <see cref="Int64.MaxValue"/>.
-/// </param>
-public readonly record struct MyersLevelAncestorStatistics(
-    int PublishedNodeCount,
-    int BlockCount,
-    long AllocatedSlotCount,
-    long AddLeafCount,
-    long AncestorQueryCount,
-    int LastAncestorHopCount,
-    int MaximumAncestorHopCount,
-    long TotalAncestorHopCount);
-
-/// <summary>
 /// Represents an immutable deque as two oppositely oriented intervals in an append-only ancestry
 /// arena.
 /// </summary>
@@ -351,8 +23,8 @@ public readonly record struct MyersLevelAncestorStatistics(
 /// indexing costs at most one Q; slicing and splitting each cost at most two Q.
 /// Endpoint reads, count, clear, and reverse are O(1). An Alstrup--Holm incremental-level-ancestor
 /// backend makes all of those operations O(1) worst case with linear arena space. The shipped
-/// <see cref="MyersLevelAncestorArena{T}"/> instead gives O(1)-amortized insertion and O(log M)
-/// ancestor queries after M historical insertions.
+/// <see cref="MyersIncrementalAncestorArena{T}"/> instead gives O(1)-amortized insertion and
+/// O(log M) ancestor queries after M historical insertions.
 /// </para>
 /// <para>
 /// The restricted algebra intentionally excludes arbitrary concatenation, point replacement, and
@@ -364,12 +36,12 @@ public readonly record struct MyersLevelAncestorStatistics(
 [DebuggerDisplay("Count = {Count}, Left = {_left.Count}, Right = {_right.Count}")]
 public sealed class BilateralAncestralDeque<T> : IReadOnlyList<T>
 {
-    private readonly IIncrementalLevelAncestorArena<T> _arena;
+    private readonly IIncrementalAncestorArena<T> _arena;
     private readonly Segment _left;
     private readonly Segment _right;
 
     private BilateralAncestralDeque(
-        IIncrementalLevelAncestorArena<T> arena,
+        IIncrementalAncestorArena<T> arena,
         Segment left,
         Segment right,
         int count)
@@ -446,12 +118,12 @@ public sealed class BilateralAncestralDeque<T> : IReadOnlyList<T>
         }
     }
 
-    /// <summary>Creates an empty deque owned by an explicit level-ancestor arena.</summary>
+    /// <summary>Creates an empty deque owned by an explicit incremental-ancestor arena.</summary>
     /// <param name="arena">The manager that retains and navigates every inserted node.</param>
     /// <returns>An empty bilateral handle.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is null.</exception>
     /// <exception cref="ArgumentException">The arena's bottom node is not at depth -1.</exception>
-    public static BilateralAncestralDeque<T> Create(IIncrementalLevelAncestorArena<T> arena)
+    public static BilateralAncestralDeque<T> Create(IIncrementalAncestorArena<T> arena)
     {
         ArgumentNullException.ThrowIfNull(arena);
         var bottom = arena.Bottom;
@@ -463,7 +135,7 @@ public sealed class BilateralAncestralDeque<T> : IReadOnlyList<T>
 
     /// <summary>Creates an empty deque backed by the shipped Myers jump-link arena.</summary>
     /// <returns>An empty deque with a fresh, independently collectible arena.</returns>
-    public static BilateralAncestralDeque<T> CreateMyers() => Create(new MyersLevelAncestorArena<T>());
+    public static BilateralAncestralDeque<T> CreateMyers() => Create(new MyersIncrementalAncestorArena<T>());
 
     /// <summary>Creates a Myers-backed deque from values in enumeration order.</summary>
     /// <param name="values">The values to append.</param>

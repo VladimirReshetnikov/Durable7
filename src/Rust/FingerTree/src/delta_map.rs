@@ -37,12 +37,18 @@
 //! stronger worst-case update-space refinement is claimed. The Theta(k + 1) enumeration figure is a
 //! full-consumption bound: unlike the lazy C# `GetChanges()`, this implementation materializes the
 //! change set when the iterator is constructed, so setup is Theta(k) and abandoning the enumeration
-//! early saves nothing. See [`PersistentDeltaMap::get_changes`].
+//! early saves nothing. See [`PersistentDeltaMap::get_changes`]. Because the change index is an
+//! ordered map under the same key policy, restricting the enumeration to an inclusive key range with
+//! [`PersistentDeltaMap::changes_in_range`] is a seek plus a bounded walk — O(log(k + 1)) plus
+//! output, not a filter over all `k` records.
 //!
 //! The mutation surface is deliberately point-only. An eager bulk clear would produce Theta(N)
 //! removal records and cannot simultaneously retain an ordinary map's O(1) clear bound, so callers
 //! start a fresh epoch with [`PersistentDeltaMap::with_policies`] when they do not need an
 //! enumerable delta, and remove entries explicitly when they do.
+//! [`PersistentDeltaMap::set_items`] is not an exception to that: it is exactly the fold over
+//! [`PersistentDeltaMap::set_item`], a convenience and an allocation saving that claims no better
+//! bound than the O(m log N) sequence of point writes it replaces.
 //!
 //! # Policies
 //!
@@ -967,6 +973,31 @@ impl<K, V> PersistentDeltaMap<K, V> {
         self.successor(next_current, next_changes)
     }
 
+    /// Applies `entries` in iteration order, exactly as if each pair had been written individually
+    /// through [`Self::set_item`]. O(m log N) for `m` supplied entries.
+    ///
+    /// This is a convenience and an allocation saving over repeated single assignment, not a
+    /// different algorithm: it *is* the fold over [`Self::set_item`], so every coalescing,
+    /// cancellation, representative-retention, and checkpoint-snap rule holds verbatim, and no
+    /// bound stronger than the fold it replaces is claimed. The underlying [`SortedMap`] exposes no
+    /// bulk primitive that would preserve those rules, so the fold is the implementation.
+    ///
+    /// Later entries for the same key class overwrite earlier ones, so the last write wins. An
+    /// empty sequence, or one whose every entry is a semantic no-op under the retained value
+    /// policy, returns a version sharing all of the receiver's storage. A batch that ends by
+    /// returning every touched class to its checkpoint state cancels its records and snaps the
+    /// current root back to the checkpoint root, exactly as the equivalent sequence of point writes
+    /// would.
+    #[must_use]
+    pub fn set_items<I>(&self, entries: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        entries
+            .into_iter()
+            .fold(self.clone(), |map, (key, value)| map.set_item(key, value))
+    }
+
     fn is_clean(&self) -> bool {
         self.changes.is_empty() && self.current.shares_storage_with(&self.checkpoint)
     }
@@ -1102,6 +1133,43 @@ where
             before: record.before.clone(),
             after: record.after.clone(),
         })
+    }
+
+    /// Iterates the exact net changes whose keys lie in the inclusive range `[low, high]`, once
+    /// each, in the same ascending key order [`Self::get_changes`] uses. O(log(k + 1)) to locate the
+    /// low boundary, plus Theta(output).
+    ///
+    /// The change index is itself an ordered map keyed by the same policy as the collection, so this
+    /// is a seek and a bounded walk over the index rather than a filter over the whole change set:
+    /// the cost is output-sensitive and does not depend on how many changes fall outside the range.
+    /// Only the two endpoints are compared, so the key policy is invoked O(log(k + 1)) times and the
+    /// value policy not at all.
+    ///
+    /// An inverted range — `low` comparing greater than `high` under the retained key policy —
+    /// yields no changes rather than failing, matching [`Self::get_key_range`] and the underlying
+    /// [`SortedMap::get_key_range`]. "Inverted" is decided by the retained policy, so under a
+    /// descending key order the low endpoint is the numerically greater key.
+    ///
+    /// Like [`Self::get_changes`], the result is materialized when the iterator is constructed, so
+    /// the Theta(output) term is paid up front and abandoning the enumeration early saves nothing.
+    #[must_use]
+    pub fn changes_in_range(&self, low: &K, high: &K) -> DeltaMapChanges<K, V> {
+        let low = DeltaMapKey::new(Arc::new(low.clone()), &self.key_policy);
+        let high = DeltaMapKey::new(Arc::new(high.clone()), &self.key_policy);
+        let changes: Vec<PersistentMapChange<K, V>> = self
+            .changes
+            .get_key_range(&low, &high)
+            .to_vec()
+            .into_iter()
+            .map(|(key, record)| PersistentMapChange {
+                key: key.key,
+                before: record.before,
+                after: record.after,
+            })
+            .collect();
+        DeltaMapChanges {
+            changes: changes.into_iter(),
+        }
     }
 
     /// Removes one current entry and coalesces its checkpoint-relative change. O(log N).
@@ -1504,6 +1572,183 @@ mod tests {
             vec![6, 5, 4, 3]
         );
         assert!(changed.validate_structure().is_ok());
+    }
+
+    #[test]
+    fn changes_in_range_restricts_the_enumeration_to_an_inclusive_key_range() {
+        let source: IntMap =
+            PersistentDeltaMap::from_entries(entries(&[(10, "ten"), (30, "thirty"), (50, "fifty")]));
+        let changed = source
+            .set_item(20, "twenty".to_owned())
+            .set_item(30, "THIRTY".to_owned())
+            .remove(&50)
+            .set_item(70, "seventy".to_owned());
+        assert_eq!(change_keys(&changed), vec![20, 30, 50, 70]);
+
+        // Present boundaries are inclusive; absent boundaries bound the walk without appearing.
+        assert_eq!(range_keys(&changed, 20, 50), vec![20, 30, 50]);
+        assert_eq!(range_keys(&changed, 21, 69), vec![30, 50]);
+        assert_eq!(range_keys(&changed, 30, 30), vec![30]);
+        assert!(range_keys(&changed, 31, 31).is_empty());
+
+        // Full cover, no cover on either side, and an inverted range.
+        assert_eq!(range_keys(&changed, -100, 100), change_keys(&changed));
+        assert!(range_keys(&changed, 100, 200).is_empty());
+        assert!(range_keys(&changed, -200, -100).is_empty());
+        assert!(range_keys(&changed, 50, 20).is_empty());
+        // The inverted-range answer is the one the collection's own key-range accessor gives.
+        assert_eq!(changed.get_key_range(&50, &20).len(), 0);
+
+        // Endpoints, kinds, and representatives survive the restriction unchanged.
+        let restricted: Vec<_> = changed.changes_in_range(&30, &50).collect();
+        assert_eq!(restricted.len(), 2);
+        assert_eq!(restricted[0].kind(), PersistentMapChangeKind::Updated);
+        assert_eq!(restricted[0].before().map(String::as_str), Some("thirty"));
+        assert_eq!(restricted[0].after().map(String::as_str), Some("THIRTY"));
+        assert_eq!(restricted[1].kind(), PersistentMapChangeKind::Removed);
+        assert_eq!(restricted[1].before().map(String::as_str), Some("fifty"));
+        assert_eq!(restricted[1].after(), None);
+        for change in &restricted {
+            assert_eq!(changed.get_change(change.key()).as_ref(), Some(change));
+        }
+
+        // Every boundary pair agrees with filtering the unrestricted enumeration.
+        for low in -1..=8 {
+            for high in -1..=8 {
+                let expected: Vec<i32> = change_keys(&changed)
+                    .into_iter()
+                    .filter(|key| (low * 10..=high * 10).contains(key))
+                    .collect();
+                assert_eq!(range_keys(&changed, low * 10, high * 10), expected);
+            }
+        }
+
+        // An empty change set is empty over every range, and the receiver is untouched.
+        assert!(source.changes_in_range(&-100, &100).next().is_none());
+        let empty: IntMap = PersistentDeltaMap::new();
+        assert!(empty.changes_in_range(&0, &10).next().is_none());
+        assert!(empty.changes_in_range(&10, &0).next().is_none());
+        assert_eq!(change_keys(&changed), vec![20, 30, 50, 70]);
+        assert!(changed.validate_structure().is_ok());
+    }
+
+    fn range_keys(map: &IntMap, low: i32, high: i32) -> Vec<i32> {
+        map.changes_in_range(&low, &high)
+            .map(|change| *change.key())
+            .collect()
+    }
+
+    #[test]
+    fn changes_in_range_uses_the_retained_key_order() {
+        let source: IntMap = PersistentDeltaMap::from_entries_with_policies(
+            entries(&[(1, "one"), (3, "three"), (5, "five")]),
+            descending(),
+            EqualityPolicy::natural(),
+        );
+        let changed = source
+            .set_item(6, "six".to_owned())
+            .set_item(4, "four".to_owned())
+            .set_item(3, "THREE".to_owned())
+            .remove(&1);
+        assert_eq!(change_keys(&changed), vec![6, 4, 3, 1]);
+
+        // Under a descending policy the low endpoint is the numerically greater key.
+        assert_eq!(range_keys(&changed, 6, 3), vec![6, 4, 3]);
+        assert_eq!(range_keys(&changed, 5, 2), vec![4, 3]);
+        assert_eq!(range_keys(&changed, 4, 1), vec![4, 3, 1]);
+        // "Inverted" is decided by the retained policy, not by natural order.
+        assert!(range_keys(&changed, 3, 6).is_empty());
+        assert!(changed.validate_structure().is_ok());
+    }
+
+    #[test]
+    fn set_items_equals_folding_the_single_entry_assignment() {
+        let source: IntMap = PersistentDeltaMap::from_entries(entries(&[(1, "one"), (2, "two")]));
+        let batch = entries(&[(3, "three"), (1, "ONE"), (2, "two"), (3, "THREE")]);
+
+        let folded = batch
+            .clone()
+            .into_iter()
+            .fold(source.clone(), |map, (key, value)| map.set_item(key, value));
+        let bulk = source.set_items(batch);
+
+        assert_eq!(contents(&bulk), contents(&folded));
+        assert_eq!(change_keys(&bulk), change_keys(&folded));
+        assert_eq!(
+            bulk.get_changes().collect::<Vec<_>>(),
+            folded.get_changes().collect::<Vec<_>>()
+        );
+
+        // A later entry for the same class wins, and the equivalent rewrite of key 2 stays a no-op.
+        assert_eq!(change_keys(&bulk), vec![1, 3]);
+        assert_eq!(bulk.get(&3).map(String::as_str), Some("THREE"));
+        let first = bulk.get_change(&1).expect("key 1 is dirty");
+        assert_eq!(first.before().map(String::as_str), Some("one"));
+        assert_eq!(first.after().map(String::as_str), Some("ONE"));
+
+        // The receiver is untouched, as for any other producing method.
+        assert!(!source.has_changes());
+        assert_eq!(contents(&source), entries(&[(1, "one"), (2, "two")]));
+        assert!(bulk.validate_structure().is_ok());
+        assert!(folded.validate_structure().is_ok());
+    }
+
+    #[test]
+    fn set_items_coalesces_and_cancels_like_repeated_single_assignment() {
+        let source: IntMap = PersistentDeltaMap::from_entries(entries(&[(1, "one"), (2, "two")]));
+
+        // A batch that ends back at the checkpoint state snaps to the exact checkpoint root.
+        let cancelled = source.set_items(entries(&[(1, "x"), (2, "y"), (1, "one"), (2, "two")]));
+        assert!(!cancelled.has_changes());
+        assert_eq!(cancelled.change_count(), 0);
+        assert!(
+            cancelled
+                .current_snapshot()
+                .shares_storage_with(source.current_snapshot())
+        );
+        assert!(
+            cancelled
+                .current_snapshot()
+                .shares_storage_with(cancelled.checkpoint_snapshot())
+        );
+
+        // Repeated writes to one class coalesce into a single record keeping the original `before`.
+        let coalesced = source.set_items(entries(&[(1, "a"), (1, "b"), (1, "c")]));
+        assert_eq!(coalesced.change_count(), 1);
+        let change = coalesced.get_change(&1).expect("one coalesced record");
+        assert_eq!(change.kind(), PersistentMapChangeKind::Updated);
+        assert_eq!(change.before().map(String::as_str), Some("one"));
+        assert_eq!(change.after().map(String::as_str), Some("c"));
+
+        // An empty batch and an all-no-op batch both return a storage-equivalent version.
+        assert!(source.shares_storage_with(&source.set_items(Vec::new())));
+        assert!(source.shares_storage_with(&source.set_items(entries(&[(1, "one"), (2, "two")]))));
+        let dirty = source.set_item(3, "three".to_owned());
+        assert!(dirty.shares_storage_with(&dirty.set_items(Vec::new())));
+        assert!(dirty.shares_storage_with(&dirty.set_items(entries(&[(3, "three"), (1, "one")]))));
+
+        // Representative retention is the point-write rule, applied per batch entry.
+        let insensitive: PersistentDeltaMap<String, i32> =
+            PersistentDeltaMap::from_entries_with_policies(
+                [("Alpha".to_owned(), 1)],
+                case_insensitive_keys(),
+                EqualityPolicy::natural(),
+            );
+        let rewritten = insensitive.set_items([("ALPHA".to_owned(), 2), ("Beta".to_owned(), 3)]);
+        assert_eq!(
+            rewritten
+                .get_entry(&"alpha".to_owned())
+                .map(|(key, _)| key.as_str()),
+            Some("Alpha")
+        );
+        assert_eq!(
+            change_keys(&rewritten),
+            vec!["Alpha".to_owned(), "Beta".to_owned()]
+        );
+
+        assert!(cancelled.validate_structure().is_ok());
+        assert!(coalesced.validate_structure().is_ok());
+        assert!(rewritten.validate_structure().is_ok());
     }
 
     #[test]

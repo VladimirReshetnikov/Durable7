@@ -79,6 +79,15 @@ public readonly record struct ContextualEventLocation(
 /// invalid machine transition, or an event-count overflow, publishes no successor and leaves every
 /// older version usable.
 /// </para>
+/// <para>
+/// <typeparamref name="TMachine"/>'s state count is validated once, in this type's static
+/// initializer. A nonpositive <see cref="IContextualEventMachine{TElement}.StateCount"/> therefore
+/// surfaces to the caller as a <see cref="TypeInitializationException"/> whose
+/// <see cref="Exception.InnerException"/> is the <see cref="InvalidOperationException"/> describing
+/// the invalid machine, and every later use of the same constructed type reports the same wrapped
+/// failure. This is how the runtime reports faulted static initialization; inspect the inner
+/// exception for the actual diagnostic.
+/// </para>
 /// </remarks>
 public sealed class ContextualRankSequence<TElement, TMachine> : IReadOnlyList<TElement>
     where TMachine : IContextualEventMachine<TElement>
@@ -211,13 +220,25 @@ public sealed class ContextualRankSequence<TElement, TMachine> : IReadOnlyList<T
 
     /// <summary>Returns a sequence with one element prepended.</summary>
     /// <param name="item">The element to prepend.</param>
-    public ContextualRankSequence<TElement, TMachine> Prepend(TElement item) =>
-        new(_tree.Prepend(item));
+    /// <returns>The updated persistent version.</returns>
+    /// <remarks>O(s) amortized, where s is <see cref="StateCount"/>.</remarks>
+    /// <exception cref="OverflowException">The sequence already holds <see cref="int.MaxValue"/> elements.</exception>
+    public ContextualRankSequence<TElement, TMachine> Prepend(TElement item)
+    {
+        CheckInsertionCapacity();
+        return new(_tree.Prepend(item));
+    }
 
     /// <summary>Returns a sequence with one element appended.</summary>
     /// <param name="item">The element to append.</param>
-    public ContextualRankSequence<TElement, TMachine> Append(TElement item) =>
-        new(_tree.Append(item));
+    /// <returns>The updated persistent version.</returns>
+    /// <remarks>O(s) amortized, where s is <see cref="StateCount"/>.</remarks>
+    /// <exception cref="OverflowException">The sequence already holds <see cref="int.MaxValue"/> elements.</exception>
+    public ContextualRankSequence<TElement, TMachine> Append(TElement item)
+    {
+        CheckInsertionCapacity();
+        return new(_tree.Append(item));
+    }
 
     /// <summary>Concatenates another compatible contextual sequence.</summary>
     /// <param name="other">The suffix.</param>
@@ -238,11 +259,12 @@ public sealed class ContextualRankSequence<TElement, TMachine> : IReadOnlyList<T
     /// <param name="index">The number of old elements before the insertion.</param>
     /// <param name="item">The inserted element.</param>
     /// <returns>The updated persistent version.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the sequence boundaries.</exception>
+    /// <exception cref="OverflowException">The sequence already holds <see cref="int.MaxValue"/> elements.</exception>
     public ContextualRankSequence<TElement, TMachine> Insert(int index, TElement item)
     {
         CheckBoundaryIndex(index);
-        if (Count == int.MaxValue)
-            throw new OverflowException("The sequence cannot contain more than Int32.MaxValue elements.");
+        CheckInsertionCapacity();
         if (index == 0)
             return Prepend(item);
         if (index == Count)
@@ -332,6 +354,12 @@ public sealed class ContextualRankSequence<TElement, TMachine> : IReadOnlyList<T
     {
         if ((uint)state >= (uint)MachineStateCount)
             throw new ArgumentOutOfRangeException(nameof(state), state, "State is outside the machine state range.");
+    }
+
+    private void CheckInsertionCapacity()
+    {
+        if (Count == int.MaxValue)
+            throw new OverflowException("The sequence cannot contain more than Int32.MaxValue elements.");
     }
 
     private void CheckElementIndex(int index)

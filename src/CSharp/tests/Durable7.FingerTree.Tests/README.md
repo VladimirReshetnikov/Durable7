@@ -39,6 +39,11 @@ reasonable oracle.
   Myers reference arena: endpoint contracts, reverse/slice closure, exhaustive and randomized
   retained branches, exact ancestor-query ceilings, irregular-tree ancestry oracles, square block
   seams, enumeration routing, and concurrent branching/reads.
+- `IncrementalAncestorArenaSeamTests.cs` covers the shared `IIncrementalAncestorArena<T>` extension
+  seam: a minimal parent-array arena is checked against the shipped Myers arena on a randomized
+  branching forest, then drives both `AncestralSliceQueue<T>` and `BilateralAncestralDeque<T>`
+  through randomized operation histories, requiring identical values, identical retained versions,
+  and identical primitive backend workloads.
 - `PersistentIntervalMapTests.cs` covers strict and replacing updates, lexicographic interval-key
   order, configured payload equality, first interval representatives, reversed-endpoint rejection,
   point and overlap queries against a brute-force model, removal, policy-preserving clear,
@@ -174,8 +179,8 @@ The experimental ancestral-slice queue lane is:
 .\test.ps1 -Filter FullyQualifiedName~AncestralSliceQueue
 ```
 
-This lane passes 15/15 tests in Debug and Release. No benchmark result is part of this experimental
-gate.
+This lane passes 16/16 tests in Debug and Release; the sixteenth is the shared-arena-seam parity case
+in `IncrementalAncestorArenaSeamTests.cs`. No benchmark result is part of this experimental gate.
 
 The bilateral ancestral deque research lane is:
 

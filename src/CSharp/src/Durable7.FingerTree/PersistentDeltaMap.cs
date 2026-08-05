@@ -87,7 +87,7 @@ public readonly record struct PersistentMapChange<TKey, TValue>(
 /// number of net-changed key classes. Point lookup, point update/removal, rank, and neighbor operations are
 /// O(log N), matching the
 /// underlying persistent ordered map. <see cref="Checkpoint"/> and <see cref="Rollback"/> are O(1).
-/// Fully consuming <see cref="GetChanges"/> is Theta(k + 1), which is output-optimal, avoiding the
+/// Fully consuming <see cref="GetChanges()"/> is Theta(k + 1), which is output-optimal, avoiding the
 /// Theta(k log(N/k + 1)) adversarial divergent-path walk of a conventional reference-pruned comparison
 /// between constant-degree, path-copied balanced trees. A live
 /// version occupies O(N + k) nodes; retaining every successor adds O(log N) nodes per changed point update,
@@ -107,7 +107,9 @@ public readonly record struct PersistentMapChange<TKey, TValue>(
 /// <para>
 /// Policy exceptions propagate without publishing a partial successor, so the receiver and every retained
 /// branch remain unchanged. <see cref="Checkpoint"/>, <see cref="Rollback"/>, and
-/// <see cref="GetChanges"/> invoke no key- or value-policy callbacks.
+/// <see cref="GetChanges()"/> invoke no key- or value-policy callbacks; the range-restricted
+/// <see cref="GetChanges(TKey, TKey)"/> overload invokes only key comparisons, and only the
+/// O(log(k + 1)) many needed to seek the range boundaries.
 /// </para>
 /// <para>
 /// The point-update API is deliberate. An eager bulk clear would produce Theta(N) removal records and cannot
@@ -279,6 +281,34 @@ public sealed class PersistentDeltaMap<TKey, TValue> : IReadOnlyDictionary<TKey,
         return new PersistentDeltaMap<TKey, TValue>(nextCurrent, _checkpoint, nextChanges, _valueComparer);
     }
 
+    /// <summary>
+    /// Applies a sequence of entries in enumeration order, exactly as repeated <see cref="SetItem"/> would.
+    /// O(m log N) for m entries.
+    /// </summary>
+    /// <param name="entries">Entries to assign, in application order; a later comparator-equivalent key wins.</param>
+    /// <returns>
+    /// The unchanged instance when <paramref name="entries"/> is empty or every entry is a semantic value
+    /// no-op; otherwise a persistent successor.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="entries"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OverflowException">The current map or change index already has maximum capacity.</exception>
+    /// <remarks>
+    /// This is a convenience and an allocation saving over repeated single assignment, not a different
+    /// algorithm: it is exactly the left fold of <see cref="SetItem"/> over <paramref name="entries"/>, so
+    /// every coalescing, cancellation, representative-retention, and checkpoint-snap rule holds verbatim and
+    /// the asymptotic bound is that of the fold it replaces. Because each intermediate value is itself an
+    /// immutable published-nothing successor, a policy exception thrown partway leaves the receiver and every
+    /// retained branch unchanged.
+    /// </remarks>
+    public PersistentDeltaMap<TKey, TValue> SetItems(IEnumerable<KeyValuePair<TKey, TValue>> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var result = this;
+        foreach (var entry in entries)
+            result = result.SetItem(entry.Key, entry.Value);
+        return result;
+    }
+
     /// <summary>Removes one current entry and coalesces its checkpoint-relative change. O(log N).</summary>
     /// <param name="key">Key to remove.</param>
     /// <returns>The unchanged instance when absent; otherwise a persistent successor.</returns>
@@ -354,6 +384,29 @@ public sealed class PersistentDeltaMap<TKey, TValue> : IReadOnlyDictionary<TKey,
     public IEnumerable<PersistentMapChange<TKey, TValue>> GetChanges()
     {
         foreach (var entry in _changes)
+            yield return new PersistentMapChange<TKey, TValue>(entry.Key, entry.Value.Before, entry.Value.After);
+    }
+
+    /// <summary>
+    /// Enumerates the exact net changes whose keys lie in the inclusive range <c>[low, high]</c>, once each in
+    /// the same ascending key order <see cref="GetChanges()"/> uses. O(log(k + 1)) to seek the range boundaries
+    /// plus Theta(1) per yielded change, which is output-sensitive rather than a scan of all k changes.
+    /// </summary>
+    /// <param name="low">Inclusive lower key bound.</param>
+    /// <param name="high">Inclusive upper key bound.</param>
+    /// <returns>
+    /// A lazy, repeatable enumeration over this immutable version's in-range changes; empty when
+    /// <paramref name="low"/> compares greater than <paramref name="high"/>, matching
+    /// <see cref="GetRange"/> on an inverted range.
+    /// </returns>
+    /// <remarks>
+    /// The change index is itself an ordered map under the collection's key comparer, so the restriction is a
+    /// boundary seek plus a bounded walk over the in-range sub-map, never a filter over the full change set.
+    /// The seek is performed on first enumeration and invokes only key-order comparisons.
+    /// </remarks>
+    public IEnumerable<PersistentMapChange<TKey, TValue>> GetChanges(TKey low, TKey high)
+    {
+        foreach (var entry in _changes.GetRange(low, high))
             yield return new PersistentMapChange<TKey, TValue>(entry.Key, entry.Value.Before, entry.Value.After);
     }
 

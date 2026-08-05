@@ -362,7 +362,7 @@ public sealed class BilateralAncestralDequeTests
     [Fact]
     public void PublicOperations_RespectLevelAncestorQueryCeilings()
     {
-        var arena = new MyersLevelAncestorArena<int>();
+        var arena = new MyersIncrementalAncestorArena<int>();
         var root = BilateralAncestralDeque<int>.Create(arena);
         var deque = root
             .AddFirst(4)
@@ -434,7 +434,7 @@ public sealed class BilateralAncestralDequeTests
     {
         const int nodeCount = 4_096;
         var random = new Random(0x5EED);
-        var arena = new MyersLevelAncestorArena<int>();
+        var arena = new MyersIncrementalAncestorArena<int>();
         var handles = new List<int> { arena.Bottom };
         var parents = new Dictionary<int, int>();
         var depths = new Dictionary<int, int> { [arena.Bottom] = -1 };
@@ -500,7 +500,7 @@ public sealed class BilateralAncestralDequeTests
     public void MyersArena_OddBlockStatisticsMatchSquareBoundaries()
     {
         const int publishedLimit = 1_024;
-        var arena = new MyersLevelAncestorArena<int>();
+        var arena = new MyersIncrementalAncestorArena<int>();
 
         for (var published = 0; published <= publishedLimit; published++)
         {
@@ -530,7 +530,7 @@ public sealed class BilateralAncestralDequeTests
     {
         const int workerCount = 8;
         const int steps = 240;
-        var arena = new MyersLevelAncestorArena<int>();
+        var arena = new MyersIncrementalAncestorArena<int>();
         var root = BilateralAncestralDeque<int>.Create(arena);
         for (var value = 0; value < 96; value++)
             root = root.AddLast(value);
@@ -624,7 +624,7 @@ public sealed class BilateralAncestralDequeTests
     [Fact]
     public void InvalidInputs_ThrowWithoutPublishingNodes()
     {
-        var arena = new MyersLevelAncestorArena<int>();
+        var arena = new MyersIncrementalAncestorArena<int>();
         var deque = BilateralAncestralDeque<int>.Create(arena).AddLast(1).AddLast(2).AddLast(3);
 
         Assert.Throws<ArgumentOutOfRangeException>(() => deque[-1]);
@@ -687,7 +687,7 @@ public sealed class BilateralAncestralDequeTests
     }
 
     private static TResult AssertQueriesAtMost<TResult>(
-        MyersLevelAncestorArena<int> arena,
+        MyersIncrementalAncestorArena<int> arena,
         long maximum,
         Func<TResult> operation)
     {
@@ -709,7 +709,7 @@ public sealed class BilateralAncestralDequeTests
         return node;
     }
 
-    private sealed class InvalidBottomArena<T> : IIncrementalLevelAncestorArena<T>
+    private sealed class InvalidBottomArena<T> : IIncrementalAncestorArena<T>
     {
         public int Bottom => 0;
 

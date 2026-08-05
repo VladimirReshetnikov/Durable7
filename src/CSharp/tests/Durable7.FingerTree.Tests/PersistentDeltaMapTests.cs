@@ -529,6 +529,210 @@ public sealed class PersistentDeltaMapTests
         Assert.True(removeFailures > 0);
     }
 
+    /// <summary>Restricts change enumeration to an inclusive key range, including inverted and empty cases.</summary>
+    [Fact]
+    public void GetChangesRange_RestrictsToTheInclusiveKeyRange()
+    {
+        var clean = PersistentDeltaMap<int, string>.CreateRange(
+            Enumerable.Range(0, 10).Select(key => KeyValuePair.Create(key, key.ToString())));
+
+        Assert.Empty(clean.GetChanges(int.MinValue, int.MaxValue));
+        Assert.Empty(clean.GetChanges(9, 0));
+
+        var changed = clean
+            .SetItem(-5, "minus-five")
+            .SetItem(2, "TWO")
+            .Remove(4)
+            .SetItem(7, "SEVEN")
+            .SetItem(20, "twenty");
+
+        Assert.Equal([-5, 2, 4, 7, 20], changed.GetChanges().Select(change => change.Key).ToArray());
+
+        Assert.Equal([2, 4, 7], changed.GetChanges(2, 7).Select(change => change.Key).ToArray());
+        Assert.Equal([2, 4], changed.GetChanges(1, 5).Select(change => change.Key).ToArray());
+        Assert.Equal([4], changed.GetChanges(4, 4).Select(change => change.Key).ToArray());
+        Assert.Equal([-5], changed.GetChanges(int.MinValue, 0).Select(change => change.Key).ToArray());
+        Assert.Equal([20], changed.GetChanges(8, int.MaxValue).Select(change => change.Key).ToArray());
+        Assert.Equal(
+            changed.GetChanges().ToArray(),
+            changed.GetChanges(int.MinValue, int.MaxValue).ToArray());
+
+        Assert.Empty(changed.GetChanges(8, 19));
+        Assert.Empty(changed.GetChanges(21, 100));
+        Assert.Empty(changed.GetChanges(-100, -6));
+        Assert.Empty(changed.GetChanges(7, 2));
+        Assert.Empty(changed.GetRange(7, 2));
+
+        var inRange = changed.GetChanges(2, 4).ToArray();
+        Assert.Equal(PersistentMapChangeKind.Updated, inRange[0].Kind);
+        AssertPresent("2", inRange[0].Before);
+        AssertPresent("TWO", inRange[0].After);
+        Assert.Equal(PersistentMapChangeKind.Removed, inRange[1].Kind);
+        AssertPresent("4", inRange[1].Before);
+        AssertAbsent(inRange[1].After);
+        Assert.Equal(inRange, changed.GetChanges(2, 4).ToArray());
+
+        var descending = Comparer<int>.Create((left, right) => right.CompareTo(left));
+        var reversed = PersistentDeltaMap<int, string>.CreateRange(
+            Enumerable.Range(0, 10).Select(key => KeyValuePair.Create(key, key.ToString())),
+            descending)
+            .SetItem(1, "ONE")
+            .SetItem(4, "FOUR")
+            .SetItem(8, "EIGHT");
+
+        Assert.Equal([8, 4, 1], reversed.GetChanges().Select(change => change.Key).ToArray());
+        Assert.Equal([8, 4], reversed.GetChanges(8, 4).Select(change => change.Key).ToArray());
+        Assert.Empty(reversed.GetChanges(4, 8));
+    }
+
+    /// <summary>Locates the range boundaries by seeking rather than scanning the whole change set.</summary>
+    [Fact]
+    public void GetChangesRange_SeeksBoundariesInsteadOfScanningAllChanges()
+    {
+        var keyComparer = new CountingComparer<int>(Comparer<int>.Default);
+        var valueComparer = new CountingEqualityComparer<int>(EqualityComparer<int>.Default);
+        var changed = PersistentDeltaMap<int, int>.CreateRange(
+            Enumerable.Range(0, 4_096).Select(key => KeyValuePair.Create(key, key)),
+            keyComparer,
+            valueComparer)
+            .SetItems(Enumerable.Range(0, 4_096)
+                .Where(key => (key & 1) == 0)
+                .Select(key => KeyValuePair.Create(key, -key - 1)));
+
+        Assert.Equal(2_048, changed.ChangeCount);
+
+        keyComparer.Reset();
+        valueComparer.Reset();
+        var window = changed.GetChanges(1_000, 1_007).ToArray();
+
+        Assert.Equal([1_000, 1_002, 1_004, 1_006], window.Select(change => change.Key).ToArray());
+        Assert.Equal(0, valueComparer.EqualityCount);
+        Assert.True(
+            keyComparer.ComparisonCount < 512,
+            $"Range-restricted change enumeration used {keyComparer.ComparisonCount} key comparisons.");
+    }
+
+    /// <summary>Applies a batch exactly as the single-entry fold does, preserving every coalescing rule.</summary>
+    [Fact]
+    public void SetItems_MatchesTheSingleEntryFold()
+    {
+        var source = PersistentDeltaMap<int, string>.CreateRange(
+        [
+            KeyValuePair.Create(1, "one"),
+            KeyValuePair.Create(2, "two"),
+            KeyValuePair.Create(3, "three"),
+        ]);
+
+        KeyValuePair<int, string>[] batch =
+        [
+            KeyValuePair.Create(4, "four"),
+            KeyValuePair.Create(2, "TWO"),
+            KeyValuePair.Create(2, "two-again"),
+            KeyValuePair.Create(1, "one"),
+            KeyValuePair.Create(4, "FOUR"),
+            KeyValuePair.Create(3, "three"),
+        ];
+
+        var folded = batch.Aggregate(source, (map, entry) => map.SetItem(entry.Key, entry.Value));
+        var bulk = source.SetItems(batch);
+
+        Assert.Equal(folded.ToArray(), bulk.ToArray());
+        Assert.Equal(folded.GetChanges().ToArray(), bulk.GetChanges().ToArray());
+        Assert.Equal(folded.ChangeCount, bulk.ChangeCount);
+        Assert.Equal("FOUR", bulk[4]);
+        Assert.Equal("two-again", bulk[2]);
+        Assert.Equal([2, 4], bulk.GetChanges().Select(change => change.Key).ToArray());
+        bulk.ValidateInvariants();
+
+        Assert.Same(source.CurrentSnapshot, source.SetItems([]).CurrentSnapshot);
+        Assert.Same(source, source.SetItems([]));
+        Assert.Same(
+            source,
+            source.SetItems([KeyValuePair.Create(1, "one"), KeyValuePair.Create(3, "three")]));
+
+        var cancelled = source.SetItems(
+        [
+            KeyValuePair.Create(2, "TWO"),
+            KeyValuePair.Create(5, "five"),
+            KeyValuePair.Create(2, "two"),
+        ]).Remove(5);
+        Assert.False(cancelled.HasChanges);
+        Assert.Same(source.CurrentSnapshot, cancelled.CurrentSnapshot);
+        Assert.Same(cancelled.CurrentSnapshot, cancelled.CheckpointSnapshot);
+
+        Assert.Throws<ArgumentNullException>(() => source.SetItems(null!));
+    }
+
+    /// <summary>Preserves representative retention and cancellation rules verbatim under a key-class comparer.</summary>
+    [Fact]
+    public void SetItems_PreservesRepresentativeAndCancellationRules()
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var checkpointKey = new string("Alpha".ToCharArray());
+        var probe = new string("ALPHA".ToCharArray());
+        var addedKey = new string("Beta".ToCharArray());
+        var equivalentAddedKey = new string("BETA".ToCharArray());
+        var source = PersistentDeltaMap<string, int>.CreateRange(
+            [KeyValuePair.Create(checkpointKey, 1)],
+            comparer);
+
+        var updated = source.SetItems([KeyValuePair.Create(probe, 2), KeyValuePair.Create(probe, 3)]);
+        Assert.Same(checkpointKey, Assert.Single(updated).Key);
+        Assert.Same(checkpointKey, Assert.Single(updated.GetChanges()).Key);
+        Assert.Equal(3, updated[probe]);
+
+        var added = source.SetItems(
+            [KeyValuePair.Create(addedKey, 5), KeyValuePair.Create(equivalentAddedKey, 6)]);
+        Assert.Same(addedKey, added.Single(entry => comparer.Compare(entry.Key, addedKey) == 0).Key);
+        Assert.Same(addedKey, Assert.Single(added.GetChanges()).Key);
+        Assert.Equal(6, added[equivalentAddedKey]);
+        added.ValidateInvariants();
+
+        var restored = updated.SetItems([KeyValuePair.Create(probe, 1)]);
+        Assert.False(restored.HasChanges);
+        Assert.Same(source.CurrentSnapshot, restored.CurrentSnapshot);
+    }
+
+    /// <summary>Leaves the receiver unchanged when a comparer fails partway through a batch.</summary>
+    [Fact]
+    public void SetItems_ComparerFailureDoesNotPublishAPartialSuccessor()
+    {
+        var keyComparer = new FailpointComparer<int>(Comparer<int>.Default);
+        var source = PersistentDeltaMap<int, string>.CreateRange(
+        [
+            KeyValuePair.Create(1, "one"),
+            KeyValuePair.Create(2, "two"),
+            KeyValuePair.Create(3, "three"),
+        ], keyComparer)
+            .SetItem(2, "TWO");
+
+        KeyValuePair<int, string>[] batch =
+        [
+            KeyValuePair.Create(4, "four"),
+            KeyValuePair.Create(5, "five"),
+            KeyValuePair.Create(1, "ONE"),
+        ];
+
+        var failures = ExerciseEveryFailure(
+            keyComparer,
+            () => source.SetItems(batch),
+            () =>
+            {
+                keyComparer.Disarm();
+                Assert.Equal(
+                    [
+                        KeyValuePair.Create(1, "one"),
+                        KeyValuePair.Create(2, "TWO"),
+                        KeyValuePair.Create(3, "three"),
+                    ],
+                    source.ToArray());
+                Assert.Equal([2], source.GetChanges().Select(change => change.Key).ToArray());
+                source.ValidateInvariants();
+            });
+
+        Assert.True(failures > 0);
+    }
+
     private static int ExerciseEveryFailure<TPolicy, TResult>(
         TPolicy policy,
         Func<TResult> operation,

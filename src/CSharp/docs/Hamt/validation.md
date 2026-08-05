@@ -120,10 +120,17 @@ The focused lane currently passes 23/23 tests: 8 patch, 7 graph, and 8 indexed-m
 ### Current Derived-Structure Integration Evidence
 
 On 2026-07-29 UTC, the complete HAMT project passed 366/366 tests and the serialized full C# solution
-passed 1,240/1,240 tests in both Debug and Release. The focused experimental
+passed 1,240/1,240 tests in both Debug and Release. The focused
 `PersistentAncestralConnectionForestTests` lane passed 12/12 tests. The full breakdown is 366 HAMT +
 794 FingerTree + 80 Ordered. Solution builds completed in both configurations; the rebased base
 currently emits pre-existing XML-documentation warnings. Benchmarks were not run.
+
+On 2026-08-04 UTC, after the connection forest was promoted into `Durable7.Hamt`, ported to Rust, and
+given the reviewed `GetComponentSize` accessor, the complete HAMT project passes 367/367 tests and
+the serialized full C# solution passes 1,254/1,254: 367 HAMT + 807 FingerTree + 80 Ordered.
+`GetComponentSize` is covered for isolated vertices, chained unions, both endpoints of a union
+agreeing, redundant links changing nothing, stability across retained branching versions, and all
+component sizes summing to `VertexCount`. Benchmarks were not run.
 
 For historical comparison, the pre-experiment checkpoint contributed 354 HAMT tests to a
 1,158-test full-solution gate. The consolidated totals above supersede that snapshot.

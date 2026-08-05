@@ -353,6 +353,18 @@ impl PersistentAncestralConnectionForest {
         Ok(self.find_root(left) == self.find_root(right))
     }
 
+    /// Returns the number of vertices in the connected component containing `vertex`. O(w log n),
+    /// worst-case in the O(log n) path factor and expected in the CHAMP factor w (see the
+    /// module-level note).
+    ///
+    /// An isolated vertex is still a singleton root and reports 1. The answer is the union-by-size
+    /// count cached at the component's current root, so the walk reads the structure without
+    /// compressing it; this forest deliberately has no path compression.
+    pub fn component_size(&self, vertex: i32) -> Result<i32, AncestralConnectionError> {
+        self.check_vertex(vertex)?;
+        Ok(self.size_of(self.find_root(vertex)))
+    }
+
     /// Creates a child history version containing an undirected connection between two vertices.
     ///
     /// The returned version is always distinct. When the endpoints were already connected its
@@ -1111,12 +1123,89 @@ mod tests {
         assert_eq!(root.link(0, 3).err(), out_of_range);
         assert_eq!(root.first_connected(-1, 0).err(), out_of_range);
         assert_eq!(root.first_connected(0, 3).err(), out_of_range);
+        assert_eq!(root.component_size(-1).err(), out_of_range);
+        assert_eq!(root.component_size(3).err(), out_of_range);
 
         // A rejected operation publishes nothing.
         assert!(root.version().is_same_version(root.version().root()));
         assert_eq!(root.version().depth(), 0);
         assert_eq!(root.component_count(), 3);
         root.validate_structure().unwrap();
+    }
+
+    fn component_size(forest: &Forest, vertex: i32) -> i32 {
+        forest
+            .component_size(vertex)
+            .expect("valid vertices are accepted")
+    }
+
+    /// Sums one cached size per distinct current root, which must recover the whole universe.
+    fn total_component_size(forest: &Forest) -> i32 {
+        let mut roots = HashMap::new();
+        for vertex in 0..forest.vertex_count() {
+            roots.insert(forest.find(vertex).unwrap(), component_size(forest, vertex));
+        }
+
+        assert_eq!(roots.len() as i32, forest.component_count());
+        roots.values().sum()
+    }
+
+    #[test]
+    fn component_size_reports_the_cached_union_size() {
+        let root = forest(6);
+        for vertex in 0..root.vertex_count() {
+            assert_eq!(component_size(&root, vertex), 1);
+        }
+        assert_eq!(total_component_size(&root), 6);
+
+        // A chain of unions grows exactly the touched component.
+        let pair = root.link(0, 1).unwrap();
+        let triple = pair.link(1, 2).unwrap();
+        let quad = triple.link(2, 3).unwrap();
+
+        assert_eq!(component_size(&pair, 0), 2);
+        assert_eq!(component_size(&pair, 1), 2);
+        assert_eq!(component_size(&pair, 5), 1);
+        assert_eq!(component_size(&triple, 2), 3);
+        for vertex in 0..4 {
+            // Both endpoints of every union agree, and so does the whole component.
+            assert_eq!(component_size(&quad, vertex), 4);
+        }
+        assert_eq!(component_size(&quad, 4), 1);
+        assert_eq!(total_component_size(&quad), 6);
+
+        // A redundant link changes nothing observable about sizes.
+        let redundant = quad.link(3, 0).unwrap();
+        for vertex in 0..quad.vertex_count() {
+            assert_eq!(
+                component_size(&redundant, vertex),
+                component_size(&quad, vertex)
+            );
+        }
+        assert_eq!(total_component_size(&redundant), 6);
+
+        // Retained versions keep their own sizes across a branching history.
+        let branch = quad.link(4, 5).unwrap();
+        assert_eq!(component_size(&branch, 4), 2);
+        assert_eq!(component_size(&quad, 4), 1);
+        assert_eq!(component_size(&pair, 2), 1);
+        assert_eq!(component_size(&root, 0), 1);
+        assert_eq!(total_component_size(&branch), 6);
+        assert_eq!(total_component_size(&pair), 6);
+
+        let merged = branch.link(5, 0).unwrap();
+        assert_eq!(merged.component_count(), 1);
+        for vertex in 0..merged.vertex_count() {
+            assert_eq!(component_size(&merged, vertex), 6);
+        }
+        assert_eq!(total_component_size(&merged), 6);
+        merged.validate_structure().unwrap();
+
+        // A huge sparse universe still reports singletons without storing them.
+        let sparse = forest(i32::MAX).link(0, i32::MAX - 1).unwrap();
+        assert_eq!(component_size(&sparse, 0), 2);
+        assert_eq!(component_size(&sparse, i32::MAX - 1), 2);
+        assert_eq!(component_size(&sparse, i32::MAX - 2), 1);
     }
 
     #[test]

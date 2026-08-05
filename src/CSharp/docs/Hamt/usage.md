@@ -864,6 +864,8 @@ var branch = v1.Link(42, 99);          // branches from v1; v2 is unaffected
 var connected = v2.Connected(3, 42);   // true
 var when = v2.FirstConnected(3, 42);   // the version token created by v1.Link(7, 42)
 var shared = branch.FirstConnected(3, 7) == v1.Version; // true on the sibling branch too
+var size = v2.GetComponentSize(3);      // 3 — the component {3, 7, 42}
+var isolated = v2.GetComponentSize(500); // 1 — never touched by a union
 ```
 
 `Create` is O(1) for any universe size because untouched vertices are implicit singleton roots; the
@@ -897,7 +899,7 @@ reachable from any live version.
 | Explicit-vertex directed adjacency with predecessor lookup | `PersistentDirectedGraph<TVertex>` |
 | Primary map with one maintained nonunique secondary index | `PersistentIndexedMap<TKey, TValue, TIndexKey>` |
 | Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
-| Branching insertion-only connectivity with first-connection versions | `PersistentAncestralConnectionForest` (experimental) |
+| Branching insertion-only connectivity with first-connection versions | `PersistentAncestralConnectionForest` |
 | Signed integer keys with ordered structural merge | `PersistentIntMap<TValue>` / `PersistentLongMap<TValue>` |
 | Canonical cross-process content address and ordered ranges | `MerkleSearchTree<TKey, TValue>` |
 | Verified block persistence and transfer | `Save`, `Load`, `ExportPack`, `Import` |

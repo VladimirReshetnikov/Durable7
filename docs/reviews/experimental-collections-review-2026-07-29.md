@@ -9,12 +9,17 @@
   `Durable7.FingerTree.Experimental` and `Durable7.Hamt.Experimental`; the fixes applied during
   this review
 
-> **Current-state note: the namespace finding below is superseded.** After this review the seven
-> collections were promoted out of the `*.Experimental` namespaces into `Durable7.FingerTree` and
-> `Durable7.Hamt`, and ported to Rust. Namespace-qualified names in this report therefore describe
-> the state at review time. Finding **F1** (duplicated Myers arena machinery) was resolved in the
-> Rust port, which ships one shared incremental-ancestor arena serving both consumers, as this
-> report recommended for promotion. Every other finding stands as written.
+> **Current-state note: this report is fully remediated.** After this review the seven collections
+> were promoted out of the `*.Experimental` namespaces into `Durable7.FingerTree` and `Durable7.Hamt`
+> and ported to Rust, so namespace-qualified names below describe the state at review time.
+> Finding **F1** (duplicated Myers arena machinery) is closed in BOTH languages: each now ships one
+> shared incremental-ancestor arena serving both consumers, and the removed C# types were
+> `IIncrementalLevelAncestorArena<T>`, `MyersLevelAncestorArena<T>`, and
+> `MyersLevelAncestorStatistics`. **F4** (catalogs not indexing these collections) is closed.
+> Every enhancement in "Proposed Enhancements" and every test gap named in "Test-Suite Assessment"
+> has since been implemented in both languages — see the
+> [2026-08-04 port review](rust-collection-port-review-2026-08-04.md) for the landed list. The
+> per-collection verdicts and the reasoning below stand as written.
 
 ## Summary
 

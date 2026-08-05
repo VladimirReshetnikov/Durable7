@@ -75,14 +75,23 @@ Release configuration is required for meaningful benchmark numbers.
 
 ### Current Derived-Structure Integration Evidence
 
-On 2026-07-29 UTC, the six consolidated experimental FingerTree lanes passed 70/70 tests in both
+On 2026-07-29 UTC, the six consolidated research-derived FingerTree lanes passed 70/70 tests in both
 Debug and Release: 15 delta-map + 15 ancestral-slice-queue + 15 bilateral-ancestral-deque + 7
 contextual-rank-sequence + 11 monotone-action-heap + 7 run-delta-vector. The complete FingerTree
 project passed 794/794 tests, and the serialized full C# solution passed 1,240/1,240 in both
-configurations: 366 HAMT + 794 FingerTree + 80 Ordered. The separate experimental
+configurations: 366 HAMT + 794 FingerTree + 80 Ordered. The separate
 ancestral-connection-forest lane contributed 12 of the HAMT tests. Benchmarks were not run because
 no empirical performance claim is part of this integration gate. Solution builds completed in both
 configurations; the rebased base currently emits pre-existing XML-documentation warnings.
+
+On 2026-08-04 UTC, after the collections were promoted into `Durable7.FingerTree`/`Durable7.Hamt`,
+ported to Rust, and extended with the reviewed enhancement backlog, the complete FingerTree project
+passes 807/807 tests and the serialized full C# solution passes 1,254/1,254: 367 HAMT +
+807 FingerTree + 80 Ordered. The added coverage is the shared incremental-ancestor seam suite
+(including a custom non-Myers arena driving both consumer collections through randomized histories),
+position-addressed run accept/revert with a retained-branch interleaving property test,
+range-restricted change enumeration, bulk assignment with failure atomicity, and uniform endpoint
+overflow reporting for the contextual sequence. Benchmarks were not run.
 
 For historical comparison, the pre-experiment checkpoint passed 1,158/1,158 full-solution
 tests, including 724 FingerTree tests. The consolidated totals above supersede the isolated

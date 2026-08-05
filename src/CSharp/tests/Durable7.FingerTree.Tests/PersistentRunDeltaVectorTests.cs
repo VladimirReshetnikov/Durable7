@@ -27,6 +27,8 @@ public sealed class PersistentRunDeltaVectorTests
         Assert.Throws<ArgumentOutOfRangeException>(() => empty.GetDirtyRunAt(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => empty.AcceptDirtyRunAt(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => empty.RevertDirtyRunAt(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => empty.AcceptDirtyRunContaining(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => empty.RevertDirtyRunContaining(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => empty.SetItem(0, 1));
         Assert.Throws<ArgumentOutOfRangeException>(() => empty.ResetItem(0));
         Assert.Throws<ArgumentNullException>(() => PersistentRunDeltaVector<int>.CreateRange(null!));
@@ -141,6 +143,120 @@ public sealed class PersistentRunDeltaVectorTests
         acceptedMiddle.ValidateInvariants();
         revertedFirst.ValidateInvariants();
         clean.ValidateInvariants();
+    }
+
+    /// <summary>Checks that position-addressed run acceptance and reversion select the containing run.</summary>
+    [Fact]
+    public void AcceptAndRevertDirtyRunContaining_SelectRunByAnyContainedPosition()
+    {
+        var comparer = new CountingComparer<int>();
+        var original = PersistentRunDeltaVector<int>.CreateRange(Enumerable.Range(0, 20), comparer);
+        var edited = original;
+        foreach (var index in Enumerable.Range(2, 4).Concat(Enumerable.Range(9, 5)).Append(17))
+            edited = edited.SetItem(index, 1000 + index);
+        AssertRuns(
+            edited,
+            new PersistentDirtyRun(2, 4),
+            new PersistentDirtyRun(9, 5),
+            new PersistentDirtyRun(17, 1));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => edited.AcceptDirtyRunContaining(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => edited.AcceptDirtyRunContaining(edited.Count));
+        Assert.Throws<ArgumentOutOfRangeException>(() => edited.RevertDirtyRunContaining(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => edited.RevertDirtyRunContaining(edited.Count));
+
+        int[] cleanIndices = [0, 1, 6, 8, 14, 19];
+        foreach (var cleanIndex in cleanIndices)
+        {
+            Assert.False(edited.IsDirty(cleanIndex));
+            Assert.Same(edited, edited.AcceptDirtyRunContaining(cleanIndex));
+            Assert.Same(edited, edited.RevertDirtyRunContaining(cleanIndex));
+        }
+
+        var acceptedByRank = edited.AcceptDirtyRunAt(1);
+        var revertedByRank = edited.RevertDirtyRunAt(1);
+        var callsBeforeSplice = comparer.Calls;
+        var acceptedByPosition = new List<PersistentRunDeltaVector<int>>();
+        var revertedByPosition = new List<PersistentRunDeltaVector<int>>();
+        for (var index = 9; index < 14; index++)
+        {
+            acceptedByPosition.Add(edited.AcceptDirtyRunContaining(index));
+            revertedByPosition.Add(edited.RevertDirtyRunContaining(index));
+        }
+        Assert.Equal(callsBeforeSplice, comparer.Calls);
+        foreach (var accepted in acceptedByPosition)
+            AssertSameObservableState(acceptedByRank, accepted);
+        foreach (var reverted in revertedByPosition)
+            AssertSameObservableState(revertedByRank, reverted);
+
+        var single = original.SetItem(4, 400).SetItem(5, 500);
+        var acceptedSingle = single.AcceptDirtyRunContaining(5);
+        Assert.False(acceptedSingle.HasChanges);
+        Assert.Equal(400, acceptedSingle.GetCheckpointValue(4));
+        var revertedSingle = single.RevertDirtyRunContaining(5);
+        Assert.False(revertedSingle.HasChanges);
+        Assert.Equal(4, revertedSingle[4]);
+        Assert.Equal(5, revertedSingle[5]);
+        acceptedSingle.ValidateInvariants();
+        revertedSingle.ValidateInvariants();
+        AssertRuns(single, new PersistentDirtyRun(4, 2));
+    }
+
+    /// <summary>Interleaves run acceptance and reversion across retained branches and revalidates every version.</summary>
+    [Fact]
+    public void RandomizedRunAcceptanceAndReversion_PreserveEveryRetainedVersion()
+    {
+        const int length = 40;
+        var random = new Random(unchecked((int)0x5A17_2026u));
+        var initial = Enumerable.Range(0, length).Select(index => index % 5).ToArray();
+        var versions = new List<ModelVersion>
+        {
+            new(PersistentRunDeltaVector<int>.CreateRange(initial), initial, initial)
+        };
+
+        for (var operation = 0; operation < 300; operation++)
+        {
+            var parent = versions[random.Next(versions.Count)];
+            var current = (int[])parent.Current.Clone();
+            var checkpoint = (int[])parent.Checkpoint.Clone();
+            var result = parent.Value;
+            var runs = ExpectedRuns(current, checkpoint);
+
+            if (runs.Count == 0 || random.Next(3) == 0)
+            {
+                var index = random.Next(length);
+                var value = random.Next(-6, 7);
+                result = result.SetItem(index, value);
+                current[index] = value;
+            }
+            else
+            {
+                var rank = random.Next(runs.Count);
+                var run = runs[rank];
+                var position = run.Start + random.Next(run.Length);
+                var byPosition = random.Next(2) == 0;
+                if (random.Next(2) == 0)
+                {
+                    result = byPosition
+                        ? result.AcceptDirtyRunContaining(position)
+                        : result.AcceptDirtyRunAt(rank);
+                    Array.Copy(current, run.Start, checkpoint, run.Start, run.Length);
+                }
+                else
+                {
+                    result = byPosition
+                        ? result.RevertDirtyRunContaining(position)
+                        : result.RevertDirtyRunAt(rank);
+                    Array.Copy(checkpoint, run.Start, current, run.Start, run.Length);
+                }
+            }
+
+            versions.Add(new(result, current, checkpoint));
+            if (versions.Count > 16)
+                versions.RemoveAt(random.Next(1, versions.Count - 1));
+            foreach (var version in versions)
+                AssertMatchesModel(version.Value, version.Current, version.Checkpoint);
+        }
     }
 
     /// <summary>Checks thousands of arbitrary retained branches against an independent array/run model.</summary>
@@ -322,6 +438,23 @@ public sealed class PersistentRunDeltaVectorTests
         for (var rank = 0; rank < runs.Count; rank++)
             Assert.Equal(runs[rank], vector.GetDirtyRunAt(rank));
         vector.ValidateInvariants();
+    }
+
+    private static void AssertSameObservableState(
+        PersistentRunDeltaVector<int> expected,
+        PersistentRunDeltaVector<int> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        Assert.Equal(expected.ToArray(), actual.ToArray());
+        Assert.Equal(expected.DirtyCount, actual.DirtyCount);
+        Assert.Equal(expected.DirtyRunCount, actual.DirtyRunCount);
+        Assert.Equal(expected.EnumerateDirtyRuns(), actual.EnumerateDirtyRuns());
+        for (var index = 0; index < expected.Count; index++)
+        {
+            Assert.Equal(expected.GetCheckpointValue(index), actual.GetCheckpointValue(index));
+            Assert.Equal(expected.IsDirty(index), actual.IsDirty(index));
+        }
+        actual.ValidateInvariants();
     }
 
     private static void AssertRuns(

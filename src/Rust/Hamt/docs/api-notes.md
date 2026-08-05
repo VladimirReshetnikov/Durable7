@@ -445,6 +445,10 @@ integer keys through the retained `BuildHasher` truncated to 32 bits, so collisi
 can form. Every per-operation cost above is therefore expected under the retained hasher rather than
 worst-case. The divergence is in the hash policy, not the algorithm.
 
+`component_size` reads the count the union-by-size root cell already caches, so it costs one root
+walk plus a cached read — the same bound as `find` — and performs no path compression. An isolated
+vertex reports 1.
+
 `first_connected` costs the same and is independent of history depth: it compares the two current
 parent paths and takes the latest union-edge version strictly below their forest LCA rather than
 searching the version history. The correctness argument is that later unions only attach the already-common

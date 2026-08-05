@@ -639,15 +639,14 @@ public sealed class PersistentMonotoneActionHeap<TElement, TPriority, TAction>
 
     private Forest SkewInsert(Tree tree, Forest? forest)
     {
-        if (forest is not null)
+        // Ranks are tag-invariant, so the raw tail's rank decides the link before any tagged tail
+        // node is materialized. Only the linking branch pays for the tagged tail.
+        if (forest?.RawTail is { } rawTail && forest.RawHead.Rank == rawTail.RawHead.Rank)
         {
-            var tail = ForestTail(forest);
-            if (tail is not null && forest.RawHead.Rank == tail.RawHead.Rank)
-            {
-                return Cons(
-                    SkewLink(tree, ForestHead(forest), ForestHead(tail)),
-                    ForestTail(tail));
-            }
+            var tail = TagForest(rawTail, forest.Action);
+            return Cons(
+                SkewLink(tree, ForestHead(forest), ForestHead(tail)),
+                ForestTail(tail));
         }
         return Cons(tree, forest);
     }

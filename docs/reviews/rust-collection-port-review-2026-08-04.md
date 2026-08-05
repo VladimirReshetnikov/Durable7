@@ -103,11 +103,15 @@ here, since acting on a refuted finding costs more than it saves.
 
 ## Validation
 
-- C#: `src/CSharp/test.ps1` — 1,240 tests pass (366 Hamt + 794 FingerTree + 80 Ordered), zero failures.
-- Rust: `src/Rust/test.ps1` — 445 tests pass across 30 binaries, zero failures. `cargo build
+At the time of the port review: C# 1,240 tests and Rust 445 tests, both green. After the same-day
+follow-up recorded above:
+
+- C#: `src/CSharp/test.ps1` — 1,254 tests pass (367 Hamt + 807 FingerTree + 80 Ordered), zero failures.
+- Rust: `src/Rust/test.ps1` — 452 tests pass across 30 binaries, zero failures. `cargo build
   --workspace` reports zero warnings and `cargo clippy --workspace --all-targets` reports no
   diagnostics attributable to the new modules.
-- The port added 128 Rust tests across the nine new modules (114 FingerTree, 14 Hamt).
+- The port added 128 Rust tests across the nine new modules; the follow-up added 21 more across both
+  languages (14 C#, 7 Rust).
 - No benchmark was run; measurement remains postponed for an isolated session, per repository policy.
 
 This evidence proves the ported semantics and the asserted structural invariants. It does not prove
@@ -115,14 +119,39 @@ the theoretical instantiations the design proposals describe — in particular, 
 sequences ship the Myers reference arena (O(1)-amortized addition, O(log M) queries) in every
 language, and no Alstrup–Holm backend exists in any port.
 
+## Follow-Up Landed (2026-08-04, same day)
+
+Items 2 and 3 of the original remaining-work list were completed immediately after this review, in
+both languages simultaneously so parity was never broken:
+
+- **Run accept/revert by contained position** — C# `AcceptDirtyRunContaining`/`RevertDirtyRunContaining`,
+  Rust `accept_dirty_run_containing`/`revert_dirty_run_containing`. A position outside the vector is
+  an out-of-range failure; a clean position is a documented no-op returning the receiver.
+- **Component size** — C# `GetComponentSize`, Rust `component_size`, both reading the count the
+  union-by-size root already caches.
+- **Range-restricted change enumeration** — C# `GetChanges(low, high)`, Rust `changes_in_range`,
+  both seeking the change index's boundaries rather than filtering.
+- **Bulk assignment** — C# `SetItems`, Rust `set_items`, both defined as the fold over single-entry
+  assignment so every coalescing and cancellation rule holds verbatim, and both documented as a
+  convenience rather than a better bound.
+- **C# arena consolidation** — finding **F1** of the
+  [2026-07-29 review](experimental-collections-review-2026-07-29.md) is now closed in C# as well.
+  `IIncrementalLevelAncestorArena<T>`, `MyersLevelAncestorArena<T>`, and
+  `MyersLevelAncestorStatistics` are gone; both collections share one
+  `IIncrementalAncestorArena<T>`/`MyersIncrementalAncestorArena<T>` seam in
+  `IncrementalAncestorArena.cs`, merging the two interface contracts into the stricter one exactly as
+  the Rust port did. `BilateralAncestralDeque<T>.Create` now takes the shared interface. A new
+  seam test drives BOTH collections through a custom non-Myers arena implementation over randomized
+  histories, closing the review's "extension seam never exercised" gap.
+- **Remaining C# code fixes** — uniform overflow reporting for the contextual sequence's endpoint
+  operations, a documented note that an invalid machine state count surfaces wrapped in
+  `TypeInitializationException`, one allocation removed from the action heap's insert path, and one
+  redundant persistent-map operation removed from the run index's merge case.
+- **Editorial** — prose describing these collections as experimental where the word denoted a
+  namespace rather than research maturity has been promoted; the proposals remain the record of the
+  scoped research claims.
+
 ## Remaining Work
 
 1. The other seven language workspaces are unported by decision, not oversight. Revisit only with a
    named consumer.
-2. The enhancement backlog from the [2026-07-29 review](experimental-collections-review-2026-07-29.md)
-   is unchanged and deliberately not actioned here, because it would break C#/Rust API parity in the
-   same change that established it: run accept/revert addressed by position rather than rank,
-   `GetComponentSize` on the forest, and range-restricted `GetChanges`. Land them in both languages
-   together or not at all.
-3. C# prose still describes these collections as experimental in places where the word denotes research
-   maturity rather than a namespace. Promoting that language is a separate editorial decision.

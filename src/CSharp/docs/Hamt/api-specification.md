@@ -1024,6 +1024,9 @@ without path compression — on a size tie the first endpoint's root remains the
 and labels the one new root-parent edge with the child version token. A redundant link still
 creates a child history version but shares the complete connectivity index, adding O(1) space.
 `Find` and `Connected` resolve current union-by-size representatives. `ComponentCount` is O(1).
+`GetComponentSize` returns the number of vertices in a vertex's component by reading the size the
+union-by-size root cell already caches — one root walk plus a cached read, at the same cost as
+`Find`, with no path compression. An isolated vertex reports 1.
 
 `FirstConnected(left, right)` returns the earliest version on this version's root-to-current
 history at which the two vertices were connected, or `null` when they are currently disconnected;

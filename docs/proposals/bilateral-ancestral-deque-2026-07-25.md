@@ -332,7 +332,8 @@ matches this arena. Its more general dynamic-forest result has different bounds 
 
 ## Shipped Myers Reference
 
-`MyersLevelAncestorArena<T>` adapts Eugene Myers's applicative random-access-stack links to every
+`MyersIncrementalAncestorArena<T>` — one arena shared with `AncestralSliceQueue<T>` rather than a
+per-consumer copy — adapts Eugene Myers's applicative random-access-stack links to every
 branch of the append tree. Each node stores one parent and one coalesced jump with its distance.
 Leaf addition performs constant link work; an ancestor lookup follows `O(log M)` links in the worst
 case. See Myers,

@@ -94,6 +94,22 @@ public sealed class PersistentAncestralConnectionForest
     }
 
     /// <summary>
+    /// Returns the number of vertices in a vertex's connected component. O(w log n) worst-case.
+    /// </summary>
+    /// <param name="vertex">A vertex in <c>0 .. VertexCount - 1</c>.</param>
+    /// <returns>
+    /// The union-by-size count cached on the component's current root, which is <c>1</c> for an
+    /// isolated vertex.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="vertex"/> is outside the universe.</exception>
+    /// <remarks>One parent-path walk plus a cached read; no path compression is performed.</remarks>
+    public int GetComponentSize(int vertex)
+    {
+        CheckVertex(vertex, nameof(vertex));
+        return GetCell(FindRoot(vertex)).Size;
+    }
+
+    /// <summary>
     /// Creates a child history version containing an undirected connection between two vertices.
     /// </summary>
     /// <param name="left">The first endpoint.</param>

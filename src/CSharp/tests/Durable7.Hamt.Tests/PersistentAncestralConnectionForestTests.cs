@@ -73,6 +73,55 @@ public sealed class PersistentAncestralConnectionForestTests
         attach.ValidateInvariants();
     }
 
+    /// <summary>Verifies component sizes are cached-root reads that agree with the connectivity partition.</summary>
+    [Fact]
+    public void GetComponentSize_ReportsTheCachedUnionBySizeComponentCount()
+    {
+        var root = PersistentAncestralConnectionForest.Create(6);
+
+        for (var vertex = 0; vertex < root.VertexCount; vertex++)
+            Assert.Equal(1, root.GetComponentSize(vertex));
+
+        var first = root.Link(0, 1);
+        Assert.Equal(2, first.GetComponentSize(0));
+        Assert.Equal(2, first.GetComponentSize(1));
+        Assert.Equal(1, first.GetComponentSize(2));
+
+        var second = first.Link(2, 3);
+        var bridge = second.Link(0, 2);
+        var attach = bridge.Link(4, 0);
+        Assert.Equal(2, second.GetComponentSize(3));
+        Assert.Equal(4, bridge.GetComponentSize(3));
+        Assert.Equal(5, attach.GetComponentSize(4));
+        Assert.Equal(1, attach.GetComponentSize(5));
+        for (var vertex = 0; vertex < 5; vertex++)
+            Assert.Equal(5, attach.GetComponentSize(vertex));
+
+        // A redundant link changes no size, and retained versions keep their own sizes.
+        var redundant = attach.Link(1, 4);
+        Assert.Equal(5, redundant.GetComponentSize(1));
+        Assert.Equal(1, redundant.GetComponentSize(5));
+        Assert.Equal(2, first.GetComponentSize(0));
+        Assert.Equal(4, bridge.GetComponentSize(0));
+
+        // Sibling branches over the same ancestor keep independent sizes.
+        var sibling = bridge.Link(5, 0);
+        Assert.Equal(5, sibling.GetComponentSize(5));
+        Assert.Equal(1, attach.GetComponentSize(5));
+        Assert.Equal(4, bridge.GetComponentSize(0));
+
+        foreach (var forest in new[] { root, first, second, bridge, attach, redundant, sibling })
+        {
+            var componentSizes = new Dictionary<int, int>();
+            for (var vertex = 0; vertex < forest.VertexCount; vertex++)
+                componentSizes[forest.Find(vertex)] = forest.GetComponentSize(vertex);
+
+            Assert.Equal(forest.ComponentCount, componentSizes.Count);
+            Assert.Equal(forest.VertexCount, componentSizes.Values.Sum());
+            forest.ValidateInvariants();
+        }
+    }
+
     /// <summary>Verifies redundant events advance history but retain the exact persistent connectivity root.</summary>
     [Fact]
     public void RedundantLinks_CreateVersionsAndShareConnectivityState()
@@ -305,6 +354,8 @@ public sealed class PersistentAncestralConnectionForestTests
         Assert.Throws<ArgumentOutOfRangeException>(() => forest.Find(3));
         Assert.Throws<ArgumentOutOfRangeException>(() => forest.Connected(-1, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => forest.Connected(0, 3));
+        Assert.Throws<ArgumentOutOfRangeException>(() => forest.GetComponentSize(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => forest.GetComponentSize(3));
         Assert.Throws<ArgumentOutOfRangeException>(() => forest.Link(-1, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => forest.Link(0, 3));
         Assert.Throws<ArgumentOutOfRangeException>(() => forest.FirstConnected(-1, 0));

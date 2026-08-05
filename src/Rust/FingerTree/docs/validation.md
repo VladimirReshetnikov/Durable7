@@ -24,13 +24,15 @@ Benchmarks were not run.
 ## Research-derived collection port evidence
 
 On 2026-08-04, the seven research-derived collections were ported from the C# reference into this
-crate. The full serialized Rust workspace passed 445/445 tests across 30 test binaries with zero
-failures; `cargo build --workspace` reports zero warnings and
-`cargo clippy --workspace --all-targets` reports no diagnostics attributable to the added modules.
-The added coverage is 114 FingerTree tests across `equality`, `incremental_ancestor`,
-`ancestral_slice_queue`, `bilateral_ancestral_deque`, `contextual_rank_sequence`, `delta_map`,
-`monotone_action_heap`, and `run_delta_vector`, plus 14 Hamt tests recorded in that crate's
-validation notes. An adversarial parity review against the C# baseline confirmed twelve
+crate, and the C#/Rust enhancement backlog landed in both languages the same day. The full
+serialized Rust workspace passes 452/452 tests across 30 test binaries with zero failures;
+`cargo build --workspace` reports zero warnings and `cargo clippy --workspace --all-targets` reports
+no diagnostics attributable to the added modules. The added coverage spans `equality`,
+`incremental_ancestor`, `ancestral_slice_queue`, `bilateral_ancestral_deque`,
+`contextual_rank_sequence`, `delta_map`, `monotone_action_heap`, and `run_delta_vector`, plus the
+Hamt connection-forest tests recorded in that crate's validation notes. The backlog additions
+covered are position-addressed run accept/revert, range-restricted change enumeration, and bulk
+assignment, each tested for equivalence with the operation it composes. An adversarial parity review against the C# baseline confirmed twelve
 documentation-accuracy, policy, and coverage findings — all fixed — and found no correctness defect
 in any port; see the
 [port review](../../../../docs/reviews/rust-collection-port-review-2026-08-04.md). No benchmark was

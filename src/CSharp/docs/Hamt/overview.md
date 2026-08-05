@@ -172,7 +172,7 @@ and canonical topology alone does not confer reference identity.
     synchronization, point/range proofs, and three-way merge.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
   - `PersistentHashSet.Transient.cs` is the public one-way set facade.
-  - `PersistentAncestralConnectionForest.cs` implements the experimental sparse CHAMP-backed
+  - `PersistentAncestralConnectionForest.cs` implements the sparse CHAMP-backed
     branching union-find with immutable version tokens and first-connection ancestry queries.
 - [`tests/Durable7.Hamt.Tests/`](../../tests/Durable7.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.

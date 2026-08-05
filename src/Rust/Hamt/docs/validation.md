@@ -34,8 +34,11 @@ and composition, adjacency/reversal/incident removal, selector cardinality and p
 retained representatives, root sharing, branching versions, and coupled-index validation.
 
 On 2026-08-04, `PersistentAncestralConnectionForest` was ported from the C# reference. Its inline
-suite passes 14/14 tests, and the full serialized Rust workspace passed 435/435 tests across 30 test
-binaries with zero failures and no new build or clippy warnings. The suite covers singleton-root
+suite passes, and the full serialized Rust workspace passes 452/452 tests across 30 test binaries
+with zero failures and no new build or clippy warnings. `component_size`, added the same day
+alongside its C# counterpart, is covered for isolated vertices, chained unions, both endpoints of a
+union agreeing, redundant links changing nothing, stability across retained branches, and all
+component sizes summing to the vertex count. The suite covers singleton-root
 construction over a sparse universe, version-tagged union edges, redundant links that publish a
 distinct version while sharing the connectivity index, sibling branches whose equal-depth version
 tokens stay distinct, first-connection queries resolved at the pair's forest LCA rather than the

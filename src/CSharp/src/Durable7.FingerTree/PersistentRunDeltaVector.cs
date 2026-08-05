@@ -260,38 +260,48 @@ public sealed class PersistentRunDeltaVector<T> : IReadOnlyList<T>
     /// <param name="rank">The zero-based dirty-run rank.</param>
     /// <returns>A version in which the selected run is clean and every other run is unchanged.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rank"/> is outside the run index.</exception>
-    public PersistentRunDeltaVector<T> AcceptDirtyRunAt(int rank)
-    {
-        var run = GetDirtyRunAt(rank);
-        if (_dirtyRuns.Count == 1)
-            return Checkpoint();
-
-        var nextCheckpoint = ReplaceRange(_checkpoint, _current, run);
-        return new(
-            _current,
-            nextCheckpoint,
-            _dirtyRuns.Remove(run.Start),
-            DirtyCount - run.Length,
-            ValueComparer);
-    }
+    public PersistentRunDeltaVector<T> AcceptDirtyRunAt(int rank) => AcceptRun(GetDirtyRunAt(rank));
 
     /// <summary>Reverts one maximal dirty run from the checkpoint by structural splicing.</summary>
     /// <param name="rank">The zero-based dirty-run rank.</param>
     /// <returns>A version in which the selected run is clean and every other run is unchanged.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rank"/> is outside the run index.</exception>
-    public PersistentRunDeltaVector<T> RevertDirtyRunAt(int rank)
-    {
-        var run = GetDirtyRunAt(rank);
-        if (_dirtyRuns.Count == 1)
-            return Rollback();
+    public PersistentRunDeltaVector<T> RevertDirtyRunAt(int rank) => RevertRun(GetDirtyRunAt(rank));
 
-        var nextCurrent = ReplaceRange(_current, _checkpoint, run);
-        return new(
-            nextCurrent,
-            _checkpoint,
-            _dirtyRuns.Remove(run.Start),
-            DirtyCount - run.Length,
-            ValueComparer);
+    /// <summary>Accepts the maximal dirty run containing one position into the checkpoint by structural splicing.</summary>
+    /// <param name="index">The zero-based position, which need not be the run's start.</param>
+    /// <returns>
+    /// This version when the position is clean; otherwise, a version in which the containing run is
+    /// clean and every other run is unchanged.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the vector.</exception>
+    /// <remarks>
+    /// The argument is a position, not a dirty-run rank. Locating the containing run costs
+    /// O(log(r + 2)) amortized time over <c>r</c> maximal runs, and the splice costs O(log n)
+    /// amortized time independently of that run's length.
+    /// </remarks>
+    public PersistentRunDeltaVector<T> AcceptDirtyRunContaining(int index)
+    {
+        ValidateIndex(index);
+        return TryFindDirtyRun(index, out var run) ? AcceptRun(run) : this;
+    }
+
+    /// <summary>Reverts the maximal dirty run containing one position from the checkpoint by structural splicing.</summary>
+    /// <param name="index">The zero-based position, which need not be the run's start.</param>
+    /// <returns>
+    /// This version when the position is clean; otherwise, a version in which the containing run is
+    /// clean and every other run is unchanged.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the vector.</exception>
+    /// <remarks>
+    /// The argument is a position, not a dirty-run rank. Locating the containing run costs
+    /// O(log(r + 2)) amortized time over <c>r</c> maximal runs, and the splice costs O(log n)
+    /// amortized time independently of that run's length.
+    /// </remarks>
+    public PersistentRunDeltaVector<T> RevertDirtyRunContaining(int index)
+    {
+        ValidateIndex(index);
+        return TryFindDirtyRun(index, out var run) ? RevertRun(run) : this;
     }
 
     /// <summary>Returns an enumerator over current values in positional order.</summary>
@@ -366,6 +376,34 @@ public sealed class PersistentRunDeltaVector<T> : IReadOnlyList<T>
         return false;
     }
 
+    private PersistentRunDeltaVector<T> AcceptRun(PersistentDirtyRun run)
+    {
+        if (_dirtyRuns.Count == 1)
+            return Checkpoint();
+
+        var nextCheckpoint = ReplaceRange(_checkpoint, _current, run);
+        return new(
+            _current,
+            nextCheckpoint,
+            _dirtyRuns.Remove(run.Start),
+            DirtyCount - run.Length,
+            ValueComparer);
+    }
+
+    private PersistentRunDeltaVector<T> RevertRun(PersistentDirtyRun run)
+    {
+        if (_dirtyRuns.Count == 1)
+            return Rollback();
+
+        var nextCurrent = ReplaceRange(_current, _checkpoint, run);
+        return new(
+            nextCurrent,
+            _checkpoint,
+            _dirtyRuns.Remove(run.Start),
+            DirtyCount - run.Length,
+            ValueComparer);
+    }
+
     private static PersistentDirtyRun ToRun(KeyValuePair<int, int> entry) =>
         new(entry.Key, entry.Value - entry.Key);
 
@@ -378,7 +416,6 @@ public sealed class PersistentRunDeltaVector<T> : IReadOnlyList<T>
         if (hasLeft && hasRight)
         {
             return runs
-                .Remove(left.Key)
                 .Remove(right.Key)
                 .SetItem(left.Key, right.Value);
         }

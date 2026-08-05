@@ -139,7 +139,7 @@ split. `CreateMyers()` is deliberately only a reference backend: its pushes are 
 its ancestor-dependent operations are O(log M) after M historical pushes. A manager retains every
 published payload and serializes reference-backend reads until that manager is collected. See the
 [scoped research proposal](../../../../docs/proposals/bilateral-ancestral-deque-2026-07-25.md) before
-selecting this experimental surface.
+selecting this surface.
 
 ## Sorted Collections
 
@@ -205,6 +205,15 @@ var tracked = PersistentDeltaMap<int, string>.CreateRange(new[]
 
 foreach (var change in tracked.GetChanges()) // keys 1, 2, 3
     Console.WriteLine($"{change.Key}: {change.Kind}");
+
+foreach (var change in tracked.GetChanges(2, 3)) // keys 2, 3 only, by seeking the change index
+    Console.WriteLine($"{change.Key}: {change.Kind}");
+
+var batched = tracked.SetItems(new[]
+{
+    KeyValuePair.Create(4, "four"),
+    KeyValuePair.Create(5, "five"),
+}); // identical to folding SetItem over the sequence
 
 var reverted = tracked.Rollback();   // { 1: "one", 2: "two" }, O(1)
 var accepted = tracked.Checkpoint(); // current state becomes the checkpoint, O(1)
@@ -759,6 +768,11 @@ var partiallyAccepted = edited.AcceptDirtyRunAt(0);
 var rejected = edited.RevertDirtyRunAt(1);
 // Position 9 is restored from the checkpoint; positions 2..4 remain dirty.
 
+// Runs are also addressable by any position they contain, so a descriptor obtained from
+// TryGetDirtyRunContaining or EnumerateDirtyRuns can be acted on without rediscovering its rank.
+var acceptedByPosition = edited.AcceptDirtyRunContaining(3); // same result as AcceptDirtyRunAt(0)
+var unchanged = edited.AcceptDirtyRunContaining(0);          // position 0 is clean: a no-op
+
 var alternate = baseline.SetItem(7, 70); // independent retained branch
 ```
 
@@ -769,7 +783,7 @@ emitting all changed payloads still costs at least Omega(k). Reads, point edits,
 accept/revert are O(log n), and complete current-value enumeration is Theta(n).
 
 The vector length and equality policy are fixed. Retained reference values must not mutate state
-observed by that comparer. This experimental surface intentionally omits insertion, deletion,
+observed by that comparer. This surface intentionally omits insertion, deletion,
 concat, unrelated rebase, range updates, and branch merge. See the
 [research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md) for the
 exact comparison class and novelty boundary.
@@ -869,7 +883,7 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | --- | --- |
 | Persistent indexed sequence with endpoint edits | `FingerTreeDeque<T>` |
 | O(1) logical reverse over a persistent sequence | `ReversibleDeque<T>` |
-| Restricted branching deque with constant-call index/slice over an ancestry backend | `BilateralAncestralDeque<T>` (experimental) |
+| Restricted branching deque with constant-call index/slice over an ancestry backend | `BilateralAncestralDeque<T>` |
 | Custom monoid measure, measure-guided locate, or split | `FingerTree<TElement, TMeasure, TMeasureOps>` |
 | Sorted values with duplicates | `SortedBag<T>` |
 | Unique sorted values and set algebra | `SortedSet<T>` |
@@ -883,10 +897,10 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | Chunked persistent positional sequence | `Rope<T>` |
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
-| Branching append history with appendable persistent slices | `AncestralSliceQueue<T>` (experimental) |
-| Fixed-length branchable checkpoint state with contiguous dirty-hunk review | `PersistentRunDeltaVector<T>` (experimental) |
+| Branching append history with appendable persistent slices | `AncestralSliceQueue<T>` |
+| Fixed-length branchable checkpoint state with contiguous dirty-hunk review | `PersistentRunDeltaVector<T>` |
 | Persistent indexed sequence with logarithmic range actions and aggregate queries | `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` |
-| Persistent rank/select for events depending on finite left context | `ContextualRankSequence<TElement, TMachine>` (experimental) |
+| Persistent rank/select for events depending on finite left context | `ContextualRankSequence<TElement, TMachine>` |
 | Sparse nonnegative integer set with population rank/select | `PersistentChunkedBitSet` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | Policy-scoped canonical sorted shape and memoized digest | `CanonicalSortedSet<T>` |
