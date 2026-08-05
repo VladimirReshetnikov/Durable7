@@ -1009,3 +1009,33 @@ signatures, key management, replay protection, or peer authentication. Keys, val
 semantics, codec behavior, and policy identifiers must remain semantically immutable for the
 lifetime of every published root. The tree copies encoded arrays, so later mutation of a codec's
 returned buffer cannot rewrite an existing address.
+
+## Persistent Ancestral Connection Forest Contract
+
+`PersistentAncestralConnectionForest` is a fully branching
+persistent insertion-only connectivity forest over the fixed vertex universe
+`0 .. VertexCount - 1`. Parent cells live sparsely in a `PersistentHashMap<int, Cell>`; an absent
+cell denotes a singleton root, so `Create(vertexCount)` is O(1) for any universe size and rejects a
+negative count. `AncestralConnectionVersion` is an immutable reference-identity token carrying
+`Parent`, `long Depth`, and O(1) `Root`; equal depths on sibling branches are distinct versions.
+
+`Link(left, right)` returns a distinct child version. A successful union applies union by size
+without path compression — on a size tie the first endpoint's root remains the representative —
+and labels the one new root-parent edge with the child version token. A redundant link still
+creates a child history version but shares the complete connectivity index, adding O(1) space.
+`Find` and `Connected` resolve current union-by-size representatives. `ComponentCount` is O(1).
+
+`FirstConnected(left, right)` returns the earliest version on this version's root-to-current
+history at which the two vertices were connected, or `null` when they are currently disconnected;
+a vertex is connected to itself at the history root. The answer is computed from the two current
+parent paths — the latest union-edge version strictly below their forest LCA — not by searching
+the version history. `TryGetFirstConnected` is the nonthrowing tuple form.
+
+With `n = VertexCount`, `w` the bounded CHAMP path cost, and union-by-size limiting every parent
+path to O(log n) cells: `Find`, `Connected`, and `Link` are O(w log n) worst-case; `Link` allocates
+O(w) new CHAMP nodes on success and O(1) on redundancy; `FirstConnected` is O(w log n) time and
+O(log n) transient path space, independent of history depth. Version tokens retain their parent
+chain, so history depth contributes O(depth) live token space reachable from any retained version.
+Deletion, path compression, confluent merging, and retroactive updates are deliberately outside
+the contract; the complete invariant and design study are normative in the
+[research proposal](../../../../docs/proposals/persistent-ancestral-connection-forest-2026-07-29.md).

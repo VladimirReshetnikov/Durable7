@@ -50,6 +50,16 @@ exposes a cached O(1) inverse facade whose inverse is the original object. Each 
 stored in both tries; the type makes no memory-saving claim and deliberately exposes no algebra,
 builder, transient, or displacement mode.
 
+`PersistentAncestralConnectionForest` is the connectivity member of the family: a fully branching
+persistent insertion-only union-find over
+a fixed integer vertex universe, with parent cells stored sparsely in a CHAMP map so `Create` is
+O(1) for any universe size. Every `Link` creates an immutable child version token; a successful
+union labels its one new union-by-size root edge with that token. `FirstConnected` reports the
+earliest ancestor version in which two vertices became connected by comparing the two current
+parent paths below their forest LCA in O(w log n), without searching the version history. Deletion,
+path compression, confluent merging, and retroactivity are deliberately excluded; see the
+[research proposal](../../../../docs/proposals/persistent-ancestral-connection-forest-2026-07-29.md).
+
 `ConcurrentHashTrie<TKey, TValue>` is the deliberately mutable member of the family. It applies
 GCAS descriptors to generation-stamped indirection nodes and a root/main RDCSS transition for
 snapshots, giving lock-free reads and updates, stable enumeration, and O(1) immutable generation
@@ -162,6 +172,8 @@ and canonical topology alone does not confer reference identity.
     synchronization, point/range proofs, and three-way merge.
   - `PersistentHashSet.cs` is the set wrapper over the map core.
   - `PersistentHashSet.Transient.cs` is the public one-way set facade.
+  - `PersistentAncestralConnectionForest.cs` implements the experimental sparse CHAMP-backed
+    branching union-find with immutable version tokens and first-connection ancestry queries.
 - [`tests/Durable7.Hamt.Tests/`](../../tests/Durable7.Hamt.Tests/README.md) contains xUnit
   and CsCheck-backed model tests.
 - [`benchmarks/Durable7.FingerTree.Benchmarks/`](../../benchmarks/Durable7.FingerTree.Benchmarks/README.md)

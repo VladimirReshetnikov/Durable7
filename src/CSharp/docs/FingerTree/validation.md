@@ -306,7 +306,7 @@ Benchmarks are explicitly outside this integration gate. They remain postponed u
 can run the benchmark harness in isolation; no wall-clock result gathered under current CPU,
 memory, or I/O contention is acceptable as validation evidence.
 
-## Contextual Rank Sequence Experimental Gate
+## Contextual Rank Sequence Gate
 
 Run the focused finite-context rank/select lane while iterating:
 

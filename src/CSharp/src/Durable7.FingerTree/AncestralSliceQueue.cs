@@ -2,7 +2,7 @@ using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
-namespace Durable7.FingerTree.Experimental;
+namespace Durable7.FingerTree;
 
 /// <summary>
 /// Defines the append-only ancestry service used by <see cref="AncestralSliceQueue{T}"/>.

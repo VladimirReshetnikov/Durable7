@@ -12,12 +12,11 @@ code shapes callers use first.
 
 ## Namespace, Build, And Samples
 
-The stable public types live in `Durable7.FingerTree`. The research prototypes described in this
-guide live in the explicit `Durable7.FingerTree.Experimental` namespace:
+Every public type in this guide lives in `Durable7.FingerTree`, including the research-derived
+surfaces that carry their own design proposals:
 
 ```csharp
 using Durable7.FingerTree;
-using Durable7.FingerTree.Experimental;
 ```
 
 Some names intentionally match BCL collection names. Use namespace aliases when a file also imports
@@ -113,7 +112,7 @@ var restored = reversed.Reverse();
 Endpoint, index, split, and concat operations respect the current logical orientation. Use
 `FingerTreeDeque<T>` when reversal is not part of the contract and the tuned deque is enough.
 
-## Experimental Bilateral Ancestral Deque
+## Bilateral Ancestral Deque
 
 Use `BilateralAncestralDeque<T>` only for the restricted workload where versions branch through
 both-end pushes, reverse, index, and contiguous slicing, but never need unrelated concat or middle
@@ -384,6 +383,39 @@ while (heap.TryDeleteMinimum(out var minimum, out var rest))
 `Meld` requires comparer object identity even when one operand is empty. Ordinary enumeration visits
 each element in unspecified structural order, so repeatedly delete the minimum when sorted order is
 required. Equal elements have no stable tie order. `ValidateStructure` is an O(n) diagnostic pass.
+
+## Monotone-Action Heap
+
+`PersistentMonotoneActionHeap<TElement, TPriority, TAction>` keeps the meldable heap's worst-case
+bounds and adds `TransformAll`, which adjusts every current priority in O(1) by composing one lazy
+monotone action. The shipped clamp policy covers floors, caps, two-sided clamps, and exact
+constants:
+
+```csharp
+
+var policy = new OrderClampPolicy<int>();
+var heap = PersistentMonotoneActionHeap<string, int, OrderClamp<int>>.Create(policy)
+    .Insert("a", 3)
+    .Insert("b", 9);
+
+var capped = heap.TransformAll(policy.AtMost(5));   // logical priorities: a=3, b=5
+var late = capped.Insert("c", 8);                   // c joins untransformed at 8
+
+var other = PersistentMonotoneActionHeap<string, int, OrderClamp<int>>
+    .Create(policy)
+    .Insert("d", 1)
+    .TransformAll(policy.AtLeast(4));               // d=4
+
+var melded = late.Meld(other);                      // a=3, b=5, c=8, d=4
+var minimum = melded.Minimum;                       // ("a", 3)
+```
+
+`TransformAll` affects only priorities present at the call; later insertions and melds are not
+retroactively transformed, which gives temporal semantics even for non-invertible actions. All
+heaps that may be melded must share the same comparer and action-policy objects. Custom policies
+implement `IMonotoneHeapAction` (identity, associative composition, monotone O(1) application);
+implement `IComparerBoundMonotoneHeapAction` when monotonicity is tied to one comparer so `Create`
+can enforce the pairing. Enumeration order is structural, not sorted.
 
 ## Priority Search Queue
 
@@ -676,7 +708,7 @@ nodes use radix indexing without size tables; split/concat introduces size table
 spans become irregular. The immutable type has no dedicated tail buffer, so prefer its builder over
 an `AddLast` loop for bulk append construction.
 
-## Experimental Ancestral Slice Queue
+## Ancestral Slice Queue
 
 Use `AncestralSliceQueue<T>` when versions form branching append histories and every retained
 contiguous slice must remain appendable. It is intentionally narrower than a general persistent
@@ -784,7 +816,7 @@ Separate enumerators are independent and safe for concurrent reads. Do not copy 
 enumerator to fork a traversal: copies share traversal state, and the stale copy fails fast after
 the other advances.
 
-## Contextual Rank Sequence (Experimental)
+## Contextual Rank Sequence
 
 Use `ContextualRankSequence<TElement, TMachine>` when an event's weight depends on finite state to
 its left. A two-state quoted-delimiter machine, for example, can rank and select only commas outside

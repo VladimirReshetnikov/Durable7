@@ -8,8 +8,9 @@
 
 `src/CSharp/src/Durable7.FingerTree` contains the .NET 10 C# preview workspace for `Durable7.FingerTree`, a persistent collection library built around tuned and general-purpose finger trees.
 
-Stable collection surfaces use the `Durable7.FingerTree` namespace. Research prototypes use the
-deliberately explicit `Durable7.FingerTree.Experimental` namespace.
+Every collection surface uses the `Durable7.FingerTree` namespace. Surfaces that originated as
+research prototypes retain their design proposals under `docs/proposals`, which remain the normative
+record of their scoped claims and limitations.
 
 This workspace provides two public finger-tree types. `FingerTree<TElement, TMeasure, TMeasureOps>` is the general Hinze–Paterson **measured** finger tree — a persistent sequence annotated by an arbitrary monoidal measure (supplied through the static-abstract `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` interfaces), whose monotone-predicate `Split` specializes it into a positional sequence (`SizeMeasure<T>`), a mergeable priority queue (`MaxMeasure<T>`/`MinMeasure<T>`), an ordered search tree (`KeyMeasure<T>`), an order-statistic tree (`OrderStatisticMeasure<T>`), or a persistent Fenwick-style cumulative-weight structure (`SumMeasure<T>`, for weighted selection and sampling) — all shipped ready-made with named operations in `FingerTreeMeasureExtensions` and `FingerTreeSumExtensions`, with any two of them composable through the `ProductMeasure<…>` combinator (e.g. size+sum for a tree that is positional *and* Fenwick, or size+max for a priority queue with positional access), and any custom measure expressible by implementing the interfaces. A full Hinze–Paterson interval tree (`IntervalTree<T>`) and payload-bearing `PersistentIntervalMap<TEndpoint, TValue>` provide logarithmic stabbing/overlap queries; a sorted multiset (`SortedBag<T>`) with ranking and order-statistic indexing, a sorted set (`SortedSet<T>`) with navigable-set queries and set algebra, a sorted dictionary (`SortedDictionary<TKey, TValue>`) with navigable-map queries and order-statistic access, and a meldable `PriorityQueue<TElement, TPriority>` are built on the same core. `PersistentDeltaMap<TKey, TValue>` is a C# research prototype over the sorted dictionary that additionally retains a designated checkpoint and its coalesced ordered net-change index; see the [research proposal](../../../../docs/proposals/persistent-delta-map-2026-07-25.md). Each deep node holds its middle subtree behind a memoized suspension and computes its measure lazily — Hinze–Paterson's lazy finger tree realized in a strict language — so the amortized bounds hold under fully persistent (branching) histories; the only consequence versus the deque is that `Measure` is O(1) amortized rather than worst-case (a general monoid has no inverse, so a popped subtree's measure is recovered by forcing, not subtraction). See [docs/api-specification.md](api-specification.md#the-general-measured-finger-tree) for its contract.
 
@@ -75,6 +76,18 @@ skew-binomial priority queue with O(1) worst-case insert, minimum, and meld and 
 delete-min. It complements the measured finger-tree priority queue when per-operation worst-case
 bounds matter more than constants or stable priority/payload separation. Its public structural
 validator audits the fused bootstrapped/skew-binomial representation and reports rank/depth statistics.
+
+`PersistentMonotoneActionHeap<TElement, TPriority, TAction>` is the experimental action-tagged
+sibling of `BrodalOkasakiHeap<T>`. A caller-supplied `IMonotoneHeapAction` policy defines an
+identity, associative composition, and O(1) application of monotone actions on priorities;
+`TransformAll` then adjusts every current priority in O(1) worst case by composing one lazy tag,
+while insert, minimum, and meld stay O(1) worst case and delete-min stays O(log n) worst case. Tags
+are pushed down only along paths the underlying bootstrapped skew-binomial algorithm already
+touches, so differently transformed heaps meld without cross-applying actions and later insertions
+are not retroactively transformed. The shipped `OrderClampPolicy<T>` closes floor/cap/two-sided
+clamps and exact constants under composition. The
+[research proposal](../../../../docs/proposals/persistent-monotone-action-heap-2026-07-29.md)
+records the tag algebra, worst-case argument, and policy-trust boundary.
 
 `PrioritySearchQueue<TKey, TPriority, TValue>` combines an ordered key map with a min-priority
 queue in one persistent AVL core. This is a winner-cached AVL, not Hinze's loser-tree priority-search
@@ -145,6 +158,10 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
     zip-zip-inspired sorted set and its random, publicly seeded, or caller-keyed HMAC rank policy.
   - `BrodalOkasakiHeap.cs` — the bootstrapped skew-binomial heap with optimal purely functional
     worst-case bounds and a public invariant/statistics audit.
+  - `PersistentMonotoneActionHeap.cs` — the experimental monotone-action sibling: the
+    `IMonotoneHeapAction` policy contract, the closed `OrderClampPolicy<T>`/`OrderClamp<T>` clamp
+    family, and the lazily tagged bootstrapped skew-binomial heap with O(1) worst-case
+    whole-heap priority transformation and a public structural/tag validator.
   - `PrioritySearchQueue.cs` — the winner-cached keyed AVL priority-search queue, range/threshold
     query surface, and public AVL/winner validation statistics.
   - `IRangeUpdateAlgebra.cs` / `RangeUpdateSequence.cs` / `RangeUpdateSequence.Core.cs` — the

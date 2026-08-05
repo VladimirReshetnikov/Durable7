@@ -847,6 +847,34 @@ Patches are strict and invertible; graphs retain isolated vertices and normalize
 indexed maps invoke their selector only for new or genuinely changed rows. See
 [derived persistent structures](derived-persistent-structures.md) for the complete contracts.
 
+## Ancestral Connection Forest
+
+`PersistentAncestralConnectionForest` is a fully branching persistent insertion-only union-find that
+can also report *when* two vertices first became connected on the current version's history path:
+
+```csharp
+using Durable7.Hamt;
+
+var forest = PersistentAncestralConnectionForest.Create(vertexCount: 1_000_000);
+
+var v1 = forest.Link(3, 7);
+var v2 = v1.Link(7, 42);
+var branch = v1.Link(42, 99);          // branches from v1; v2 is unaffected
+
+var connected = v2.Connected(3, 42);   // true
+var when = v2.FirstConnected(3, 42);   // the version token created by v1.Link(7, 42)
+var shared = branch.FirstConnected(3, 7) == v1.Version; // true on the sibling branch too
+```
+
+`Create` is O(1) for any universe size because untouched vertices are implicit singleton roots; the
+CHAMP map stores cells only for vertices touched by a successful union. Every `Link` — including a
+redundant one — produces a distinct immutable `AncestralConnectionVersion` token, so version tokens
+are usable as history identities; redundant links share the entire connectivity index. `Find`,
+`Connected`, `Link`, and `FirstConnected` are O(w log n) with union-by-size paths and bounded CHAMP
+depth w, independent of history depth. There is no deletion, no path compression, no confluent
+merge, and no retroactive edit; version tokens retain their parent chain, so a long history remains
+reachable from any live version.
+
 ## Choosing A Surface
 
 | Need | Start with |
@@ -869,6 +897,7 @@ indexed maps invoke their selector only for new or genuinely changed rows. See
 | Explicit-vertex directed adjacency with predecessor lookup | `PersistentDirectedGraph<TVertex>` |
 | Primary map with one maintained nonunique secondary index | `PersistentIndexedMap<TKey, TValue, TIndexKey>` |
 | Shared mutable map with O(1) immutable snapshots | `ConcurrentHashTrie<TKey, TValue>` |
+| Branching insertion-only connectivity with first-connection versions | `PersistentAncestralConnectionForest` (experimental) |
 | Signed integer keys with ordered structural merge | `PersistentIntMap<TValue>` / `PersistentLongMap<TValue>` |
 | Canonical cross-process content address and ordered ranges | `MerkleSearchTree<TKey, TValue>` |
 | Verified block persistence and transfer | `Save`, `Load`, `ExportPack`, `Import` |

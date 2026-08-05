@@ -5,7 +5,7 @@
 
 **Date:** 2026-07-29
 
-**Namespace:** `Durable7.Hamt.Experimental`
+**Namespace:** `Durable7.Hamt`
 
 **Scope:** an immutable, fully branching, insertion-only connectivity structure over a fixed vertex
 universe

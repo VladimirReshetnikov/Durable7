@@ -1,8 +1,7 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
-using Durable7.FingerTree;
 
-namespace Durable7.FingerTree.Experimental;
+namespace Durable7.FingerTree;
 
 /// <summary>Describes one transition of a deterministic additive event machine.</summary>
 /// <param name="NextState">The state after consuming the element.</param>
@@ -351,7 +350,9 @@ public sealed class ContextualRankSequence<TElement, TMachine> : IReadOnlyList<T
     {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentOutOfRangeException.ThrowIfNegative(count);
-        if (index > Count || count > Count - index)
+        if (index > Count)
+            throw new ArgumentOutOfRangeException(nameof(index), index, "Index is outside the sequence boundaries.");
+        if (count > Count - index)
             throw new ArgumentOutOfRangeException(nameof(count), count, "The range extends past the sequence.");
     }
 

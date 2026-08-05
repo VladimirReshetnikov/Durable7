@@ -4,7 +4,7 @@
 - Created: 2026-07-29
 - Base repository HEAD: `67a67f9f553a9194db9d8dd3cf9c7bd670f9b981`
 - Branch: `experimental`
-- Namespace: `Durable7.FingerTree.Experimental`
+- Namespace: `Durable7.FingerTree`
 - Prototype:
   [`PersistentMonotoneActionHeap.cs`](../../src/CSharp/src/Durable7.FingerTree/PersistentMonotoneActionHeap.cs)
 - Tests:

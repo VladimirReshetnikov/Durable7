@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using Durable7.FingerTree.Experimental;
 using Xunit;
 
 namespace Durable7.FingerTree.Tests;

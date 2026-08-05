@@ -14,7 +14,7 @@
 
 ## Summary
 
-This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, rope, and range-update sequence contracts in the same library. Stable surfaces live in `Durable7.FingerTree`; every research prototype identified as experimental below lives in `Durable7.FingerTree.Experimental`. For first-use examples and facade selection, start with the [usage guide](usage.md).
+This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, rope, and range-update sequence contracts in the same library. Every surface specified here lives in `Durable7.FingerTree`; the research-derived surfaces additionally carry a design proposal under `docs/proposals` that remains the normative record of their scoped claims. For first-use examples and facade selection, start with the [usage guide](usage.md).
 
 ## Scope And Non-Goals
 
@@ -523,7 +523,7 @@ The implementation should keep XML documentation aligned with this file. XML sum
 - **Bounds preserved.** O(1) endpoint reads; O(log n) worst / O(1) amortized (linear-use) endpoint insert/remove; indexing, `SetItem`, `InsertAt`, `RemoveAt`, and `SplitAt` logarithmic in the distance from the nearer end; `Concat` O(log(min(n, m))). Crucially, **concatenation stays O(log(min)) even across mixed orientations** (e.g. `a.Reverse().Concat(b)`): `glue` reads each operand through its logical accessors, so a reversed operand never needs reifying. This is the "full-bounds" property that distinguishes this type from a cheaper root-flag design whose mixed-orientation concat would degrade to O(n).
 - **Cost.** Relative to `FingerTreeDeque<T>`: a reversal-bit branch on every internal access, and small orientation-adjusted digit-array copies along reversed paths. Forward-only usage takes the fast path. Choose `FingerTreeDeque<T>` unless O(1) reverse is required.
 
-## The Experimental Bilateral Ancestral Deque
+## The Bilateral Ancestral Deque
 
 `BilateralAncestralDeque<T>` is a restricted immutable `IReadOnlyList<T>` over an append-only
 `IIncrementalLevelAncestorArena<T>`. A handle denotes
@@ -879,7 +879,7 @@ preserve instance identity, and no caller-owned mutable arrays are retained. The
 dedicated persistent tail buffer: repeated immutable `AddLast` remains a boundary-spine operation;
 use the builder when append throughput is the dominant construction workload.
 
-## Experimental Ancestral Slice Queue
+## Ancestral Slice Queue
 
 `AncestralSliceQueue<T>` is an immutable `IReadOnlyList<T>` facade over a mutable, monotone
 `IIncrementalAncestorArena<T>`. A handle stores an arena-owned tail node, the absolute depth of its
@@ -1248,6 +1248,40 @@ Strict Fibonacci and hollow heaps remain intentionally absent. Their optimal dec
 depends on mutable pointer surgery, so path-copying would not preserve the bounds that distinguish
 them; this is a recorded rejection, not an implementation gap.
 
+## Persistent Monotone-Action Heap
+
+`PersistentMonotoneActionHeap<TElement, TPriority, TAction>` is the action-tagged
+sibling of `BrodalOkasakiHeap<T>`. It stores
+payload/priority entries in the same fused bootstrapped skew-binomial representation, and every
+tree and forest spine additionally carries one immutable pending action. A caller-supplied
+`IMonotoneHeapAction<TPriority, TAction>` policy defines the semantic identity, an associative
+`Compose(outer, inner)` denoting `outer(inner(priority))`, and O(1) `Apply`; every action must be
+monotone for the retained comparer. `IComparerBoundMonotoneHeapAction` additionally names the exact
+comparer object the policy is monotone for, and `Create` rejects any other comparer.
+
+`TransformAll(action)` composes one tag onto the root in O(1) worst-case time and O(1) fresh
+structure; it transforms every **current** priority while future insertions and melds join
+untransformed. Tags are pushed down only where the underlying algorithm already exposes a
+component, so `Insert` and `Meld` remain O(1) worst case, `Minimum`/`TryGetMinimum` O(1), and
+`DeleteMinimum`/`TryDeleteMinimum` O(log n) worst case, each bound counting O(1) policy calls and
+comparisons. Melding two differently transformed heaps is supported and never cross-applies one
+heap's pending actions to the other's entries; this holds even for non-invertible actions such as
+clamps. `Meld` requires comparer and action-policy object identity.
+
+Enumeration yields `MonotoneHeapEntry<TElement, TPriority>` values with fully applied logical
+priorities in unspecified structural order in Theta(n) time. `ValidateStructure` is an O(n)
+diagnostic traversal that checks rank encodings, logical heap order through every pending tag, and
+the count, returning `PersistentMonotoneActionHeapStatistics`.
+
+The shipped `OrderClampPolicy<T>` supplies the closed monotone family
+`x -> clamp(x, lower, upper)`: `AtLeast`, `AtMost`, validated `Between`, and exact `Constant`
+actions represented by `OrderClamp<T>` values. Composition returns one clamp or an explicit
+constant, so representative distinctions survive coarse comparers. The policy is trusted: violating
+identity, associativity, monotonicity, or the O(1)-operation contract invalidates the semantic and
+complexity guarantees. The complete tag algebra, worst-case argument, and prior-art audit are
+normative in the
+[research proposal](../../../../docs/proposals/persistent-monotone-action-heap-2026-07-29.md).
+
 ## Priority Search Queue
 
 `PrioritySearchQueue<TKey, TPriority, TValue>` stores at most one entry per key in an immutable AVL
@@ -1472,7 +1506,7 @@ shipment checkpoint, the full serialized C# solution built with zero warnings or
 1,417/1,417 tests in both configurations: 319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52
 Tungsten. No benchmark result is part of the shipment evidence.
 
-## Contextual Rank Sequence (Experimental)
+## Contextual Rank Sequence
 
 `ContextualRankSequence<TElement, TMachine>` lifts a deterministic additive event machine into the
 general measured finger tree. `TMachine` declares a positive fixed state count and returns a valid
