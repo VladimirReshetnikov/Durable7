@@ -60,11 +60,17 @@ parity is the product:
 | **Ordered & sorted** | Sorted bags/sets/maps, canonical zip-zip sets, insertion-ordered set/map/multimap with explicit movement and stable sorting |
 | **Priority & interval** | Brodal–Okasaki heaps, measured priority queues, winner-cached priority-search queues, interval trees, and payload-bearing interval maps |
 | **Text & bits** | Positional and measured ropes, UTF-aware text ropes, sparse rank/select chunked bit sets |
+| **Checkpoints & deltas** | Checkpoint-differential sorted maps and fixed-length vectors that track their own exact net-change and dirty-run indexes, with O(1) checkpoint/rollback and run-length-independent accept/revert |
+| **Ancestry & actions** | Ancestry-interval queues and O(1)-reverse deques over a shared incremental level-ancestor arena, contextual rank/select sequences driven by finite event machines, Brodal–Okasaki heaps with lazily composed monotone priority actions and O(1) whole-heap transforms, and a branching insertion-only union-find that answers at which historical version two vertices first became connected |
 | **Cursors** | Immutable, version-bound gap and search cursors over the maps, sets, sequences, and ropes that have a stable neighbor axis |
 
 The [data-structure catalog](docs/reference/data-structure-catalog.md) lists every public entry point
-per language. For the long version — what each structure actually is, how it is represented, and when
-to reach for it — read the field guide below.
+per language. The seven newest collections — the two checkpoint-differential structures and the five
+ancestry, contextual, and action-tagged ones — originated as scoped design studies, and each keeps a
+normative proposal under [`docs/proposals`](docs/proposals/) recording its claims, prior-art
+boundary, and deliberate limitations; every one separates its shipped bounds from theoretical
+instantiations. For the long version — what each structure actually is, how it is represented, and
+when to reach for it — read the field guide below.
 
 ## 📖 The field guide
 
@@ -143,10 +149,10 @@ Every port ships an executable test suite, and the gates run single-worker for d
 
 | Port | Suite |
 | --- | --- |
-| C# | 1,158 tests, zero-warning Debug and Release builds |
+| C# | 1,254 tests, zero-warning Debug and Release builds |
 | TypeScript | 252 tests (Vitest + fast-check) |
 | Python | 234 tests (pytest + Hypothesis), plus Ruff, strict Mypy, and installed-wheel gates |
-| Kotlin | 194 tests |
+| Kotlin | 291 tests |
 | OCaml | 48 Alcotest/QCheck cases under strict warnings, ocamlformat, and odoc |
 | C / C++ | CTest suites per workspace, MSVC Debug and Release |
 | Haskell | Per-package executable suites |
