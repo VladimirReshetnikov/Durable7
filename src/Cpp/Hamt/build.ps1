@@ -41,6 +41,12 @@ $testPrograms = @(
         UseTestSupport = $true
     },
     @{
+        Name = 'persistent_ancestral_connection_forest_tests'
+        Source = Join-Path $root 'tests\persistent_ancestral_connection_forest_tests.cpp'
+        Include = $includeDir
+        UseTestSupport = $true
+    },
+    @{
         Name = 'merkle_search_tree_tests'
         Source = Join-Path $root 'tests\merkle_search_tree_tests.cpp'
         Include = $includeDir

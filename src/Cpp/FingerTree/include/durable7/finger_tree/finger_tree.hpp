@@ -8,12 +8,16 @@
 
 #pragma once
 
+#include <durable7/finger_tree/ancestral_slice_queue.hpp>
 #include <durable7/finger_tree/built_in_measures.hpp>
+#include <durable7/finger_tree/bilateral_ancestral_deque.hpp>
 #include <durable7/finger_tree/brodal_okasaki_heap.hpp>
 #include <durable7/finger_tree/canonical_sorted_set.hpp>
 #include <durable7/finger_tree/comparisons.hpp>
+#include <durable7/finger_tree/contextual_rank_sequence.hpp>
 #include <durable7/finger_tree/daba_lite.hpp>
 #include <durable7/finger_tree/detail/common.hpp>
+#include <durable7/finger_tree/incremental_ancestor.hpp>
 #include <durable7/finger_tree/interval_tree.hpp>
 #include <durable7/finger_tree/persistent_interval_map.hpp>
 #include <durable7/finger_tree/persistent_chunked_bit_set.hpp>
@@ -22,7 +26,10 @@
 #include <durable7/finger_tree/measured_finger_tree.hpp>
 #include <durable7/finger_tree/measured_rope.hpp>
 #include <durable7/finger_tree/ordered_search_cursors.hpp>
+#include <durable7/finger_tree/persistent_delta_map.hpp>
 #include <durable7/finger_tree/persistent_deque.hpp>
+#include <durable7/finger_tree/persistent_monotone_action_heap.hpp>
+#include <durable7/finger_tree/persistent_run_delta_vector.hpp>
 #include <durable7/finger_tree/priority_queue.hpp>
 #include <durable7/finger_tree/priority_search_queue.hpp>
 #include <durable7/finger_tree/product_measure.hpp>

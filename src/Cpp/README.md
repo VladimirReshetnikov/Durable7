@@ -15,9 +15,20 @@ which pays for type erasure at run time.
 
 | Workspace | Role | Primary entry points | Validation |
 | --- | --- | --- | --- |
-| [Hamt](Hamt/README.md) | C++20 CHAMP collections, strict patches, directed graphs, indexed maps, Patricia, and exact-wire Merkle | [aggregate header](Hamt/include/durable7/hamt/hamt.hpp), [API spec](Hamt/docs/api-specification.md) | `.\build.ps1 -Workspace Hamt -RunTests`; see [validation](Hamt/docs/validation.md) and [tests](Hamt/tests/README.md) |
-| [FingerTree](FingerTree/README.md) | C++23 measured-tree family, chunked bit set, RRB, DABA Lite, priority/interval, ropes, and cursors | [aggregate header](FingerTree/include/durable7/finger_tree/finger_tree.hpp), [API notes](FingerTree/docs/api-notes.md) | `.\build.ps1 -Workspace FingerTree -RunTests`; see [validation](FingerTree/docs/validation.md) and [tests](FingerTree/tests/README.md) |
+| [Hamt](Hamt/README.md) | C++20 CHAMP collections, strict patches, directed graphs, indexed maps, Patricia, exact-wire Merkle, and the ancestral connection forest | [aggregate header](Hamt/include/durable7/hamt/hamt.hpp), [API spec](Hamt/docs/api-specification.md) | `.\build.ps1 -Workspace Hamt -RunTests`; see [validation](Hamt/docs/validation.md) and [tests](Hamt/tests/README.md) |
+| [FingerTree](FingerTree/README.md) | C++23 measured-tree family, chunked bit set, RRB, DABA Lite, priority/interval, ropes, cursors, the level-ancestor seam, and six of the seven research-derived collections | [aggregate header](FingerTree/include/durable7/finger_tree/finger_tree.hpp), [API notes](FingerTree/docs/api-notes.md) | `.\build.ps1 -Workspace FingerTree -RunTests`; see [validation](FingerTree/docs/validation.md) and [tests](FingerTree/tests/README.md) |
 | [Ordered](Ordered/README.md) | Neutral C++23 insertion-ordered set, map, and grouped multimap | [aggregate header](Ordered/include/durable7/ordered/ordered.hpp), [API notes](Ordered/docs/api-notes.md) | `.\build.ps1 -Workspace Ordered -RunTests`; see [validation](Ordered/docs/validation.md) and [tests](Ordered/tests/README.md) |
+
+The seven research-derived collections ship here too, six in FingerTree and the ancestral connection
+forest in Hamt. C++ is the port where the policy regime pays off most visibly: where the managed
+reference injects a level-ancestor backend, an action algebra, a comparer, and an event machine as
+runtime objects, this workspace takes all four as compile-time template parameters constrained by
+concepts. The consequence is not merely inlining — the reference's runtime policy-identity gates
+(mismatched comparers, melded heaps with different policies, concatenated sequences with different
+machines) stop being throwing checks and become compile errors. It is also the only port besides
+Haskell whose measured substrate is a genuine Hinze–Paterson finger tree, so its contextual rank
+sequence keeps the reference's endpoint and concatenation bounds where the Rust and Kotlin ports
+must weaken them.
 
 All three are header-only: there is no compiled library to link, only an include directory and an
 aggregate header per family. `Ordered` includes the public `Hamt` and `FingerTree` headers and

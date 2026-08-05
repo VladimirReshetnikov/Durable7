@@ -1,7 +1,14 @@
 add_executable(
     fingertree_smoke_tests
+    ancestral_slice_queue_tests.cpp
     atomic_box_tests.cpp
+    bilateral_ancestral_deque_tests.cpp
     brodal_okasaki_heap_tests.cpp
+    contextual_rank_sequence_tests.cpp
+    incremental_ancestor_tests.cpp
+    persistent_delta_map_tests.cpp
+    persistent_monotone_action_heap_tests.cpp
+    persistent_run_delta_vector_tests.cpp
     canonical_sorted_set_tests.cpp
     command_sequence_tests.cpp
     daba_lite_tests.cpp
@@ -57,9 +64,16 @@ set(
     brodal-okasaki-heap
     canonical-sorted-set
     command-model
+    ancestral-slice-queue
+    bilateral-ancestral-deque
     concurrency
+    contextual-rank-sequence
     daba-lite
     deque
+    incremental-ancestor
+    monotone-action-heap
+    persistent-delta-map
+    run-delta-vector
     interval-tree
     interval-map
     chunked-bit-set

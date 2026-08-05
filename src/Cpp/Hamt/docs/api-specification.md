@@ -571,3 +571,37 @@ changed path and any touched collision bucket. Published nodes are immutable and
 readers as long as ordinary C++ object lifetime rules are respected. Merkle updates likewise
 allocate only changed blocks and their replacement byte vectors while retaining every untouched
 subtree by shared ownership.
+
+## Persistent ancestral connection forest
+
+`persistent_ancestral_connection_forest` is the Hamt member of the seven research-derived
+collections whose other six live in the FingerTree workspace. It is a branching, insertion-only
+union-find over a sparse CHAMP parent map that answers "at which ancestor version did these two
+vertices first become connected?" without searching version history: the witness is the latest
+union-edge version strictly below the two current parent paths' lowest common ancestor. `link`
+always yields a distinct child version, sharing its connectivity cells unchanged when the endpoints
+were already connected, and unions by size with the first endpoint's root kept on a tie.
+
+Version identity is **pointer identity** on the retained token node, which is the faithful
+counterpart of the managed reference's reference-identity tokens. Structural identity would be
+wrong: a token records only depth, parent, and history root, and sibling branches agree on exactly
+those, so structural equality would silently merge branches that `first_connected` must keep apart.
+The history root is stored as a null parent rather than a self-reference, which keeps `root()` O(1)
+without a reference cycle, and every version-chain and parent-path walk — release included — is a
+loop rather than a recursion, so a history hundreds of thousands of links deep neither overflows the
+stack nor defers work into a later read.
+
+Its CHAMP path factor is **worst case**, not merely expected — stronger than the Rust and Haskell
+ports, which must document an expected factor. The forest pins its own vertex hash, the MurmurHash3
+32-bit finalizer, whose every step is a bijection of the 32-bit word, so distinct vertices never
+share a hash, no collision node can hold two distinct vertices, and every trie path is at most seven
+levels. Pinning matters rather than defaulting: `std::hash<int>` is identity on libstdc++ but
+truncated FNV-1a on MSVC, which genuinely collides, so inheriting the default would have reduced the
+bound to expected. The suite substantiates the claim constructively by building the explicit left
+inverse and round-tripping probe vertices chosen to agree on every low-order trie level.
+
+Vertices and universe counts stay `std::int32_t` rather than `std::size_t`, deliberately: the count
+doubles as the exclusive bound of a *signed* vertex index, and making it unsigned would delete the
+negative-vertex and negative-universe rejection the other ports perform. `first_connected` keeps its
+two failure modes distinguishable — an out-of-universe endpoint throws `std::out_of_range`, while a
+merely disconnected pair returns an empty `std::optional`.

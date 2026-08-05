@@ -1,5 +1,10 @@
 # Kotlin Collection Port — 2026-08-05
 
+> **Current-state note (2026-08-05, later the same day).** A C++ port of the same seven collections
+> shipped after this one, so coverage is now six languages. This review's scope and findings are
+> unchanged and still describe the Kotlin shipment; the C++ port carries its own verification,
+> recorded in [the C++ port review](cpp-collection-port-2026-08-05.md).
+
 - Created (UTC): 2026-08-05
 - Repository HEAD (reviewed): `experimental` branch, post Haskell port
 - Audience: Maintainers reviewing the five-language shipment of the seven research-derived collections

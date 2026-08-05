@@ -786,3 +786,82 @@ rank and then scans forward, breaking once low endpoints exceed the query high. 
 O(start + scanned), so it is O(n), and enumerating k overlaps by repeated continuation is O(k·n).
 `get_cursor_at_interval` shares the same prefix-advance pattern. Use `find_all_overlaps` on the
 container when output-sensitive pruning matters.
+
+## The seven research-derived collections
+
+Six of the seven live here; the seventh, `persistent_ancestral_connection_forest`, is in the Hamt
+workspace. All are reachable through the aggregate `finger_tree.hpp`.
+
+`incremental_ancestor.hpp` carries the append-only level-ancestor seam that `ancestral_slice_queue`
+and `bilateral_ancestral_deque` share. Where the managed ports express the backend as a runtime
+interface, this workspace expresses it the way it expresses every other policy: `incremental_ancestor_arena`
+is a **concept**, the consuming collections take the arena as a template parameter defaulted to
+`myers_incremental_ancestor_arena<T>`, and a different backend is a different type rather than a
+virtual dispatch. The arena itself is a faithful port — mutex-serialized, integer-handled, with the
+odd-block store whose square boundaries give O(1) addressing and O(sqrt(M)) unused slots, and the
+saturating hop counters. Because it is non-copyable and non-movable, collections hold it through
+`std::shared_ptr`, which is what keeps them ordinary copyable values. Leaf addition is O(1)
+amortized; an ancestor query follows O(log M) parent/jump links.
+
+`ancestral_slice_queue<T, Arena>` is the triple `(tail, low depth, count)` naming an interval of one
+root-to-tail path. Its anchored-empty rule is preserved exactly: an empty value retains the node
+immediately before its window, so appending to any empty slice yields exactly the new value, and a
+queue drained from the front and one drained from the back keep different anchors. Suffix ranges,
+`take(size)`, `drop(0)`, and a split at `size` are query-free; a split at `0` of a non-empty queue is
+not, because the anchor one level above the window can only be named by an ancestor query, while on
+an empty queue the two boundaries coincide and no query happens.
+
+`bilateral_ancestral_deque<T, Arena>` holds a reversed left interval and a forward right interval, so
+`reverse()` is an O(1) exchange. The at-most-two-query ceiling for range selection and splitting
+holds including cross-arm cases, removals on the owning arm are query-free, and the four cached
+endpoints index with no query. The suites assert exact query-profile tables rather than ceilings, so
+a regression that stayed under a documented ceiling would still fail.
+
+`contextual_rank_sequence<T, Machine>` lifts a finite deterministic event machine into an
+all-start-state summary monoid, with the machine supplied as a compile-time policy constrained by
+the `contextual_event_machine` concept — which makes C#'s type-identity gate on concatenation free,
+and turns a zero-state machine into a constraint failure rather than a runtime initialization error.
+**This port keeps the managed reference's bounds exactly**, including O(s) amortized endpoint updates
+and O(s log(min(n, m))) concatenation, because `detail/measured_tree.hpp` is a genuine
+Hinze–Paterson finger tree: it has 1..4-element digits, a lazy middle spine that answers a measure
+probe without forcing, and a concatenation that descends the two middles in lockstep and so
+terminates at the shallower operand. The Rust and Kotlin ports must state weaker endpoint and
+concatenation bounds because their substrates are height-balanced join trees; this one need not.
+Every constructing operation forces the root summary before publishing, so the substrate's amortized
+measure cost is charged to the writer and `evaluate` is flatly O(1) for a later reader.
+
+`persistent_delta_map<Key, Value, KeyLess, ValueEqual>` pairs current state with a designated
+checkpoint and a coalesced exact net-change index. Every load-bearing rule survives: a policy-equal
+write is a no-op returning a value that shares every root, the first effective write captures
+`before`, repeated writes coalesce, returning a key to its checkpoint state removes its record, and
+emptying the change index snaps the current root back onto the checkpoint root. `std::optional`
+replaces the presence-safe wrapper the managed reference needs only because `null` is a valid value.
+Range-restricted enumeration goes through `sorted_map::get_range`, a real ordered restriction built
+from two measured splits, so it never filters over all changes. One bound is **better** than in the
+Haskell and Kotlin ports: `min_entry`/`max_entry` are O(1) here, because the finger tree's outer
+digits hold the extremes.
+
+`persistent_run_delta_vector<T, EqualityPolicy>` keeps current and checkpoint RRB roots plus an
+ordered index of the maximal runs of differing positions. Accepting or reverting one run is a
+structural splice costing O(log n) amortized independently of the run's length and performing no
+value comparisons. Values are boxed in an identity-comparing cell, and that is load-bearing rather
+than stylistic: `rrb_vector::set_item` short-circuits on `l == r` *value* equality, so storing raw
+payloads would let an equal-but-distinct object satisfy the short circuit and silently retain the
+wrong representative — the cell turns that test into the identity test the "a clean position reuses
+its exact checkpoint cell" invariant needs. The floating-point situation is handled rather than
+documented away: `natural_value_equality` static-asserts against raw floating types because
+`operator==` is not reflexive on `NaN`, `reflexive_ieee_equality` supplies the .NET-matching
+relation, and `default_value_equality` selects it automatically for raw floats — so
+`persistent_run_delta_vector<double>` behaves exactly like the managed original with its default
+comparer, with no silent-corruption path. Aggregates containing floats still need a hand-written
+policy; the selector does not reach inside them.
+
+`persistent_monotone_action_heap<Element, Priority, Policy>` is the action-tagged sibling of
+`brodal_okasaki_heap`, carrying one immutable pending action per tree and forest spine so a
+whole-heap priority transform is O(1) while insert, meld, and minimum stay O(1) and delete-minimum
+stays O(log n). `compose(outer, inner)` means `outer` applied after `inner`, so the newer action is
+the outer one at every pushdown site, and the `order_clamp` algebra pins that direction. The old root
+is exposed before a losing child is skew-inserted, so a later insertion is never retroactively
+transformed. Because the policy is a type, the managed reference's runtime `ArgumentException` gates
+on mismatched comparers and melded policies disappear into the type system: a differently-policied
+heap is a different type and does not compile.

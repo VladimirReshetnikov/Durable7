@@ -22,6 +22,13 @@ using namespace durable7::finger_tree;
 using namespace durable7::finger_tree::tests;
 
 void add_measure_tests(suite& tests);
+void add_incremental_ancestor_tests(suite& tests);
+void add_ancestral_slice_queue_tests(suite& tests);
+void add_bilateral_ancestral_deque_tests(suite& tests);
+void add_contextual_rank_sequence_tests(suite& tests);
+void add_persistent_delta_map_tests(suite& tests);
+void add_persistent_run_delta_vector_tests(suite& tests);
+void add_persistent_monotone_action_heap_tests(suite& tests);
 void add_interval_tree_tests(suite& tests);
 void add_persistent_interval_map_tests(suite& tests);
 void add_persistent_chunked_bit_set_tests(suite& tests);
@@ -126,6 +133,27 @@ int main(const int argument_count, const char* const* arguments)
 
     tests.set_group("measure");
     add_measure_tests(tests);
+
+    tests.set_group("incremental-ancestor");
+    add_incremental_ancestor_tests(tests);
+
+    tests.set_group("ancestral-slice-queue");
+    add_ancestral_slice_queue_tests(tests);
+
+    tests.set_group("bilateral-ancestral-deque");
+    add_bilateral_ancestral_deque_tests(tests);
+
+    tests.set_group("contextual-rank-sequence");
+    add_contextual_rank_sequence_tests(tests);
+
+    tests.set_group("persistent-delta-map");
+    add_persistent_delta_map_tests(tests);
+
+    tests.set_group("run-delta-vector");
+    add_persistent_run_delta_vector_tests(tests);
+
+    tests.set_group("monotone-action-heap");
+    add_persistent_monotone_action_heap_tests(tests);
 
     tests.set_group("interval-tree");
     add_interval_tree_tests(tests);

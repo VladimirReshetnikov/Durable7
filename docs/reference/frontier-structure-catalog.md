@@ -1420,16 +1420,16 @@ The implementation wave described by this catalog has already landed these refer
 - `CanonicalSortedSet<T>` with keyed zip-zip ranks;
 - `BrodalOkasakiHeap<T>` and `PrioritySearchQueue<TKey, TPriority, TValue>`;
 - the seven research-derived collections promoted out of the former `*.Experimental` namespaces into
-  `Durable7.FingerTree`/`Durable7.Hamt` and ported to Rust, C, Haskell, and Kotlin: the restricted ancestry-interval
+  `Durable7.FingerTree`/`Durable7.Hamt` and ported to Rust, C, Haskell, Kotlin, and C++: the restricted ancestry-interval
   sequences `AncestralSliceQueue<T>` and `BilateralAncestralDeque<T>` over a shared incremental
   level-ancestor seam; the lifted finite-context `ContextualRankSequence<TElement, TMachine>`; the
   checkpoint-differential `PersistentDeltaMap<TKey, TValue>` and `PersistentRunDeltaVector<T>`; the
   lazily tagged `PersistentMonotoneActionHeap<TElement, TPriority, TAction>`; and the branching
   connectivity forest `PersistentAncestralConnectionForest`. Each keeps a design proposal under
   `docs/proposals` as the normative record of its scoped claims, and each separates shipped bounds
-  from theoretical instantiations rather than collapsing them. Coverage is C#, Rust, C, Haskell, and
-  Kotlin; the remaining four languages are deliberately unported pending a named consumer. The Rust,
-  C, and Kotlin ports consolidate the two duplicate C# level-ancestor arenas into one shared backend,
+  from theoretical instantiations rather than collapsing them. Coverage is C#, Rust, C, Haskell,
+  Kotlin, and C++; the remaining three languages are deliberately unported pending a named consumer.
+  The Rust, C, Kotlin, and C++ ports consolidate the two duplicate C# level-ancestor arenas into one shared backend,
   as the [2026-07-29 review](../reviews/experimental-collections-review-2026-07-29.md) recommended,
   and the Haskell port dispenses with the arena object altogether by making each node its own handle;
 - `DabaLite<T, TMonoid>`;

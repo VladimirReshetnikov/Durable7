@@ -13,6 +13,7 @@
 #include <durable7/hamt/persistent_hash_multimap.hpp>
 #include <durable7/hamt/persistent_hash_set.hpp>
 #include <durable7/hamt/persistent_directed_graph.hpp>
+#include <durable7/hamt/persistent_ancestral_connection_forest.hpp>
 #include <durable7/hamt/persistent_indexed_map.hpp>
 #include <durable7/hamt/persistent_map_patch.hpp>
 #include <durable7/hamt/persistent_relation.hpp>
