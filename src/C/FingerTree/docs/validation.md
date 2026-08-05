@@ -299,6 +299,40 @@ diagnostic; that is an environment limitation, not a test failure. Canonical-set
 queue leak liveness is independently covered by deterministic allocator-failure sweeps and exact
 outstanding-allocation/copy-destroy accounting.
 
+## Research-Derived Collection Port Evidence
+
+On 2026-08-04, the six research-derived FingerTree collections and their shared incremental
+level-ancestor arena were ported from the C# and Rust references into this workspace. The seventh,
+the ancestral connection forest, is recorded in the Hamt workspace's validation notes.
+
+The full workspace was reconfigured, rebuilt from clean, and tested with CMake 4.3.2 and GCC 16.1.0
+(MSVC was unavailable on the porting machine):
+
+```text
+src/C/FingerTree> cmake -S . -B build-mingw -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=gcc
+src/C/FingerTree> cmake --build build-mingw --clean-first
+src/C/FingerTree> ctest --test-dir build-mingw
+```
+
+The library and all sixteen test executables built with zero warnings under
+`-Wall -Wextra -Wpedantic -Werror`, and 16/16 CTest cases passed. Seven of those executables are new:
+`fingertree_c.incremental_ancestor`, `.ancestral_slice_queue`, `.bilateral_ancestral_deque`,
+`.contextual_rank_sequence`, `.persistent_delta_map`, `.persistent_monotone_action_heap`, and
+`.persistent_run_delta_vector`, contributing 76 assertions-level test cases.
+
+Coverage mirrors the obligations of the C# suites: randomized model equivalence against simple
+oracles, retained-version independence after branching, anchored-empty provenance, arena-statistics
+query ceilings proving that boundary-specialized operations issue no ancestor query, exact odd-block
+capacity at square boundaries, ancestor answers checked against a naive parent walk on both deep
+chains and irregular branch shapes, a caller-supplied non-Myers backend driven in lockstep with the
+shipped arena, clamp-composition algebra with temporal transform semantics, maximal non-adjacent
+dirty runs with run-length-independent splicing, and — specific to C — failure atomicity under
+injected allocation failures and failing copy callbacks, verified to leave counters, payload
+ownership, and outstanding allocations unchanged with the structure still usable.
+
+This evidence was produced with GCC rather than the MSVC toolchain the presets target; an MSVC run
+remains the canonical gate. No benchmark was run.
+
 ## Evidence To Record
 
 When reporting validation, include the workspace and exact command, for example:

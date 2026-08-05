@@ -345,6 +345,69 @@ serialized C# Release build had zero warnings and zero errors and the complete g
 structure gate recorded above. No benchmark was run for either shipment, and measurements remain postponed for an
 isolated session.
 
+## Research-Derived Collections
+
+Seven collections originated as scoped design studies, each with a normative proposal under
+[`docs/proposals`](../proposals/) recording its claims, prior-art boundary, and deliberate
+limitations. They were promoted out of the former `*.Experimental` namespaces into the ordinary
+family namespaces and ported to Rust, C, Haskell, and Kotlin. Coverage is **C#, Rust, C, Haskell, and
+Kotlin** — the remaining four languages are deliberately unported pending a named consumer, so
+absence elsewhere is a scheduling decision rather than a gap. Every one of them separates shipped
+bounds from theoretical instantiations; read the proposal before relying on a headline complexity.
+
+| Collection | Role | Proposal |
+| --- | --- | --- |
+| `AncestralSliceQueue<T>` | Persistent queue whose handle is an appendable interval of one root-to-node path in an append-only arena | [ASQ](../proposals/ancestral-slice-queue-2026-07-25.md) |
+| `BilateralAncestralDeque<T>` | Restricted persistent deque as two oppositely oriented ancestry intervals, with O(1) reverse | [BAD](../proposals/bilateral-ancestral-deque-2026-07-25.md) |
+| `ContextualRankSequence<TElement, TMachine>` | Measured sequence lifting a finite event machine into an all-start-state summary for contextual rank/select | [CRS](../proposals/contextual-rank-sequence-2026-07-25.md) |
+| `PersistentDeltaMap<TKey, TValue>` | Sorted map with a designated checkpoint and a coalesced exact net-change index | [PDM](../proposals/persistent-delta-map-2026-07-25.md) |
+| `PersistentRunDeltaVector<T>` | Fixed-length current/checkpoint vector with an exact maximal dirty-run index | [PRDV](../proposals/persistent-run-delta-vector-2026-07-29.md) |
+| `PersistentMonotoneActionHeap<TElement, TPriority, TAction>` | Brodal-Okasaki heap with lazily composed monotone priority actions | [PMAH](../proposals/persistent-monotone-action-heap-2026-07-29.md) |
+| `PersistentAncestralConnectionForest` | Branching insertion-only union-find answering first-connected-at-which-version | [PACF](../proposals/persistent-ancestral-connection-forest-2026-07-29.md) |
+
+| Language | Public entry points | Primary references |
+| --- | --- | --- |
+| C# | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IIncrementalAncestorArena<T>`, `MyersIncrementalAncestorArena<T>`, `ContextualRankSequence<TElement, TMachine>`, `IContextualEventMachine<TElement>`, `PersistentDeltaMap<TKey, TValue>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<TElement, TPriority, TAction>`, `IMonotoneHeapAction<TPriority, TAction>`, `OrderClampPolicy<T>` (FingerTree); `PersistentAncestralConnectionForest`, `AncestralConnectionVersion` (Hamt) | [FingerTree API spec](../../src/CSharp/docs/FingerTree/api-specification.md), [FingerTree usage](../../src/CSharp/docs/FingerTree/usage.md), [Hamt API spec](../../src/CSharp/docs/Hamt/api-specification.md), [Hamt usage](../../src/CSharp/docs/Hamt/usage.md) |
+| Rust | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IncrementalAncestorArena<T>`, `MyersAncestorArena<T>`, `ContextualRankSequence<T, M>`, `ContextualEventMachine<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>`, `MonotoneHeapAction<P, A>`, `ActionPolicy<P, A>`, `OrderClampPolicy<T>`, `EqualityPolicy<T>` (FingerTree); `PersistentAncestralConnectionForest`, `AncestralConnectionVersion` (Hamt) | [FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md), [Hamt API notes](../../src/Rust/Hamt/docs/api-notes.md), [FingerTree README](../../src/Rust/FingerTree/README.md), [Hamt README](../../src/Rust/Hamt/README.md) |
+
+| C | `ft_ancestral_slice_queue_*`, `ft_bilateral_ancestral_deque_*`, `ft_incremental_ancestor_arena_*` (vtable seam plus the shipped Myers arena), `ft_contextual_rank_sequence_*`, `ft_persistent_delta_map_*`, `ft_persistent_run_delta_vector_*`, `ft_monotone_action_heap_*` with its clamp policy family (FingerTree); `d7_hamt_ancestral_connection_forest_*` (Hamt) | [FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md), [FingerTree headers](../../src/C/FingerTree/include/durable7/finger_tree/), [Hamt API specification](../../src/C/Hamt/docs/api-specification.md), [Hamt headers](../../src/C/Hamt/include/durable7/hamt/) |
+| Kotlin | `durable7.fingertree.AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IncrementalAncestorArena<T>` with the shipped `MyersIncrementalAncestorArena<T>` (a faithful arena port — the JVM supplies the mutable state and monitor the reference assumes), `ContextualRankSequence<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>` with its `OrderClamp` family (FingerTree); `durable7.hamt.PersistentAncestralConnectionForest` (Hamt) | [FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [Hamt API notes](../../src/Kotlin/Hamt/docs/api-notes.md), [workspace README](../../src/Kotlin/README.md) |
+| Haskell | `Durable7.FingerTree.AncestralSliceQueue`, `.BilateralAncestralDeque`, `.IncrementalAncestor` (the shared seam, with no arena object), `.ContextualRankSequence`, `.PersistentDeltaMap`, `.PersistentRunDeltaVector`, `.PersistentMonotoneActionHeap` (FingerTree); `Durable7.Hamt.PersistentAncestralConnectionForest` (Hamt). Each is reachable through its own module rather than the family umbrella, because several export a `ValidationStatistics` type | [FingerTree README](../../src/Haskell/FingerTree/README.md), [Hamt README](../../src/Haskell/Hamt/README.md), [workspace README](../../src/Haskell/README.md) |
+
+The Rust port makes three intentional, documented divergences, all recorded in the local API notes:
+it consolidates C#'s two duplicate level-ancestor arenas into one shared backend; it replaces the
+presence-safe `DeltaMapValue<T>` wrapper with `Option`, which C# needs only because `null` is a
+valid present value; and it replaces the run-delta vector's private reference-identity `Cell` class
+with `Arc<T>` plus `Arc::ptr_eq`. Value equality is taken from a retained `EqualityPolicy<T>`, the
+equality counterpart of `OrderPolicy<T>`, because that policy defines semantic no-ops and change
+cancellation and so must be remembered rather than taken as a `PartialEq` bound.
+
+The C port follows the workspace's type-erased conventions — values addressed by size plus a
+caller-owned type-identity tag, policies carrying copy/destroy/compare callbacks and an allocator,
+`ft_status` returns whose outputs are published only on success, and borrow-versus-own accessor
+pairs where the managed ports return a single value. It starts from the consolidated arena seam
+rather than reproducing the duplication C# originally shipped, so all three languages agree there.
+Its one substantive divergence is concurrency: C# and Rust serialize the arena behind a lock, while
+C11 has no portable mutex without `<threads.h>`, so the C arena documents the weaker contract —
+single-threaded unless the caller synchronizes, with every operation including reads treated as a
+write. Handle reference counts remain atomic, and no port claims lock-free progress.
+
+The Haskell port diverges furthest, and in the direction of removing machinery rather than adding
+it. The level-ancestor arena disappears entirely: a node is its own handle, so there is no arena
+object, no lock, no backend-injection seam, and no arena statistics, and leaf addition improves from
+O(1) amortized to O(1) worst case. The retained query counters that removal costs are recovered by
+returning a query's hop count to the caller that caused it, which is what keeps the deque's
+at-most-two-query ceiling testable. Comparer and action interfaces become retained records of
+functions, so operand compatibility for concatenation and melding is a documented caller obligation
+rather than a detected error, with one exception: the contextual sequence still rejects a declared
+state-count mismatch, because that alone would silently corrupt summaries. Versions of the
+connection forest have structural rather than referential identity. Two honest cost statements
+follow the substrate rather than the baseline: the delta map's `minEntry`/`maxEntry` are Θ(log N)
+because the Haskell sorted map caches no extremes, and the connection forest's CHAMP path factor is
+expected rather than worst-case because the hash is truncated to 32 bits. Against that, the
+contextual rank sequence keeps the reference's endpoint and concatenation bounds exactly, which the
+Rust port cannot, because the Haskell substrate is a genuine finger tree with digits.
+
 ## Persistent Cursor Availability
 
 All nine language ports ship the repository-wide semantic cursor tier. Concrete names follow each

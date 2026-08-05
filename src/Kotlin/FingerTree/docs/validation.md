@@ -125,3 +125,29 @@ escape analysis, tiered compilation, and collector choice make them non-portable
 counts and identity-sharing bounds are the deterministic JVM substitutes.
 The measured/text cursor checkpoint likewise claims only the documented snapshot-plus-gap costs;
 none of its correctness tests is presented as C# focused cursor, allocation, or amortized-locality evidence.
+
+The seven research-derived collections add six groups to this executable. Ancestral slice queue
+coverage exercises the anchored-empty rule at every boundary of a 65-element source, front- versus
+back-drained empties keeping different anchors, every take/drop/split boundary of a 257-element
+source, the odd-block square seams, and an ancestor-query discipline expressed as exact counts from
+`MyersIncrementalAncestorArena.statistics()`: suffix slices, whole prefixes, zero drops, endpoint
+splits, and `validateStructure` itself are proved to make zero queries, while a proper prefix, an
+interior slice, and a split at zero of a non-empty queue are proved to make exactly one. Bilateral
+ancestral deque coverage asserts full exact query tables rather than ceilings — an eight-entry
+indexing profile, all 45 slice pairs, a nine-entry split profile, and the crossing-the-centre drain
+that pins the count-equals-two shortcut — plus all 511 construction words through length eight and an
+eight-thread branching test that reconciles `publishedNodeCount` against successful additions.
+
+Contextual rank sequence coverage pins an explicitly non-commutative machine pair, exhaustive words
+to length six against a direct scanner, and a counting machine proving that cached ranks and selects
+invoke it zero times. Delta map coverage pins every checkpoint-differential rule, including
+checkpoint-root snap-back verified by reference identity, and a comparison budget showing a
+one-element window over a 1,024-record change index costs under 128 key comparisons and zero value
+comparisons where a filter would need at least 1,024. Run-delta vector coverage proves the splice is
+comparison-free under a counting comparer with a live-counter positive control, demonstrates on a
+bare `RrbVector` the hazard that identity-only cell boxing exists to avoid, and asserts the JVM's
+boxed-versus-primitive `NaN` behaviours directly rather than trusting the documentation. Monotone
+action heap coverage pins the clamp collapse table, composition direction and associativity,
+tie-breaking, and the temporal rule that an insertion after a transform is not retroactively
+transformed; three of those cases were confirmed to bite by mutation testing the corresponding
+kernel lines.

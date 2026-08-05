@@ -21,6 +21,28 @@ payload interval-map suite. The serialized full Rust workspace subsequently pass
 and Release, including all FingerTree unit, integration, compile-fail, and documentation tests.
 Benchmarks were not run.
 
+## Research-derived collection port evidence
+
+On 2026-08-04, the seven research-derived collections were ported from the C# reference into this
+crate, and the C#/Rust enhancement backlog landed in both languages the same day. The full
+serialized Rust workspace passes 452/452 tests across 30 test binaries with zero failures;
+`cargo build --workspace` reports zero warnings and `cargo clippy --workspace --all-targets` reports
+no diagnostics attributable to the added modules. The added coverage spans `equality`,
+`incremental_ancestor`, `ancestral_slice_queue`, `bilateral_ancestral_deque`,
+`contextual_rank_sequence`, `delta_map`, `monotone_action_heap`, and `run_delta_vector`, plus the
+Hamt connection-forest tests recorded in that crate's validation notes. The backlog additions
+covered are position-addressed run accept/revert, range-restricted change enumeration, and bulk
+assignment, each tested for equivalence with the operation it composes. An adversarial parity review against the C# baseline confirmed twelve
+documentation-accuracy, policy, and coverage findings — all fixed — and found no correctness defect
+in any port; see the
+[port review](../../../../docs/reviews/rust-collection-port-review-2026-08-04.md). No benchmark was
+run.
+
+This evidence proves the ported semantics and the structural invariants asserted by the tests. It
+does not prove the theoretical instantiations the design proposals describe: in particular, the
+ancestry-interval sequences ship the Myers reference arena with O(1)-amortized addition and
+O(log M) ancestor queries, and no Alstrup-Holm backend exists in any port.
+
 The crate uses `#![forbid(unsafe_code)]`. Unit tests are inline in the module files under
 `FingerTree/src/`; representation-scale integration tests live under `FingerTree/tests/`. Together
 they cover:
@@ -85,6 +107,27 @@ they cover:
 - cached-newline text line helpers, Rust string/display conversions, Unicode scalar and UAX #29 extended-grapheme
   addressing, LF/CRLF/CR/mixed detection, CRLF-aware line text, builder output, and the nominal text cursor's
   exact-facade snapshots, newline-prefix search, scalar line/column positions, and Unicode edits.
+
+- retained equality policies: natural-versus-custom compatibility, clone-preserved identity, and
+  coarse/fine closure policies that change which writes are no-ops and which changes cancel;
+- the shared incremental level-ancestor arena: branched ancestor queries checked against a naive
+  parent-walk oracle, exact odd-block capacity at square boundaries, and a conservative logarithmic
+  hop-count envelope;
+- ancestry-interval queue and deque semantics: anchored-empty provenance, retained-branch
+  independence, every slice/split boundary against a sequence oracle, O(1) reverse by segment
+  exchange, and the arena-statistics ceilings proving that boundary-specialized operations issue no
+  ancestor query and that no scalar operation issues more than the documented number;
+- contextual rank sequences: exhaustive short inputs against an independent scanner, contextual
+  event rank/select including multi-event transitions, and cached-summary reuse showing reads do not
+  rescan the input;
+- checkpoint-differential map and vector: coalescing and cancellation of repeated writes, exact
+  representative retention across delete/re-add round trips, checkpoint-root canonicalization when
+  the change index empties, maximal non-adjacent dirty runs, run-length-independent accept/revert
+  splicing, and output-optimal descriptor counts for clustered dirty positions;
+- monotone-action heaps: identity/associativity/monotonicity of clamp composition, exact
+  representative preservation under a coarse comparer, temporal insert-after-transform semantics,
+  melding of independently transformed heaps without cross-applied actions, and constant policy-call
+  and allocation counts for whole-heap transformation.
 
 The current validation proves structurally shared Rust storage across the public FingerTree-family facades and the
 observable semantic checkpoint behavior, not final C#/C++ lazy-spine asymptotic parity for the whole crate.

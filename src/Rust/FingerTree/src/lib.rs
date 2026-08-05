@@ -28,22 +28,39 @@
 //! mismatched operands instead of silently producing malformed results. The crate forbids
 //! `unsafe`.
 
+mod ancestral_slice_queue;
+mod bilateral_ancestral_deque;
 mod brodal_okasaki_heap;
 mod canonical_sorted_set;
 mod chunked_bit_set;
+mod contextual_rank_sequence;
 mod daba_lite;
+mod delta_map;
 mod deque;
+mod equality;
+mod incremental_ancestor;
 mod interval_map;
 mod interval_tree;
 mod measured;
+mod monotone_action_heap;
 mod ordering;
 mod priority_queue;
 mod priority_search_queue;
 mod rope;
 mod rrb_vector;
+mod run_delta_vector;
 mod sorted;
 mod text_extras;
 
+pub use ancestral_slice_queue::{
+    AncestralSliceQueue, AncestralSliceQueueArenaError, AncestralSliceQueueIter,
+    AncestralSliceQueuePop, AncestralSliceQueueSplit,
+};
+pub use bilateral_ancestral_deque::{
+    BilateralAncestralDeque, BilateralAncestralDequeInvariantError, BilateralAncestralDequeIter,
+    BilateralAncestralDequePop, BilateralAncestralDequeSplit, BilateralAncestralDequeStatistics,
+    BilateralArenaError,
+};
 pub use brodal_okasaki_heap::{
     BrodalInvariantError, BrodalIter, BrodalMeldError, BrodalMinimumView, BrodalOkasakiHeap,
     BrodalOkasakiHeapStatistics,
@@ -58,12 +75,25 @@ pub use chunked_bit_set::{
     ChunkedBitSetCursorSearch, ChunkedBitSetInvariantError, ChunkedBitSetStatistics,
     NegativeBitIndex, PersistentChunkedBitSet, PersistentChunkedBitSetCursor,
 };
+pub use contextual_rank_sequence::{
+    ContextualEventLocation, ContextualEventMachine, ContextualEventTransition,
+    ContextualPrefixSummary, ContextualRankSequence, ContextualRankSequenceInvariantError,
+    ContextualRankSequenceIter, ContextualRankSequenceSplit, ContextualRankSequenceStatistics,
+};
 pub use daba_lite::{
     DabaLite, DabaLiteInvariantError, DabaLiteStatistics, DabaMonoid, EmptyDabaLiteError,
+};
+pub use delta_map::{
+    DeltaMapChanges, DeltaMapInvariantError, DeltaMapIter, DeltaMapSnapshot, DeltaMapStatistics,
+    PersistentDeltaMap, PersistentMapChange, PersistentMapChangeKind,
 };
 pub use deque::{
     DequeItemSplit, DequePop, DequeRangeSplit, DequeSplit, PersistentDeque, PersistentDequeCursor,
     ReversibleDeque, ReversibleDequeCursor, ReversibleDequePop, ReversibleDequeSplit,
+};
+pub use equality::{EqualityComparer, EqualityPolicy, NaturalEqualityComparer};
+pub use incremental_ancestor::{
+    IncrementalAncestorArena, MyersAncestorArena, MyersAncestorStatistics,
 };
 pub use interval_map::{
     IntervalMapCursorSearch, IntervalMapEntry, IntervalMapError, IntervalMapInvariantError,
@@ -74,6 +104,12 @@ pub use measured::{
     FingerTree, FingerTreeCursor, FingerTreeCursorSearch, KeyMeasure, LocateResult, MaxMeasure,
     MeasurePair, MeasurePolicy, MeasuredSplit, MinMeasure, OrderStatisticMeasure, ProductMeasure,
     RankedKey, SizeAndMaxMeasure, SizeAndMinMeasure, SizeAndSumMeasure, SizeMeasure, SumMeasure,
+};
+pub use monotone_action_heap::{
+    ActionPolicy, ClampBoundsError, MonotoneActionHeapIter, MonotoneActionInvariantError,
+    MonotoneActionMeldError, MonotoneActionMinimumView, MonotoneActionPolicyError,
+    MonotoneHeapAction, MonotoneHeapEntry, OrderClamp, OrderClampPolicy,
+    PersistentMonotoneActionHeap, PersistentMonotoneActionHeapStatistics,
 };
 pub use ordering::{NaturalOrderComparer, OrderComparer, OrderPolicy};
 pub use priority_queue::{PriorityEntry, PriorityQueue};
@@ -91,6 +127,10 @@ pub use rope::{
 pub use rrb_vector::{
     RrbVector, RrbVectorBuilder, RrbVectorCursor, RrbVectorIntoIter, RrbVectorInvariantError,
     RrbVectorIter, RrbVectorPop, RrbVectorSplit, RrbVectorStatistics,
+};
+pub use run_delta_vector::{
+    DirtyRunIter, PersistentDirtyRun, PersistentRunDeltaVector, RunDeltaVectorInvariantError,
+    RunDeltaVectorIter, RunDeltaVectorStatistics,
 };
 pub use sorted::{
     DuplicateKeyError, OrderedCursorInsert, OrderedCursorSearch, SortedBag, SortedBagCursor,

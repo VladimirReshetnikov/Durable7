@@ -28,6 +28,22 @@ reasonable oracle.
   `PriorityQueueTests.cs`, `IntervalTreeTests.cs`, `ReversibleDequeTests.cs`, and
   `DerivedCollectionPersistenceTests.cs` cover derived collection facades and mutable sorted builders against
   BCL or brute-force model behavior.
+- `PersistentDeltaMapTests.cs` covers exact checkpoint-relative before/after changes, coalescing and
+  cancellation, comparer-equivalent representative episodes, retained branches, O(1) root-sharing
+  checkpoint/rollback, randomized model parity, callback failure atomicity, and a baseline-independent
+  change-enumeration comparison-count guard.
+- `PersistentMonotoneActionHeapTests.cs` covers the experimental clamp-action algebra, ordinary heap
+  semantics, lazy whole-heap transforms, meld compatibility, retained and randomized branching
+  histories, exact callback/allocation ceilings, failure atomicity, and concurrent readers.
+- `BilateralAncestralDequeTests.cs` covers the experimental two-oriented-ancestry-interval deque and
+  Myers reference arena: endpoint contracts, reverse/slice closure, exhaustive and randomized
+  retained branches, exact ancestor-query ceilings, irregular-tree ancestry oracles, square block
+  seams, enumeration routing, and concurrent branching/reads.
+- `IncrementalAncestorArenaSeamTests.cs` covers the shared `IIncrementalAncestorArena<T>` extension
+  seam: a minimal parent-array arena is checked against the shipped Myers arena on a randomized
+  branching forest, then drives both `AncestralSliceQueue<T>` and `BilateralAncestralDeque<T>`
+  through randomized operation histories, requiring identical values, identical retained versions,
+  and identical primitive backend workloads.
 - `PersistentIntervalMapTests.cs` covers strict and replacing updates, lexicographic interval-key
   order, configured payload equality, first interval representatives, reversed-endpoint rejection,
   point and overlap queries against a brute-force model, removal, policy-preserving clear,
@@ -65,6 +81,15 @@ reasonable oracle.
   radix-indexed regular nodes, relaxed size-table invariants, exact-boundary leaf reuse, adversarial
   split/concat density and height, builder snapshot isolation, endpoint contracts, and randomized
   persistent edit histories with retained versions.
+- `AncestralSliceQueueTests.cs` covers exhaustive slice/split boundaries, appendable anchored empties,
+  retained and randomized branching histories, direct Myers ancestor-oracle parity, odd-block square
+  seams and capacity arithmetic, traversal-hop and operation-routing guardrails, explicit/custom
+  factory validation, enumeration, and synchronized concurrent branches/readers.
+- `PersistentRunDeltaVectorTests.cs` covers factories, equality policies both coarser and finer than
+  default equality, exact representatives and maximal dirty runs, every point-induced
+  merge/split/shrink/cancellation case, whole and zero-comparer-call selected-run accept/revert,
+  5,000 randomized retained branches against an independent model, the clustered `k >> r` witness,
+  comparer failure atomicity, structural invariants, and concurrent readers/writers.
 - `DabaLiteTests.cs` covers noncommutative FIFO order, a 100,000-operation randomized variable
   window model, empty/clear contracts, and the three/two/at-most-one worst-case `Combine` limits.
   `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a
@@ -101,6 +126,11 @@ reasonable oracle.
   `RangeUpdateDiagnosticsAdapter.cs` exposes the
   internal deterministic counters to this test assembly without adding diagnostics to the public
   collection API.
+- `ContextualRankSequenceTests.cs` covers the experimental finite-context event sequence: quoted
+  delimiters, exhaustive short words from every start state, randomized retained branches against
+  a direct scanner, multi-event transitions, split/concat boundaries, cached-query callback counts,
+  invalid policies, overflow atomicity, and concurrent readers with independent branch writers.
+  The focused lane passes 7/7 in both Debug and Release on the experimental branch.
 - `SampleSmokeTests.cs` captures the Tour, Showcase, and Editor sample output contracts, including
   the Axis 2 C3 retained measured-cursor history, cadence-sixteen snapshot policy, localized Unicode
   editing, line/column result, and alternate branch transcript.
@@ -129,6 +159,46 @@ Filter a class while developing a focused change:
 ```powershell
 .\test.ps1 -Filter FullyQualifiedName~RopePropertyTests
 ```
+
+On 2026-07-29 UTC, the six consolidated experimental classes passed 70/70 focused tests in both
+Debug and Release. The complete FingerTree project passed 794/794 tests, and the serialized full C#
+solution passed 1,240/1,240 in both configurations: 366 HAMT + 794 FingerTree + 80 Ordered. These
+consolidated totals supersede the isolated branch snapshots.
+
+The checkpoint-differential map lane uses:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentDeltaMapTests
+```
+
+The research-prototype lane passes 15/15 focused cases in both configurations.
+
+The experimental ancestral-slice queue lane is:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~AncestralSliceQueue
+```
+
+This lane passes 16/16 tests in Debug and Release; the sixteenth is the shared-arena-seam parity case
+in `IncrementalAncestorArenaSeamTests.cs`. No benchmark result is part of this experimental gate.
+
+The bilateral ancestral deque research lane is:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~BilateralAncestralDequeTests
+```
+
+That lane passes 15/15 tests in Debug and Release.
+
+The remaining experimental lanes can be selected by class name:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~ContextualRankSequenceTests
+.\test.ps1 -Filter FullyQualifiedName~PersistentMonotoneActionHeapTests
+.\test.ps1 -Filter FullyQualifiedName~PersistentRunDeltaVectorTests
+```
+
+They pass 7/7, 11/11, and 7/7 tests respectively in both Debug and Release.
 
 The range-update integration lane uses the same serialized launcher:
 

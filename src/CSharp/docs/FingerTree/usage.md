@@ -12,7 +12,8 @@ code shapes callers use first.
 
 ## Namespace, Build, And Samples
 
-The public types live in the `Durable7.FingerTree` namespace:
+Every public type in this guide lives in `Durable7.FingerTree`, including the research-derived
+surfaces that carry their own design proposals:
 
 ```csharp
 using Durable7.FingerTree;
@@ -111,6 +112,35 @@ var restored = reversed.Reverse();
 Endpoint, index, split, and concat operations respect the current logical orientation. Use
 `FingerTreeDeque<T>` when reversal is not part of the contract and the tuned deque is enough.
 
+## Bilateral Ancestral Deque
+
+Use `BilateralAncestralDeque<T>` only for the restricted workload where versions branch through
+both-end pushes, reverse, index, and contiguous slicing, but never need unrelated concat or middle
+edits. Every handle belongs to an append-only ancestry arena:
+
+```csharp
+var history = BilateralAncestralDeque<int>.CreateMyers()
+    .AddLast(10)
+    .AddLast(20)
+    .AddFirst(5);                       // [5, 10, 20]
+
+var window = history.Slice(1, 2);       // [10, 20]
+var branch = window.Reverse()
+    .AddFirst(99)
+    .AddLast(7);                        // [99, 20, 10, 7]
+
+// Retained values are unchanged.
+var original = history.ToArray();       // [5, 10, 20]
+```
+
+The deque makes at most two level-ancestor queries for any scalar operation. With an optimal
+incremental-level-ancestor arena this gives O(1) worst-case pushes, pops, index, reverse, slice, and
+split. `CreateMyers()` is deliberately only a reference backend: its pushes are O(1) amortized and
+its ancestor-dependent operations are O(log M) after M historical pushes. A manager retains every
+published payload and serializes reference-backend reads until that manager is collected. See the
+[scoped research proposal](../../../../docs/proposals/bilateral-ancestral-deque-2026-07-25.md) before
+selecting this surface.
+
 ## Sorted Collections
 
 Use the sorted wrappers when order is an invariant owned by the collection.
@@ -159,6 +189,44 @@ if (map.TryGetValue(2, out var value))
 var firstEntry = map.EntryAt(0);
 var range = map.GetRange(1, 2);
 ```
+
+Use `PersistentDeltaMap<TKey, TValue>` when the recurring question is “what is the exact net change
+from this accepted checkpoint?” rather than an arbitrary-pair diff:
+
+```csharp
+var tracked = PersistentDeltaMap<int, string>.CreateRange(new[]
+{
+    KeyValuePair.Create(1, "one"),
+    KeyValuePair.Create(2, "two"),
+})
+    .SetItem(1, "ONE")
+    .Remove(2)
+    .SetItem(3, "three");
+
+foreach (var change in tracked.GetChanges()) // keys 1, 2, 3
+    Console.WriteLine($"{change.Key}: {change.Kind}");
+
+foreach (var change in tracked.GetChanges(2, 3)) // keys 2, 3 only, by seeking the change index
+    Console.WriteLine($"{change.Key}: {change.Kind}");
+
+var batched = tracked.SetItems(new[]
+{
+    KeyValuePair.Create(4, "four"),
+    KeyValuePair.Create(5, "five"),
+}); // identical to folding SetItem over the sequence
+
+var reverted = tracked.Rollback();   // { 1: "one", 2: "two" }, O(1)
+var accepted = tracked.Checkpoint(); // current state becomes the checkpoint, O(1)
+```
+
+Repeated writes coalesce to the checkpoint's first-before/final-after endpoints; restoring an
+endpoint cancels its record. With N keys across checkpoint and current state and k net-changed keys,
+point operations remain O(log(N + 1)) and fully consuming ordered `GetChanges()` is `Θ(k + 1)`.
+This research surface is
+fully persistent but deliberately limited to a designated checkpoint and point updates; it does not
+promise arbitrary-version diff, tracked bulk clear, or tracked range extraction. The
+[proposal and prior-art audit](../../../../docs/proposals/persistent-delta-map-2026-07-25.md) state the
+precise comparison model and novelty boundary.
 
 Pass an `IComparer<T>` or `IComparer<TKey>` through `Create` or `CreateRange` when the default order
 is not the desired order.
@@ -324,6 +392,39 @@ while (heap.TryDeleteMinimum(out var minimum, out var rest))
 `Meld` requires comparer object identity even when one operand is empty. Ordinary enumeration visits
 each element in unspecified structural order, so repeatedly delete the minimum when sorted order is
 required. Equal elements have no stable tie order. `ValidateStructure` is an O(n) diagnostic pass.
+
+## Monotone-Action Heap
+
+`PersistentMonotoneActionHeap<TElement, TPriority, TAction>` keeps the meldable heap's worst-case
+bounds and adds `TransformAll`, which adjusts every current priority in O(1) by composing one lazy
+monotone action. The shipped clamp policy covers floors, caps, two-sided clamps, and exact
+constants:
+
+```csharp
+
+var policy = new OrderClampPolicy<int>();
+var heap = PersistentMonotoneActionHeap<string, int, OrderClamp<int>>.Create(policy)
+    .Insert("a", 3)
+    .Insert("b", 9);
+
+var capped = heap.TransformAll(policy.AtMost(5));   // logical priorities: a=3, b=5
+var late = capped.Insert("c", 8);                   // c joins untransformed at 8
+
+var other = PersistentMonotoneActionHeap<string, int, OrderClamp<int>>
+    .Create(policy)
+    .Insert("d", 1)
+    .TransformAll(policy.AtLeast(4));               // d=4
+
+var melded = late.Meld(other);                      // a=3, b=5, c=8, d=4
+var minimum = melded.Minimum;                       // ("a", 3)
+```
+
+`TransformAll` affects only priorities present at the call; later insertions and melds are not
+retroactively transformed, which gives temporal semantics even for non-invertible actions. All
+heaps that may be melded must share the same comparer and action-policy objects. Custom policies
+implement `IMonotoneHeapAction` (identity, associative composition, monotone O(1) application);
+implement `IComparerBoundMonotoneHeapAction` when monotonicity is tied to one comparer so `Create`
+can enforce the pairing. Enumeration order is structural, not sorted.
 
 ## Priority Search Queue
 
@@ -616,6 +717,77 @@ nodes use radix indexing without size tables; split/concat introduces size table
 spans become irregular. The immutable type has no dedicated tail buffer, so prefer its builder over
 an `AddLast` loop for bulk append construction.
 
+## Ancestral Slice Queue
+
+Use `AncestralSliceQueue<T>` when versions form branching append histories and every retained
+contiguous slice must remain appendable. It is intentionally narrower than a general persistent
+sequence: it has no prepend, point update, middle insertion, or concatenation of unrelated histories.
+
+```csharp
+var source = AncestralSliceQueue<int>.CreateRange(Enumerable.Range(0, 100));
+var window = source.Slice(25, 50);
+
+var leftBranch = window.AddLast(1000);
+var rightBranch = window.RemoveFirst().AddLast(2000);
+var (prefix, suffix) = window.SplitAt(20);
+
+int item = suffix[5];
+// source, window, prefix, and both branches remain unchanged and appendable.
+```
+
+Every handle shares an append-only arena. The shipped Myers arena makes `AddLast` O(1) amortized;
+`RemoveFirst`, `RemoveLast`, and `Drop` are O(1) worst case; and `First`, indexing, `Take`, `Slice`,
+and nontrivial `SplitAt` are O(log M) worst case for M historical appends in that arena. The arena
+retains every appended payload until the arena itself is collectible. An optimal dynamic
+level-ancestor backend would make all scalar operations O(1) worst case, but that backend is a
+theoretical instantiation rather than shipped code. See the
+[research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md) for the invariant,
+proof, scoped novelty claim, and comparison table.
+
+## Persistent Run-Delta Vectors
+
+Use `PersistentRunDeltaVector<T>` when a fixed-length persistent state needs a branch-local
+checkpoint and callers review contiguous change regions:
+
+```csharp
+var baseline = PersistentRunDeltaVector<int>.CreateRange(new int[12]);
+var edited = baseline
+    .SetItem(2, 20)
+    .SetItem(3, 30)
+    .SetItem(4, 40)
+    .SetItem(9, 90);
+
+foreach (var run in edited.EnumerateDirtyRuns())
+    Console.WriteLine($"[{run.Start}, {run.EndExclusive})");
+// [2, 5)
+// [9, 10)
+
+var partiallyAccepted = edited.AcceptDirtyRunAt(0);
+// Positions 2..4 now belong to the checkpoint; position 9 remains dirty.
+
+var rejected = edited.RevertDirtyRunAt(1);
+// Position 9 is restored from the checkpoint; positions 2..4 remain dirty.
+
+// Runs are also addressable by any position they contain, so a descriptor obtained from
+// TryGetDirtyRunContaining or EnumerateDirtyRuns can be acted on without rediscovering its rank.
+var acceptedByPosition = edited.AcceptDirtyRunContaining(3); // same result as AcceptDirtyRunAt(0)
+var unchanged = edited.AcceptDirtyRunContaining(0);          // position 0 is clean: a no-op
+
+var alternate = baseline.SetItem(7, 70); // independent retained branch
+```
+
+`Checkpoint()` accepts every current value and `Rollback()` rejects every change in O(1).
+`ResetItem(i)` cancels one position exactly when it becomes comparer-equal to its checkpoint value.
+If `k` dirty positions form `r` maximal runs, descriptor enumeration is Theta(r); reading or
+emitting all changed payloads still costs at least Omega(k). Reads, point edits, and selected-run
+accept/revert are O(log n), and complete current-value enumeration is Theta(n).
+
+The vector length and equality policy are fixed. Retained reference values must not mutate state
+observed by that comparer. This surface intentionally omits insertion, deletion,
+concat, unrelated rebase, range updates, and branch merge. See the
+[research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md) for the
+exact comparison class and novelty boundary.
+
 ## Range-Update Sequence
 
 Use `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` when a persistent indexed sequence must
@@ -658,6 +830,36 @@ Separate enumerators are independent and safe for concurrent reads. Do not copy 
 enumerator to fork a traversal: copies share traversal state, and the stale copy fails fast after
 the other advances.
 
+## Contextual Rank Sequence
+
+Use `ContextualRankSequence<TElement, TMachine>` when an event's weight depends on finite state to
+its left. A two-state quoted-delimiter machine, for example, can rank and select only commas outside
+quotes after persistent edits:
+
+```csharp
+readonly struct QuotedComma : IContextualEventMachine<char>
+{
+    public static int StateCount => 2;
+    public static ContextualEventTransition Transition(int state, char value) => value switch
+    {
+        '"' => new(1 - state, 0),
+        ',' when state == 0 => new(state, 1),
+        _ => new(state, 0)
+    };
+}
+
+var text = ContextualRankSequence<char, QuotedComma>
+    .Create("\"a,b\",c,d".AsSpan());
+long separators = text.Evaluate(0).EventCount; // 2
+text.TrySelectEvent(0, 0, out var first);       // first.ElementIndex == 5
+var branch = text.Insert(0, '"');               // text remains valid
+```
+
+For a fixed `s`-state machine, evaluation is O(1), while prefix rank, event select, and arbitrary
+edits are O(s log n) amortized. The `s` factor and O(s n) cached storage are explicit when machine
+size is not constant. See the
+[research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md).
+
 ## Persistent Chunked Bit Set
 
 Use `PersistentChunkedBitSet` for a sparse nonnegative integer set when population rank/select and
@@ -681,19 +883,24 @@ Storage is proportional to nonzero 64-bit chunks, not the largest bit index. See
 | --- | --- |
 | Persistent indexed sequence with endpoint edits | `FingerTreeDeque<T>` |
 | O(1) logical reverse over a persistent sequence | `ReversibleDeque<T>` |
+| Restricted branching deque with constant-call index/slice over an ancestry backend | `BilateralAncestralDeque<T>` |
 | Custom monoid measure, measure-guided locate, or split | `FingerTree<TElement, TMeasure, TMeasureOps>` |
 | Sorted values with duplicates | `SortedBag<T>` |
 | Unique sorted values and set algebra | `SortedSet<T>` |
 | Batched sorted-set edits before one snapshot | `SortedSet<T>.Builder` |
 | Sorted key/value lookup and rank access | `SortedDictionary<TKey, TValue>` |
 | Batched sorted-dictionary edits before one snapshot | `SortedDictionary<TKey, TValue>.Builder` |
+| Exact sorted net changes from one designated persistent-map checkpoint | `PersistentDeltaMap<TKey, TValue>` |
 | Minimum-priority draining and meld | `PriorityQueue<TElement, TPriority>` |
 | Closed-interval overlap and containment queries | `IntervalTree<T>` |
 | Closed-interval keys with payload lookup and overlap queries | `PersistentIntervalMap<TEndpoint, TValue>` |
 | Chunked persistent positional sequence | `Rope<T>` |
 | Localized persistent positional editing with retained branches | `RopeCursor<T>` from `Rope<T>.GetCursor()` |
 | Uniform random-access persistent sequence | `RrbVector<T>` |
+| Branching append history with appendable persistent slices | `AncestralSliceQueue<T>` |
+| Fixed-length branchable checkpoint state with contiguous dirty-hunk review | `PersistentRunDeltaVector<T>` |
 | Persistent indexed sequence with logarithmic range actions and aggregate queries | `RangeUpdateSequence<TElement, TMeasure, TTag, TOps>` |
+| Persistent rank/select for events depending on finite left context | `ContextualRankSequence<TElement, TMachine>` |
 | Sparse nonnegative integer set with population rank/select | `PersistentChunkedBitSet` |
 | Mutable FIFO window aggregate with worst-case O(1) operations | `DabaLite<T, TMonoid>` |
 | Policy-scoped canonical sorted shape and memoized digest | `CanonicalSortedSet<T>` |

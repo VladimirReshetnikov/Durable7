@@ -424,3 +424,41 @@ partial receiver can be repaired iteratively.
 `MerkleMergeValue::Present(Arc<V>)` is distinct from `Absent`, including when `V` itself is
 `Option<T>` and the present value is `None`. Resolvers may select a side, base, deletion, or a new
 value. Any unresolved conflict produces all typed conflicts and no partial tree.
+
+## Ancestral connection forest
+
+`PersistentAncestralConnectionForest` is a fully branching persistent insertion-only connectivity
+forest over the fixed vertex universe `0 .. vertex_count - 1`. Its distinguishing query is
+`first_connected`: the earliest version on the receiver's own root-to-current history at which two
+vertices became connected, or `None` when they are currently disconnected.
+
+Parent cells live sparsely in a `PersistentHashMap`, and an absent cell denotes a singleton root, so
+construction is O(1) for any universe size — a million-vertex forest allocates nothing per vertex.
+`link` applies union by size without path compression, keeping the first endpoint's root on a size
+tie, and labels the one new root-parent edge with the child version. Union by size bounds every
+parent path at O(log n) cells, so `find`, `connected`, and `link` cost O(w log n) for CHAMP path
+cost `w`; a successful `link` allocates O(w) new CHAMP nodes and a redundant one allocates O(1).
+
+**`w` is an expected bound in this port, not the unconditional one the managed reference states.**
+C# can assert a bounded CHAMP path because it hashes over the full key width; this crate hashes
+integer keys through the retained `BuildHasher` truncated to 32 bits, so collision buckets genuinely
+can form. Every per-operation cost above is therefore expected under the retained hasher rather than
+worst-case. The divergence is in the hash policy, not the algorithm.
+
+`component_size` reads the count the union-by-size root cell already caches, so it costs one root
+walk plus a cached read — the same bound as `find` — and performs no path compression. An isolated
+vertex reports 1.
+
+`first_connected` costs the same and is independent of history depth: it compares the two current
+parent paths and takes the latest union-edge version strictly below their forest LCA rather than
+searching the version history. The correctness argument is that later unions only attach the already-common
+root to other roots, which extends both vertices' paths by a shared rootward suffix and leaves the
+pair's LCA and everything below it frozen at connection time.
+
+Every `link` produces a distinct version token, including a redundant one, which still shares the
+entire connectivity index. C# gives version tokens reference identity; the Rust port uses `Arc` with
+pointer identity, exposing `parent()`, `depth()`, and `root()`. Equal depths on sibling branches are
+therefore distinct versions, as in the managed reference. Because a token retains its parent chain,
+a long history stays reachable from any live version — the cost is per `link`, not per successful
+union. Deletion, path compression, confluent merging, and retroactive updates are outside the
+contract in both ports.

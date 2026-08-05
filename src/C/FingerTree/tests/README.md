@@ -211,3 +211,20 @@ Run the built executables directly when changing runner diagnostics or a focused
 
 Use the workspace [validation guide](../docs/validation.md) for Release validation, warning policy,
 generated-output locations, sample smoke tests, and benchmark entry points.
+
+## Research-Derived Collection Suites
+
+Seven focused executables cover the collections ported from the C# and Rust references:
+
+| Test | Covers |
+| --- | --- |
+| `fingertree_c.incremental_ancestor` | The shared append-only level-ancestor seam: ancestor answers against a naive parent-walk oracle on deep chains and irregular branches, exact odd-block capacity at square boundaries, a logarithmic hop envelope, a caller-supplied non-Myers backend driven in lockstep with the shipped arena, and allocation/callback failure atomicity |
+| `fingertree_c.ancestral_slice_queue` | Anchored-empty provenance, every slice and split boundary against a sequence oracle, retained-branch independence, and arena-statistics query ceilings proving boundary-specialized operations issue no ancestor query |
+| `fingertree_c.bilateral_ancestral_deque` | The two-oriented-interval denotation, O(1) reverse by segment exchange, the at-most-two-query slice and split ceilings, and interval/count invariant validation |
+| `fingertree_c.contextual_rank_sequence` | Lifted all-start-state summaries against an independent scanner, contextual event rank and select including multi-event transitions, and policy-failure atomicity |
+| `fingertree_c.persistent_delta_map` | Coalescing and cancellation, checkpoint-root canonicalization when the change index empties, representative retention across delete/re-add round trips, and range-restricted change enumeration |
+| `fingertree_c.persistent_monotone_action_heap` | Clamp-composition algebra, temporal insert-after-transform semantics, melding of independently transformed heaps without cross-applied actions, and structural validation |
+| `fingertree_c.persistent_run_delta_vector` | Maximal non-adjacent dirty runs across every add and clear case, run-length-independent accept/revert splicing, and output-optimal descriptor counts for clustered dirty positions |
+
+Each suite additionally exercises the C-specific obligation the managed ports do not have: failure
+atomicity under injected allocation failures and failing copy callbacks.

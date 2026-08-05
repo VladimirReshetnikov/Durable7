@@ -74,3 +74,12 @@ query/block/step/expansion/omission/extra-step tampering; complete, partial, and
 synchronization; disjoint, identical, unresolved, and resolved typed merges; present `Nothing`
 versus deletion; retained roots in one content store; and a 2,000-operation save/load model. Local
 proof and sync construction is separately exercised with decoders that fail if forced.
+
+Ancestral connection forest coverage ports the reference cases and adds the branching ones: link
+producing a distinct version whose connectivity cells are shared when the endpoints were already
+connected, self-link as a redundant link, first-connected of a vertex with itself returning the
+history root, disconnected pairs, out-of-universe rejection on every entry point, union-by-size with
+the first endpoint kept on a tie, a survey of every witness in an eight-vertex forest asserting that
+equal depth and equal version coincide, a 20,000-link redundant tail proving the depth field builds
+no thunk chain, structural version identity including the collapse it implies, and a PRNG-seeded
+350-operation branching model checked against a reference union-find.

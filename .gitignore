@@ -77,3 +77,6 @@ cabal.project.local~
 _build/
 _opam/
 *.install
+
+# C / CMake
+build-mingw/

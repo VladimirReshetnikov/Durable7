@@ -8,15 +8,49 @@
 
 `src/CSharp/src/Durable7.FingerTree` contains the .NET 10 C# preview workspace for `Durable7.FingerTree`, a persistent collection library built around tuned and general-purpose finger trees.
 
-This workspace provides two public finger-tree types. `FingerTree<TElement, TMeasure, TMeasureOps>` is the general Hinze–Paterson **measured** finger tree — a persistent sequence annotated by an arbitrary monoidal measure (supplied through the static-abstract `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` interfaces), whose monotone-predicate `Split` specializes it into a positional sequence (`SizeMeasure<T>`), a mergeable priority queue (`MaxMeasure<T>`/`MinMeasure<T>`), an ordered search tree (`KeyMeasure<T>`), an order-statistic tree (`OrderStatisticMeasure<T>`), or a persistent Fenwick-style cumulative-weight structure (`SumMeasure<T>`, for weighted selection and sampling) — all shipped ready-made with named operations in `FingerTreeMeasureExtensions` and `FingerTreeSumExtensions`, with any two of them composable through the `ProductMeasure<…>` combinator (e.g. size+sum for a tree that is positional *and* Fenwick, or size+max for a priority queue with positional access), and any custom measure expressible by implementing the interfaces. A full Hinze–Paterson interval tree (`IntervalTree<T>`) and payload-bearing `PersistentIntervalMap<TEndpoint, TValue>` provide logarithmic stabbing/overlap queries; a sorted multiset (`SortedBag<T>`) with ranking and order-statistic indexing, a sorted set (`SortedSet<T>`) with navigable-set queries and set algebra, a sorted dictionary (`SortedDictionary<TKey, TValue>`) with navigable-map queries and order-statistic access, and a meldable `PriorityQueue<TElement, TPriority>` are built on the same core. Each deep node holds its middle subtree behind a memoized suspension and computes its measure lazily — Hinze–Paterson's lazy finger tree realized in a strict language — so the amortized bounds hold under fully persistent (branching) histories; the only consequence versus the deque is that `Measure` is O(1) amortized rather than worst-case (a general monoid has no inverse, so a popped subtree's measure is recovered by forcing, not subtraction). See [docs/api-specification.md](api-specification.md#the-general-measured-finger-tree) for its contract.
+Every collection surface uses the `Durable7.FingerTree` namespace. Surfaces that originated as
+research prototypes retain their design proposals under `docs/proposals`, which remain the normative
+record of their scoped claims and limitations.
+
+This workspace provides two public finger-tree types. `FingerTree<TElement, TMeasure, TMeasureOps>` is the general Hinze–Paterson **measured** finger tree — a persistent sequence annotated by an arbitrary monoidal measure (supplied through the static-abstract `IMonoid<TMeasure>` / `IMeasure<TElement, TMeasure>` interfaces), whose monotone-predicate `Split` specializes it into a positional sequence (`SizeMeasure<T>`), a mergeable priority queue (`MaxMeasure<T>`/`MinMeasure<T>`), an ordered search tree (`KeyMeasure<T>`), an order-statistic tree (`OrderStatisticMeasure<T>`), or a persistent Fenwick-style cumulative-weight structure (`SumMeasure<T>`, for weighted selection and sampling) — all shipped ready-made with named operations in `FingerTreeMeasureExtensions` and `FingerTreeSumExtensions`, with any two of them composable through the `ProductMeasure<…>` combinator (e.g. size+sum for a tree that is positional *and* Fenwick, or size+max for a priority queue with positional access), and any custom measure expressible by implementing the interfaces. A full Hinze–Paterson interval tree (`IntervalTree<T>`) and payload-bearing `PersistentIntervalMap<TEndpoint, TValue>` provide logarithmic stabbing/overlap queries; a sorted multiset (`SortedBag<T>`) with ranking and order-statistic indexing, a sorted set (`SortedSet<T>`) with navigable-set queries and set algebra, a sorted dictionary (`SortedDictionary<TKey, TValue>`) with navigable-map queries and order-statistic access, and a meldable `PriorityQueue<TElement, TPriority>` are built on the same core. `PersistentDeltaMap<TKey, TValue>` is a C# research prototype over the sorted dictionary that additionally retains a designated checkpoint and its coalesced ordered net-change index; see the [research proposal](../../../../docs/proposals/persistent-delta-map-2026-07-25.md). Each deep node holds its middle subtree behind a memoized suspension and computes its measure lazily — Hinze–Paterson's lazy finger tree realized in a strict language — so the amortized bounds hold under fully persistent (branching) histories; the only consequence versus the deque is that `Measure` is O(1) amortized rather than worst-case (a general monoid has no inverse, so a popped subtree's measure is recovered by forcing, not subtraction). See [docs/api-specification.md](api-specification.md#the-general-measured-finger-tree) for its contract.
 
 `ReversibleDeque<T>` is a sibling deque that adds **O(1) `Reverse`** while preserving all of the deque's bounds (including mixed-orientation `Concat` at O(log min)), via per-node reversal bits read through orientation-aware accessors — at a constant-factor cost, so it is a separate opt-in type rather than a change to the tuned deque.
+
+`BilateralAncestralDeque<T>` is a restricted persistent-deque Pareto point. A
+constant-sized handle denotes a reversed left ancestry interval followed by a forward right ancestry
+interval in one append-only manager. The representation is closed under both-end edits, O(1)
+reverse, indexing, arbitrary slice, and split using at most two incremental level-ancestor queries;
+it deliberately omits concat and middle edits. With an optimal incremental-level-ancestor backend,
+all scalar operations are O(1) worst case and enumeration is linear. The shipped Myers reference
+backend instead has O(1)-amortized pushes and O(log M) queries after M historical pushes; it exists
+to validate the reduction and extension seam, not to claim the optimal backend's bound. See the
+[research proposal](../../../../docs/proposals/bilateral-ancestral-deque-2026-07-25.md).
 
 `RrbVector<T>` is the random-access sibling: a persistent relaxed radix-balanced vector with
 32-element leaves, 32-way regular radix branches, and cumulative size tables only on relaxed
 branches. It provides uniform O(log32 n) indexing and path-copying updates, O(log32(n + m))
 concatenation by merging and repartitioning only the two boundary spines, and an append-only builder
 with immutable cached snapshots.
+
+`AncestralSliceQueue<T>` is a manager-backed persistent queue for branching append
+histories. A handle is an appendable interval on one root-to-node path, so dequeue, suffix drop, and
+tail removal change only constant-sized boundaries. Indexed access, prefix/slice construction, and
+split reduce to an incremental level-ancestor query. The shipped Myers arena provides O(1)-amortized
+append and O(log M) navigation after M historical appends; the all-O(1)-worst-case scalar bound is a
+proved reduction to an Alstrup--Holm backend that is not implemented here. The
+[research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md) records the proof,
+prior-art boundary, rootish allocator, and retained-history limitations.
+
+`PersistentRunDeltaVector<T>` is the fixed-length checkpoint sibling. It retains
+current and checkpoint RRB roots plus an exact persistent maximal-interval index of positions that
+differ under one stable equality policy. Point edits update one RRB path and at most two neighboring
+run records; whole checkpoint and rollback are root changes. If `k` dirty positions form `r`
+maximal runs, descriptors enumerate in output-optimal Theta(r), improving worst-case Theta(n)
+discovery from unindexed current/checkpoint roots. It also avoids the straightforward Theta(k)
+linear scan used to coalesce point records, although that scan is not a lower bound for every
+order-statistic point index. The
+[research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md) states the
+restricted RRB comparison, DIET prior art, sublogarithmic-array caveat, and deliberate limits.
 
 `DabaLite<T, TMonoid>` is the family's deliberately mutable streaming member. It reuses
 `IMonoid<T>` to maintain a FIFO window aggregate through the VLDB Journal 2021 six-cursor DABA Lite
@@ -43,6 +77,18 @@ delete-min. It complements the measured finger-tree priority queue when per-oper
 bounds matter more than constants or stable priority/payload separation. Its public structural
 validator audits the fused bootstrapped/skew-binomial representation and reports rank/depth statistics.
 
+`PersistentMonotoneActionHeap<TElement, TPriority, TAction>` is the action-tagged
+sibling of `BrodalOkasakiHeap<T>`. A caller-supplied `IMonotoneHeapAction` policy defines an
+identity, associative composition, and O(1) application of monotone actions on priorities;
+`TransformAll` then adjusts every current priority in O(1) worst case by composing one lazy tag,
+while insert, minimum, and meld stay O(1) worst case and delete-min stays O(log n) worst case. Tags
+are pushed down only along paths the underlying bootstrapped skew-binomial algorithm already
+touches, so differently transformed heaps meld without cross-applying actions and later insertions
+are not retroactively transformed. The shipped `OrderClampPolicy<T>` closes floor/cap/two-sided
+clamps and exact constants under composition. The
+[research proposal](../../../../docs/proposals/persistent-monotone-action-heap-2026-07-29.md)
+records the tag algebra, worst-case argument, and policy-trust boundary.
+
 `PrioritySearchQueue<TKey, TPriority, TValue>` combines an ordered key map with a min-priority
 queue in one persistent AVL core. This is a winner-cached AVL, not Hinze's loser-tree priority-search
 pennant. Each node caches its subtree winner, enabling O(log n) keyed updates/deletion, O(1)
@@ -62,6 +108,14 @@ reference is shipped: its focused Debug lane passes 62/62 tests and the complete
 passes 692/692 tests in Debug and Release. At the pre-bimap Range shipment checkpoint, the full
 serialized C# solution passed 1,417/1,417 tests with zero build warnings or errors in both
 configurations. No benchmark result is part of that shipment evidence.
+
+`ContextualRankSequence<TElement, TMachine>` is a measured-sequence facade for
+context-dependent events. Each subtree caches the deterministic machine's outgoing state and
+nonnegative event count for every possible incoming state. For a fixed finite machine, full
+evaluation is O(1), contextual prefix rank and event select are O(log n) amortized, and ordinary
+persistent sequence edits retain the underlying finger-tree asymptotics. The
+[research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md) records the lifted
+monoid, strict comparison boundary, literature audit, and limitations.
 
 `PersistentChunkedBitSet` stores ascending nonzero 64-bit words in a measured finger tree whose
 annotation caches population and word boundaries. It provides sparse point edits, inclusive rank,
@@ -89,16 +143,25 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   - `SortedBag.cs` — `SortedBag<T>`, an immutable sorted multiset on the order-statistic measure (runtime `IComparer<T>`): O(log n) add/remove/search/rank, order-statistic indexing, range extraction, and O(1) count/min/max.
   - `SortedSet.cs` / `SortedSet.Builder.cs` — `SortedSet<T>`, the uniqueness-enforcing sibling: navigable-set queries (floor/ceiling/lower/higher), order-statistic indexing and ranking, range extraction, O(n + m) set algebra and relations, plus a nested mutable builder for batched edits and cached snapshots.
   - `SortedDictionary.cs` / `SortedDictionary.Builder.cs` — `SortedDictionary<TKey, TValue>` (an `IReadOnlyDictionary`) on a key-projecting order-statistic measure (`EntryMeasure<TKey, TValue>`): O(log n) lookup/set/add/remove, navigable-map neighbor queries, order-statistic access by rank, key-range extraction, plus a nested mutable builder for batched entry edits.
+  - `PersistentDeltaMap.cs` — checkpoint-differential ordered-map research prototype: ordinary persistent sorted state plus a persistent, coalesced before/after index for `Θ(k + 1)` exact sorted changes from one designated checkpoint.
   - `PriorityQueue.cs` — `PriorityQueue<TElement, TPriority>`, a meldable persistent min-priority queue on a count-plus-min measure (`PriorityMeasure`): O(1) amortized enqueue, O(1) min-priority peek, O(log n) peek/dequeue, and O(log(min(n, m))) melding.
   - `RrbVector.cs` — a 32-way relaxed radix-balanced persistent vector with radix-indexed regular
     nodes, relaxed-node size tables, an append-only builder, structural split/edit, and
     boundary-spine concatenation.
+  - `AncestralSliceQueue.cs` — the append-tree interval queue, its incremental-ancestor
+    backend contract, and a Myers jump-link reference arena stored in odd-sized square-boundary blocks.
+  - `PersistentRunDeltaVector.cs` — a fixed-length persistent current/checkpoint vector with exact
+    equality-relative dirty runs and selected-run accept/revert.
   - `DabaLite.cs` — a six-cursor, chunk-queue-backed FIFO sliding-window aggregator over any monoid,
     with bounded callback counts, strong callback exception safety, and structural statistics.
   - `CanonicalSortedSet.cs` / `ZipTreeRankPolicy.cs` — the policy-canonical, stack-safe
     zip-zip-inspired sorted set and its random, publicly seeded, or caller-keyed HMAC rank policy.
   - `BrodalOkasakiHeap.cs` — the bootstrapped skew-binomial heap with optimal purely functional
     worst-case bounds and a public invariant/statistics audit.
+  - `PersistentMonotoneActionHeap.cs` — the monotone-action sibling: the
+    `IMonotoneHeapAction` policy contract, the closed `OrderClampPolicy<T>`/`OrderClamp<T>` clamp
+    family, and the lazily tagged bootstrapped skew-binomial heap with O(1) worst-case
+    whole-heap priority transformation and a public structural/tag validator.
   - `PrioritySearchQueue.cs` — the winner-cached keyed AVL priority-search queue, range/threshold
     query surface, and public AVL/winner validation statistics.
   - `IRangeUpdateAlgebra.cs` / `RangeUpdateSequence.cs` / `RangeUpdateSequence.Core.cs` — the
@@ -106,6 +169,9 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
     and cached ordered measures; the generic algebra, structural bounds, enumeration, failure, and
     concurrency contracts are specified in the
     [range-update sequence reference](range-update-sequence.md).
+  - `ContextualRankSequence.cs` — the finite-context event sequence, including its
+    static machine policy, lifted all-start-state summaries, prefix evaluation, and contextual
+    event rank/select surface.
   - `FingerTree.cs` — the public general measured finger tree `FingerTree<TElement, TMeasure, TMeasureOps>`.
   - `Rope.cs` / `Rope.Builder.cs` + `Internal/RopeChunk.cs` — `Rope<T>`, a general-purpose persistent **chunked** sequence (rope): elements live in bounded array chunks (`Chunk<T>`, measured by `ChunkLengthMeasure<T>`) at the leaves of a count-measured finger tree, giving cache-friendly storage and O(log n) indexed insert/remove/split/slice with O(log min) concat and structural-sharing persistence. Element-agnostic (`Rope<char>` is a text buffer, `Rope<byte>` a binary buffer); positional reads/splits use the zero-allocation `ElementIndexPredicate` over `TryLocate`; the nested append-only builder uses frozen-prefix snapshots for incremental construction.
   - `Rope.Cursor.cs` + `Internal/RopeCursorPrototype.cs` — the public immutable `RopeCursor<T>` positional edit cursor and its shared focused cursor engine. A cursor is a gap in `0 .. Count`; movement and edits return branchable cursor values over a 16-element focus with sub-256-element carries, while a winner-returning memo cell materializes one canonical `Rope<T>` snapshot per logical edit version. Linear local-edit histories are O(1) amortized per operation and O(log n) worst-case; arbitrary fan-out retains the honest O(b log n) bound for b branches. See the [C0 decision](rope-cursor-c0-decision.md) for the selected proof scope and the [API specification](api-specification.md#positional-edit-cursor) for the shipped contract.
@@ -118,6 +184,10 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   - `MeasurePredicate.cs` — the public `IMeasurePredicate<TMeasure>` value-type predicate strategy interface (a sibling of `IMonoid`/`IMeasure`/`IComparison`), so callers can write their own **zero-allocation** queries over a raw tree through the public generic `FingerTree.TryLocate<TPredicate>`.
   - `Internal/MeasurePredicates.cs` — the library's own non-capturing struct predicates (`CountAbovePredicate`, `KeyAtLeast`/`KeyAbovePredicate`, `PriorityFrontPredicate`, `MaxHighAtLeastPredicate`, and the `FuncMeasurePredicate` delegate adapter) that route the sorted/order-statistic/priority/interval collections' hot reads through `TryLocate` with zero allocation.
   - `ReversibleDeque.cs` + `Internal/Reversible/` — `ReversibleDeque<T>`, the reversible sibling of `FingerTreeDeque<T>`: the same deque/index/split/concat bounds plus O(1) `Reverse` (every node carries a reversal bit and an O(1) `Mirror`; operations read through orientation-aware accessors so even mixed-orientation `Concat` stays O(log min)). Strict, with higher constant factors — use it when O(1) reverse is needed.
+  - `BilateralAncestralDeque.cs` — the two-oriented-ancestry-interval deque, its
+    incremental-level-ancestor backend contract, and the shipped Myers jump-link reference arena.
+    The proposal keeps optimal-backend and shipped-reference bounds separate and records the
+    restricted algebra and manager-retention caveats.
   - `FingerTreeDeque.cs` — public deque type, argument validation, and the struct enumerator.
   - `FingerTreeDequeResults.cs` — split and pop result record structs.
   - `Internal/` — the deque's tuned finger-tree core: `TreeElement.cs` (measured-element contract and the struct `Leaf<T>`), `Digit.cs`, `Node.cs`, `Tree.cs` (empty/single/deep levels), `MiddleTree.cs` (memoized middle-subtree suspensions and their pending operations), and `TreeOperations.cs` (smart deep constructors, pulls with the paper's `chop`, and concatenation).
@@ -128,6 +198,9 @@ zero-based select, ascending enumeration, and chunk-stream set algebra over the 
   and the complete FingerTree project passes 692/692 tests in Debug and Release. At the pre-bimap
   Range shipment checkpoint, the full serialized C# solution passed 1,417/1,417 tests with zero
   build warnings or errors in both configurations.
+  After the research-derived collections were promoted, ported to Rust, and extended with the
+  reviewed enhancement backlog, the complete FingerTree project passes 807/807 tests and the full C#
+  solution passes 1,254/1,254 tests.
 - `benchmarks/Durable7.FingerTree.Benchmarks/` is the shared BenchmarkDotNet harness for
   the C# persistent-collections workspace. Alongside the deque, ropes, measures, sorted collections,
   and measured priority queue, it now contains RRB-vector, DABA Lite, canonical zip-set,

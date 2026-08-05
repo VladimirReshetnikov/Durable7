@@ -18,6 +18,10 @@ project.
 - [C# FingerTree API Specification](api-specification.md) defines the normative public C# API shape, semantic contracts, and complexity targets for the implementation in `src/Durable7.FingerTree/`.
 - [Persistent chunked bit set](persistent-chunked-bit-set.md) specifies the sparse nonnegative-int
   domain, inclusive rank, zero-based select, chunk-stream algebra, API, and complexity contract.
+- [Persistent run-delta vector research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md)
+  specifies the fixed-length checkpoint vector, exact maximal-dirty-run invariant,
+  output-optimal run discovery bound, RRB comparator family, prior-art boundary, and validation
+  evidence.
 - [Range-update sequence contract](range-update-sequence.md) specifies the static tag/action algebra,
   `Compose(newer, older)` direction, implicit-AVL lazy-tag invariant, exact public API, structural
   bounds, affine assign/add example, and deterministic validation boundary for
@@ -26,6 +30,9 @@ project.
   and Release. At the pre-bimap Range shipment checkpoint, the full serialized C# solution passed
   1,417/1,417 tests with zero build warnings or errors in both configurations. Benchmarks remain
   postponed until they can run in isolation.
+- [Contextual Rank Sequence research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md)
+  specifies the persistent finite-context event rank/select lift, its transducer
+  monoid, exact asymptotic comparison, novelty boundary, and C# validation evidence.
 - [Validation](validation.md) records the local .NET restore/build/test commands, XML-documentation gate,
   sample and benchmark validation boundaries, stress controls, and test-suite coverage.
 - [Tests README](../../tests/Durable7.FingerTree.Tests/README.md) maps the xUnit/CsCheck test project,

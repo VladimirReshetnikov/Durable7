@@ -75,12 +75,27 @@ Release configuration is required for meaningful benchmark numbers.
 
 ### Current Derived-Structure Integration Evidence
 
-On 2026-07-17 UTC, the focused `PersistentIntervalMapTests` and `PersistentChunkedBitSetTests` lanes
-passed 9/9 and 8/8 tests, and the complete FingerTree project passed 709/709 tests in both full
-serialized Debug and Release solution gates.
-Both complete solution builds finish with zero warnings and zero errors, and both full C# gates
-currently pass 1,158/1,158 tests, of which the FingerTree project contributes 724. Benchmarks were
-not run.
+On 2026-07-29 UTC, the six consolidated research-derived FingerTree lanes passed 70/70 tests in both
+Debug and Release: 15 delta-map + 15 ancestral-slice-queue + 15 bilateral-ancestral-deque + 7
+contextual-rank-sequence + 11 monotone-action-heap + 7 run-delta-vector. The complete FingerTree
+project passed 794/794 tests, and the serialized full C# solution passed 1,240/1,240 in both
+configurations: 366 HAMT + 794 FingerTree + 80 Ordered. The separate
+ancestral-connection-forest lane contributed 12 of the HAMT tests. Benchmarks were not run because
+no empirical performance claim is part of this integration gate. Solution builds completed in both
+configurations; the rebased base currently emits pre-existing XML-documentation warnings.
+
+On 2026-08-04 UTC, after the collections were promoted into `Durable7.FingerTree`/`Durable7.Hamt`,
+ported to Rust, and extended with the reviewed enhancement backlog, the complete FingerTree project
+passes 807/807 tests and the serialized full C# solution passes 1,254/1,254: 367 HAMT +
+807 FingerTree + 80 Ordered. The added coverage is the shared incremental-ancestor seam suite
+(including a custom non-Myers arena driving both consumer collections through randomized histories),
+position-addressed run accept/revert with a retained-branch interleaving property test,
+range-restricted change enumeration, bulk assignment with failure atomicity, and uniform endpoint
+overflow reporting for the contextual sequence. Benchmarks were not run.
+
+For historical comparison, the pre-experiment checkpoint passed 1,158/1,158 full-solution
+tests, including 724 FingerTree tests. The consolidated totals above supersede the isolated
+per-branch snapshots recorded while the prototypes were developed.
 
 `tests/Durable7.FingerTree.Tests/` covers the xUnit/CsCheck suite. See the
 [tests README](../../tests/Durable7.FingerTree.Tests/README.md) for source-file grouping, filter examples,
@@ -92,6 +107,17 @@ During interval-map development, run its focused model/invariant lane with:
 .\test.ps1 -Filter FullyQualifiedName~PersistentIntervalMapTests
 ```
 
+For the checkpoint-differential ordered-map research prototype, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentDeltaMapTests
+```
+
+The focused lane passes 15/15 cases covering endpoint classification, cancellation, representative
+policy, retained branches, randomized model parity, callback failures, and the `Θ(k + 1)`
+enumeration guard. The broader proposal and scoped novelty audit are recorded in the
+[research note](../../../../docs/proposals/persistent-delta-map-2026-07-25.md).
+
 For the sparse chunked bit set, run:
 
 ```powershell
@@ -100,6 +126,54 @@ For the sparse chunked bit set, run:
 
 The focused lane currently passes 8/8 tests covering domain boundaries, word seams, rank/select,
 algebra, receiver identity, retained branches, randomized model parity, and measured invariants.
+
+For the experimental ancestral slice queue, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~AncestralSliceQueue
+```
+
+Its focused lane covers the empty/singleton contract, every subrange of a representative history,
+appendable empty anchors, split boundaries, retained branching versions, deterministic randomized
+model histories, odd-block square seams, a direct ancestor oracle, traversal-hop guardrails,
+explicit/custom factories, per-operation backend-counter deltas, synchronized concurrent
+branches/readers, enumeration, and invalid ranges. It passes 15/15 in both Debug and Release.
+
+For the experimental bilateral ancestral deque and its Myers reference arena, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~BilateralAncestralDequeTests
+```
+
+This lane is required to cover the two-arm invariant, all slice/split boundaries, retained branching
+models, exact level-ancestor call ceilings, direct irregular-tree arena oracles, odd-block seams, and
+concurrent reads. The optimal Alstrup--Holm instantiation remains a proved backend reduction rather
+than a shipped implementation, so tests must report Myers bounds separately.
+
+The bilateral lane passes 15/15 tests in Debug and Release. Benchmarks are not evidence for its
+asymptotic theorem.
+
+For the experimental persistent run-delta vector, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentRunDeltaVectorTests
+```
+
+The focused lane contains 7 tests covering factories and equality policies both coarser and finer
+than default equality, every local run merge/split/shrink/cancellation case, zero-comparer-call
+selected-run acceptance and reversion, 5,000 randomized retained-version operations against an
+independent model, the clustered `k >> r` witness, comparer failure atomicity, and concurrent
+readers with independent branch writers.
+
+For the experimental persistent monotone-action heap, run:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~PersistentMonotoneActionHeapTests
+```
+
+The focused lane contains 11 tests covering the clamp-action algebra, ordinary heap semantics,
+lazy whole-heap transforms, meld compatibility, retained branching versions, randomized model
+parity, structural and callback ceilings, failure atomicity, and concurrent readers.
 
 The suite covers:
 
@@ -110,6 +184,9 @@ The suite covers:
 - derived sorted bag/set/dictionary, sorted mutable builders, priority queue, interval tree,
   persistent interval map, persistent chunked bit set, and reversible deque
   behavior against BCL or brute-force models where appropriate;
+- `BilateralAncestralDeque<T>` empty/end/reverse/index/slice/split behavior, exhaustive and randomized
+  retained-version models, query-routing ceilings, Myers branch ancestry, allocation seams, and
+  lock-safe concurrent use;
 - `Rope<T>`, its public immutable `RopeCursor<T>` gap editor, `MeasuredRope<T, TMeasure, TMeasureOps>`,
   text helpers, editor-grade Unicode/newline helpers, `RopeBuilder`, and nested append-only rope builders;
 - `RopeCursorTests.cs` locks default-value rejection, gap and edit semantics, no-op/version/context/snapshot
@@ -134,6 +211,12 @@ The suite covers:
 - `RrbVector<T>` radix boundaries, regular-versus-relaxed representation invariants, exact-boundary
   leaf reuse, unequal-height and adversarial-fragment concatenation, density/height ceilings,
   builder snapshot isolation, retained snapshots, and randomized mixed-edit histories;
+- `AncestralSliceQueue<T>` queue/slice semantics, appendable anchored empties, direct Myers ancestor
+  correctness, odd-block square boundaries, retained branches, randomized models, factory validation,
+  operation-routing/traversal counters, and synchronized concurrent publication/read behavior;
+- `PersistentRunDeltaVector<T>` exact equality-relative dirty runs, current/checkpoint parity,
+  interval locality and maximality, cancellation, whole and selected-run accept/revert, retained
+  branches, comparer failures, clustered descriptors, and concurrent snapshots;
 - `DabaLiteTests.cs` covers noncommutative FIFO ordering, a 100,000-operation randomized window
   model, empty/clear behavior, and the three/two/at-most-one worst-case `Combine` ceilings;
 - `DabaLiteAdversarialTests.cs` exhausts short histories and covers all four fixup phases with a
@@ -231,6 +314,24 @@ in both configurations. The detailed semantic oracle is the
 Benchmarks are explicitly outside this integration gate. They remain postponed until the machine
 can run the benchmark harness in isolation; no wall-clock result gathered under current CPU,
 memory, or I/O contention is acceptable as validation evidence.
+
+## Contextual Rank Sequence Gate
+
+Run the focused finite-context rank/select lane while iterating:
+
+```powershell
+.\test.ps1 -Filter FullyQualifiedName~ContextualRankSequence
+```
+
+The experimental lane covers an independently scanned semantic model, exhaustive short inputs,
+retained branching histories, cached-query callback counts, transition-policy failures, and checked
+event-total overflow. Before publishing the branch, also run the complete FingerTree project and
+full C# solution in Debug and Release, formatting, Markdown-link validation, and `git diff --check`.
+The [research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md) is the
+authoritative home for the proof and novelty boundary.
+
+The focused lane passes 7/7 tests in both Debug and Release. Its complete integration totals are
+recorded in the consolidated gate above.
 
 ## Stress Controls
 

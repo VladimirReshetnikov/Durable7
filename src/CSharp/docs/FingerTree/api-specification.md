@@ -14,7 +14,7 @@
 
 ## Summary
 
-This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, rope, and range-update sequence contracts in the same library. For first-use examples and facade selection, start with the [usage guide](usage.md).
+This document specifies the public API contract for the C# FingerTree workspace. It opens with the tuned `FingerTreeDeque<T>` contract, then records the sibling measured tree, sorted collections, priority queue, interval tree, reversible deque, rope, and range-update sequence contracts in the same library. Every surface specified here lives in `Durable7.FingerTree`; the research-derived surfaces additionally carry a design proposal under `docs/proposals` that remains the normative record of their scoped claims. For first-use examples and facade selection, start with the [usage guide](usage.md).
 
 ## Scope And Non-Goals
 
@@ -510,6 +510,7 @@ The implementation should keep XML documentation aligned with this file. XML sum
 - **Sorted multiset.** `SortedBag<T>` is an immutable sorted multiset built on `OrderStatisticMeasure<T>`. Because that measure's combine is order-independent, the bag stores a runtime `IComparer<T>` and applies it in the split predicates, so it accepts an arbitrary comparer (not just `Comparer<T>.Default`) while keeping O(1) `Count`/`Min`/`Max`, O(log n) `Add`/`Remove`/`RemoveAll`/`Contains`/`CountOf`, rank queries (`CountLessThan`/`CountAtMost`), order-statistic indexing (`this[rank]`), and range extraction (`GetRange`). It enforces the sorted invariant by construction, so its queries are always well-defined.
 - **Sorted set.** `SortedSet<T>` is the uniqueness-enforcing sibling of `SortedBag<T>` on the same order-statistic measure and runtime comparer. Beyond the bag's queries it adds navigable-set neighbor lookups (`TryFloor`/`TryCeiling`/`TryLower`/`TryHigher`), `IndexOf`, and the set algebra — `Union`/`Intersect`/`Except`/`SymmetricExcept` plus the relations `IsSubsetOf`/`IsSupersetOf`/`IsProperSubsetOf`/`IsProperSupersetOf`/`Overlaps`/`SetEquals` — implemented as O(n + m) sorted-merge sweeps that assume both operands share the order. `CreateBuilder(comparer)` and `ToBuilder()` expose a nested mutable `Builder` for large batched edits: `Add`, `Remove`, `UnionWith`, `ExceptWith`, `Clear`, and `ToImmutable`. Dirty freezes rebuild from comparer-ordered staging in O(n); repeated clean freezes return the same immutable reference.
 - **Sorted dictionary.** `SortedDictionary<TKey, TValue>` is a key-ordered map (an `IReadOnlyDictionary<TKey, TValue>`) on `EntryMeasure<TKey, TValue>`, which projects each entry's key into the order-statistic measure. It mirrors `SortedSet<T>` over keys: O(log n) `SetItem`/`Add`/`TryAdd`/`Remove`/`ContainsKey`/`TryGetValue`/`IndexOfKey`, order-statistic `EntryAt`, navigable-map neighbors (`TryFloorEntry`/`TryCeilingEntry`/`TryLowerEntry`/`TryHigherEntry`), `GetRange`, and O(1) `Count`/`MinEntry`/`MaxEntry`, with a runtime key comparer and last-wins `CreateRange`. Its nested mutable `Builder` stages ordered entries with `Add`, `TryAdd`, `SetItem`, `AddRange`, `Remove`, `Clear`, and `ToImmutable`; dirty freezes are O(n), clean freezes are reference-cached, and `SetItem` is an unconditional cache-invalidating write.
+- **Checkpoint-differential ordered map (research prototype).** `PersistentDeltaMap<TKey, TValue>` stores three fully persistent roots: checkpoint map B, current map S, and a sorted delta map D containing exactly one `(before, after)` record for each comparator-equivalent key on which B and S differ under the configured value equivalence. `SetItem` and `Remove` update S and D in O(log(N + 1)), coalesce repeated edits, and delete D's record when the endpoints again agree. `Checkpoint` selects S as the new B and clears D in O(1); `Rollback` selects B as S and clears D in O(1). Fully consuming `GetChanges()` enumerates D directly in `Θ(k + 1)`, already in key order. The `GetChanges(low, high)` overload restricts that enumeration to an inclusive key range by seeking D's boundaries rather than filtering, costing O(log(k + 1)) plus output; an inverted range yields nothing, matching the sorted dictionary's own inclusive-range behavior, and only key comparisons are invoked. `SetItems` applies a sequence in enumeration order exactly as if each entry were applied through `SetItem`, so coalescing, cancellation, representative retention, and the clean-version checkpoint snap all hold verbatim, later entries win for equivalent keys, and an all-no-op batch returns the receiver; it is a convenience and allocation saving over the equivalent fold, not a better asymptotic bound. All ordinary exposed reads retain the sorted dictionary's bounds; a live version uses O(N + k) nodes, and this path-copied prototype adds O(log(N + 1)) nodes per effective point edit. The contract covers one designated checkpoint and point edits, not arbitrary-pair diff or tracked bulk clear. The [proposal](../../../../docs/proposals/persistent-delta-map-2026-07-25.md) proves the invariant and the representation-specific separation from reference-pruned structural diff.
 - **Meldable priority queue.** `PriorityQueue<TElement, TPriority>` is a persistent minimum-priority queue on `PriorityMeasure<TElement, TPriority>` (a count plus minimum-priority product measure). Entries are stored in insertion order and the front is found through the measure's minimum, so `Enqueue` is a cheap append (O(1) amortized), `TryPeekPriority` is O(1), `TryPeek`/`TryDequeue` are O(log n), and two queues `Meld` by concatenation in O(log(min(n, m))) — the finger-tree advantage over a heap. It is stable (FIFO among equal least priorities) and orders by `Comparer<TPriority>.Default` (reverse the priority for a maximum-priority queue); because a min measure's `Combine` depends on the order, this is the one collection that cannot take a runtime comparer.
 - **Persistence (lazy-memoized spine).** Like `FingerTreeDeque<T>`, this type holds the middle subtree of each deep node behind a memoized suspension, so deferred spine repairs are paid once and shared among every version holding the same suspension — the amortized bounds therefore hold under fully persistent (branching) histories. The deque additionally keeps `Measure` O(1) worst-case because its size measure is a *group*: it recovers a popped subtree's size by subtraction without forcing. A general monoid has no inverse, so this type cannot subtract; instead it memoizes each deep node's measure *lazily* (Hinze and Paterson's approach). The consequence is the one bound that differs from the deque: `Measure` is O(1) amortized rather than O(1) worst-case, since the first read of a fresh node may force an O(log n) chain of suspended measures before memoizing. `First`/`Last` still never force and remain O(1) worst-case. The pre-force-the-source discipline (a new suspension always captures an already-forced source) keeps every suspension one operation deep, bounding the forcing cascade by the tree height. Suspensions publish their forced result by compare-exchange, so concurrent reads are safe and converge.
 
@@ -521,6 +522,45 @@ The implementation should keep XML documentation aligned with this file. XML sum
 - **Reverse.** `Reverse()` mirrors the root — O(1) — and leaves the original unchanged. Double reverse is the identity.
 - **Bounds preserved.** O(1) endpoint reads; O(log n) worst / O(1) amortized (linear-use) endpoint insert/remove; indexing, `SetItem`, `InsertAt`, `RemoveAt`, and `SplitAt` logarithmic in the distance from the nearer end; `Concat` O(log(min(n, m))). Crucially, **concatenation stays O(log(min)) even across mixed orientations** (e.g. `a.Reverse().Concat(b)`): `glue` reads each operand through its logical accessors, so a reversed operand never needs reifying. This is the "full-bounds" property that distinguishes this type from a cheaper root-flag design whose mixed-orientation concat would degrade to O(n).
 - **Cost.** Relative to `FingerTreeDeque<T>`: a reversal-bit branch on every internal access, and small orientation-adjusted digit-array copies along reversed paths. Forward-only usage takes the fast path. Choose `FingerTreeDeque<T>` unless O(1) reverse is required.
+
+## The Bilateral Ancestral Deque
+
+`BilateralAncestralDeque<T>` is a restricted immutable `IReadOnlyList<T>` over an append-only
+`IIncrementalAncestorArena<T>` — the same arena seam `AncestralSliceQueue<T>` uses, shared by both
+collections rather than duplicated per consumer. A handle denotes
+`reverse(path(leftAnchor,leftTail)) ++ path(rightAnchor,rightTail)`. Each arm also caches its first
+physical node, so `First` and `Last` never need an ancestor query. Public factories are
+`Create(arena)`, `CreateMyers()`, and `CreateRange(values)`; the value operations are `AddFirst`,
+`AddLast`, `RemoveFirst`, `RemoveLast`, their `TryRemove*` forms, `Take`, `Drop`, `Slice`, `SplitAt`,
+`Reverse`, `Clear`, `ToArray`, indexing, and enumeration.
+
+- **Semantics.** All producing operations return an immutable handle and preserve every source
+  version; identity cases may return the source reference.
+  Either end can be extended from an arbitrary retained handle. Negative/out-of-range indices and
+  counts throw `ArgumentOutOfRangeException`; empty endpoint reads/removals throw
+  `InvalidOperationException`; `TryRemove*` returns `false`, default value, and the same source.
+  `CreateRange` always owns a fresh Myers arena and consumes its source once. No exact internal
+  anchor provenance is promised for extensionally empty values.
+- **Closed representation.** End pushes add one arena leaf. Pops move one arm tail or advance the
+  other arm anchor. Reverse swaps the arms. A contiguous slice intersects each oriented ancestry
+  interval at most once, so `Slice` and both halves of `SplitAt` remain constant-sized handles and
+  use at most two total level-ancestor queries.
+- **Parameterized bounds.** If arena leaf addition costs `U(M)` and level ancestor costs `Q(M)`
+  after `M` historical pushes, end addition costs `U(M)`; end removal and index cost at most one
+  `Q(M)`; slice/split cost at most two `Q(M)`; count, endpoints, reverse, and clear are O(1).
+  Enumeration is Theta(n). Alstrup--Holm's incremental-tree result supplies `U=Q=O(1)` worst case
+  and O(M) arena space, yielding O(1) worst-case time for every scalar operation.
+- **Shipped backend.** `MyersIncrementalAncestorArena<T>` is a semantic/reference implementation,
+  not the optimal instantiation. It gives O(1)-amortized leaf addition, O(log M) worst-case ancestor
+  queries, and O(M) retained records. `MyersIncrementalAncestorStatistics` exposes publication,
+  odd-block allocation, query, and hop counters. All arena calls are serialized by one lock.
+- **Lifetime and omissions.** A handle retains its arena, which retains every historical pushed
+  payload until collection; storage is O(M+H), not current-length-only. The API intentionally has
+  no unrelated `Concat`, `SetItem`, `InsertAt`, `RemoveAt`, or cursor. It is a scoped
+  reduction/ADT synthesis and does not replace the general deque.
+
+The complete invariant, slice proof, separated complexity tables, and novelty limits are in the
+[research proposal](../../../../docs/proposals/bilateral-ancestral-deque-2026-07-25.md).
 
 ## The Rope
 
@@ -840,6 +880,142 @@ preserve instance identity, and no caller-owned mutable arrays are retained. The
 dedicated persistent tail buffer: repeated immutable `AddLast` remains a boundary-spine operation;
 use the builder when append throughput is the dominant construction workload.
 
+## Ancestral Slice Queue
+
+`AncestralSliceQueue<T>` is an immutable `IReadOnlyList<T>` facade over a mutable, monotone
+`IIncrementalAncestorArena<T>`. A handle stores an arena-owned tail node, the absolute depth of its
+first visible value, and its count. Its denotation is the contiguous ancestor-depth interval from
+that first depth through the tail. An empty result retains the node immediately before its window as
+an anchor; appending to any empty slice consequently produces exactly the appended value.
+
+The restricted public algebra is `AddLast`, endpoint reads and removals, indexed lookup, `Take`,
+`Drop`, `Slice`, `SplitAt`, and enumeration. Every producing operation leaves all old handles valid,
+and every result remains appendable. Prepend, point replacement, arbitrary middle edits, unrelated
+concatenation, and cross-arena operations are deliberately unsupported.
+
+Let `U(M)` be `AddLeaf` time and `Q(M)` be level-ancestor-query time after M nodes have been
+published in one arena. Parent, depth, and value reads are O(1). These are sequential bounds and do
+not include lock waiting or caller payload work. The facade has these bounds:
+
+| Operation | Time |
+| --- | --- |
+| `AddLast` | `U(M)` |
+| `Count`, `IsEmpty`, `Last`, `RemoveFirst`, `RemoveLast`, `Drop` | O(1) |
+| `First`, indexer, `Take`, `Slice`, nontrivial `SplitAt` | `Q(M)` |
+| `TryRemoveFirst` / `TryRemoveLast` | `Q(M)` / O(1) |
+| enumerate n visible values | Theta(n) |
+
+The shipped `MyersIncrementalAncestorArena<T>` uses one parent and one coalesced jump per immutable
+node. Its leaf insertion does O(1) link work and is O(1) amortized including odd-block allocation;
+ancestor queries are O(log M) worst case; and total manager storage is O(M). All its reads and writes
+are serialized by one private lock. An Alstrup--Holm incremental level-ancestor backend supplies
+`U(M) = Q(M) = O(1)` worst case with linear manager space, giving the facade O(1) worst-case scalar
+operations, but no such backend is included in this prototype.
+
+Space is charged to history, not a single handle: the arena retains every successful append and its
+payload until the arena becomes unreachable. The complete invariant, preservation proof, allocator
+arithmetic, prior-art audit, and precise shipped/theoretical distinction are normative in the
+[research proposal](../../../../docs/proposals/ancestral-slice-queue-2026-07-25.md).
+
+## Persistent Run-Delta Vector
+
+`PersistentRunDeltaVector<T>` is an immutable fixed-length `IReadOnlyList<T>` with a current RRB
+root, a checkpoint RRB root, and an exact ordered index of maximal positions at which the roots
+differ under `ValueComparer`. `PersistentDirtyRun` describes one half-open interval by `Start`,
+`Length`, and checked `EndExclusive`.
+
+```csharp
+public static PersistentRunDeltaVector<T> Empty { get; }
+public static PersistentRunDeltaVector<T> Create(IEqualityComparer<T>? valueComparer = null);
+public static PersistentRunDeltaVector<T> CreateRange(
+    IEnumerable<T> items,
+    IEqualityComparer<T>? valueComparer = null);
+
+public int Count { get; }
+public bool IsEmpty { get; }
+public IEqualityComparer<T> ValueComparer { get; }
+public T this[int index] { get; }
+public T GetCheckpointValue(int index);
+
+public int DirtyCount { get; }
+public int DirtyRunCount { get; }
+public bool HasChanges { get; }
+public bool IsDirty(int index);
+public bool TryGetDirtyRunContaining(int index, out PersistentDirtyRun run);
+public PersistentDirtyRun GetDirtyRunAt(int rank);
+public IEnumerable<PersistentDirtyRun> EnumerateDirtyRuns();
+
+public PersistentRunDeltaVector<T> SetItem(int index, T value);
+public PersistentRunDeltaVector<T> ResetItem(int index);
+public PersistentRunDeltaVector<T> Checkpoint();
+public PersistentRunDeltaVector<T> Rollback();
+public PersistentRunDeltaVector<T> AcceptDirtyRunAt(int rank);
+public PersistentRunDeltaVector<T> RevertDirtyRunAt(int rank);
+public PersistentRunDeltaVector<T> AcceptDirtyRunContaining(int index);
+public PersistentRunDeltaVector<T> RevertDirtyRunContaining(int index);
+```
+
+The dirty set is exactly
+`{ i | !ValueComparer.Equals(this[i], GetCheckpointValue(i)) }`. Its run index is ordered,
+nonoverlapping, nonadjacent, and maximal. A clean position reuses its exact checkpoint cell; a clean
+vector reuses its exact checkpoint root. `SetItem` retains the receiver for a comparer-equal current
+value. Returning to the checkpoint equality class cancels that point and restores its checkpoint
+representative. `ResetItem` performs that cancellation directly.
+
+That cell-level reuse is what makes the invariant checkable, and it has a storage cost worth stating
+plainly: each position is stored in a private reference cell so a clean position can be recognized
+by reference identity rather than by re-comparing values. For a reference-typed `T` the cell is one
+extra indirection per position; for a value-typed `T` it also boxes, so a
+`PersistentRunDeltaVector<int>` occupies materially more than an `RrbVector<int>` of the same
+length. The overhead is per position, not per dirty position, and it is inherent to the
+representation rather than an implementation detail that could be tuned away. The Rust port reaches
+the same identity through `Arc<T>` and `Arc::ptr_eq`, which avoids the second allocation layer but
+keeps the per-position indirection.
+
+`Checkpoint` accepts all current values as the new checkpoint, while `Rollback` restores all
+current values from the checkpoint. Both are O(1), return the receiver when clean, and clear the
+dirty index. `AcceptDirtyRunAt` copies the selected current slice into the checkpoint;
+`RevertDirtyRunAt` copies the selected checkpoint slice into the current values.
+`AcceptDirtyRunContaining` and `RevertDirtyRunContaining` select the same run by any *position* it
+contains rather than by its rank, so a caller holding a run descriptor from
+`TryGetDirtyRunContaining` or `EnumerateDirtyRuns` need not rediscover its rank. A position outside
+the vector throws `ArgumentOutOfRangeException`; a clean position is a no-op returning the receiver,
+because the run containing it does not exist. Locating the containing run costs O(log(r + 2)) and
+the splice itself is unchanged. Run ranks are
+ascending by start position, and a selected operation leaves every other dirty run unchanged.
+
+Let `n` be `Count`, `k` the dirty-position count, and `r` the dirty-run count:
+
+| Operation | Bound |
+| --- | ---: |
+| `CreateRange` | Theta(n) |
+| current or checkpoint indexer | O(log n) |
+| `SetItem`, `ResetItem` | O(log n) amortized time and fresh nodes |
+| `Checkpoint`, `Rollback`, retaining/forking a version | O(1) |
+| `DirtyCount`, `HasChanges` | O(1) |
+| `DirtyRunCount` | O(1) amortized |
+| `IsDirty`, `TryGetDirtyRunContaining` | O(log(r + 2)) amortized |
+| `GetDirtyRunAt` | O(log(r + 2)) amortized |
+| `EnumerateDirtyRuns` | Theta(r) |
+| `AcceptDirtyRunAt`, `RevertDirtyRunAt` | O(log n) amortized |
+| `AcceptDirtyRunContaining`, `RevertDirtyRunContaining` | O(log n) amortized, independent of run length |
+| enumerate current values | Theta(n) |
+
+The Theta(r) descriptor bound does not include changed payload emission, which is Omega(k). The
+strict discovery improvement and no-regression theorem compare against state-only RRB checkpoints;
+Theta(k) is only the cost of a straightforward linear point-delta coalescing scan, not a lower bound
+for every order-statistic point index. The exact comparison is in the
+[research proposal](../../../../docs/proposals/persistent-run-delta-vector-2026-07-29.md). A
+persistent RRB plus balanced DIET matches this construction, and faster general fully persistent
+arrays exist; no universal optimality is claimed.
+
+All producing operations leave every input version usable. Comparer calls that can affect
+`SetItem` occur before successor construction, so a thrown comparer publishes no partial version.
+The comparer must remain a stable equivalence relation and be safe for overlapping calls when
+versions are used concurrently. Values retained in any version must not mutate state observed by
+that comparer. The type deliberately provides no length changes, concat, range update, unrelated
+rebase, or branch merge.
+
 ## DABA Lite Sliding-Window Aggregator
 
 `DabaLite<T, TMonoid>` is a mutable FIFO sliding-window aggregator over the existing static
@@ -1092,6 +1268,40 @@ Strict Fibonacci and hollow heaps remain intentionally absent. Their optimal dec
 depends on mutable pointer surgery, so path-copying would not preserve the bounds that distinguish
 them; this is a recorded rejection, not an implementation gap.
 
+## Persistent Monotone-Action Heap
+
+`PersistentMonotoneActionHeap<TElement, TPriority, TAction>` is the action-tagged
+sibling of `BrodalOkasakiHeap<T>`. It stores
+payload/priority entries in the same fused bootstrapped skew-binomial representation, and every
+tree and forest spine additionally carries one immutable pending action. A caller-supplied
+`IMonotoneHeapAction<TPriority, TAction>` policy defines the semantic identity, an associative
+`Compose(outer, inner)` denoting `outer(inner(priority))`, and O(1) `Apply`; every action must be
+monotone for the retained comparer. `IComparerBoundMonotoneHeapAction` additionally names the exact
+comparer object the policy is monotone for, and `Create` rejects any other comparer.
+
+`TransformAll(action)` composes one tag onto the root in O(1) worst-case time and O(1) fresh
+structure; it transforms every **current** priority while future insertions and melds join
+untransformed. Tags are pushed down only where the underlying algorithm already exposes a
+component, so `Insert` and `Meld` remain O(1) worst case, `Minimum`/`TryGetMinimum` O(1), and
+`DeleteMinimum`/`TryDeleteMinimum` O(log n) worst case, each bound counting O(1) policy calls and
+comparisons. Melding two differently transformed heaps is supported and never cross-applies one
+heap's pending actions to the other's entries; this holds even for non-invertible actions such as
+clamps. `Meld` requires comparer and action-policy object identity.
+
+Enumeration yields `MonotoneHeapEntry<TElement, TPriority>` values with fully applied logical
+priorities in unspecified structural order in Theta(n) time. `ValidateStructure` is an O(n)
+diagnostic traversal that checks rank encodings, logical heap order through every pending tag, and
+the count, returning `PersistentMonotoneActionHeapStatistics`.
+
+The shipped `OrderClampPolicy<T>` supplies the closed monotone family
+`x -> clamp(x, lower, upper)`: `AtLeast`, `AtMost`, validated `Between`, and exact `Constant`
+actions represented by `OrderClamp<T>` values. Composition returns one clamp or an explicit
+constant, so representative distinctions survive coarse comparers. The policy is trusted: violating
+identity, associativity, monotonicity, or the O(1)-operation contract invalidates the semantic and
+complexity guarantees. The complete tag algebra, worst-case argument, and prior-art audit are
+normative in the
+[research proposal](../../../../docs/proposals/persistent-monotone-action-heap-2026-07-29.md).
+
 ## Priority Search Queue
 
 `PrioritySearchQueue<TKey, TPriority, TValue>` stores at most one entry per key in an immutable AVL
@@ -1315,3 +1525,25 @@ complete 692-test FingerTree project suite passes in Debug and Release. At the p
 shipment checkpoint, the full serialized C# solution built with zero warnings or errors and passed
 1,417/1,417 tests in both configurations: 319 Numerics + 292 HAMT + 692 FingerTree + 62 Ordered + 52
 Tungsten. No benchmark result is part of the shipment evidence.
+
+## Contextual Rank Sequence
+
+`ContextualRankSequence<TElement, TMachine>` lifts a deterministic additive event machine into the
+general measured finger tree. `TMachine` declares a positive fixed state count and returns a valid
+next state plus a nonnegative `long` event count for each state/element pair. Every subtree stores
+the outgoing state and total events for every incoming state. Ordered composition feeds the left
+outgoing state into the right summary.
+
+The public contextual queries are `Evaluate(initialState)`,
+`EvaluatePrefix(elementCount, initialState)`, `EventRank(elementCount, initialState)`, and
+`TrySelectEvent(eventIndex, initialState, out location)`. Select returns the emitting element index,
+event ordinal within that transition, before/after states, and transition event count. Positional
+updates are `Prepend`, `Append`, `Insert`, `SetItem`, `RemoveAt`, `Concat`, `SplitAt`, and
+`GetRange`; values are fully persistent.
+
+For `n` elements and `s` states, full evaluation is O(1); prefix evaluation, rank, select, indexed
+access, and arbitrary edits are O(s log n) amortized; endpoint edits are O(s) amortized; concat is
+O(s log(min(n,m))) amortized; and storage is O(s n). Transition weights must be nonnegative, totals
+are checked against `long.MaxValue`, and invalid policies fail before a successor facade is
+published. The complete proof, comparison, and novelty scope are in the
+[Contextual Rank Sequence research note](../../../../docs/proposals/contextual-rank-sequence-2026-07-25.md).

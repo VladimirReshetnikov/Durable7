@@ -40,6 +40,23 @@ vertices with the relation for forward/reverse adjacency. `PersistentIndexedMap<
 primary rows with one selector-maintained nonunique secondary index. All retain runtime policy
 objects, first representatives, immutable snapshots, and atomic composite publication.
 
+`PersistentAncestralConnectionForest` is the HAMT member of the seven research-derived collections
+whose other six live in the FingerTree workspace. It is a branching, insertion-only union-find over a
+sparse CHAMP parent map that answers "at which ancestor version did these two vertices first become
+connected?" without searching version history: the witness is the latest union-edge version strictly
+below the two current parent paths' lowest common ancestor. `link` always yields a distinct child
+version, sharing its connectivity cells unchanged when the endpoints were already connected, and
+unions by size with the first endpoint's root kept on a tie. `AncestralConnectionVersion` deliberately
+does not override `equals`, so version identity is reference identity exactly as in the managed
+reference, which is what keeps sibling branches at equal depth distinct.
+
+Its CHAMP path factor is **worst case**, not merely expected — stronger than the Rust and Haskell
+ports, which must document an expected cost. The forest pins a private injective vertex hash
+(`hash(v) = v`) and this workspace's CHAMP builds a collision node only on full 32-bit hash equality,
+so no bucket can ever hold two distinct vertices and a path is at most seven nodes. Every version and
+parent-path walk is an explicit loop, so a history hundreds of thousands of links deep neither
+overflows the JVM stack nor defers work into a later read.
+
 The CHAMP map and set also expose one-way `Transient` editing sessions through `toTransient()` and
 `createTransient(...)`. Adoption and `persist()` are O(1) reference transfers, clean or logically
 unchanged sessions publish the exact adopted persistent object, and successful publication consumes

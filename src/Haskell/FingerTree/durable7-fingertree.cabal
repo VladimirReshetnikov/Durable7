@@ -12,9 +12,13 @@ build-type: Simple
 library
   exposed-modules:
     Durable7.FingerTree
+    Durable7.FingerTree.AncestralSliceQueue
+    Durable7.FingerTree.BilateralAncestralDeque
     Durable7.FingerTree.BrodalOkasakiHeap
     Durable7.FingerTree.CanonicalSortedSet
+    Durable7.FingerTree.ContextualRankSequence
     Durable7.FingerTree.Deque
+    Durable7.FingerTree.IncrementalAncestor
     Durable7.FingerTree.IntervalTree
     Durable7.FingerTree.IntervalMap
     Durable7.FingerTree.Measured
@@ -24,6 +28,9 @@ library
     Durable7.FingerTree.PriorityQueue
     Durable7.FingerTree.PrioritySearchQueue
     Durable7.FingerTree.PersistentChunkedBitSet
+    Durable7.FingerTree.PersistentDeltaMap
+    Durable7.FingerTree.PersistentMonotoneActionHeap
+    Durable7.FingerTree.PersistentRunDeltaVector
     Durable7.FingerTree.RangeUpdateSequence
     Durable7.FingerTree.ReversibleDeque
     Durable7.FingerTree.Rope
@@ -48,8 +55,14 @@ test-suite ft-test
   main-is: Main.hs
   hs-source-dirs: test
   other-modules:
+    AncestralSliceQueueTests
+    BilateralAncestralDequeTests
     CanonicalSortedSetTests
+    ContextualRankSequenceTests
     OrderedSearchCursorTests
+    PersistentDeltaMapTests
+    PersistentMonotoneActionHeapTests
+    PersistentRunDeltaVectorTests
     RangeUpdateSequenceTests
   build-depends:
     base >=4.21 && <4.22,
