@@ -673,6 +673,11 @@ priority transformation is O(1) worst case while insert, minimum, and meld stay 
 stays O(log n). Tags compose only through the exposing accessors, so heaps carrying different pending
 actions meld without cross-applying them, and later insertions are never retroactively transformed.
 Melding requires action-policy identity and otherwise fails with `FT_STATUS_INCOMPATIBLE_POLICY`.
+Unlike the managed ports, the C port keeps the global root in exposed (identity-tagged) form, so
+the borrowed minimum accessor returns stored representatives; `transform_all` therefore allocates a
+fresh root and one tagged forest cell rather than sharing the predecessor's child forest, at an
+unchanged O(1) bound. The `tagged_component_count` statistic is representation-dependent and can
+differ from the managed ports for equivalent histories.
 
 **Concurrency divergence worth stating plainly.** C# and Rust serialize their arena behind a lock or
 `Mutex`. C11 has no portable mutex without `<threads.h>`, so the C arena's documented contract is

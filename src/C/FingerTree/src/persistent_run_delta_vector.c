@@ -1280,6 +1280,18 @@ void ft_run_delta_vector_dispose(ft_run_delta_vector* vector)
     ft_run_delta_vector_dispose_contents(vector);
 }
 
+ft_status ft_run_delta_vector_get_policy(
+    const ft_run_delta_vector* vector,
+    ft_run_delta_policy* policy)
+{
+    if (!ft_run_delta_vector_valid(vector) || policy == NULL) {
+        return FT_STATUS_INVALID_ARGUMENT;
+    }
+    ft_run_delta_policy_retain(vector->policy);
+    policy->rep = vector->policy;
+    return FT_STATUS_OK;
+}
+
 /* --------------------------------------------------------------------------------------------
  * Queries.
  * -------------------------------------------------------------------------------------------- */

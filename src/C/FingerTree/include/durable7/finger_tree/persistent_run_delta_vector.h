@@ -211,6 +211,10 @@ void ft_run_delta_vector_move(
     ft_run_delta_vector* source);
 /* Releases this handle's reference. Other versions sharing the same nodes stay valid. */
 void ft_run_delta_vector_dispose(ft_run_delta_vector* vector);
+/* Initializes a handle on this version's retained policy. */
+ft_status ft_run_delta_vector_get_policy(
+    const ft_run_delta_vector* vector,
+    ft_run_delta_policy* policy);
 
 /* Whether the vector has no positions. */
 bool ft_run_delta_vector_empty(const ft_run_delta_vector* vector);

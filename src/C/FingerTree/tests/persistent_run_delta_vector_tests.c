@@ -496,6 +496,14 @@ static void test_empty_and_boundary_contracts(void)
     REQUIRE(!ft_run_delta_vector_has_changes(&empty));
     REQUIRE(ft_run_delta_vector_dirty_count(&empty) == 0);
     REQUIRE(ft_run_delta_vector_dirty_run_count(&empty) == 0);
+    {
+        ft_run_delta_policy retrieved;
+        REQUIRE_STATUS(ft_run_delta_vector_get_policy(&empty, &retrieved), FT_STATUS_OK);
+        REQUIRE(ft_run_delta_policy_same(&policy, &retrieved));
+        ft_run_delta_policy_dispose(&retrieved);
+    }
+    REQUIRE_STATUS(ft_run_delta_vector_get_policy(&empty, NULL), FT_STATUS_INVALID_ARGUMENT);
+    REQUIRE_STATUS(ft_run_delta_vector_get_policy(NULL, &policy_copy), FT_STATUS_INVALID_ARGUMENT);
     REQUIRE_STATUS(ft_run_delta_vector_at_copy(&empty, 0, &observed), FT_STATUS_OUT_OF_RANGE);
     REQUIRE_STATUS(
         ft_run_delta_vector_checkpoint_at_copy(&empty, 0, &observed),

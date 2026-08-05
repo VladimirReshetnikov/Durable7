@@ -23,7 +23,8 @@
  * event r without a binary search and without replaying a prefix.
  *
  * Let n be the element count and s the machine's fixed state count. Full-sequence evaluation is
- * O(1); prefix evaluation, indexing, contextual event rank and select, insertion, replacement,
+ * an O(s) copy of the cached root effect table (O(1) for a fixed machine); prefix evaluation,
+ * indexing, contextual event rank and select, insertion, replacement,
  * removal, splitting, and slicing are O(s log n) amortized; endpoint updates are O(s) amortized;
  * concatenation is O(s log(min(n,m))) amortized; visitation is O(n). When the machine is fixed s is
  * a constant, giving O(log n) rank/select and edits. Each retained changed spine adds O(s log n)
@@ -243,14 +244,15 @@ ft_status ft_contextual_rank_sequence_at_copy(
     size_t index,
     void* element);
 
-/* Runs the machine over the whole sequence from an initial state. O(1): the answer is the cached
- * root summary. */
+/* Runs the machine over the whole sequence from an initial state. O(s): the answer is read from
+ * the cached root summary, but materializing that summary copies the O(s)-wide root effect table
+ * into scratch storage, which can report FT_STATUS_NO_MEMORY. O(1) for a fixed machine. */
 ft_status ft_contextual_rank_sequence_evaluate(
     const ft_contextual_rank_sequence* sequence,
     size_t initial_state,
     ft_contextual_prefix_summary* summary);
 /* Runs the machine over the first element_count elements from an initial state. O(s log n)
- * amortized, and O(1) at either sequence endpoint. */
+ * amortized, and an O(s) cached-summary read at either sequence endpoint. */
 ft_status ft_contextual_rank_sequence_evaluate_prefix(
     const ft_contextual_rank_sequence* sequence,
     size_t element_count,

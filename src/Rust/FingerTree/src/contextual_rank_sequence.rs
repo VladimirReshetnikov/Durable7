@@ -589,6 +589,10 @@ where
         let element = search.cursor.peek_next()?;
         let state_before = before.final_state(initial_state);
         let transition = M::transition(state_before, element);
+        assert!(
+            transition.next_state < machine_state_count::<T, M>(),
+            "the contextual event machine returned an invalid next state"
+        );
         Some(ContextualEventLocation {
             element_index: before.count,
             event_index_in_element: event_index - before.event_count(initial_state),

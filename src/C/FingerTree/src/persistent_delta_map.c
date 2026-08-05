@@ -754,27 +754,39 @@ typedef struct ft_delta_map_range_state {
 } ft_delta_map_range_state;
 
 /* Prunes at every node, so the walk touches only the boundary paths plus the in-range nodes rather
- * than filtering the whole root. */
+ * than filtering the whole root. Once an ancestor has established a bound for an entire subtree the
+ * corresponding comparison is skipped, so the key policy runs only along the two boundary paths -
+ * O(log(k + 1)) invocations - while the in-range interior is walked comparison-free. */
 static ft_status ft_delta_map_visit_range_nodes(
     const ft_delta_map_node* node,
-    ft_delta_map_range_state* state)
+    ft_delta_map_range_state* state,
+    bool low_established,
+    bool high_established)
 {
-    int from_low = 0;
-    int to_high = 0;
+    int from_low = -1;
+    int to_high = -1;
     ft_status status = FT_STATUS_OK;
     if (node == NULL) {
         return FT_STATUS_OK;
     }
-    status = ft_delta_map_compare(state->policy, state->low, node->key->bytes, &from_low);
-    if (status != FT_STATUS_OK) {
-        return status;
+    if (low_established && high_established) {
+        return ft_delta_map_visit_nodes(node, state->visitor, state->context);
     }
-    status = ft_delta_map_compare(state->policy, node->key->bytes, state->high, &to_high);
-    if (status != FT_STATUS_OK) {
-        return status;
+    if (!low_established) {
+        status = ft_delta_map_compare(state->policy, state->low, node->key->bytes, &from_low);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
+    }
+    if (!high_established) {
+        status = ft_delta_map_compare(state->policy, node->key->bytes, state->high, &to_high);
+        if (status != FT_STATUS_OK) {
+            return status;
+        }
     }
     if (from_low <= 0) {
-        status = ft_delta_map_visit_range_nodes(node->left, state);
+        status = ft_delta_map_visit_range_nodes(
+            node->left, state, low_established, high_established || to_high <= 0);
         if (status != FT_STATUS_OK) {
             return status;
         }
@@ -786,7 +798,8 @@ static ft_status ft_delta_map_visit_range_nodes(
         }
     }
     if (to_high <= 0) {
-        return ft_delta_map_visit_range_nodes(node->right, state);
+        return ft_delta_map_visit_range_nodes(
+            node->right, state, low_established || from_low <= 0, high_established);
     }
     return FT_STATUS_OK;
 }
@@ -813,7 +826,7 @@ static ft_status ft_delta_map_visit_range_core(
     state.high = high;
     state.visitor = visitor;
     state.context = context;
-    return ft_delta_map_visit_range_nodes(root, &state);
+    return ft_delta_map_visit_range_nodes(root, &state, false, false);
 }
 
 /* Handle plumbing. */

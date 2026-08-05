@@ -179,8 +179,9 @@ d7_hamt_status d7_hamt_ancestral_connection_forest_component_size(
  * endpoint's root stays the representative.
  *
  * O(w log n) time and O(w) new CHAMP nodes for a successful union; O(w log n) time and O(1) space
- * when redundant. The result may alias the source. On failure every output and input is left
- * untouched. */
+ * when redundant. The result may alias the source. Fails with D7_HAMT_OVERFLOW when the history
+ * depth counter saturates, and with D7_HAMT_OUT_OF_MEMORY when allocation fails. On failure every
+ * output and input is left untouched. */
 d7_hamt_status d7_hamt_ancestral_connection_forest_link(
     const d7_hamt_ancestral_connection_forest* forest,
     int32_t left,

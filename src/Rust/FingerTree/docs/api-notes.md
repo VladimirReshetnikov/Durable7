@@ -455,13 +455,16 @@ followed by a forward right interval, which makes `reverse` an O(1) exchange of 
 Both deliberately omit prepend-into-the-middle, point replacement, unrelated concatenation, and
 confluent merging; those omissions are what buy the interval-level bounds.
 
-**Deliberate divergence from C#.** The managed reference ships two near-identical copies of the
-arena machinery, one per consumer. The Rust port consolidates them into a single
-`IncrementalAncestorArena<T>` trait with one `MyersAncestorArena<T>` implementation serving both
-collections, merging the two C# interface contracts into the stricter of the two. This was
+**Consolidated arena seam (historical note).** The managed reference originally shipped two
+near-identical copies of the arena machinery, one per consumer. The Rust port consolidated them
+into a single `IncrementalAncestorArena<T>` trait with one `MyersAncestorArena<T>` implementation
+serving both collections, merging the two C# interface contracts into the stricter of the two, as
 recommended by the
 [2026-07-29 review](../../../../docs/reviews/experimental-collections-review-2026-07-29.md) as a
-promotion prerequisite. The observable per-collection contract is unchanged.
+promotion prerequisite. C# has since converged on the same consolidated seam
+(`IIncrementalAncestorArena<T>`/`MyersIncrementalAncestorArena<T>`), so all three workspaces now
+agree here and this is no longer a live divergence. The observable per-collection contract is
+unchanged.
 
 Bounds are parameterized by the backend: with `U` the leaf-add cost and `Q` the level-ancestor query
 cost, appending costs `U`; indexed access, prefix selection, slicing, and a boundary-moving split
@@ -535,7 +538,16 @@ managed constructs disappear as redundant in Rust: the delta map's presence-safe
 becomes `Option`, since C# needs the wrapper only because `null` is a valid present value; and the
 run-delta vector's private `Cell` class becomes `Arc<T>` with `Arc::ptr_eq`, which supplies the same
 reference identity the "a clean position reuses its exact checkpoint cell" invariant depends on,
-without the extra allocation layer.
+without the extra allocation layer. Change enumeration is also eager here: `changes` and
+`changes_in_range` materialize the full result at iterator construction, so obtaining the iterator
+costs Θ(k + 1) (Θ(log(k + 1)) plus output for the range form) even if the caller then consumes only
+a prefix, where C#'s `GetChanges()` is a lazy Θ(1) handle. A fully consumed enumeration — the bound
+the contract advertises — costs the same in both languages. Finally, the natural-policy
+constructors of both structures are bounded on `Eq` rather than `PartialEq`, so raw `f32`/`f64`
+payloads deliberately fail to compile against them: .NET's `EqualityComparer<T>.Default` is
+reflexive on `NaN` while `PartialEq` is not, and a non-reflexive policy would corrupt the
+run/change accounting undetectably. Float payloads use `EqualityPolicy::reflexive_ieee()`, which
+reproduces the C# default comparer exactly (`NaN` ≡ `NaN`, `-0.0` ≡ `+0.0`).
 
 ## Priority-search queue
 

@@ -1133,7 +1133,10 @@ static void test_range_enumeration_and_output_sensitivity(void)
                 FT_STATUS_OK);
             REQUIRE(changes.count == 4 && orders_match(changes.orders, expected, 4));
             REQUIRE(context.equal_calls == equalities);
-            REQUIRE(context.compare_calls - comparisons < 512);
+            /* The range seek promises O(log(k + 1)) key comparisons: at most two per node on the
+             * two boundary paths plus the low/high ordering check, far below the 1024-entry change
+             * index's size. */
+            REQUIRE(context.compare_calls - comparisons < 96);
             ft_delta_map_dispose(&windowed);
         }
         ft_delta_map_dispose(&large);
