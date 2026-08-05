@@ -231,6 +231,26 @@ When reporting validation, include the workspace and exact command, for example:
 src/C/Hamt> .\build.ps1 -Configuration Release -RunTests
 ```
 
+## Ancestral Connection Forest Port Evidence
+
+On 2026-08-04, `d7_hamt_ancestral_connection_forest_*` was ported from the C# and Rust references.
+`build.ps1` now builds and runs its test executable alongside the others. Because MSVC was
+unavailable on the porting machine, the module was verified with GCC 16.1.0 by compiling the same
+translation units directly:
+
+```text
+src/C/Hamt> gcc -std=c11 -Wall -Wextra -Wpedantic -Werror -DD7_HAMT_TESTING=1 -I include -I ../../test_support/include -o build-gcc/forest_tests.exe src/hamt.c src/persistent_ancestral_connection_forest.c tests/persistent_ancestral_connection_forest_tests.c
+```
+
+It compiled with zero warnings and its 16 test cases passed. Coverage includes singleton-root
+construction over a sparse universe, version-tagged union edges, redundant links publishing a
+distinct version while sharing the connectivity index, sibling branches whose equal-depth version
+tokens stay distinct, first-connection queries resolved at the pair's forest LCA rather than the
+component's birth version, component sizes including isolated vertices, union-by-size height limits,
+randomized branching histories checked against a naive ancestor scan, and failure atomicity under
+injected allocation failures. An MSVC `build.ps1` run remains the canonical gate. No benchmark was
+run.
+
 If a docs-only change only updates links or wording and does not alter commands or C API claims, the
 repository-wide Markdown checks from
 [`docs/guides/build-and-validation.md`](../../../../docs/guides/build-and-validation.md#documentation-checks)

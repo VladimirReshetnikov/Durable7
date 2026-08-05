@@ -19,13 +19,20 @@ add_library(durable7::finger_tree_c ALIAS durable7_finger_tree_c)
 target_sources(
     durable7_finger_tree_c
     PRIVATE
+        src/ancestral_slice_queue.c
+        src/bilateral_ancestral_deque.c
         src/brodal_okasaki_heap.c
         src/canonical_sorted_set.c
+        src/contextual_rank_sequence.c
         src/daba_lite.c
         src/fingertree.c
+        src/incremental_ancestor.c
         src/priority_search_queue.c
+        src/persistent_delta_map.c
         src/persistent_interval_map.c
         src/persistent_chunked_bit_set.c
+        src/persistent_monotone_action_heap.c
+        src/persistent_run_delta_vector.c
         src/range_update_sequence.c
         src/rrb_vector.c
 )

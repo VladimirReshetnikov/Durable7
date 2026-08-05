@@ -41,6 +41,7 @@ $indexedMapSourcePath = Join-Path $root 'src\persistent_indexed_map.c'
 $mapPatchSourcePath = Join-Path $root 'src\persistent_map_patch.c'
 $patriciaSourcePath = Join-Path $root 'src\patricia.c'
 $merkleSourcePath = Join-Path $root 'src\merkle_search_tree.c'
+$forestSourcePath = Join-Path $root 'src\persistent_ancestral_connection_forest.c'
 $testSource = Join-Path $root 'tests\hamt_tests.c'
 $bagTestSource = Join-Path $root 'tests\persistent_hash_bag_tests.c'
 $biMapTestSource = Join-Path $root 'tests\persistent_bi_map_tests.c'
@@ -48,6 +49,7 @@ $multimapTestSource = Join-Path $root 'tests\persistent_hash_multimap_tests.c'
 $derivedTestSource = Join-Path $root 'tests\persistent_derived_structures_tests.c'
 $patriciaTestSource = Join-Path $root 'tests\patricia_tests.c'
 $merkleTestSource = Join-Path $root 'tests\merkle_search_tree_tests.c'
+$forestTestSource = Join-Path $root 'tests\persistent_ancestral_connection_forest_tests.c'
 $objectDir = Join-Path $buildDir 'obj'
 $pdbPath = Join-Path $buildDir 'hamt_tests.pdb'
 $exePath = Join-Path $buildDir 'hamt_tests.exe'
@@ -63,6 +65,8 @@ $patriciaPdbPath = Join-Path $buildDir 'patricia_tests.pdb'
 $patriciaExePath = Join-Path $buildDir 'patricia_tests.exe'
 $merklePdbPath = Join-Path $buildDir 'merkle_search_tree_tests.pdb'
 $merkleExePath = Join-Path $buildDir 'merkle_search_tree_tests.exe'
+$forestPdbPath = Join-Path $buildDir 'persistent_ancestral_connection_forest_tests.pdb'
+$forestExePath = Join-Path $buildDir 'persistent_ancestral_connection_forest_tests.exe'
 
 New-Item -ItemType Directory -Force -Path $objectDir | Out-Null
 
@@ -137,6 +141,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "cl.exe failed for the Merkle search tree tests with exit code $LASTEXITCODE."
 }
 
+& cl.exe @commonArgs @configurationArgs "/Fd$forestPdbPath" "/Fe:$forestExePath" `
+    $hamtSourcePath $forestSourcePath $forestTestSource
+if ($LASTEXITCODE -ne 0) {
+    throw "cl.exe failed for the ancestral connection forest tests with exit code $LASTEXITCODE."
+}
+
 if ($RunTests) {
     & $exePath
     if ($LASTEXITCODE -ne 0) {
@@ -171,5 +181,10 @@ if ($RunTests) {
     & $merkleExePath
     if ($LASTEXITCODE -ne 0) {
         throw "merkle_search_tree_tests.exe failed with exit code $LASTEXITCODE."
+    }
+
+    & $forestExePath
+    if ($LASTEXITCODE -ne 0) {
+        throw "persistent_ancestral_connection_forest_tests.exe failed with exit code $LASTEXITCODE."
     }
 }

@@ -101,8 +101,15 @@ validation, benchmark entry points, warning policy, and generated-output locatio
   `src/priority_search_queue.c` contains the persistent winner-cached AVL;
   `src/range_update_sequence.c` contains the lazy implicit-AVL range-update core;
   `src/persistent_interval_map.c` contains the dual-index interval map;
-  `src/rrb_vector.c` contains the independent RRB core and builder; and `src/daba_lite.c` contains
-  the independent sliding-window aggregator.
+  `src/rrb_vector.c` contains the independent RRB core and builder; `src/daba_lite.c` contains
+  the independent sliding-window aggregator;
+  `src/incremental_ancestor.c` contains the shared append-only level-ancestor seam and its Myers
+  reference arena, consumed by both `src/ancestral_slice_queue.c` and
+  `src/bilateral_ancestral_deque.c`; `src/contextual_rank_sequence.c` contains the lifted
+  finite-context event sequence; `src/persistent_delta_map.c` and
+  `src/persistent_run_delta_vector.c` contain the checkpoint-differential map and vector; and
+  `src/persistent_monotone_action_heap.c` contains the action-tagged sibling of the
+  Brodal-Okasaki heap.
 - `tests/` contains the [core and focused CTest executables](tests/README.md).
 - `samples/` contains deterministic C sample executables that are also registered as CTest smoke tests; see
   [`samples/README.md`](samples/README.md).

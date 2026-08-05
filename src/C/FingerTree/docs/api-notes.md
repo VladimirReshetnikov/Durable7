@@ -629,6 +629,57 @@ callbacks once per scanned element. The `MaxHigh` annotation is used by
 `persistent_interval_map.h`'s claim that "the interval tree provides pruned overlap navigation" does
 not extend to these cursor functions.
 
+## Research-Derived Collection Contracts
+
+Six research-derived collections ship here alongside their C# and Rust counterparts; the seventh,
+the ancestral connection forest, lives in the Hamt workspace. Each keeps a design proposal under
+`docs/proposals` as the normative record of its scoped claims. All six follow this workspace's
+ordinary conventions — type-erased values with a caller-owned type-identity tag, policy-carried
+copy/destroy/compare callbacks and allocator, `ft_status` returns whose outputs are published only
+on success, reference-counted handles with `_init`/`_copy`/`_move`/`_dispose`, borrow-versus-own
+accessor pairs, and visitor traversal.
+
+**Shared incremental level-ancestor arena** (`incremental_ancestor.h`). One arena seam serves both
+`ancestral_slice_queue` and `bilateral_ancestral_deque`, matching the consolidated shape C# and Rust
+converged on rather than the per-consumer duplicate C# originally shipped. A caller may supply a
+backend through the vtable; the shipped Myers arena stores one parent link plus one coalesced jump
+link per immutable node in odd-sized blocks of 1, 3, 5, ..., giving O(1)-amortized addition,
+O(log M) ancestor queries, and O(sqrt(M)) allocation slack.
+
+**Ancestry-interval sequences** (`ancestral_slice_queue.h`, `bilateral_ancestral_deque.h`). Handles
+are constant-sized intervals on the paths of one append-only arena. Their bounds are parameterized
+by the backend: with `U` the leaf-add cost and `Q` the ancestor-query cost, appending costs `U`,
+indexed access and boundary-moving slices cost `Q`, and endpoint reads and handle-only removals are
+O(1). The deque's reverse is an O(1) exchange of its two oriented intervals, and its slice and split
+each cost at most two queries. The all-O(1)-worst-case statement in the proposals is a reduction to
+an Alstrup–Holm backend that is **not** implemented in any port.
+
+**Contextual rank sequence** (`contextual_rank_sequence.h`). Every measured subtree caches, for each
+of the machine's `s` states, the outgoing state and emitted event count, so a context-dependent scan
+becomes an associative measure. Where C# uses a static-abstract interface and Rust a trait with an
+associated constant, C takes a policy struct carrying the state count and a transition callback.
+
+**Checkpoint-differential structures** (`persistent_delta_map.h`, `persistent_run_delta_vector.h`).
+Both pair current state with a designated checkpoint plus an exact difference index, making whole
+checkpoint and rollback O(1) root swaps. The map's change enumeration is output-optimal Θ(k + 1) in
+net-changed keys; the vector's run-descriptor enumeration is Θ(r) in maximal runs, and accepting or
+reverting one run costs O(log n) by structural splicing, independent of that run's length. C# needs
+a presence-safe wrapper because `null` is a valid value and Rust uses `Option`; C carries an explicit
+presence flag beside the storage.
+
+**Monotone-action heap** (`persistent_monotone_action_heap.h`). The action-tagged sibling of
+`ft_brodal_*`, carrying one immutable pending action per tree and forest spine so whole-heap
+priority transformation is O(1) worst case while insert, minimum, and meld stay O(1) and delete-min
+stays O(log n). Tags compose only through the exposing accessors, so heaps carrying different pending
+actions meld without cross-applying them, and later insertions are never retroactively transformed.
+Melding requires action-policy identity and otherwise fails with `FT_STATUS_INCOMPATIBLE_POLICY`.
+
+**Concurrency divergence worth stating plainly.** C# and Rust serialize their arena behind a lock or
+`Mutex`. C11 has no portable mutex without `<threads.h>`, so the C arena's documented contract is
+weaker: an arena is single-threaded unless the caller synchronizes it, and every operation — reads
+and statistics snapshots included — mutates arena state and must be treated as a write. Handle
+reference counts remain atomic, matching the neighbouring modules. No port claims lock-free progress.
+
 ## Intentional API Differences
 
 - `ft_tree_locate` reports "not found" through its `found` flag with the total measure in

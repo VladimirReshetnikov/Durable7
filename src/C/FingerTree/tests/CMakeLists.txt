@@ -179,3 +179,150 @@ d7_add_headless_test(
     NAME fingertree_c.persistent_chunked_bit_set
     TARGET persistent_chunked_bit_set_c_tests
 )
+
+add_executable(
+    incremental_ancestor_c_tests
+    incremental_ancestor_tests.c
+)
+
+target_link_libraries(
+    incremental_ancestor_c_tests
+    PRIVATE
+        durable7::finger_tree_c
+)
+
+target_include_directories(
+    incremental_ancestor_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(incremental_ancestor_c_tests)
+
+d7_add_headless_test(NAME fingertree_c.incremental_ancestor TARGET incremental_ancestor_c_tests)
+
+add_executable(
+    ancestral_slice_queue_c_tests
+    ancestral_slice_queue_tests.c
+)
+
+target_link_libraries(
+    ancestral_slice_queue_c_tests
+    PRIVATE
+        durable7::finger_tree_c
+)
+
+target_include_directories(
+    ancestral_slice_queue_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(ancestral_slice_queue_c_tests)
+
+d7_add_headless_test(NAME fingertree_c.ancestral_slice_queue TARGET ancestral_slice_queue_c_tests)
+
+add_executable(
+    bilateral_ancestral_deque_c_tests
+    bilateral_ancestral_deque_tests.c
+)
+
+target_link_libraries(
+    bilateral_ancestral_deque_c_tests
+    PRIVATE
+        durable7::finger_tree_c
+)
+
+target_include_directories(
+    bilateral_ancestral_deque_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(bilateral_ancestral_deque_c_tests)
+
+d7_add_headless_test(NAME fingertree_c.bilateral_ancestral_deque TARGET bilateral_ancestral_deque_c_tests)
+
+add_executable(
+    contextual_rank_sequence_c_tests
+    contextual_rank_sequence_tests.c
+)
+
+target_link_libraries(
+    contextual_rank_sequence_c_tests
+    PRIVATE
+        durable7::finger_tree_c
+)
+
+target_include_directories(
+    contextual_rank_sequence_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(contextual_rank_sequence_c_tests)
+
+d7_add_headless_test(NAME fingertree_c.contextual_rank_sequence TARGET contextual_rank_sequence_c_tests)
+
+add_executable(
+    persistent_delta_map_c_tests
+    persistent_delta_map_tests.c
+)
+
+target_link_libraries(
+    persistent_delta_map_c_tests
+    PRIVATE
+        durable7::finger_tree_c
+)
+
+target_include_directories(
+    persistent_delta_map_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(persistent_delta_map_c_tests)
+
+d7_add_headless_test(NAME fingertree_c.persistent_delta_map TARGET persistent_delta_map_c_tests)
+
+add_executable(
+    persistent_monotone_action_heap_c_tests
+    persistent_monotone_action_heap_tests.c
+)
+
+target_link_libraries(
+    persistent_monotone_action_heap_c_tests
+    PRIVATE
+        durable7::finger_tree_c
+)
+
+target_include_directories(
+    persistent_monotone_action_heap_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(persistent_monotone_action_heap_c_tests)
+
+d7_add_headless_test(NAME fingertree_c.persistent_monotone_action_heap TARGET persistent_monotone_action_heap_c_tests)
+
+add_executable(
+    persistent_run_delta_vector_c_tests
+    persistent_run_delta_vector_tests.c
+)
+
+target_link_libraries(
+    persistent_run_delta_vector_c_tests
+    PRIVATE
+        durable7::finger_tree_c
+)
+
+target_include_directories(
+    persistent_run_delta_vector_c_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+fingertree_c_configure_target(persistent_run_delta_vector_c_tests)
+
+d7_add_headless_test(NAME fingertree_c.persistent_run_delta_vector TARGET persistent_run_delta_vector_c_tests)

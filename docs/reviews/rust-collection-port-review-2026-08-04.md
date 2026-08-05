@@ -151,7 +151,37 @@ both languages simultaneously so parity was never broken:
   namespace rather than research maturity has been promoted; the proposals remain the record of the
   scoped research claims.
 
+## C Port Landed (2026-08-04)
+
+All seven collections were subsequently ported to the **C** workspaces, making this a three-language
+shipment. The C port starts from the *consolidated* arena seam rather than reproducing the
+duplication C# originally shipped, so all three languages agree there from the first commit.
+
+It follows the C workspace's established conventions: type-erased values addressed by size plus a
+caller-owned type-identity tag, policies carrying copy/destroy/compare callbacks and an allocator,
+`ft_status`/`d7_hamt_status` returns whose outputs are published only on success, reference-counted
+handles with `_init`/`_copy`/`_move`/`_dispose`, borrow-versus-own accessor pairs where the managed
+ports return a single value, and visitor traversal instead of iterators.
+
+One substantive divergence, documented in the C API notes rather than papered over: C# and Rust
+serialize the arena behind a lock or `Mutex`, but C11 has no portable mutex without `<threads.h>`,
+so the C arena states the weaker contract — single-threaded unless the caller synchronizes, with
+every operation including reads and statistics snapshots treated as a write. Handle reference counts
+remain atomic. No port claims lock-free progress.
+
+C adds an obligation the managed ports do not have, and the suites cover it explicitly: failure
+atomicity under injected allocation failures and failing copy callbacks, verified to leave counters,
+payload ownership, and outstanding allocations unchanged with the structure still usable.
+
+**Validation.** The C FingerTree workspace reconfigured, rebuilt from clean, and passed 16/16 CTest
+cases with zero warnings under `-Wall -Wextra -Wpedantic -Werror`; the Hamt forest module compiled
+warning-free and passed its 16 test cases. The port added 92 C test cases across the eight new
+modules. Both were verified with CMake 4.3.2 and GCC 16.1.0 because MSVC was unavailable on the
+porting machine — an MSVC run remains the canonical gate for this workspace.
+
 ## Remaining Work
 
-1. The other seven language workspaces are unported by decision, not oversight. Revisit only with a
+1. The other six language workspaces are unported by decision, not oversight. Revisit only with a
    named consumer.
+2. The C evidence above is a GCC run. Re-validate under MSVC, which is the C workspaces' canonical
+   toolchain and enforces `/W4 /WX` plus `/permissive-`, before treating the C port as gated.

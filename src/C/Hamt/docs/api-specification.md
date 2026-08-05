@@ -410,6 +410,33 @@ equal-hash collision bucket.
 Update allocation is O(b * depth + c) array storage and O(depth + c) allocated node objects for the
 changed path and any touched collision bucket. Published nodes are immutable apart from reference counts.
 
+## Ancestral Connection Forest Contract
+
+`d7_hamt_ancestral_connection_forest_*` is a fully branching persistent insertion-only connectivity
+forest over a fixed integer vertex universe, with parent cells stored sparsely in the CHAMP map. An
+absent cell denotes a singleton root, so construction is O(1) for any universe size rather than
+proportional to the vertex count.
+
+Linking applies union by size without path compression, keeping the first endpoint's root on a size
+tie, and labels the one new root-parent edge with the child version. Every link publishes a distinct
+immutable version token, including a redundant one, which shares the entire connectivity index.
+Version tokens are reference-counted nodes compared by address and expose their parent, depth, and
+root; equal depths on sibling branches are therefore distinct versions, matching the reference
+implementations' reference identity.
+
+The distinguishing query reports the earliest version on the receiver's own root-to-current history
+at which two vertices became connected. It is computed from the two current parent paths as the
+latest union-edge version strictly below their forest LCA — not by searching version history — so it
+costs the same as a find and is independent of history depth. A vertex is connected to itself at the
+history root, and a currently disconnected pair reports absence. Component size reads the count the
+union-by-size root cell already caches, so an isolated vertex reports 1.
+
+With `n` vertices and `w` the CHAMP path cost, find, connectivity, link, component size, and the
+first-connection query are O(w log n); a successful link allocates O(w) new CHAMP nodes and a
+redundant one allocates O(1). Deletion, path compression, confluent merging, and retroactive updates
+are outside the contract, as in every port. The complete design record is the
+[research proposal](../../../../docs/proposals/persistent-ancestral-connection-forest-2026-07-29.md).
+
 ## Concurrency
 
 Reference counts are non-atomic. Concurrent read-only access to already-retained map/set/bag

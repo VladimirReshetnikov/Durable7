@@ -350,7 +350,7 @@ isolated session.
 Seven collections originated as scoped design studies, each with a normative proposal under
 [`docs/proposals`](../proposals/) recording its claims, prior-art boundary, and deliberate
 limitations. They were promoted out of the former `*.Experimental` namespaces into the ordinary
-family namespaces and ported to Rust. Coverage is **C# and Rust only** — the remaining seven
+family namespaces and ported to Rust and C. Coverage is **C#, Rust, and C** — the remaining six
 languages are deliberately unported pending a named consumer, so absence elsewhere is a scheduling
 decision rather than a gap. Every one of them separates shipped bounds from theoretical
 instantiations; read the proposal before relying on a headline complexity.
@@ -370,6 +370,8 @@ instantiations; read the proposal before relying on a headline complexity.
 | C# | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IIncrementalAncestorArena<T>`, `MyersIncrementalAncestorArena<T>`, `ContextualRankSequence<TElement, TMachine>`, `IContextualEventMachine<TElement>`, `PersistentDeltaMap<TKey, TValue>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<TElement, TPriority, TAction>`, `IMonotoneHeapAction<TPriority, TAction>`, `OrderClampPolicy<T>` (FingerTree); `PersistentAncestralConnectionForest`, `AncestralConnectionVersion` (Hamt) | [FingerTree API spec](../../src/CSharp/docs/FingerTree/api-specification.md), [FingerTree usage](../../src/CSharp/docs/FingerTree/usage.md), [Hamt API spec](../../src/CSharp/docs/Hamt/api-specification.md), [Hamt usage](../../src/CSharp/docs/Hamt/usage.md) |
 | Rust | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IncrementalAncestorArena<T>`, `MyersAncestorArena<T>`, `ContextualRankSequence<T, M>`, `ContextualEventMachine<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>`, `MonotoneHeapAction<P, A>`, `ActionPolicy<P, A>`, `OrderClampPolicy<T>`, `EqualityPolicy<T>` (FingerTree); `PersistentAncestralConnectionForest`, `AncestralConnectionVersion` (Hamt) | [FingerTree API notes](../../src/Rust/FingerTree/docs/api-notes.md), [Hamt API notes](../../src/Rust/Hamt/docs/api-notes.md), [FingerTree README](../../src/Rust/FingerTree/README.md), [Hamt README](../../src/Rust/Hamt/README.md) |
 
+| C | `ft_ancestral_slice_queue_*`, `ft_bilateral_ancestral_deque_*`, `ft_incremental_ancestor_arena_*` (vtable seam plus the shipped Myers arena), `ft_contextual_rank_sequence_*`, `ft_persistent_delta_map_*`, `ft_persistent_run_delta_vector_*`, `ft_monotone_action_heap_*` with its clamp policy family (FingerTree); `d7_hamt_ancestral_connection_forest_*` (Hamt) | [FingerTree API notes](../../src/C/FingerTree/docs/api-notes.md), [FingerTree headers](../../src/C/FingerTree/include/durable7/finger_tree/), [Hamt API specification](../../src/C/Hamt/docs/api-specification.md), [Hamt headers](../../src/C/Hamt/include/durable7/hamt/) |
+
 The Rust port makes three intentional, documented divergences, all recorded in the local API notes:
 it consolidates C#'s two duplicate level-ancestor arenas into one shared backend; it replaces the
 presence-safe `DeltaMapValue<T>` wrapper with `Option`, which C# needs only because `null` is a
@@ -377,6 +379,16 @@ valid present value; and it replaces the run-delta vector's private reference-id
 with `Arc<T>` plus `Arc::ptr_eq`. Value equality is taken from a retained `EqualityPolicy<T>`, the
 equality counterpart of `OrderPolicy<T>`, because that policy defines semantic no-ops and change
 cancellation and so must be remembered rather than taken as a `PartialEq` bound.
+
+The C port follows the workspace's type-erased conventions — values addressed by size plus a
+caller-owned type-identity tag, policies carrying copy/destroy/compare callbacks and an allocator,
+`ft_status` returns whose outputs are published only on success, and borrow-versus-own accessor
+pairs where the managed ports return a single value. It starts from the consolidated arena seam
+rather than reproducing the duplication C# originally shipped, so all three languages agree there.
+Its one substantive divergence is concurrency: C# and Rust serialize the arena behind a lock, while
+C11 has no portable mutex without `<threads.h>`, so the C arena documents the weaker contract —
+single-threaded unless the caller synchronizes, with every operation including reads treated as a
+write. Handle reference counts remain atomic, and no port claims lock-free progress.
 
 ## Persistent Cursor Availability
 
