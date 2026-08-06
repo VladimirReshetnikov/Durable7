@@ -498,19 +498,26 @@ def _item_digit(item: object) -> tuple[object, ...]:
     return item.children if isinstance(item, _Node) else (item,)
 
 
-def _reverse_item(item: object) -> object:
-    """Mirror one item. Sizes and cached measures survive: reversal is only offered under a
-    commutative measure (see :meth:`MeasuredSequence.reversed_view`), where a subtree's combined
-    measure is order-independent."""
+def _reverse_item(policy: MeasurePolicy[T, M], item: object) -> object:
+    """Mirror one item, recombining its summary in the mirrored order.
+
+    Sizes and end handles survive with roles swapped, but the cached measure is rebuilt from the
+    reversed children: a mirrored subtree's summary equals its cached one only under a commutative
+    monoid, and this recombination is what makes the reversed view correct under every monoid at
+    O(1) combines per node, paid only when the enclosing reversal suspension forces.
+    """
 
     if not isinstance(item, _Node):
         return item
-    children = tuple(_reverse_item(child) for child in reversed(item.children))
-    return _Node(children, item.size, item.measure, item.last, item.first)
+    children = tuple(_reverse_item(policy, child) for child in reversed(item.children))
+    measure = _item_measure(policy, children[0])
+    for child in children[1:]:
+        measure = policy.combine(measure, _item_measure(policy, child))  # type: ignore[arg-type]
+    return _Node(children, item.size, measure, _item_first(children[0]), _item_last(children[-1]))
 
 
-def _reverse_digit(digit: tuple[object, ...]) -> tuple[object, ...]:
-    return tuple(_reverse_item(item) for item in reversed(digit))
+def _reverse_digit(policy: MeasurePolicy[T, M], digit: tuple[object, ...]) -> tuple[object, ...]:
+    return tuple(_reverse_item(policy, item) for item in reversed(digit))
 
 
 def _reverse_tree(policy: MeasurePolicy[T, M], tree: _Tree) -> _Tree:
@@ -519,13 +526,13 @@ def _reverse_tree(policy: MeasurePolicy[T, M], tree: _Tree) -> _Tree:
     if tree is None:
         return None
     if isinstance(tree, _Single):
-        return _Single(_reverse_item(tree.item))
+        return _Single(_reverse_item(policy, tree.item))
     return _Deep(
         tree.size,
-        _reverse_digit(tree.suffix),
+        _reverse_digit(policy, tree.suffix),
         _Susp.reverse_of(policy, tree.middle),
         tree.middle_size,
-        _reverse_digit(tree.prefix),
+        _reverse_digit(policy, tree.prefix),
     )
 
 
@@ -1018,11 +1025,12 @@ class MeasuredSequence(Generic[T, M]):
     def reversed_view(self) -> MeasuredSequence[T, M]:
         """Return the sequence in reverse order, sharing storage lazily.
 
-        O(1) immediate work: digits mirror eagerly, the middle's reversal rides a suspension, and
-        cached node measures are reused. Reuse is only sound when the measure is **commutative**
-        (a reversed subtree then combines to the same measure), which is the caller's obligation -
-        the reversible deque's size measure is the intended consumer. Under a non-commutative
-        measure the reversed view's cached measures would be wrong, so do not use it there.
+        O(1) immediate work: digits mirror eagerly and the middle's reversal rides a suspension.
+        Correct under **every** monoid, commutative or not: a mirrored node's summary is
+        recombined in the mirrored order rather than reused, at O(1) combines per node paid only
+        when the reversal suspension forces. (An earlier revision reused cached measures under a
+        documented commutative-only contract; the TypeScript port strengthened the guarantee and
+        this workspace was equalized upward to match.)
         """
 
         return MeasuredSequence(_reverse_tree(self.policy, self._root), self.policy)

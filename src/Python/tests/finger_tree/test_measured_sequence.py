@@ -265,3 +265,43 @@ def test_cross_orientation_concat_is_structural() -> None:
     assert immediate <= 40, immediate
     assert len(joined) == 16_393
     assert joined.at(16_392) == 0
+
+
+class _Spelling:
+    """A deliberately non-commutative measure: concatenation of element spellings.
+
+    Under this monoid a mirrored subtree's summary is NOT its cached summary read backwards, so
+    any reversal that reuses cached measures reports the forward spelling for the reversed view.
+    Only reversed-order recombination can pass these assertions.
+    """
+
+    identity = ""
+
+    def combine(self, left: str, right: str) -> str:
+        return left + right
+
+    def measure(self, element: object) -> str:
+        return str(element)
+
+
+def test_reversed_view_is_correct_under_a_non_commutative_measure() -> None:
+    policy = _Spelling()
+    sequence: MeasuredSequence[str, str] = MeasuredSequence.empty(policy)
+    letters = [chr(ord("a") + value % 26) + str(value) for value in range(300)]
+    for letter in letters:
+        sequence = sequence.append(letter)
+
+    mirrored = sequence.reversed_view()
+    assert mirrored.to_list() == list(reversed(letters))
+    assert mirrored.measure == "".join(reversed(letters)), "the summary must mirror too"
+
+    # Interior structure must agree as well, not only the root summary: split inside the mirror
+    # and check both halves' summaries against the model.
+    split = mirrored.split_at(137)
+    assert split is not None
+    expected = list(reversed(letters))
+    assert split.left.measure == "".join(expected[:137])
+    assert split.right.measure == "".join(expected[137:])
+
+    # A double reversal restores the forward spelling.
+    assert mirrored.reversed_view().measure == "".join(letters)

@@ -243,9 +243,10 @@ class PersistentDeque(Generic[T]):
     def reversed_view(self) -> PersistentDeque[T]:
         """Return the deque in reverse order, sharing storage lazily.
 
-        O(1) immediate work over the size-measured substrate (a commutative measure, so cached
-        node measures survive mirroring); the middle's reversal rides the suspensions. This is
-        the structural primitive the reversible deque's cross-orientation concatenation uses.
+        O(1) immediate work; the middle's reversal rides the suspensions, and mirrored node
+        summaries are recombined in the mirrored order, so the view is correct under every
+        measure. This is the structural primitive the reversible deque's cross-orientation
+        concatenation uses.
         """
 
         return PersistentDeque(self._items.reversed_view())
