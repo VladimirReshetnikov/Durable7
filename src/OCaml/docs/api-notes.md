@@ -281,8 +281,8 @@ Honest costs for this group, all verified against the implementation bodies:
   while extremes stay O(1) digit reads.
 - `Priority_search_queue` is the winner-cached key-ordered AVL (Wave 2b): key search and bound
   ranks are O(log n), cursor edits are O(log n) path-copied writes, the minimum is the root's O(1)
-  cached winner, and rank peeks are O(log n) size-directed descents. It still exposes no pruned
-  range-enumeration query, as already recorded below.
+  cached winner, and rank peeks are O(log n) size-directed descents. `enumerate_at_most` is the
+  winner-pruned bounded enumeration the sibling surfaces ship, at the reference's O(log n + v).
 - `Canonical_sorted_set` delegates its storage to `Sorted_set` and has no Cartesian tree; the cursor
   inherits that, so no canonical zip-zip bound applies. See the existing note in
   [Language-Local Semantics](#language-local-semantics).
@@ -374,8 +374,9 @@ encoding, not of the surrounding immutability model.
 - `Rrb_vector` is a genuine eager 32-way relaxed radix-balanced tree (Wave 2a) — 5-bit radix,
   size tables only on relaxed branches, seam-only concat rebalance — though it still ships no
   transient RRB kernel. `Priority_search_queue` is the winner-cached key-ordered AVL (Wave 2b) and
-  delivers the sibling winner-cached bounds; it exposes no pruned range-enumeration query on its
-  OCaml surface, so no pruned-query bound is claimed.
+  delivers the sibling winner-cached bounds, including `enumerate_at_most`, the winner-pruned
+  inclusive key-range-and-priority enumeration at the reference's O(log n + v) - the coverage gap
+  the Wave-2b rebuild recorded is closed.
 - `Canonical_sorted_set` derives the shared `ZZT2` HMAC-SHA256 ranks and preserves canonical sorted
   contents across insertion histories. Its initial storage delegates to `Sorted_set`, so it does
   not claim canonical zip-tree topology or zip-zip complexity bounds.

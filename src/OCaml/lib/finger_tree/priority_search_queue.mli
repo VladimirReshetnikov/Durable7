@@ -89,6 +89,18 @@ val minimum_view :
 (** The minimum-priority entry together with the queue remaining. O(log n): an O(1) winner read and
     a keyed delete of that winner. *)
 
+val enumerate_at_most :
+  minimum_key:'key ->
+  maximum_key:'key ->
+  maximum_priority:'priority ->
+  ('key, 'priority, 'value) t ->
+  (('key, 'priority, 'value) entry list, string) result
+(** The entries whose keys lie in the inclusive range and whose priorities are at most the
+    inclusive threshold, in key order. The winner caches prune every subtree whose best priority
+    exceeds the threshold, so the query is [O(log n + v)] for [v] visited nodes whose subtrees
+    cannot be pruned - at most [n] for an unselective query - using [O(log n)] traversal space.
+    Fails when the key range is inverted, mirroring the reference surface. *)
+
 val entries_by_key : ('key, 'priority, 'value) t -> ('key, 'priority, 'value) entry list
 (** The entries bound to the key, in order. Theta(n), with no comparator call. *)
 

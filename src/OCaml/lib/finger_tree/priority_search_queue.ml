@@ -230,6 +230,55 @@ let minimum_view queue =
   | None -> None
   | Some entry -> Option.map (fun (_, successor) -> (entry, successor)) (remove entry.key queue)
 
+(* Query frames for the bounded enumeration: a node whose subtree may still qualify, or an entry
+   already known to qualify and waiting its turn in key order. The explicit stack bounds traversal
+   space by the tree height, mirroring the reference implementation frame for frame. *)
+type ('key, 'priority, 'value) query_frame =
+  | Visit of ('key, 'priority, 'value) node
+  | Emit of ('key, 'priority, 'value) entry
+
+let enumerate_at_most ~minimum_key ~maximum_key ~maximum_priority queue =
+  if compare_key queue minimum_key maximum_key > 0 then
+    Error "priority-search queue range has its minimum key after its maximum key"
+  else begin
+    let compare_priority = Common.Comparator.compare queue.priority_order in
+    let rec drain pending emitted =
+      match pending with
+      | [] -> List.rev emitted
+      | Emit entry :: rest -> drain rest (entry :: emitted)
+      | Visit node :: rest ->
+          (* The winner cache is the pruning structure: when even this subtree's best priority
+             exceeds the threshold, nothing below can qualify and the whole subtree is skipped. *)
+          if compare_priority node.winner.priority maximum_priority > 0 then drain rest emitted
+          else begin
+            let above_minimum = compare_key queue node.entry.key minimum_key in
+            let below_maximum = compare_key queue node.entry.key maximum_key in
+            let pending = rest in
+            let pending =
+              match node.right with
+              | Some right when below_maximum < 0 -> Visit right :: pending
+              | _ -> pending
+            in
+            let pending =
+              if
+                above_minimum >= 0 && below_maximum <= 0
+                && compare_priority node.entry.priority maximum_priority <= 0
+              then Emit node.entry :: pending
+              else pending
+            in
+            let pending =
+              match node.left with
+              | Some left when above_minimum > 0 -> Visit left :: pending
+              | _ -> pending
+            in
+            drain pending emitted
+          end
+    in
+    match queue.root with
+    | None -> Ok []
+    | Some root -> Ok (drain [ Visit root ] [])
+  end
+
 let entries_by_key queue =
   let rec walk node acc =
     match node with

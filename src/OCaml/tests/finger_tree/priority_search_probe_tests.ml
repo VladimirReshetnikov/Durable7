@@ -171,6 +171,110 @@ let test_rank_bounds_seek_logarithmically () =
     true
     (!key_calls > 0 && !key_calls <= bound)
 
+
+(* The bounded enumeration's contract, pinned against a filter model: inclusive on both key
+   boundaries and on the priority threshold, output in key order, inverted range rejected. *)
+let test_enumerate_at_most_matches_a_filter_model () =
+  key_calls := 0;
+  priority_calls := 0;
+  let queue =
+    ref
+      (Priority_search_queue.empty
+         ~key_comparator:(counting_key_order ())
+         ~priority_comparator:(counting_priority_order ()))
+  in
+  for key = 0 to 511 do
+    queue := snd (Priority_search_queue.set key ((key * 37) mod 97) key !queue)
+  done;
+  let model minimum_key maximum_key maximum_priority =
+    Priority_search_queue.entries_by_key !queue
+    |> List.filter (fun entry ->
+           let key = Priority_search_queue.entry_key entry in
+           let priority = Priority_search_queue.entry_priority entry in
+           key >= minimum_key && key <= maximum_key && priority <= maximum_priority)
+    |> List.map (fun entry ->
+           (Priority_search_queue.entry_key entry, Priority_search_queue.entry_priority entry))
+  in
+  let query minimum_key maximum_key maximum_priority =
+    match
+      Priority_search_queue.enumerate_at_most ~minimum_key ~maximum_key ~maximum_priority !queue
+    with
+    | Error message -> Alcotest.failf "unexpected enumeration failure: %s" message
+    | Ok entries ->
+        List.map
+          (fun entry ->
+            (Priority_search_queue.entry_key entry, Priority_search_queue.entry_priority entry))
+          entries
+  in
+  List.iter
+    (fun (minimum_key, maximum_key, maximum_priority) ->
+      Alcotest.(check (list (pair int int)))
+        (Printf.sprintf "window [%d,%d] priority<=%d" minimum_key maximum_key maximum_priority)
+        (model minimum_key maximum_key maximum_priority)
+        (query minimum_key maximum_key maximum_priority))
+    [
+      (0, 511, 96);
+      (0, 511, 0);
+      (100, 100, 96);
+      (37, 205, 40);
+      (0, 511, 48);
+      (500, 511, 96);
+      (17, 18, -1);
+    ];
+  (match Priority_search_queue.enumerate_at_most ~minimum_key:9 ~maximum_key:3 ~maximum_priority:96 !queue with
+  | Error _ -> ()
+  | Ok _ -> Alcotest.fail "an inverted key range must be rejected")
+
+(* The pruning bound. Priorities equal keys, so a low threshold over the full key range qualifies
+   only the leftmost few entries, and every disqualified subtree must be cut at its winner cache:
+   O(log n + v) comparator work. The negative control lifts the threshold so nothing can be
+   pruned, proving the counters are live and the pruning is what kept the first number small. *)
+let test_enumerate_at_most_prunes_through_winner_caches () =
+  let queue =
+    ref
+      (Priority_search_queue.empty
+         ~key_comparator:(counting_key_order ())
+         ~priority_comparator:(counting_priority_order ()))
+  in
+  for key = 0 to 4_095 do
+    queue := snd (Priority_search_queue.set key key key !queue)
+  done;
+  key_calls := 0;
+  priority_calls := 0;
+  let selective =
+    match
+      Priority_search_queue.enumerate_at_most ~minimum_key:0 ~maximum_key:4_095
+        ~maximum_priority:5 !queue
+    with
+    | Error message -> Alcotest.failf "selective enumeration failed: %s" message
+    | Ok entries -> entries
+  in
+  let selective_calls = !key_calls + !priority_calls in
+  Alcotest.(check int) "six entries qualify" 6 (List.length selective);
+  let bound = (8 * ceiling_log2 4_097) + (8 * 6) + 16 in
+  Alcotest.(check bool)
+    (Printf.sprintf "%d selective-query comparisons within O(log n + v) bound %d" selective_calls
+       bound)
+    true
+    (selective_calls > 0 && selective_calls <= bound);
+  key_calls := 0;
+  priority_calls := 0;
+  let everything =
+    match
+      Priority_search_queue.enumerate_at_most ~minimum_key:0 ~maximum_key:4_095
+        ~maximum_priority:4_095 !queue
+    with
+    | Error message -> Alcotest.failf "unselective enumeration failed: %s" message
+    | Ok entries -> entries
+  in
+  let unselective_calls = !key_calls + !priority_calls in
+  Alcotest.(check int) "everything qualifies" 4_096 (List.length everything);
+  Alcotest.(check bool)
+    (Printf.sprintf "unselective control visits every node (%d calls > %d)" unselective_calls
+       (4 * 4_096))
+    true
+    (unselective_calls > 4 * 4_096)
+
 let tests =
   [
     Alcotest.test_case "writes scale logarithmically" `Quick test_writes_scale_logarithmically;
@@ -180,4 +284,8 @@ let tests =
       test_write_allocation_is_polylogarithmic;
     Alcotest.test_case "rank bounds seek logarithmically" `Quick
       test_rank_bounds_seek_logarithmically;
+    Alcotest.test_case "bounded enumeration matches a filter model" `Quick
+      test_enumerate_at_most_matches_a_filter_model;
+    Alcotest.test_case "bounded enumeration prunes through winner caches" `Quick
+      test_enumerate_at_most_prunes_through_winner_caches;
   ]
