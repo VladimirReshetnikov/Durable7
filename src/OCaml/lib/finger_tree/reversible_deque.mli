@@ -1,4 +1,9 @@
-(** Persistent deque with an O(1) logical reversal bit. *)
+(** Persistent deque with an O(1) logical reversal bit.
+
+    Reversal flips an orientation bit and shares the tree. Concatenation is orientation-aware and
+    structural: operands stored in opposite orientations are joined through the underlying tree's
+    O(1) lazy reversed view, at O(log(min(n, m))) amortized, never by re-materializing either
+    operand. Cursor edits are O(log n) tree splices at the mirrored physical index. *)
 
 type 'element t
 type 'element cursor
@@ -45,7 +50,9 @@ val to_list : 'element t -> 'element list
 (** The elements, in the deque's own order. *)
 
 val concat : 'element t -> 'element t -> 'element t
-(** The concatenation of two deques, sharing both operands' unchanged structure. *)
+(** The concatenation of two deques, sharing both operands' unchanged structure. O(log(min(n, m)))
+    amortized whatever the two operands' orientations: a mismatched pair goes through the O(1)
+    lazy reversed view rather than a rebuild. *)
 
 val cursor : 'element t -> 'element cursor
 (** A cursor before the first element. *)
@@ -81,10 +88,11 @@ val cursor_seek : int -> 'element cursor -> 'element cursor option
 (** A cursor at the given position within the same deque version. *)
 
 val cursor_insert : 'element -> 'element cursor -> 'element cursor
-(** A deque containing the given element. *)
+(** A deque containing the given element. O(log n): a tree splice at the mirrored physical
+    index. *)
 
 val cursor_insert_many : 'element list -> 'element cursor -> 'element cursor
-(** A deque with several elements inserted at the position. *)
+(** A deque with several elements inserted at the position. O(log n + k) for k elements. *)
 
 val cursor_delete_previous : 'element cursor -> 'element cursor option
 (** Removes the element before the gap, producing a new version the returned cursor is positioned

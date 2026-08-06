@@ -17,6 +17,7 @@ let to_list = function Empty -> [] | Tree value -> Measured_tree.to_list value
 let cons value deque = wrap (Measured_tree.cons value (tree deque))
 let snoc deque value = wrap (Measured_tree.snoc (tree deque) value)
 let concat left right = wrap (Result.get_ok (Measured_tree.concat (tree left) (tree right)))
+let reverse = function Empty -> Empty | Tree value -> Tree (Measured_tree.reverse value)
 let first = function Empty -> None | Tree value -> Measured_tree.first value
 let last = function Empty -> None | Tree value -> Measured_tree.last value
 

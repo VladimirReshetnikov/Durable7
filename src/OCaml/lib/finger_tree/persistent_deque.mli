@@ -32,6 +32,10 @@ val snoc : 'element t -> 'element -> 'element t
 val concat : 'element t -> 'element t -> 'element t
 (** The concatenation of two deques, sharing both operands' unchanged structure. *)
 
+val reverse : 'element t -> 'element t
+(** The deque in the opposite order, sharing storage lazily. O(1): the underlying tree mirrors its
+    outer digits and defers the middle's reversal behind a memoized suspension. *)
+
 val first : 'element t -> 'element option
 (** The first element. *)
 

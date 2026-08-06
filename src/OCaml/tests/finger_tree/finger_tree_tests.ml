@@ -35,9 +35,11 @@ let test_measured_sequence () =
   | None -> Alcotest.fail "measure search missed a satisfying prefix"
 
 let test_measured_tree_stays_balanced () =
-  (* Repeated end-insertion must keep the weight-balance invariant, so every descent stays
-     logarithmic. Before [join] rebalanced on the way up, snoc/cons built a tree of depth ~n/5;
-     [validate] now enforces the balance invariant, so an unbalanced spine fails here. *)
+  (* Repeated end-insertion must leave a structurally sound finger tree: [validate] forces every
+     pending middle and enforces digit widths, 2-3 node arity, and the cached sizes that keep
+     descents logarithmic, so a corrupted spine fails here. (The eager weight-balance invariant
+     this test used to pin belonged to the replaced join tree; the endpoint-cost probes now pin
+     the stronger amortized bounds directly.) *)
   let n = 5000 in
   let snoc_built =
     let tree = ref (Measured_tree.empty Measures.int_sum) in
@@ -739,6 +741,7 @@ let () =
           Alcotest.test_case "interval-map and bit-set cursors" `Quick
             test_interval_map_and_bit_set_cursors;
         ] );
+      ("measured-core-probes", Measured_core_probe_tests.tests);
       ("incremental-ancestor", Incremental_ancestor_tests.tests);
       ("ancestral-slice-queue", Ancestral_slice_queue_tests.tests);
       ("bilateral-ancestral-deque", Bilateral_ancestral_deque_tests.tests);

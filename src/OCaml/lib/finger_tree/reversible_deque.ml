@@ -1,7 +1,11 @@
 (** Implementation of the persistent deque with an O(1) logical reversal bit.
 
-    Reversal flips an orientation bit and shares the tree; every read consults that bit rather than
-    the stored order. *)
+    Reversal flips an orientation bit and shares the tree; every read consults that bit rather
+    than the stored order. Concatenation is orientation-aware and structural: operands stored in
+    opposite orientations are joined by taking the lazy O(1) reversed view of one side and
+    concatenating the trees in O(log(min(n, m))), never by re-materializing either operand. Cursor
+    edits map the logical position to a physical index and go through the underlying tree's
+    O(log n) splice operations. *)
 
 type 'element t = { deque : 'element Persistent_deque.t; reversed : bool }
 type 'element cursor = { cursor_snapshot : 'element t; cursor_position : int }
@@ -54,7 +58,22 @@ let to_list value =
   let values = Persistent_deque.to_list value.deque in
   if value.reversed then List.rev values else values
 
-let concat left right = of_list (to_list left @ to_list right)
+(* Orientation-aware structural concatenation. With [rev] for a stored order read backwards,
+   [rev a ++ rev b = rev (b ++ a)], so equal orientations concatenate the stored trees directly
+   (swapped when both are reversed) and mismatched orientations take the O(1) lazy reversed view
+   of the right operand's tree first — O(log(min(n, m))) overall, sharing both operands. *)
+let concat left right =
+  if left.reversed = right.reversed then
+    if left.reversed then
+      { deque = Persistent_deque.concat right.deque left.deque; reversed = true }
+    else { deque = Persistent_deque.concat left.deque right.deque; reversed = false }
+  else if left.reversed then
+    { deque = Persistent_deque.concat (Persistent_deque.reverse right.deque) left.deque;
+      reversed = true }
+  else
+    { deque = Persistent_deque.concat left.deque (Persistent_deque.reverse right.deque);
+      reversed = false }
+
 let cursor deque = { cursor_snapshot = deque; cursor_position = 0 }
 
 let cursor_at position deque =
@@ -75,23 +94,26 @@ let cursor_move_next value =
 
 let cursor_seek position value = cursor_at position value.cursor_snapshot
 
-let split_list position elements =
-  let rec loop remaining reversed_before rest =
-    if remaining = 0 then (List.rev reversed_before, rest)
-    else
-      match rest with
-      | [] -> (List.rev reversed_before, [])
-      | head :: tail -> loop (remaining - 1) (head :: reversed_before) tail
-  in
-  loop position [] elements
+(* The logical gap [position] of a snapshot corresponds to the stored gap counted from the other
+   end when the snapshot is reversed; a logical element index mirrors to [length - index - 1]. *)
+let stored_gap snapshot position =
+  if snapshot.reversed then length snapshot - position else position
+
+let stored_index snapshot index = if snapshot.reversed then length snapshot - index - 1 else index
 
 let cursor_insert_many elements value =
   match elements with
   | [] -> value
   | _ ->
-      let before, after = split_list value.cursor_position (to_list value.cursor_snapshot) in
+      let snapshot = value.cursor_snapshot in
+      let gap = stored_gap snapshot value.cursor_position in
+      let block =
+        Persistent_deque.of_list (if snapshot.reversed then List.rev elements else elements)
+      in
+      let left, right = Persistent_deque.split_at gap snapshot.deque in
+      let deque = Persistent_deque.concat (Persistent_deque.concat left block) right in
       {
-        cursor_snapshot = of_list (before @ elements @ after);
+        cursor_snapshot = { snapshot with deque };
         cursor_position = value.cursor_position + List.length elements;
       }
 
@@ -100,30 +122,32 @@ let cursor_insert element value = cursor_insert_many [ element ] value
 let cursor_delete_previous value =
   if cursor_is_at_start value then None
   else
-    let elements = to_list value.cursor_snapshot in
-    let snapshot =
-      of_list (List.filteri (fun index _ -> index <> value.cursor_position - 1) elements)
-    in
-    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position - 1 }
+    let snapshot = value.cursor_snapshot in
+    let stored = stored_index snapshot (value.cursor_position - 1) in
+    let _, deque = Result.get_ok (Persistent_deque.remove_at stored snapshot.deque) in
+    Some
+      {
+        cursor_snapshot = { snapshot with deque };
+        cursor_position = value.cursor_position - 1;
+      }
 
 let cursor_delete_next value =
   if cursor_is_at_end value then None
   else
-    let elements = to_list value.cursor_snapshot in
-    let snapshot =
-      of_list (List.filteri (fun index _ -> index <> value.cursor_position) elements)
-    in
-    Some { cursor_snapshot = snapshot; cursor_position = value.cursor_position }
+    let snapshot = value.cursor_snapshot in
+    let stored = stored_index snapshot value.cursor_position in
+    let _, deque = Result.get_ok (Persistent_deque.remove_at stored snapshot.deque) in
+    Some { cursor_snapshot = { snapshot with deque }; cursor_position = value.cursor_position }
 
 let cursor_replace_next element value =
   if cursor_is_at_end value then None
   else
-    let elements =
-      List.mapi
-        (fun index stored -> if index = value.cursor_position then element else stored)
-        (to_list value.cursor_snapshot)
+    let snapshot = value.cursor_snapshot in
+    let stored = stored_index snapshot value.cursor_position in
+    let deque =
+      Result.get_ok (Persistent_deque.update_at stored (fun _ -> element) snapshot.deque)
     in
-    Some { cursor_snapshot = of_list elements; cursor_position = value.cursor_position }
+    Some { cursor_snapshot = { snapshot with deque }; cursor_position = value.cursor_position }
 
 let cursor_reverse value =
   {
