@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Generic, TypeVar, cast
 
-from ..finger_tree import Comparator, PersistentDeque
+from ..finger_tree import Comparator
 from ..hamt import DuplicateKeyError, HashPolicy, PersistentHashMap, default_hash_policy
+from ._stamped_order import StampedOrder
 
 K = TypeVar("K")
 V = TypeVar("V")
@@ -89,7 +90,7 @@ class PersistentOrderedMap(Generic[K, V]):
 
     def __init__(
         self,
-        order: PersistentDeque[_StoredEntry[K, V]],
+        order: StampedOrder[_StoredEntry[K, V]],
         stamps: PersistentHashMap[K, int],
         value_equals: Callable[[V, V], bool],
     ) -> None:
@@ -113,7 +114,7 @@ class PersistentOrderedMap(Generic[K, V]):
         """Return an empty map retaining the exact key policy and value comparison objects."""
 
         effective = default_hash_policy() if key_policy is None else key_policy
-        return cls(PersistentDeque.empty(), PersistentHashMap.empty(effective), value_equals)
+        return cls(StampedOrder.empty(), PersistentHashMap.empty(effective), value_equals)
 
     @classmethod
     def from_items(
@@ -586,20 +587,15 @@ class PersistentOrderedMap(Generic[K, V]):
         return PersistentOrderedMap(order, self._stamps.put(stored.key, stamp), self.value_equals)
 
     def _index_of_stamp(self, stamp: int) -> int:
-        low = 0
-        high = self.size
-        while low < high:
-            middle = low + ((high - low) // 2)
-            if self._order[middle].stamp < stamp:
-                low = middle + 1
-            else:
-                high = middle
-        if low >= self.size or self._order[low].stamp != stamp:
+        # One measure-directed descent over the stamp-measured order sequence: O(log n), where the
+        # former binary search cost O(log n) probes of O(log n) each.
+        index = self._order.try_index_of_stamp(stamp)
+        if index is None:
             raise RuntimeError("The ordered map's indexes disagree.")
-        return low
+        return index
 
     @staticmethod
-    def _pick_stamp(order: PersistentDeque[_StoredEntry[K, V]], index: int) -> int | None:
+    def _pick_stamp(order: StampedOrder[_StoredEntry[K, V]], index: int) -> int | None:
         if order.is_empty:
             return 0
         if index == 0:
@@ -633,14 +629,14 @@ class PersistentOrderedMap(Generic[K, V]):
             ordered.append(_StoredEntry(stamp, entry.key, entry.value))
             indexed.append((entry.key, stamp))
         return cls(
-            PersistentDeque.from_iterable(ordered),
+            StampedOrder.from_iterable(ordered),
             PersistentHashMap.from_items(indexed, key_policy),
             value_equals,
         )
 
     @staticmethod
     def _build_index(
-        order: PersistentDeque[_StoredEntry[K, V]], key_policy: HashPolicy[K]
+        order: StampedOrder[_StoredEntry[K, V]], key_policy: HashPolicy[K]
     ) -> PersistentHashMap[K, int]:
         return PersistentHashMap.from_items(
             ((entry.key, entry.stamp) for entry in order), key_policy
@@ -649,7 +645,7 @@ class PersistentOrderedMap(Generic[K, V]):
     @classmethod
     def _wrap(
         cls,
-        order: PersistentDeque[_StoredEntry[K, V]],
+        order: StampedOrder[_StoredEntry[K, V]],
         stamps: PersistentHashMap[K, int],
         value_equals: Callable[[V, V], bool],
     ) -> PersistentOrderedMap[K, V]:

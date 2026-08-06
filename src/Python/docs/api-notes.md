@@ -196,12 +196,14 @@ when omitted, and does not retain that comparator for later additions.
 Python maps invalid positions and empty endpoints to `IndexError`, invalid counts to `ValueError`,
 missing movement targets to `KeyError`, and null iterable operands to `TypeError`. The nullable
 `get` convenience method returns `None` on a miss; use `try_get_value` when stored `None` must
-remain distinct from absence. `index_of` first performs a HAMT lookup and then binary-searches
-through the public deque index API. Since one deque index is O(log n), this language-local
-implementation is O(log^2 n) for that second phase rather than the C# workspace's O(log n)
-specialized lower bound. All updates remain immutable and failure-atomic.
+remain distinct from absence. `index_of` performs a HAMT lookup and then one
+measure-directed descent over the stamp-measured order sequence, whose cached measure is each
+subtree's maximum stamp — O(log n) for that second phase, matching the reference workspaces. (The
+former representation, a size-measured deque probed by binary search, made this O(log^2 n); the
+`StampedOrder` substrate removed that divergence.) All updates remain immutable and
+failure-atomic.
 
-`PersistentOrderedMap[K, V]` uses the same neutral sparse-label design. Its persistent deque owns
+`PersistentOrderedMap[K, V]` uses the same neutral sparse-label design. Its stamp-measured order sequence owns
 each `(stamp, key, value)` entry while CHAMP stores only key-to-stamp navigation, avoiding a second
 retained payload. Construction keeps the first key representative and position while the last
 value-distinct payload wins. `set` never moves an existing class; only explicit movement, reversal,
@@ -639,10 +641,10 @@ addition recomputes the inserted pair's position in the successor's grouped orde
 gap after it; deleting a group's final value contracts the group. Independent key and value policies
 are retained.
 
-Ordered-cursor costs follow the collection's dual-index design. Peeks are one O(log n) deque index.
-The set's and map's equality seek is one CHAMP lookup followed by `_index_of_stamp`, a binary search
-whose every probe is an O(log n) public deque index, so the stamp-location tier is genuinely
-**O(log^2 n)** — the same bound already documented for `index_of` and `index_of_key`, not O(log n).
+Ordered-cursor costs follow the collection's dual-index design. Peeks are one O(log n)
+order-sequence index. The set's and map's equality seek is one CHAMP lookup followed by
+`_index_of_stamp`, one measure-directed descent over the stamp-measured order sequence — O(log n),
+the same bound `index_of` and `index_of_key` now deliver, matching the reference workspaces.
 Interior insertion is an O(log n) deque insert plus the CHAMP add; when a sparse `2^20` label gap is
 exhausted, the operation falls back to a deterministic relabel that rebuilds the entire order,
 costing O(n) hash and sequence work for that produced version and sharing nothing with retained

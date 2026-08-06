@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Generic, TypeVar, cast
 
-from ..finger_tree import Comparator, PersistentDeque, default_comparator
+from ..finger_tree import Comparator, default_comparator
 from ..hamt import HashPolicy, PersistentHashMap, default_hash_policy
+from ._stamped_order import StampedOrder
 
 T = TypeVar("T")
 
@@ -78,7 +79,7 @@ class PersistentOrderedSet(Generic[T]):
 
     def __init__(
         self,
-        order: PersistentDeque[_Entry[T]],
+        order: StampedOrder[_Entry[T]],
         stamps: PersistentHashMap[T, int],
     ) -> None:
         """Wrap an already-built order sequence and stamp index; use the factory methods instead.
@@ -98,7 +99,7 @@ class PersistentOrderedSet(Generic[T]):
         effective = default_hash_policy() if policy is None else policy
         if effective is default_hash_policy():
             return cast("PersistentOrderedSet[T]", _DEFAULT_EMPTY)
-        return cls(PersistentDeque.empty(), PersistentHashMap.empty(effective))
+        return cls(StampedOrder.empty(), PersistentHashMap.empty(effective))
 
     @classmethod
     def from_values(
@@ -552,21 +553,15 @@ class PersistentOrderedSet(Generic[T]):
         return PersistentOrderedSet(order, self._stamps.put(stored, stamp))
 
     def _index_of_stamp(self, stamp: int) -> int:
-        low = 0
-        high = self.size
-        while low < high:
-            middle = low + ((high - low) // 2)
-            candidate = self._order[middle].stamp
-            if candidate < stamp:
-                low = middle + 1
-            else:
-                high = middle
-        if low >= self.size or self._order[low].stamp != stamp:
+        # One measure-directed descent over the stamp-measured order sequence: O(log n), where the
+        # former binary search cost O(log n) probes of O(log n) each.
+        index = self._order.try_index_of_stamp(stamp)
+        if index is None:
             raise RuntimeError("The ordered set's membership and order indexes disagree.")
-        return low
+        return index
 
     @staticmethod
-    def _pick_stamp(order: PersistentDeque[_Entry[T]], index: int) -> int | None:
+    def _pick_stamp(order: StampedOrder[_Entry[T]], index: int) -> int | None:
         if order.is_empty:
             return 0
         if index == 0:
@@ -582,7 +577,7 @@ class PersistentOrderedSet(Generic[T]):
 
     def _rebuild_inserted(
         self,
-        order: PersistentDeque[_Entry[T]],
+        order: StampedOrder[_Entry[T]],
         index: int,
         value: T,
     ) -> PersistentOrderedSet[T]:
@@ -618,11 +613,11 @@ class PersistentOrderedSet(Generic[T]):
             order_entries.append(_Entry(stamp, value))
             pairs.append((value, stamp))
         stamps: PersistentHashMap[T, int] = PersistentHashMap.from_items(pairs, policy)
-        return cls(PersistentDeque.from_iterable(order_entries), stamps)
+        return cls(StampedOrder.from_iterable(order_entries), stamps)
 
     @staticmethod
     def _build_index(
-        order: PersistentDeque[_Entry[T]],
+        order: StampedOrder[_Entry[T]],
         policy: HashPolicy[T],
     ) -> PersistentHashMap[T, int]:
         return PersistentHashMap.from_items(
@@ -633,7 +628,7 @@ class PersistentOrderedSet(Generic[T]):
     @classmethod
     def _wrap(
         cls,
-        order: PersistentDeque[_Entry[T]],
+        order: StampedOrder[_Entry[T]],
         stamps: PersistentHashMap[T, int],
     ) -> PersistentOrderedSet[T]:
         return cls.empty(stamps.policy) if order.is_empty else cls(order, stamps)
@@ -706,7 +701,7 @@ class PersistentOrderedSet(Generic[T]):
 
 
 _DEFAULT_EMPTY: PersistentOrderedSet[object] = PersistentOrderedSet(
-    PersistentDeque.empty(),
+    StampedOrder.empty(),
     PersistentHashMap.empty(default_hash_policy()),
 )
 
