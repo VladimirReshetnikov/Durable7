@@ -2,8 +2,11 @@
  * The persistent sequence core: deques, a reversible deque, and the measured finger tree.
  *
  * Every collection here returns a new version and leaves the previous one valid, sharing unchanged
- * structure. The finger tree caches a monoidal measure at every node, so one generic split answers
- * any monotone question the measure can express without visiting the elements it skips.
+ * structure. The substrate is a lazy Hinze-Paterson finger tree with memoized suspensions, so
+ * endpoint reads are O(1) worst-case, endpoint edits are O(1) amortized under persistent
+ * branching, concatenation is O(log(min(n, m))) amortized, and whole-value reversal is an O(1)
+ * lazy structural mirror. The tree caches a monoidal measure at every node, so one generic split
+ * answers any monotone question the measure can express without visiting the elements it skips.
  */
 import { MeasuredSequence } from "./measured-sequence.js";
 import { SizeMeasure, type MeasurePolicy } from "./measures.js";
@@ -30,7 +33,7 @@ export interface DequePop<T> { readonly value: T; readonly rest: PersistentDeque
  */
 export interface SequenceCursorPeek<T> { readonly value: T }
 
-/** Persistent catenable sequence facade over a measured balanced tree. */
+/** Persistent catenable sequence facade over the measured finger tree. */
 export class PersistentDeque<T> implements Iterable<T> {
     readonly #items: MeasuredSequence<T, number>;
     private constructor(items: MeasuredSequence<T, number>) { this.#items = items; }
@@ -112,8 +115,15 @@ export class PersistentDeque<T> implements Iterable<T> {
         if (this.isEmpty) return undefined;
         return { value: this.back()!, rest: this.splitAt(this.size - 1)!.left };
     }
-    /** A deque with the order reversed. */
-    public reverse(): PersistentDeque<T> { return PersistentDeque.from(this.toArray().reverse()); }
+    /**
+     * A deque with the order reversed. O(1): a lazy structural mirror sharing storage with the
+     * receiver - digits mirror eagerly and the middle's reversal rides a suspension - not a
+     * rebuild. (This was previously a Theta(n) materialization.)
+     */
+    public reverse(): PersistentDeque<T> {
+        if (this.size < 2) return this;
+        return new PersistentDeque(this.#items.reversedView());
+    }
     /** Copy the elements into an array, in order. */
     public toArray(): T[] { return this.#items.toArray(); }
     /**
@@ -156,8 +166,11 @@ export class ReversibleDeque<T> implements Iterable<T> {
         return new ReversibleDeque(this.#reversed ? this.#items.prepend(value) : this.#items.append(value), this.#reversed);
     }
     /**
-     * This deque's elements followed by the other's, joining the two trees rather than copying
-     * either.
+     * This deque's elements followed by the other's. O(log(min(n, m))) amortized in every
+     * orientation combination. Same-orientation operands join structurally; opposite orientations
+     * lazily mirror the smaller operand into the larger one's orientation first - an O(1)
+     * structural reversal whose work rides the suspensions - and then join structurally. (This
+     * previously fell back to a Theta(n + m) materialization.)
      */
     public concat(other: ReversibleDeque<T>): ReversibleDeque<T> {
         if (this.isEmpty) return other;
@@ -166,7 +179,18 @@ export class ReversibleDeque<T> implements Iterable<T> {
             const joined = this.#reversed ? other.#items.concat(this.#items) : this.#items.concat(other.#items);
             return new ReversibleDeque(joined, this.#reversed);
         }
-        return ReversibleDeque.from([...this, ...other]);
+        if (this.size >= other.size) {
+            // Keep the receiver's orientation; mirror the smaller right operand into it.
+            const joined = this.#reversed
+                ? other.#items.reverse().concat(this.#items)
+                : this.#items.concat(other.#items.reverse());
+            return new ReversibleDeque(joined, this.#reversed);
+        }
+        // Keep the larger right operand's orientation; mirror the receiver into it.
+        const joined = other.#reversed
+            ? other.#items.concat(this.#items.reverse())
+            : this.#items.reverse().concat(other.#items);
+        return new ReversibleDeque(joined, other.#reversed);
     }
     /**
      * The elements before the index and those from it on; both halves share structure with the
@@ -195,11 +219,11 @@ export class ReversibleDeque<T> implements Iterable<T> {
      * Builds a deque whose logical order is `values` in *this* deque's physical orientation.
      *
      * {@link from} always produces forward-oriented storage. Splicing such a range into a reversed
-     * receiver would make both {@link concat} calls see mismatched orientations and fall back to
-     * re-materializing every element, discarding all structural sharing. Aligning the middle first
-     * keeps the splice on the sharing path in both orientations: when this deque is reversed the
-     * range is stored physically reversed, which is exactly the design's statement that inserting
-     * the logical range inserts the reversed range physically. `values` is enumerated once.
+     * receiver would make both {@link concat} calls see mismatched orientations and interpose a
+     * lazy mirror of the range. Aligning the middle first keeps the splice on the direct
+     * same-orientation path in both orientations: when this deque is reversed the range is stored
+     * physically reversed, which is exactly the design's statement that inserting the logical
+     * range inserts the reversed range physically. `values` is enumerated once.
      *
      * @internal Ownership detail of the cursor splice path; not part of the published surface.
      */
@@ -217,7 +241,7 @@ export class ReversibleDeque<T> implements Iterable<T> {
     public sharesStorageWith(other: ReversibleDeque<T>): boolean { return this.#items.sharesStorageWith(other.#items); }
     public *[Symbol.iterator](): IterableIterator<T> {
         if (!this.#reversed) yield* this.#items;
-        else for (let index = this.size - 1; index >= 0; index--) yield this.#items.get(index)!;
+        else yield* this.#items.reverse();
     }
 }
 

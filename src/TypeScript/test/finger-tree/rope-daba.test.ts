@@ -94,6 +94,11 @@ describe("rope family", () => {
         const measuredEdit = measured.getCursor().replaceNext(value).snapshot();
         expect(measuredEdit).not.toBe(measured);
         expect(measuredEdit.get(0)).toBe(value);
+        // Inverted with the lazy finger-tree core: the edit itself defers all measuring, so the
+        // fresh publish shows zero immediate policy calls, and the element is re-measured on the
+        // first forced read instead of eagerly at edit time.
+        expect(measureCalls).toBe(0);
+        expect(measuredEdit.measure()).toBe(1);
         expect(measureCalls).toBeGreaterThan(0);
     });
 

@@ -87,19 +87,23 @@ describe("persistent sequence cursors", () => {
     });
 
     it("splices reversed ranges in physical orientation without losing sharing", () => {
-        const forward = ReversibleDeque.from([1, 2, 3, 4]);
-        const reversed = ReversibleDeque.from([4, 3, 2, 1]).reverse();
+        // Large enough that the finger tree has a spine of 2-3 nodes to share; a handful of
+        // elements lives entirely in the root digits, where an edit legitimately rebuilds all
+        // structure. (The old join tree shared subtree nodes even at size four.)
+        const values = Array.from({ length: 32 }, (_, index) => index + 1);
+        const forward = ReversibleDeque.from(values);
+        const reversed = ReversibleDeque.from([...values].reverse()).reverse();
         expect(reversed.toArray()).toEqual(forward.toArray());
         for (const source of [forward, reversed]) {
             for (let gap = 0; gap <= source.size; gap++) {
-                const edited = source.getCursor(gap).insertRange([8, 9]);
-                expect(edited.snapshot().toArray()).toEqual([1, 2, 3, 4].toSpliced(gap, 0, 8, 9));
+                const edited = source.getCursor(gap).insertRange([98, 99]);
+                expect(edited.snapshot().toArray()).toEqual(values.toSpliced(gap, 0, 98, 99));
                 expect(edited.position).toBe(gap + 2);
                 expect(edited.snapshot().sharesStorageWith(source)).toBe(true);
-                expect(source.toArray()).toEqual([1, 2, 3, 4]);
+                expect(source.toArray()).toEqual(values);
             }
         }
-        expect(reversed.getCursor(2).insert(7).snapshot().toArray()).toEqual([1, 2, 7, 3, 4]);
+        expect(reversed.getCursor(2).insert(0).snapshot().toArray()).toEqual(values.toSpliced(2, 0, 0));
         const clean = reversed.getCursor(2);
         expect(clean.insertRange([])).toBe(clean);
     });
