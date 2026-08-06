@@ -31,18 +31,16 @@
 //! slicing are O(s log n): a measure-directed descent over O(log n) levels, each level composing
 //! one O(s) effect table. Enumeration is O(n), and building from a source is O(s n).
 //!
-//! Endpoint updates are Θ(s log n) per operation, not O(s). This is a Rust-substrate divergence
-//! from the managed reference rather than a different algorithm: the C# reference sits on a lazy
-//! finger tree, whose digits give amortized O(1) node work at either end, so the same push there
-//! costs O(s). This crate's measured tree is a height-balanced join tree with no finger, so
-//! pushing one element joins a singleton against a tree of height Θ(log n) and rebuilds every node
-//! on that spine, each rebuild composing an O(s) effect table.
+//! Endpoint updates are **O(s) amortized** (O(s log n) worst case per call), matching the managed
+//! reference. This crate's measured tree is now a lazy Hinze-Paterson finger tree - digits at
+//! both ends, memoized defunctionalized suspensions in every deep node's middle - so an endpoint
+//! push performs amortized O(1) node work, each node composing one O(s) effect table, and the
+//! amortization holds under persistent branching because forced suspensions memoize into shared
+//! cells. (An earlier revision of this crate sat on a height-balanced join tree and honestly
+//! documented Θ(s log n) here; the substrate upgrade removed that divergence.)
 //!
-//! Concatenation costs Θ(s · |h_left − h_right|), proportional to the operands' height difference:
-//! the join descends the taller operand's spine until the heights meet and rebuilds exactly that
-//! many nodes. For operands of comparable size that is O(s log(min(n, m))), the bound the C# lazy
-//! finger tree meets in general; for asymmetric operands — appending a short run to a long
-//! sequence — it degrades to O(s log(max(n, m))), so the log(min(n, m)) form does not hold here.
+//! Concatenation is **O(s log(min(n, m))) amortized**, the reference bound: the substrate
+//! suspends its middle recursion and regroups only the boundary digits eagerly.
 //!
 //! Each retained changed spine adds O(s log n) summary storage while untouched structure stays
 //! shared, so the structure costs O(s n) summary space rather than O(n).
@@ -607,9 +605,9 @@ where
 
     /// Returns a sequence with `item` prepended.
     ///
-    /// Θ(s log n): the substrate has no finger, so this joins a singleton against a tree of height
-    /// Θ(log n) and recomposes an O(s) effect table at every node on that spine. The C# reference's
-    /// lazy finger tree does this in O(s); see the module-level `Bounds` section.
+    /// O(s) amortized, O(s log n) worst case per call: an endpoint digit push on the lazy
+    /// finger-tree substrate, whose overflow cascades ride memoized suspensions; see the
+    /// module-level `Bounds` section.
     #[must_use]
     pub fn push_front(&self, item: T) -> Self {
         Self {
@@ -617,7 +615,7 @@ where
         }
     }
 
-    /// Returns a sequence with `item` appended. Θ(s log n), for the reason given on
+    /// Returns a sequence with `item` appended. O(s) amortized, as
     /// [`push_front`](Self::push_front).
     #[must_use]
     pub fn push_back(&self, item: T) -> Self {
@@ -630,9 +628,9 @@ where
     ///
     /// An empty operand is not copied: the result shares the non-empty operand's root.
     ///
-    /// Θ(s · |h_left − h_right|), proportional to the operands' height difference: that is
-    /// O(s log(min(n, m))) for operands of comparable size, but O(s log(max(n, m))) when they are
-    /// asymmetric. Only the balanced case matches the C# reference's log(min(n, m)) bound.
+    /// O(s log(min(n, m))) amortized in every shape, matching the C# reference: the suspended
+    /// middle recursion terminates at the shallower operand, and only the boundary digits are
+    /// regrouped eagerly.
     #[must_use]
     pub fn concat(&self, other: &Self) -> Self {
         Self {
@@ -643,7 +641,7 @@ where
     /// Inserts `item` so that `index` old elements precede it, or returns [`None`] when `index`
     /// exceeds the length. O(s log n), including at either endpoint: the endpoint cases delegate to
     /// [`push_front`](Self::push_front) and [`push_back`](Self::push_back), which are themselves
-    /// Θ(s log n) on this substrate.
+    /// O(s) amortized on this substrate.
     #[must_use]
     pub fn insert(&self, index: usize, item: T) -> Option<Self> {
         if index > self.len() {

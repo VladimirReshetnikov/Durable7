@@ -494,13 +494,14 @@ evaluation is O(1); contextual prefix evaluation, event rank, event select, inde
 persistent edits are O(s log n); summaries occupy O(s·n). For a fixed machine `s` is constant, so
 the contextual operations are O(log n) against the Θ(n) replay a state-free sequence would require.
 
-**Two bounds differ from the managed reference because the substrate differs.** C# sits on a lazy
-finger tree; this crate's measured core is a height-balanced join tree with no finger. Endpoint
-updates are therefore Θ(s log n) per operation here rather than the C# reference's O(s) amortized,
-and concatenation costs Θ(s·|h_left − h_right|) in the operand height difference rather than
-O(s log(min(n, m))). The algorithm is the same; only the substrate's locality guarantees are
-weaker, which is the same checkpoint boundary the rest of this crate records for its derived
-sequence facades.
+**Both formerly divergent bounds now match the managed reference.** This crate's measured core is
+a lazy Hinze-Paterson finger tree - digits at both ends, memoized defunctionalized suspensions in
+every deep node's middle, forced and dropped iteratively - so endpoint updates are O(s) amortized
+(O(s log n) worst case per call) and concatenation is O(s log(min(n, m))) amortized, valid under
+persistent branching because forced suspensions memoize into shared cells. (An earlier revision's
+measured core was a height-balanced join tree and this note honestly recorded Θ(s log n) endpoints
+and height-difference concatenation; the substrate upgrade removed the divergence, and the crate's
+probe tests pin the new bounds the way measurements once established the old ones.)
 
 ## Persistent delta map and run-delta vector
 
