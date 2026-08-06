@@ -39,21 +39,18 @@
     - The structure costs [O(s n)] summary storage; a retained changed spine adds [O(s log n)] while
       untouched structure stays shared.
 
-    Two bounds are deliberately {b weaker} than the C# reference states, because this workspace's
-    substrate is not the same structure. {!Measured_tree} is a weight-balanced join tree of leaves
-    (Hirai and Yamamoto, delta = 3, gamma = 2) with no digits and no lazy middle, so it has no
-    finger:
+    Both formerly weaker bounds now match the C# reference, because {!Measured_tree} is a lazy
+    Hinze-Paterson finger tree: digits give amortized [O(1)] node work at either end, each node
+    composing one [O(s)] effect table, and the suspended middle recursion of concatenation
+    terminates at the shallower operand.
 
-    - Endpoint updates ({!cons}, {!snoc}) are [Theta (s log n)], not [O(s)]. Pushing one element
-      joins a singleton against a tree whose leftmost or rightmost spine has [Theta (log n)] levels,
-      and every node rebuilt on that spine recomposes an [O(s)] effect table. The C# reference sits
-      on a lazy Hinze-Paterson finger tree whose digits give amortized [O(1)] node work at either
-      end, which is the only reason it can claim [O(s)].
-    - Concatenation is [Theta (s (1 + log (max (n, m) / min (n, m))))], proportional to the
-      operands' weight ratio: the join descends the heavier operand's spine until the two weights
-      come within the balance factor and rebuilds exactly those nodes. That is [O(s)] for operands
-      of comparable size but degrades to [O(s log (max (n, m)))] when they are asymmetric, so the
-      [O(s log (min (n, m)))] form the C# reference claims does {b not} hold here.
+    - Endpoint updates ({!cons}, {!snoc}) are [O(s)] amortized ([O(s log n)] worst case per call),
+      valid under persistent branching because forced suspensions memoize into shared cells.
+    - Concatenation is [O(s log (min (n, m)))] amortized.
+
+    An earlier revision of this workspace sat on a weight-balanced join tree and honestly
+    documented [Theta (s log n)] endpoints and a weight-ratio concatenation bound here; the Wave-1
+    substrate upgrade removed the divergence, and the workspace's probe tests pin the new bounds.
 
     When the machine is fixed, [s] is a constant and the contextual queries are [O(log n)] instead
     of the [Theta (n)] replay a state-free persistent sequence needs. Treating [s] as an input, this
@@ -189,8 +186,9 @@ val select_event : event_index:int -> initial_state:int -> 'element t -> event_l
     transition for the located element. There is no binary search and no prefix replay. *)
 
 val cons : 'element -> 'element t -> ('element t, string) result
-(** A sequence with the element added at the front. [Theta (s log n)] on this substrate, not [O(s)];
-    see the module's bounds. Fails when the machine violates its contract on the element. *)
+(** A sequence with the element added at the front. [O(s)] amortized, [O(s log n)] worst case
+    per call; see the module's bounds. Fails when the machine violates its contract on the
+    element. *)
 
 val snoc : 'element t -> 'element -> ('element t, string) result
 (** A sequence with the element added at the back, with the cost and failure mode of {!cons}. *)

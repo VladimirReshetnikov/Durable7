@@ -113,10 +113,9 @@ immutable. Policies arrive as retained runtime records with an `id`, following `
 concatenation and melding are gated on declared policy identity rather than on object identity.
 
 Their bounds are stated against this workspace's substrates rather than inherited from the managed
-baseline, and two of those substrates are weaker than the reference's. `Measured_tree` is a
-weight-balanced join tree, not a Hinze–Paterson finger tree, so `Contextual_rank_sequence` states
-Θ(s log n) endpoint updates rather than O(s) amortized, and a concatenation bound that depends on
-the operands' height difference rather than on the smaller operand. `Sorted_map` is an immutable
+baseline. `Measured_tree` is now a lazy Hinze–Paterson finger tree (Wave 1 of the complexity-parity
+campaign), so `Contextual_rank_sequence` delivers the reference bounds: O(s) amortized endpoint
+updates — valid under persistent branching — and O(s log(min(n, m))) amortized concatenation. `Sorted_map` is an immutable
 entry array, so `Persistent_delta_map` writes are Θ(N + k) while its extremes are O(1) — weaker in
 one direction and stronger in the other than the tree-backed ports. `Rrb_vector` is a facade over
 the same measured tree rather than a relaxed radix trie, so the run-delta vector's splice bounds are

@@ -54,14 +54,21 @@ donor-mechanism extractions (C#, C++, Haskell lazy cores): `donors-full.json`.
 | A5 | OCaml ordered family: flat arrays with linear scans | Θ(n) membership, Θ(n) writes, Θ(n·m) algebra | expected O(1) membership; O(log n) positional | CHAMP stamp map + stamped sequence composite, as siblings (`Persistent_hamt` is real and ready) |
 | A6 | Haskell `SortedSet`/`SortedMap`: facades over `Data.Set`/`Data.Map` | O(log n) min/max; `SortedSet` rank-slice is **Θ(position+length)** | O(1) extremes; O(log n) slice via two splits | Rebuild on the workspace's own finger tree, as its `SortedBag` already is |
 | A7 | Python ordered map/set/multimap keyed position ops | **O(log² n)** (`_index_of_stamp` binary search × O(log n) probes) | O(log n): one measure-directed descent | Give `_order` a last-stamp measure and locate by monotone predicate, as TypeScript does |
-| A8 | Reversible-deque cross-orientation concat: ~~TS~~, ~~Python~~, OCaml | Θ(n+m) re-materialization (**Python FIXED**: lazy structural `reversed_view` as a fourth defunctionalized suspension op — O(1) mirror, O(log min) mismatched concat, plain-deque `reverse()` upgraded from Θ(n) to O(1) as a by-product; probe-pinned) | O(log(min)) — C# delivers `a.Reverse().Concat(b)` at O(log min) | Orientation-aware concat; falls out of the Wave-1 rebase for TS/OCaml |
-| A9 | OCaml reversible deque | Θ(n+m) concat, Θ(n) cursor edits (list rebuild) | O(log) via tree ops | Rebase on new core (Wave 1) |
+| ~~A8~~ | ~~Reversible-deque cross-orientation concat: TS, Python, OCaml~~ — **closed everywhere** | Θ(n+m) re-materialization (**Python FIXED**: lazy structural `reversed_view` as a fourth defunctionalized suspension op — O(1) mirror, O(log min) mismatched concat, plain-deque `reverse()` upgraded from Θ(n) to O(1) as a by-product; probe-pinned) | O(log(min)) — C# delivers `a.Reverse().Concat(b)` at O(log min) | Orientation-aware concat; falls out of the Wave-1 rebase for TS/OCaml |
+| ~~A9~~ | ~~OCaml reversible deque~~ | **FIXED with the Wave-1 core** (b9434bb): orientation-aware structural concat across all four flag pairings, O(log n) cursor splices | done | done |
 
 ### Class B — the keystone: join-tree cores (blocks most of Class A's siblings)
 
-Five workspaces (~~Rust~~, ~~Kotlin~~, OCaml, ~~Python~~, ~~TypeScript~~) must replace their join-tree
+Five workspaces (~~Rust~~, ~~Kotlin~~, ~~OCaml~~, ~~Python~~, ~~TypeScript~~) must replace their join-tree
 measured cores with genuine lazy Hinze–Paterson finger trees, **in place, same module, same public
-API**. **TypeScript landed fourth** (9e4a1e1 + follow-ups): same probe signature (340/340, 3,336-vs-5.0,
+API**. **OCaml landed fifth — CLASS B IS CLOSED** (b9434bb + docs): the weight-balanced join tree is
+gone, native `Lazy.force` banned from the spine per the 200k-overflow experiment, suspensions
+published by single mutable-field assignment under the 4.14 runtime lock, and the same probe
+signature as all four siblings (340/340, 0-vs-4, 3,336-vs-5, 200k chains). Rows A9 and A8 closed
+with it: the reversible deque's Θ(n+m) concat and Θ(n) cursor edits became structural through the
+orientation-aware rebase and the every-monoid reversed view. All five cores now measure identical
+probe numbers — the library's measured substrate is one algorithm in five more languages.
+**TypeScript landed fourth** (9e4a1e1 + follow-ups): same probe signature (340/340, 3,336-vs-5.0,
 0-vs-4), plain-assignment publication documented as the single-threaded workspace's atomic
 primitive, and row A8 closed for TS via the lazy reversed view. It also STRENGTHENED the reversed
 view beyond the Python original — mirrored node summaries recombine in mirrored order, correct

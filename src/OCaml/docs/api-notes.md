@@ -161,9 +161,10 @@ monoid identity selects position 0 of a nonempty sequence. **`Measured_sequence`
 facade, exposes no cursor at all**; consumers needing a measured gap must use `Measured_tree`
 directly.
 
-`Measured_tree`, `Persistent_deque`, and `Rrb_vector` share one weight-balanced measured-tree
-substrate (`Rrb_vector` is a type alias of `Persistent_deque`, which wraps `Measured_tree` under
-`Measures.size`). Their cursor costs are therefore: factories, `cursor_position`, `cursor_length`,
+`Measured_tree`, `Persistent_deque`, and `Rrb_vector` share one measured substrate — since the
+Wave-1 core upgrade, a lazy Hinze–Paterson finger tree with memoized defunctionalized suspensions
+(`Rrb_vector` is a type alias of `Persistent_deque`, which wraps `Measured_tree` under
+`Measures.size`), giving O(1) worst-case ends and amortized O(1) endpoint updates. Their cursor costs are therefore: factories, `cursor_position`, `cursor_length`,
 `cursor_seek`, `cursor_move_*`, and `cursor_snapshot` O(1); `cursor_peek_*`,
 `cursor_insert`, `cursor_replace_next`, and `cursor_delete_*` O(log n) through split/join;
 `cursor_by_measure`/`cursor_seek_by_measure` and `cursor_measure_before`/`cursor_measure_after`

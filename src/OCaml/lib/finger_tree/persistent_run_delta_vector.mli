@@ -34,9 +34,11 @@
     - {!validate}: [Theta (n + r)] plus [n] relation calls. An auditor, not a hot-path operation.
 
     Two substrate facts back those numbers and both differ from the reference ports. The vector
-    roots are [Rrb_vector], a facade over the weight-balanced measured tree, so indexed read, split
-    and concatenation are [O(log n)] {e worst case} rather than amortized; the reference ports'
-    amortized RRB bounds are therefore not inherited and not claimed. The run index is [Sorted_map],
+    roots are [Rrb_vector], a facade over the lazy finger-tree measured core rather than a real
+    32-way radix trie, so indexed read, split and concatenation are [O(log n)] {e amortized}: a
+    call may force memoized deferred spine work, paid once per suspension across all versions.
+    (Until the Wave-1 core upgrade the facade's substrate was eager and these were worst-case
+    bounds; the pending Wave-2 rebuild onto a genuine RRB restores the reference shape outright.) The run index is [Sorted_map],
     a sorted array, so a key lookup is [O(log r)] worst case and rank selection is [O(1)], but
     inserting or replacing a record copies the array, which is [Theta (r)] rather than [O(log r)].
     Run-index mutation is consequently the one place where this port is asymptotically weaker than
