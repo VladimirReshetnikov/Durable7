@@ -1,9 +1,14 @@
 # Data Structure Catalog
 
 - Created (UTC): 2026-07-02T19:53:11Z
-- Repository HEAD: 1d90612aed11f273521046015c9d63bb7c993bba
+- Repository HEAD: be7d186f0c75ffd86637253f6bde1b928d78ab84
 - Audience: Maintainers and AI agents comparing data-structure surfaces across languages
-- Scope: Repository-owned data-structure families, public entry points, and primary reference links
+- Scope: Repository-owned data-structure families, public entry points, and primary reference links.
+  Coverage is complete: no family is awaiting a scheduled port, the last cross-language gap having
+  closed on 2026-08-06, and the handful of surfaces that are deliberately not nine-way (the
+  managed-only concurrent hash trie; DABA Lite, which Haskell does not ship) are marked where they
+  appear. Since the complexity-parity campaign of the same week the ports also share one asymptotic
+  profile per family rather than merely one API shape
 
 This catalog is the cross-workspace orientation layer. It answers "which public library surfaces exist in
 which language, and where do I start?" The workspace API specifications and headers remain the
@@ -143,17 +148,28 @@ The finger-tree workspaces provide persistent sequence engines: a tuned catenabl
 general monoid-measured tree. They support endpoint operations, concatenation, splitting by
 position or measure, indexed access where exposed, and immutable structural sharing.
 
+All nine measured cores are now the same structure — a lazy Hinze-Paterson 2-3 finger tree with
+1-4-element digits at both ends and every deep node's middle held behind a memoized suspension —
+so they deliver one profile: O(1) worst-case first/last reads, O(1) amortized endpoint push/pop
+(valid under persistent branching, because a forced suspension memoizes into a cell shared by every
+version that references it) with O(log n) worst case per call, O(log(min(n, m))) amortized
+concatenation, and O(log n) split/index/locate. Five workspaces — Python, Rust, Kotlin, TypeScript,
+and OCaml — reached that shape only in the complexity-parity campaign, which replaced their
+height-balanced join-tree cores in place, same module and same public API; see
+[Complexity Parity Across The Nine Workspaces](#complexity-parity-across-the-nine-workspaces).
+Because most families below are thin layers over this core, its bounds are largely their bounds.
+
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
 | C# | `FingerTreeDeque<T>`, `FingerTree<TElement, TMeasure, TMeasureOps>`, `RrbVector<T>`, `RrbVector<T>.Builder` | [Workspace](../../src/CSharp/docs/FingerTree/overview.md), [usage guide](../../src/CSharp/docs/FingerTree/usage.md), [API spec](../../src/CSharp/docs/FingerTree/api-specification.md), [deque source](../../src/CSharp/src/Durable7.FingerTree/FingerTreeDeque.cs), [measured tree source](../../src/CSharp/src/Durable7.FingerTree/FingerTree.cs), [RRB vector and builder](../../src/CSharp/src/Durable7.FingerTree/RrbVector.cs) |
 | C | `ft_tree`, `ft_tree_policy`, `ft_measure_policy`, `ft_persistent_deque`, `ft_rrb_vector`, `ft_rrb_builder` | [Workspace](../../src/C/FingerTree/README.md), [usage guide](../../src/C/FingerTree/docs/usage.md), [API notes](../../src/C/FingerTree/docs/api-notes.md), [finger-tree header](../../src/C/FingerTree/include/durable7/finger_tree/fingertree.h), [RRB header](../../src/C/FingerTree/include/durable7/finger_tree/rrb_vector.h) |
 | C++ | `persistent_deque<T>`, `finger_tree<Element, MeasurePolicy>`, `rrb_vector<T>`, `rrb_vector_builder<T>` | [Workspace](../../src/Cpp/FingerTree/README.md), [usage guide](../../src/Cpp/FingerTree/docs/usage.md), [API notes](../../src/Cpp/FingerTree/docs/api-notes.md), [aggregate header](../../src/Cpp/FingerTree/include/durable7/finger_tree/finger_tree.hpp), [deque header](../../src/Cpp/FingerTree/include/durable7/finger_tree/persistent_deque.hpp), [measured tree header](../../src/Cpp/FingerTree/include/durable7/finger_tree/measured_finger_tree.hpp), [RRB vector header](../../src/Cpp/FingerTree/include/durable7/finger_tree/rrb_vector.hpp) |
 | Haskell | `Deque a`, `FingerTree v a`, `Measured v a`, `RrbVector a` | [Workspace](../../src/Haskell/FingerTree/README.md), [deque source](../../src/Haskell/FingerTree/src/Durable7/FingerTree/Deque.hs), [measured tree source](../../src/Haskell/FingerTree/src/Durable7/FingerTree/Measured.hs), [RRB source](../../src/Haskell/FingerTree/src/Durable7/FingerTree/RrbVector.hs), [tests](../../src/Haskell/FingerTree/test/README.md) |
-| Kotlin | `PersistentDeque<T>`, `FingerTree<T, M>`, `MeasurePolicy<T, M>`, `RrbVector<T>`, `RrbVector.Builder<T>` | [Workspace](../../src/Kotlin/FingerTree/README.md), [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [public facades](../../src/Kotlin/FingerTree/src/durable7/fingertree/Core.kt), [measured AVL engine](../../src/Kotlin/FingerTree/src/durable7/fingertree/PersistentMeasuredTree.kt), [RRB source](../../src/Kotlin/FingerTree/src/durable7/fingertree/RrbVector.kt), [tests](../../src/Kotlin/FingerTree/tests/README.md) |
+| Kotlin | `PersistentDeque<T>`, `FingerTree<T, M>`, `MeasurePolicy<T, M>`, `RrbVector<T>`, `RrbVector.Builder<T>` | [Workspace](../../src/Kotlin/FingerTree/README.md), [API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [public facades](../../src/Kotlin/FingerTree/src/durable7/fingertree/Core.kt), [lazy finger-tree engine](../../src/Kotlin/FingerTree/src/durable7/fingertree/PersistentMeasuredTree.kt), [RRB source](../../src/Kotlin/FingerTree/src/durable7/fingertree/RrbVector.kt), [tests](../../src/Kotlin/FingerTree/tests/README.md) |
 | Rust | `PersistentDeque<T>`, `FingerTree<T, P>`, `MeasurePolicy<T>`, `RrbVector<T>`, `RrbVectorBuilder<T>` | [Workspace](../../src/Rust/FingerTree/README.md), [API notes](../../src/Rust/FingerTree/docs/api-notes.md), [deque source](../../src/Rust/FingerTree/src/deque.rs), [measured source](../../src/Rust/FingerTree/src/measured.rs), [RRB source](../../src/Rust/FingerTree/src/rrb_vector.rs) |
 | OCaml | `Persistent_deque`, `Measured_tree`, `Measured_sequence`, `Measures`, `Rrb_vector` and builder | [Workspace](../../src/OCaml/README.md), [API notes](../../src/OCaml/docs/api-notes.md), [source](../../src/OCaml/lib/finger_tree), [tests](../../src/OCaml/tests/README.md) |
 | TypeScript | `PersistentDeque<T>`, `FingerTree<T, M>`, `MeasurePolicy<T, M>`, `RrbVector<T>`, `RrbVectorBuilder<T>` | [Workspace](../../src/TypeScript/README.md), [core](../../src/TypeScript/src/finger-tree/core.ts), [RRB vector](../../src/TypeScript/src/finger-tree/rrb-vector.ts) |
-| Python | `PersistentDeque`, `FingerTree`, `MeasuredSequence`, `MeasurePolicy`, `RrbVector`, `RrbVectorBuilder` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [measured AVL/core](../../src/Python/src/durable7/finger_tree/measured_sequence.py), [RRB vector](../../src/Python/src/durable7/finger_tree/rrb_vector.py), [tests](../../src/Python/tests/README.md) |
+| Python | `PersistentDeque`, `FingerTree`, `MeasuredSequence`, `MeasurePolicy`, `RrbVector`, `RrbVectorBuilder` | [Workspace](../../src/Python/README.md), [API notes](../../src/Python/docs/api-notes.md), [lazy finger-tree core](../../src/Python/src/durable7/finger_tree/measured_sequence.py), [RRB vector](../../src/Python/src/durable7/finger_tree/rrb_vector.py), [tests](../../src/Python/tests/README.md) |
 
 ## Range-Update Sequence
 
@@ -164,6 +180,12 @@ AVL sibling in the FingerTree assembly, not a tagged modification of either exis
 engine. `IRangeUpdateAlgebra<TElement, TMeasure, TTag>` combines the ordinary ordered measure
 monoid with a tag monoid and actions on elements and cached measures;
 `Compose(newer, older)` means apply `older` first and `newer` second.
+
+OCaml's port was a flat array that applied every range tag eagerly to each covered element (Θ(n)
+per range edit) until the complexity-parity campaign rebuilt it onto the same path-copied implicit
+AVL every sibling ships, so the paragraph above now describes all nine ports; its point indexing
+regressed from the array's O(1) to O(log n) under the ruling recorded in
+[Complexity Parity Across The Nine Workspaces](#complexity-parity-across-the-nine-workspaces).
 
 Each node's logical value and cached measure already include its own pending tag while its children
 do not. Structural descent and rotations push tags before rearranging nodes, and read-only indexing,
@@ -195,7 +217,14 @@ and range-update sequence ship across all nine languages; the detailed earlier e
 ## Reversible Deque
 
 Reversible deques add orientation-aware views over persistent deque storage so reversal can be
-represented without eagerly copying the sequence.
+represented without eagerly copying the sequence. In every port `reverse` is O(1) structural work
+rather than a rebuild, and concatenating two deques whose orientations disagree stays on the tree
+path at O(log(min(n, m))) instead of re-materializing both operands through lists. Python,
+TypeScript, and OCaml paid Θ(n) for `reverse` and Θ(n + m) for a mismatched concatenation until the
+complexity-parity campaign added a lazy structural mirror to their cores as a fourth suspension
+operation. That work also made the mirrored view correct under **every** monoid: a mirrored node
+recombines its children's summaries in mirrored order instead of reusing a cached summary, which is
+only valid when `combine` commutes.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -212,9 +241,14 @@ represented without eagerly copying the sequence.
 ## Sorted Collections
 
 Sorted collections expose immutable sorted bags/multisets, sets, and key-value maps with
-comparer-preserving behavior. The mature C#/C++/C ports use order-statistic measures over finger
-trees; the Rust checkpoint now uses cached count plus last-key order-statistic measures over its
-measured tree while its API notes track the remaining lazy-spine parity boundary.
+comparer-preserving behavior. Every port layers order-statistic measures over the same lazy
+finger-tree core, so ordered searches are measure-directed descents, extremes are O(1) digit reads
+at the root, rank windows are structural splits by cached counts, and point writes are O(log n).
+Two ports reached that shape only in the complexity-parity campaign: OCaml's sorted family was a
+flat immutable array (Θ(n) per write, Θ(n²) construction, Θ(n·m) algebra), and Haskell's
+`SortedSet`/`SortedMap` were facades over `containers` with O(log n) extremes and a
+Θ(position + length) rank slice. Both were rebuilt on their workspace's own finger tree without
+regressing set algebra below the O(m log(n/m + 1)) hedge class.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -231,9 +265,16 @@ measured tree while its API notes track the remaining lazy-spine parity boundary
 ## Priority Queue
 
 Priority queues locate and remove the front priority entry according to each language's comparison
-policy. The mature C#/C++/C ports use measured finger-tree facades; the Rust checkpoint now uses
-cached minimum-priority measures over its measured tree while its API notes track the remaining
-lazy-spine parity boundary.
+policy. Three distinct engines ship here, each identical across the nine ports: the stable
+`PriorityQueue` is a minimum-priority measure over the shared finger-tree core; the
+Brodal-Okasaki heap is a bootstrapped skew-binomial forest with O(1) worst-case
+insert/meld/minimum and O(log n) delete-min; and the priority-search queue is a key-ordered AVL in
+which every node caches its subtree's minimum-priority winner, so `minimum` is an O(1) root read,
+keyed writes are O(log n), and bounded range enumeration prunes whole subtrees through those same
+winner caches. OCaml's heap stored its elements in a plain list and its priority-search queue was a
+flat sorted array with a cached winner index until the complexity-parity campaign rebuilt both on
+the real algorithms; the rebuild then exposed a coverage gap it also closed, since OCaml alone had
+never exported the priority-bounded `enumerate_at_most`.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -249,10 +290,9 @@ lazy-spine parity boundary.
 
 ## Interval Tree
 
-Interval trees store ordered interval collections for overlap and containment queries. The mature
-C#/C++/C ports use interval annotations in finger-tree measures so queries can skip subtrees whose
-summary cannot intersect the probe; the Rust checkpoint now uses cached maximum-high measures over
-its measured tree while its API notes track the remaining lazy-spine parity boundary.
+Interval trees store ordered interval collections for overlap and containment queries. Every port
+uses interval annotations — a cached maximum high endpoint — in finger-tree measures, so queries
+skip subtrees whose summary cannot intersect the probe.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -279,12 +319,14 @@ measure seek. Haskell likewise ships opaque snapshot-plus-gap `MeasuredRopeCurso
 `Char`-element text positions. Every sibling cursor preserves branching and edit behavior without
 claiming the C# focused cursor representation or its focus-local complexity. C text positions count byte-sized `char` elements and use
 the existing LF-only zero-based line/column rules.
-The Rust checkpoint uses chunked measured storage for both positional `Rope<T>` and custom-measured
-`MeasuredRope<T, P>` and stores `TextRope` content in a newline-measured rope while its API notes track
-the remaining lazy-spine parity boundary.
-Python uses the same snapshot-plus-gap semantics over its persistent measured-AVL checkpoint;
+Rust uses chunked measured storage for both positional `Rope<T>` and custom-measured
+`MeasuredRope<T, P>` and stores `TextRope` content in a newline-measured rope.
+Python uses the same snapshot-plus-gap semantics over the shared lazy finger-tree core;
 `TextRope` and `TextRopeCursor` count Python Unicode code points rather than UTF-16 units or
-grapheme clusters.
+grapheme clusters. Leaf chunking is the one representation difference the complexity-parity
+campaign deliberately left standing — chunked leaves in C#, C, C++, Rust, and Haskell against
+per-element leaves in Kotlin, Python, and TypeScript — because it is a constant factor rather than
+an asymptotic divergence, and so is a representation-parity follow-up rather than a violation.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -300,9 +342,15 @@ grapheme clusters.
 
 ## Measures, Comparisons, And Predicates
 
-Measures are the connective tissue for finger-tree-derived collections. The C#, C++, Kotlin, and Python
-workspaces expose typed measure abstractions (with comparison and predicate abstractions where their
-surfaces require them); the C workspace exposes equivalent policy callbacks and context pointers.
+Measures are the connective tissue for finger-tree-derived collections. Every typed workspace —
+C#, C++, Haskell, Kotlin, OCaml, Rust, TypeScript, and Python — exposes measure abstractions (with
+comparison and predicate abstractions where their surfaces require them), though the shape is
+idiomatic: C#, C++, and Rust resolve policies at compile time, Haskell uses a class plus ordinary
+`v -> Bool` predicates, and Kotlin, OCaml, TypeScript, and Python retain runtime policy objects
+that carry identity so binary operations can reject mismatched operands. The C workspace
+exposes equivalent policy callbacks and context pointers. DABA Lite is deliberately mutable
+wherever it exists and is deliberately absent from Haskell; that is a coverage choice, not a
+complexity divergence.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -325,6 +373,15 @@ representative. Explicit movement, positional ranges, reversal, stable one-shot 
 receiver-policy set algebra, and all six set relations preserve immutable versions and documented
 identity no-ops. Algebra eagerly normalizes the complete argument under the receiver policy before
 applying shortcuts, retaining receiver representatives and first normalized argument representatives.
+
+Every port realizes this as a CHAMP index from element to a sparse 64-bit order stamp plus a
+persistent stamped sequence, so membership is expected O(1) and positional work is O(log n). Two
+ports reached that profile only in the complexity-parity campaign. Python recovered a position from
+a stamp by binary search whose every probe was itself a tree descent — O(log² n) where every
+sibling paid O(log n) — and now performs one measure-directed descent over a sequence whose cached
+measure is each subtree's maximum stamp. OCaml's whole ordered family was flat arrays with linear
+scans for membership, and was rebuilt onto the same composite, deliberately reusing the design
+Python had just been given.
 
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
@@ -350,7 +407,8 @@ isolated session.
 Seven collections originated as scoped design studies, each with a normative proposal under
 [`docs/proposals`](../proposals/) recording its claims, prior-art boundary, and deliberate
 limitations. They were promoted out of the former `*.Experimental` namespaces into the ordinary
-family namespaces and ported to every other workspace. Coverage is **all nine languages** — C#,
+family namespaces and ported from the C# reference to every other workspace, TypeScript last on
+2026-08-06. Coverage is **all nine languages** — C#,
 Rust, C, Haskell, Kotlin, C++, OCaml, Python, and TypeScript — with no scheduling gap left. Every one
 of them separates shipped bounds from theoretical instantiations; read the proposal before relying on
 a headline complexity.
@@ -365,6 +423,101 @@ a headline complexity.
 | `PersistentMonotoneActionHeap<TElement, TPriority, TAction>` | Brodal-Okasaki heap with lazily composed monotone priority actions | [PMAH](../proposals/persistent-monotone-action-heap-2026-07-29.md) |
 | `PersistentAncestralConnectionForest` | Branching insertion-only union-find answering first-connected-at-which-version | [PACF](../proposals/persistent-ancestral-connection-forest-2026-07-29.md) |
 
+### What Each Collection Is
+
+These seven are not variants of one another, and the table above is too terse to choose from. Each
+buys an unusual bound by giving something up — omitted operations, extra summary space, or an
+explicitly maintained index — and those concessions are the design, not gaps to be filled later.
+
+**`AncestralSliceQueue<T>`** is a persistent FIFO queue whose entire value is a constant-sized
+handle naming one contiguous interval of a root-to-node path in an append-only arena. Appending
+creates one child below the interval's tail; taking or dropping a prefix, slicing, and splitting
+move only the two boundaries, and every retained value stays a valid, independently extendable
+branch point. Reach for it when you want many related queue snapshots whose slicing and indexed
+access cost one ancestor query rather than a rebuild, and can live without prepend, arbitrary
+insertion or deletion, point replacement, and concatenation of unrelated histories — omitting those
+is exactly what buys the bounds.
+
+**`BilateralAncestralDeque<T>`** applies the same representation to both ends: a version is two
+oppositely oriented ancestry intervals, so pushing or popping at either end grows or shrinks one of
+them and a logical reverse simply swaps them, in O(1). Every contiguous slice meets each interval at
+most once, so slicing and splitting return handles of the same shape rather than rebuilding a tree.
+Prefer it to the general persistent deque when O(1) reversal and slice closure matter more than
+concatenation and middle editing, which it does not offer. Reversal really is O(1) — it touches only
+the handle — but random access and slicing each cost one ancestor query, so they are O(log M) on the
+backend every workspace ships and O(1) only under the theoretical backend described in
+[The Shared Ancestor Arena Seam](#the-shared-ancestor-arena-seam) below.
+
+**`ContextualRankSequence<TElement, TMachine>`** ranks and selects events whose occurrence is not a
+property of the element alone — a comma that is a separator in one prefix and quoted data in
+another, a frame boundary in an escaped byte stream, a lexer's token boundaries. Every subtree
+caches, for *each* of the machine's `s` states, the state it leaves the subtree in and the events it
+emits from there, so ordered composition feeds the left summary's outgoing state into the right one
+and context survives an edit instead of forcing a prefix replay. Contextual prefix evaluation, rank,
+select, and arbitrary edits cost O(s log n) against the Θ(n) replay a state-free sequence needs;
+whole-sequence final state and event count are O(1). The trade is O(s·n) summary space.
+
+**`PersistentDeltaMap<TKey, TValue>`** is a sorted map that carries a designated checkpoint beside
+current state plus an exact change index: one presence-safe `(before, after)` record for every key
+class on which the two differ. The first effective write to a class captures its checkpoint-relative
+`before`, later writes replace only `after`, and writing a class back to its checkpoint value
+removes the record — so the answer to "what differs from the checkpoint, and what were the old and
+new values?" is maintained online and consumed in output-optimal Θ(k + 1), never rediffed. Checkpoint
+and rollback are O(1) root swaps and point operations keep the underlying ordered map's O(log N).
+The mutation surface is deliberately point-only.
+
+**`PersistentRunDeltaVector<T>`** pairs the same current/checkpoint idea with a fixed-length vector,
+but indexes the maximal contiguous *runs* on which the two differ under one retained equality
+relation. Discovering those runs is output-optimal Θ(r) where scanning two state-only roots is
+Θ(n) — an unbounded gap, since one dirty block of an n-position vector is r = 1 against k = n — and
+individual hunks can be accepted into the baseline or reverted. It suits fixed-shape state edited
+speculatively along many retained branches: parameter slabs, property grids, reviewable
+configuration snapshots.
+
+**`PersistentMonotoneActionHeap<TElement, TPriority, TAction>`** is a persistent meldable
+Brodal-Okasaki min-heap whose priority domain admits a fixed, constant-time-composable family of
+monotone actions — identity, floor, cap, two-sided clamp, and constant. `TransformAll` applies one
+to every entry present in that version in O(1) worst case allocating O(1) structure, where the
+state-only heap must enumerate and rebuild all `n` entries; entries inserted afterwards are not
+retroactively transformed, and two independently transformed heaps still meld in O(1) even when
+their actions are noninvertible (a clamp has no inverse). Ordinary bounds are unchanged: O(1)
+worst-case insert, minimum, and meld, O(log n) delete-min.
+
+**`PersistentAncestralConnectionForest`** is an insertion-only union-by-size connectivity structure
+over a fixed integer vertex universe, stored in the workspace's canonical CHAMP. Every `Link`
+creates a child version, any retained version may be extended, and forking is free. Beyond ordinary
+`Connected`/`Find` it answers `FirstConnected(x, y)` — the earliest version on the queried version's
+root lineage at which two vertices became connected — at the cost of a single connectivity query,
+where treating connectivity as a black box would need a logarithmic number of them.
+
+### The Shared Ancestor Arena Seam
+
+The first two collections do not own their storage. Both reduce to one *incremental level-ancestor*
+service: an append-only forest that grows a leaf at a time — below **any** existing node, not only
+the newest, which is what makes retained handles independent branch points — and answers "which
+ancestor of this node sits at absolute depth `d`?". Every port exposes that service as a replaceable
+backend seam and ships one backend: a Myers two-link arena (a parent link plus a coalesced jump
+link) over an odd-block store of sizes 1, 3, 5, …, whose square boundaries make handle-to-slot
+addressing pure arithmetic and bound wasted slots at O(√M) after `M` published nodes. Leaf addition
+is O(1) amortized and an ancestor query follows O(log M) links.
+
+The seam takes each language's natural shape — a C# interface, a compile-time C++ concept, a C
+vtable, Kotlin and TypeScript interfaces, an OCaml module, a Python `Protocol` — and in Haskell it
+dissolves: a node *is* its own handle, so there is no arena object, no lock, no injection point, and
+no arena statistics. Concurrency varies with what the language guarantees: C#, C++, Rust, Kotlin,
+OCaml, and Python serialize every arena operation behind one private lock, while C11 has no portable
+mutex without `<threads.h>` and therefore documents the weaker contract — single-threaded unless the
+caller synchronizes, with reads treated as writes — and TypeScript has no shared-memory concurrency
+for ordinary objects, so it has no lock to document. No port claims lock-free progress.
+
+Both proposals keep the shipped backend and the theoretical one strictly apart, and so must anyone
+quoting them. Alstrup and Holm proved that leaf addition and level-ancestor queries are both
+achievable in O(1) worst case with linear space when the only update is adding a leaf; instantiated
+with *that* backend, every scalar operation of these two collections is O(1) worst case. No
+workspace implements it. The shipped Myers backend makes indexed and boundary-seeking operations
+O(log M), and the reference implementations demonstrate the semantics and the seam — they are not
+evidence for the stronger theorem.
+
 | Language | Public entry points | Primary references |
 | --- | --- | --- |
 | C# | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IIncrementalAncestorArena<T>`, `MyersIncrementalAncestorArena<T>`, `ContextualRankSequence<TElement, TMachine>`, `IContextualEventMachine<TElement>`, `PersistentDeltaMap<TKey, TValue>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<TElement, TPriority, TAction>`, `IMonotoneHeapAction<TPriority, TAction>`, `OrderClampPolicy<T>` (FingerTree); `PersistentAncestralConnectionForest`, `AncestralConnectionVersion` (Hamt) | [FingerTree API spec](../../src/CSharp/docs/FingerTree/api-specification.md), [FingerTree usage](../../src/CSharp/docs/FingerTree/usage.md), [Hamt API spec](../../src/CSharp/docs/Hamt/api-specification.md), [Hamt usage](../../src/CSharp/docs/Hamt/usage.md) |
@@ -375,7 +528,7 @@ a headline complexity.
 | Kotlin | `durable7.fingertree.AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IncrementalAncestorArena<T>` with the shipped `MyersIncrementalAncestorArena<T>` (a faithful arena port — the JVM supplies the mutable state and monitor the reference assumes), `ContextualRankSequence<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>` with its `OrderClamp` family (FingerTree); `durable7.hamt.PersistentAncestralConnectionForest` (Hamt) | [FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [Hamt API notes](../../src/Kotlin/Hamt/docs/api-notes.md), [workspace README](../../src/Kotlin/README.md) |
 | Haskell | `Durable7.FingerTree.AncestralSliceQueue`, `.BilateralAncestralDeque`, `.IncrementalAncestor` (the shared seam, with no arena object), `.ContextualRankSequence`, `.PersistentDeltaMap`, `.PersistentRunDeltaVector`, `.PersistentMonotoneActionHeap` (FingerTree); `Durable7.Hamt.PersistentAncestralConnectionForest` (Hamt). Each is reachable through its own module rather than the family umbrella, because several export a `ValidationStatistics` type | [FingerTree README](../../src/Haskell/FingerTree/README.md), [Hamt README](../../src/Haskell/Hamt/README.md), [workspace README](../../src/Haskell/README.md) |
 | Python | `durable7.finger_tree.AncestralSliceQueue`, `BilateralAncestralDeque`, the `IncrementalAncestorArena` **Protocol** with the shipped `MyersIncrementalAncestorArena` (structural typing, so a backend conforms without declaring it), `ContextualRankSequence`, `PersistentDeltaMap`, `PersistentRunDeltaVector`, `PersistentMonotoneActionHeap` with its `OrderClamp` family, and the shared `ValueEquality` relation in `durable7.finger_tree.equality` (FingerTree); `durable7.hamt.PersistentAncestralConnectionForest` (Hamt). All are re-exported from the root `durable7` namespace | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [workspace README](../../src/Python/README.md) |
-| TypeScript | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, the `IncrementalAncestorArena<T>` interface with the shipped `MyersIncrementalAncestorArena<T>`, `ContextualRankSequence<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>` with its `OrderClamp` family (finger-tree); `PersistentAncestralConnectionForest` (hamt). Reached through the `durable7/finger-tree` and `durable7/hamt` subpaths or the root re-export. Ported last, after the complexity-parity campaign, so it is the only port whose contextual sequence states the reference's O(s) amortized endpoints and O(s log(min(n, m))) concatenation from the outset rather than weakening them | [API notes](../../src/TypeScript/docs/api-notes.md), [workspace README](../../src/TypeScript/README.md) |
+| TypeScript | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, the `IncrementalAncestorArena<T>` interface with the shipped `MyersIncrementalAncestorArena<T>`, `ContextualRankSequence<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>` with its `OrderClamp` family (finger-tree); `PersistentAncestralConnectionForest` (hamt). Reached through the `durable7/finger-tree` and `durable7/hamt` subpaths or the root re-export. Ported last, after the complexity-parity campaign had already rebuilt its measured core, so it is the only port that never documented a weakened bound and later lifted it: its contextual sequence states the reference's O(s) amortized endpoints and O(s log(min(n, m))) concatenation from the outset | [API notes](../../src/TypeScript/docs/api-notes.md), [workspace README](../../src/TypeScript/README.md) |
 
 The Rust port makes three intentional, documented divergences, all recorded in the local API notes:
 it consolidates C#'s two duplicate level-ancestor arenas into one shared backend; it replaces the
@@ -389,9 +542,10 @@ The C port follows the workspace's type-erased conventions — values addressed 
 caller-owned type-identity tag, policies carrying copy/destroy/compare callbacks and an allocator,
 `ft_status` returns whose outputs are published only on success, and borrow-versus-own accessor
 pairs where the managed ports return a single value. It starts from the consolidated arena seam
-rather than reproducing the duplication C# originally shipped, so all three languages agree there.
-Its one substantive divergence is concurrency: C# and Rust serialize the arena behind a lock, while
-C11 has no portable mutex without `<threads.h>`, so the C arena documents the weaker contract —
+rather than reproducing the duplication C# originally shipped, which is the shape every later port
+inherited as well.
+Its one substantive divergence is concurrency: every arena port with a portable mutex serializes
+behind a lock, while C11 has none without `<threads.h>`, so the C arena documents the weaker contract —
 single-threaded unless the caller synchronizes, with every operation including reads treated as a
 write. Handle reference counts remain atomic, and no port claims lock-free progress.
 
@@ -404,14 +558,80 @@ at-most-two-query ceiling testable. Comparer and action interfaces become retain
 functions, so operand compatibility for concatenation and melding is a documented caller obligation
 rather than a detected error, with one exception: the contextual sequence still rejects a declared
 state-count mismatch, because that alone would silently corrupt summaries. Versions of the
-connection forest have structural rather than referential identity. One honest cost statement
-follows the substrate rather than the baseline: the connection forest's CHAMP path factor is
-expected rather than worst-case because the hash is truncated to 32 bits. (The other former
-divergence — Θ(log N) delta-map extremes over a sorted map that cached none — was erased by the
-2026-08-06 complexity-parity rebuild of the Haskell sorted set and map onto the workspace's own
-finger tree; `minEntry`/`maxEntry` are O(1) digit reads now, census row A6.) Against that, the
-contextual rank sequence keeps the reference's endpoint and concatenation bounds exactly, which the
-Rust port cannot, because the Haskell substrate is a genuine finger tree with digits.
+connection forest have structural rather than referential identity. Two former cost divergences are
+now closed. The connection forest's CHAMP factor was expected rather than worst-case, because the
+hash was a truncated general-purpose one; it is unconditional now that the port pins MurmurHash3's
+`fmix32` bijection and caps the vertex universe at 2^31 − 1, the universe every sibling already had,
+so no collision bucket can hold two distinct vertices (census row D1). And the Θ(log N) delta-map
+extremes over a sorted map that cached none were erased by the 2026-08-06 rebuild of the Haskell
+sorted set and map onto the workspace's own finger tree; `minEntry`/`maxEntry` are O(1) digit reads
+now (row A6). The arena's
+disappearance is likewise recorded in Haskell's own module documentation as *exceeding* the shared
+arena profile rather than silently departing from it, under the ruling below. Against that, the
+contextual rank sequence has always kept the reference's endpoint and concatenation bounds exactly,
+because the Haskell substrate was already a genuine finger tree with digits — no longer a
+distinction, now that the five rebuilt workspaces carry the same substrate and the same bounds.
+
+## Complexity Parity Across The Nine Workspaces
+
+Since the complexity-parity campaign of 2026-08-05/06, "the same algorithms, the same data
+structures, and the same complexity guarantees in every language, wherever that is possible at all"
+is the library's governing principle rather than an aspiration. Three clauses give it teeth: where a
+bound requires laziness, strict languages build memoized suspensions by hand; where one workspace
+delivers a stronger guarantee than the reference, that stronger guarantee becomes the target
+everywhere; and no fix may make any delivered bound asymptotically worse. The middle clause is not
+decorative — it fired against the reference itself, when a freshly ported workspace documented the
+run-delta vector's splices as worst-case O(log n) where C# and Rust said "amortized" over equally
+eager code, and the reference's wording was raised rather than the port's lowered.
+
+The keystone was the measured core, because most families in this catalog are thin layers over it.
+Five workspaces — Python, Rust, Kotlin, TypeScript, and OCaml — turned out to be running
+height-balanced join trees (AVL or weight-balanced, one element per node) under finger-tree names.
+Those deliver the same O(log n) interior operations but cannot deliver O(1) ends or O(log min)
+concatenation, having neither digits nor laziness; three of the five nevertheless called themselves
+finger trees, and two documented bounds their code did not deliver. All five were rebuilt in place —
+same module, same public API — as lazy Hinze-Paterson finger trees whose suspensions are stored as
+data and forced by an explicit-stack interpreter, so consumers inherited the new bounds without a
+source change. OCaml additionally carried six honestly documented placeholder substrates (flat
+arrays for the sorted family, the priority search queue, the range-update sequence, and the ordered
+family; a plain list for the Brodal-Okasaki heap; a type alias for the RRB vector), and Haskell's
+sorted set and map were facades over `containers`; those were rebuilt onto the real algorithms too.
+**Every family in this catalog now carries one asymptotic profile across all nine ports.**
+
+Two divergences survive, both by explicit maintainer ruling, and both recorded here so that nobody
+"fixes" them silently:
+
+- **The ancestor arena's Θ(√M) block-boundary spike is the accepted shared contract.** Leaf addition
+  is O(1) amortized, but the call that fills a block pays Θ(√M) to allocate the next odd one.
+  Real-time two-table migration would remove the spike and was analyzed as implementable in every
+  arena workspace; it was declined, as permanent extra complexity in the hottest path of eight
+  implementations to shave an allocation the memory allocator performs. Every arena workspace now
+  carries the identical two-part statement, and Haskell's arena-free port documents its O(1)
+  worst-case leaf add as *exceeding* the shared profile rather than diverging from it.
+- **OCaml's rank-select regressed from O(1) to O(log n)** when its flat-array placeholders were
+  replaced. A sorted immutable array selects by direct indexing but copies all `n` slots per write;
+  no persistent structure gives both O(log n) writes and O(1) select, because O(1) select needs
+  array-like contiguity and persistent updates to a contiguous representation are exactly the Θ(n)
+  copies being eliminated. The ruling adopted the reference profile — O(log n) writes, O(log n)
+  rank-select, O(1) extremes, which a finger tree keeps through its digits — and treats the arrays'
+  O(1) select as an artifact of the placeholder. Every affected `.mli` states the regression
+  explicitly: the sorted family, the priority search queue, the range-update sequence's point
+  indexing, and the ordered family.
+
+Because asymptotic claims are invisible to correctness tests — a join tree passes every behavioural
+test a finger tree passes — parity here is a *measured* property. Counting policy objects pin exact
+call counts as equalities, and every load-bearing mechanism was mutation-checked by breaking it and
+watching a probe fail. The five new cores return byte-identical numbers: one algorithm, five
+different memoization primitives, one fingerprint. One follow-up is open and recorded as such: the
+three donor cores (C#, C++, C) were never put through the 200,000-deep force-and-release chains the
+five new cores were built to survive.
+
+- [Complexity parity census](../reviews/complexity-parity-census-2026-08-05.md) — the ranked,
+  dependency-ordered work order, every row now struck with its landing commit and probe numbers,
+  plus the "deliberate non-violations" list.
+- [Complexity parity retrospective](../reviews/complexity-parity-retrospective-2026-08-06.md) — the
+  full story, written for a reader who was not there: how each divergence was found, fixed or ruled
+  on, and verified. Start here.
 
 ## Persistent Cursor Availability
 
@@ -443,6 +663,10 @@ representation, memoization, allocation/callback ceilings, or local-edit amortiz
 - Use the [workspace map](workspace-map.md) when choosing the correct language/data-structure directory.
 - Use the [semantic contracts reference](semantic-contracts.md) when checking shared persistence,
   ownership, policy, ordering, and failure-behavior obligations.
+- Use [Complexity Parity Across The Nine Workspaces](#complexity-parity-across-the-nine-workspaces)
+  before assuming a port's bound differs from the reference's: since 2026-08-06 it does not, except
+  for the two ruled divergences recorded there. A workspace document that still describes a weaker
+  substrate is stale, not authoritative.
 - Use the implemented [repository-wide persistent cursor design](../proposals/repository-wide-persistent-cursor-design.md)
   when assessing navigation/editing across families or deciding whether a new family has a stable
   cursor axis. Its applicability exclusions are normative, and its focused-representation tier

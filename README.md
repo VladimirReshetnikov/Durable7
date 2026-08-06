@@ -49,6 +49,16 @@ parity is the product:
 - **Language-native, not transliterated.** Rust uses `Arc` and forbids `unsafe`; C# exposes
   `IReadOnlyList<T>`; OCaml returns `option`/`result`; C is type-erased with explicit ownership and
   fallible allocators. The semantics match; the idioms do not have to.
+- **One complexity profile, not nine.** Bounds are part of the contract, so no port may quietly ship
+  a slower structure behind the same name. A campaign in August 2026 audited all nine workspaces
+  against that rule, found five of them running height-balanced join trees under finger-tree names,
+  and rebuilt each as a genuine lazy Hinze–Paterson finger tree — hand-rolling the memoized
+  suspensions that amortization under persistence requires wherever the language has no laziness of
+  its own. The outcome is measured rather than asserted: policy objects count their own invocations,
+  and the rebuilt cores answer with identical numbers (512 endpoint pushes cost exactly 340 `combine`
+  calls whether the tree holds 1,024 elements or 32,768). The
+  [complexity-parity retrospective](docs/reviews/complexity-parity-retrospective-2026-08-06.md) tells
+  the whole story, including the two places where equalizing upward was deliberately declined.
 
 ## What's inside
 
@@ -56,7 +66,7 @@ parity is the product:
 | --- | --- |
 | **Hash maps & sets** | CHAMP maps/sets, hash bags, strict bimaps, set-valued multimaps, bidirectional relations, map patches, directed graphs, multi-index maps |
 | **Integer & authenticated** | 32/64-bit Patricia maps and sets, lock-free snapshotting Ctrie, Merkle search trees with bounded verification, proofs, synchronization, and three-way merge |
-| **Sequences** | Catenable deques, monoid-measured trees, RRB vectors, reversible deques, and a lazily range-updating implicit-AVL sequence |
+| **Sequences** | Catenable deques, lazy measured finger trees, RRB vectors, reversible deques, and a lazily range-updating implicit-AVL sequence |
 | **Ordered & sorted** | Sorted bags/sets/maps, canonical zip-zip sets, insertion-ordered set/map/multimap with explicit movement and stable sorting |
 | **Priority & interval** | Brodal–Okasaki heaps, measured priority queues, winner-cached priority-search queues, interval trees, and payload-bearing interval maps |
 | **Text & bits** | Positional and measured ropes, UTF-aware text ropes, sparse rank/select chunked bit sets |
@@ -66,23 +76,28 @@ parity is the product:
 
 The [data-structure catalog](docs/reference/data-structure-catalog.md) lists every public entry point
 per language. The seven newest collections — the two checkpoint-differential structures and the five
-ancestry, contextual, and action-tagged ones — originated as scoped design studies, and each keeps a
-normative proposal under [`docs/proposals`](docs/proposals/) recording its claims, prior-art
-boundary, and deliberate limitations; every one separates its shipped bounds from theoretical
-instantiations. For the long version — what each structure actually is, how it is represented, and
-when to reach for it — read the field guide below.
+ancestry, contextual, and action-tagged ones — originated as scoped design studies, graduated out of
+the experimental namespaces, and are now ported to all nine languages. Each keeps a normative
+proposal under [`docs/proposals`](docs/proposals/) recording its claims, prior-art boundary, and
+deliberate limitations; every one separates its shipped bounds from theoretical instantiations. For
+the long version — what each structure actually is, how it is represented, and when to reach for it —
+read the field guide below.
 
 ## 📖 The field guide
 
 **[Persistent Data Structures: The Durable7 Field Guide](docs/book/durable7-data-structures.pdf)**
-(PDF, 133 pages) is a single long-form tour of every collection in this repository.
+(PDF, 209 pages) is a single long-form tour of every collection in this repository.
 
 It covers CHAMP and the nine families composed over it, Patricia integer tries, the concurrent trie,
 finger trees and the measure framework that turns one tree into a dozen collections, RRB vectors,
 ropes and text, the range-update sequence, zip-zip canonical sets, the three priority structures,
-interval trees, Merkle search trees with their proofs and synchronization, and cursors — plus a
-complexity table for the whole library, a nine-language name index, and the design decisions the
-project deliberately declined.
+interval trees, Merkle search trees with their proofs and synchronization, the seven research-derived
+collections — the ancestry-interval queue and deque, the contextual rank sequence, the two
+checkpoint-differential structures, the monotone action heap, and the connection forest — and
+cursors. It also explains why an amortized bound needs laziness the moment a structure becomes
+persistent, and what a strict language has to build by hand to earn one. It closes with a complexity
+table for the whole library, a nine-language name index, and the design decisions the project
+deliberately declined.
 
 It is written to be read, not merely consulted, and it is candid about where each guarantee stops.
 [LaTeX source](docs/book/durable7-data-structures.tex) and
@@ -145,18 +160,19 @@ full matrix, including the single-worker validation policy, is in the
 **Pre-release (0.1.0).** The collection families are implemented and tested across all nine ports,
 but the API is not frozen and nothing is published to a package registry yet.
 
-Every port ships an executable test suite, and the gates run single-worker for determinism:
+Every port ships an executable test suite — behavioral tests plus counting probes that pin the
+complexity bounds — and the gates run single-worker for determinism:
 
 | Port | Suite |
 | --- | --- |
 | C# | 1,254 tests, zero-warning Debug and Release builds |
-| TypeScript | 252 tests (Vitest + fast-check) |
-| Python | 234 tests (pytest + Hypothesis), plus Ruff, strict Mypy, and installed-wheel gates |
-| Kotlin | 291 tests |
-| OCaml | 48 Alcotest/QCheck cases under strict warnings, ocamlformat, and odoc |
+| TypeScript | 403 tests across 46 files (Vitest + fast-check) |
+| Python | 430 tests (pytest + Hypothesis), plus Ruff, strict Mypy, and installed-wheel gates |
+| Kotlin | 299 tests across the three workspaces |
+| OCaml | 176 Alcotest/QCheck cases under strict warnings, ocamlformat, and odoc |
 | C / C++ | CTest suites per workspace, MSVC Debug and Release |
-| Haskell | Per-package executable suites |
-| Rust | Crate unit and integration tests, `#![forbid(unsafe_code)]` |
+| Haskell | Three executable suites (`ft-test`, `hamt-test`, `ordered-test`), warning-free under `-Wall -Wcompat` |
+| Rust | 30 test binaries across the crates (243 in the finger-tree crate), `#![forbid(unsafe_code)]` |
 
 Benchmarks exist for the C# workspace but are deliberately excluded from routine validation, and no
 performance numbers are published as shipment evidence.

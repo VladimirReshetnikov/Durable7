@@ -61,6 +61,19 @@
 \definecolor{d7leaf}     {HTML}{3E6B4A} % code strings
 \definecolor{d7plum}     {HTML}{6B3A6B} % code keywords 2
 
+% --- Cover palette ----------------------------------------------------------
+% The cover runs a separate gray-olive-khaki range from the interior. Keeping it
+% scoped means the mark can be retuned without restyling 133 pages of body text.
+\definecolor{d7coverink}  {HTML}{262B21} % near-black olive -- cover title
+\definecolor{d7coverdeep} {HTML}{3D4632} % deep olive -- structural strokes
+\definecolor{d7coverolive}{HTML}{5D6B41} % olive -- mid strokes
+\definecolor{d7coversage} {HTML}{75894C} % sage -- the live path
+\definecolor{d7coverlime} {HTML}{A6B87A} % pale sage -- glow
+\definecolor{d7coverkhaki}{HTML}{AFA372} % khaki -- retained versions
+\definecolor{d7covergray} {HTML}{7C8478} % gray-green -- muted rule, subtitle
+\definecolor{d7coverhaze} {HTML}{E9E9DD} % pale khaki-gray -- node fill
+\definecolor{d7covermoss} {HTML}{F1F2E7} % lightest wash -- halo
+
 % --- Hyperlinks ------------------------------------------------------------
 \usepackage[
   colorlinks=true,
@@ -341,37 +354,83 @@
 \centering
 \vspace*{0.10\textheight}
 
-\begin{tikzpicture}[scale=1]
-  % A stylized "version DAG": one root, three shared branches.
-  \definecolor{c}{HTML}{16243C}
-  \foreach \x/\y/\r in {0/0/3.4, -1.5/-1.2/2.6, 1.5/-1.2/2.6,
-                        -2.6/-2.4/2.0, -0.4/-2.4/2.0, 2.6/-2.4/2.0}
-    { \node[circle, draw=d7ink, fill=white, line width=0.8pt,
-            minimum size=\r mm, inner sep=0pt] at (\x,\y) {}; }
-  \draw[d7edge] (0,0) -- (-1.5,-1.2);
-  \draw[d7edge] (0,0) -- (1.5,-1.2);
-  \draw[d7edge] (-1.5,-1.2) -- (-2.6,-2.4);
-  \draw[d7edge] (-1.5,-1.2) -- (-0.4,-2.4);
-  \draw[d7edge] (1.5,-1.2) -- (-0.4,-2.4);
-  \draw[d7edge] (1.5,-1.2) -- (2.6,-2.4);
-  \draw[d7copper, line width=1.1pt] (0,0) -- (1.5,-1.2) -- (2.6,-2.4);
+% --- Cover mark -------------------------------------------------------------
+% A version DAG whose subject is structural sharing: two live versions descend
+% from one root and converge on a single retained node, which is therefore the
+% only solid one and the only one inside a reticle. Every edge runs at exactly
+% 45 degrees; the geometry is the point, so nothing here is freehand.
+\begin{tikzpicture}[
+  x=1.14cm, y=1.14cm,
+  hex/.style={regular polygon, regular polygon sides=6, rotate=30,
+              draw=d7coverdeep, fill=d7coverhaze, line width=0.7pt,
+              inner sep=0pt, minimum size=#1},
+  trace/.style={draw=d7covergray, line width=0.65pt,
+                shorten >=2.2pt, shorten <=2.2pt},
+  live/.style={draw=d7coversage, line width=1.5pt,
+               shorten >=2.2pt, shorten <=2.2pt},
+  halo/.style={draw=d7coverlime, line width=3.4pt, opacity=0.40,
+               shorten >=2.2pt, shorten <=2.2pt},
+]
+  \coordinate (root) at (0,1.2);
+  \coordinate (vl)   at (-1.2,0);
+  \coordinate (vr)   at (1.2,0);
+  \coordinate (fl)   at (-2.4,-1.2);
+  \coordinate (sh)   at (0,-1.2);
+  \coordinate (fr)   at (2.4,-1.2);
+
+  % History continues above the root: the DAG is never rooted at the beginning.
+  \draw[d7covergray, line width=0.6pt, opacity=0.5, dash pattern=on 1.6pt off 2.2pt]
+    (0,1.62) -- (0,2.24);
+  \fill[d7covergray, opacity=0.5] (0,2.32) circle (0.045);
+
+  % Reticle around the shared node: two rings and four gap ticks.
+  \fill[d7coverlime, opacity=0.30] (sh) circle (0.50);
+  \draw[d7coversage, line width=0.5pt, opacity=0.75] (sh) circle (0.58);
+  \draw[d7coverkhaki, line width=0.5pt, opacity=0.85] (sh) circle (0.76);
+  \foreach \a in {0,90,180,270}
+    { \draw[d7coversage, line width=0.7pt, opacity=0.85]
+        ($(sh)+(\a:0.64)$) -- ($(sh)+(\a:0.88)$); }
+
+  % Retained branches: still reachable from an older handle, never rewritten.
+  \draw[trace] (root) -- (vl);
+  \draw[trace] (vl) -- (fl);
+  \draw[trace] (vl) -- (sh);
+  \draw[trace] (vr) -- (fr);
+
+  % The live path, glow beneath stroke.
+  \draw[halo] (root) -- (vr);  \draw[halo] (vr) -- (sh);
+  \draw[live] (root) -- (vr);  \draw[live] (vr) -- (sh);
+
+  \node[hex=7.6mm, draw=d7coverolive, line width=0.9pt] at (root) {};
+  \node[hex=6.2mm] at (vl) {};
+  \node[hex=6.2mm, draw=d7coversage, line width=1.1pt] at (vr) {};
+  \node[hex=5.0mm, draw=d7coverkhaki] at (fl) {};
+  \node[hex=5.0mm, draw=d7coverkhaki] at (fr) {};
+  \node[hex=6.8mm, draw=d7coverdeep, fill=d7coversage, line width=0.9pt] at (sh) {};
+
+  % Close bracket frame: four L-marks, open on every side.
+  \foreach \cx/\cy/\sx/\sy in {-3.05/2.05/1/-1, 3.05/2.05/-1/-1,
+                               -3.05/-1.95/1/1, 3.05/-1.95/-1/1}
+    { \draw[d7coverolive, line width=0.7pt, opacity=0.85]
+        ($(\cx,\cy)+(0,{0.30*\sy})$) -- (\cx,\cy) -- ($(\cx,\cy)+({0.30*\sx},0)$); }
 \end{tikzpicture}
 
 \vspace{0.05\textheight}
 
-{\sffamily\fontsize{13}{16}\selectfont\color{d7copper}\scshape
- The Durable7 Field Guide\par}
+{\ttfamily\fontsize{10}{13}\selectfont\color{d7coverolive}
+ T\,H\,E\ \ D\,U\,R\,A\,B\,L\,E\,7\ \ F\,I\,E\,L\,D\ \ G\,U\,I\,D\,E\par}
 
-\vspace{14pt}
-{\color{d7copper}\rule{0.34\textwidth}{1.2pt}}
+\vspace{13pt}
+{\color{d7coversage}\rule{0.10\textwidth}{1.6pt}}%
+{\color{d7coverkhaki}\rule{0.24\textwidth}{1.6pt}}
 \vspace{18pt}
 
-{\sffamily\fontsize{34}{40}\selectfont\bfseries\color{d7ink}
+{\sffamily\fontsize{34}{40}\selectfont\bfseries\color{d7coverink}
  Persistent\\Data Structures\par}
 
 \vspace{16pt}
 
-{\sffamily\fontsize{14}{20}\selectfont\color{d7slate}
+{\sffamily\fontsize{14}{20}\selectfont\color{d7covergray}
  Nine languages, one contract,\\forty-odd immutable collections\par}
 
 \vspace{0.16\textheight}
@@ -382,7 +441,7 @@
  why it exists, and when to reach for it.\par}
 
 \vfill
-{\sffamily\footnotesize\color{d7slate}
+{\ttfamily\footnotesize\color{d7covergray}
  Pre-release 0.1.0 \quad\textbullet\quad MIT No Attribution\par}
 \end{titlepage}
 
@@ -681,11 +740,399 @@ opportunities to quietly claim a bound nobody proved. Durable7's device for
 avoiding that is the \term{checkpoint port}: a port that preserves the
 observable API semantics and passes the same behavioral tests, while
 documenting exactly which representation or asymptotic property it does
-\emph{not} yet have.\index{checkpoint port} OCaml's range-update sequence is a checkpoint --- same
-algebra, same persistence, no implicit-AVL logarithmic lazy-update claim. Most
-of the newer cursors are checkpoints. Saying so in the API notes is treated as
-part of shipping, not as an admission of failure.
+\emph{not} yet have.\index{checkpoint port} Most of the newer cursors are
+checkpoints: the multimap's cursor resolves a rank by walking the grouped
+flattening, so it is linear where the collection it navigates is logarithmic, and
+its specification says so in the same table that gives every other row. Saying so
+in the API notes is treated as part of shipping, not as an admission of failure
+--- and a checkpoint is a debt with a name on it rather than a permanent
+concession. Chapter~\ref{ch:laziness} follows one such debt, carried by five
+ports at once, to the point where it was paid.
 \end{asidebox}
+
+\chapter{Laziness, and the Price of Persistence}
+\label{ch:laziness}
+
+\motto{Amortization is credit spent by the operations that come after.
+Persistence lets a caller spend the same credit again, and again, out of the
+same version. Memoization is what closes the account.}
+
+\begin{specimen}[Specimen --- the memoized suspension]
+\index{suspension!memoized}\index{laziness}\index{memoization}%
+\spec{Purpose}{Make an amortized bound survive persistent branching, by deferring cascading work and charging every version that shares it at most once.}
+\spec{Core}{A one-slot cell holding either a pending operation or its result. Forcing runs the operation and publishes the result back into the cell.}
+\spec{Operations}{A closed set of deferred spine steps: push an overflow node into the middle from the front, push one from the back, concatenate two middles around regrouped nodes, and --- where reversal is a view --- mirror a middle.}
+\spec{Complexity}{What it buys the finger tree: \bigoh{1} amortized endpoints and \bigoh{\log \min(n,m)} concatenation that stay true \emph{under branching}. Without it both collapse to \bigoh{\log n}.}
+\spec{Mutability}{One write per cell, ever, and only after the deferred computation has succeeded.}
+\spec{Ports}{All nine, each with its own publication primitive (Section~\ref{sec:nine-cells}). Haskell gets it from the language; the other eight build it by hand.}
+\spec{Limits}{Pending chains reach $\Theta(n)$ links. Forcing them --- and releasing them --- must be iterative, never recursive.}
+\end{specimen}
+
+\noindent
+Chapter~\ref{ch:persistence} closed its tour of the version DAG with a warning:
+amortized bounds are proved over one linear history, and branching breaks the
+proof. That warning was abstract, a rule for classifying adaptive schemes. This
+chapter is what it looks like made concrete, because the structure it threatens
+is the one a third of this library is built on.
+
+\section{The credit that gets spent twice}
+
+A finger tree earns its cheap ends from its digits (Chapter~\ref{ch:fingertree}).
+Pushing onto a digit that has room is \bigoh{1}: the digit widens and nothing
+else moves. Pushing onto a \emph{full} digit is not. Four items are regrouped
+into a 2-3 node and pushed down into the middle, where they may meet another
+full digit and cascade again, as far as the spine goes. Classic amortized
+analysis absorbs this the way it absorbs a doubling array: the cheap pushes
+between cascades deposit credit, the rare cascade spends it, the average is
+constant. The argument is correct --- for a structure with one past.
+
+Now keep an old version. Let $v$ sit exactly one push away from a cascade $k$
+levels deep, and let a caller retain $v$ and push from it $b$ times. Each push
+produces its own successor and each successor pays the whole cascade, because
+the results are not shared --- only the input is. The aggregate is $\Theta(bk)$
+where the bound promised $\Theta(b)$: credit deposited once, before $v$, and
+spent $b$ times.\index{amortization!under persistence} Nothing about that
+program is adversarial. It is an undo stack retrying from a checkpoint, a
+speculative evaluator forking a candidate state a few dozen ways, an editor
+keeping every keystroke --- the workloads persistent collections exist to serve.
+A naive persistent finger tree does not deliver the \bigoh{1} ends it is famous
+for. It delivers them to the last version anyone touched.
+
+\section{Suspend, then memoize}
+
+Hinze and Paterson's answer (\textit{JFP}, 2006) is not to make the cascade
+cheaper. It is to not do it yet, and then to arrange that it is done at most
+once. When a digit overflows, the overflowing middle is not rebuilt; it is
+stored as an unevaluated computation --- a \term{suspension}. When some later
+operation actually needs that middle, the computation runs and the result is
+written back into the very cell that held it. Every version whose spine passes
+through that node holds a reference to that one cell, so the first branch to
+force it pays and every other branch reads the published result.
+
+That is worth stating as a thesis rather than as a technique:
+\textbf{laziness here is not an optimization; it is the correctness condition of
+the amortization argument.} A strict finger tree is not a slower finger tree; it
+is a different data structure with different bounds. Okasaki makes the general
+form of the argument in \textit{Purely Functional Data Structures}: amortization
+and persistence are reconciled by lazy evaluation with memoization and by
+essentially nothing else, and the worst-case variants of the same structures are
+then obtained by \emph{scheduling} the forced work, not by removing the
+laziness.
+
+Two restrictions keep this from turning the tree into a cloud of thunks. Only
+the middle subtree of each deep node is suspended, so a tree of $n$ elements
+carries $\Theta(\log n)$ suspensions rather than one per element; and within
+them only the monoid's \code{combine} is ever deferred, because element measures
+are computed eagerly at insertion and every node's size is strict at every
+construction site. That second restriction is what keeps the promises of
+Chapter~\ref{ch:measures} honest: reading the first element, the last element,
+or the length invokes no policy callback at all, on any port, at any size.
+
+\begin{contractbox}[What a suspension cell owes]
+A cell is written at most once, and only \emph{after} the deferred computation
+has succeeded. A measure policy that throws or raises mid-force therefore
+publishes nothing: the cell stays pending, the force may be retried, and every
+retained version remains valid --- the failure atomicity of
+Chapter~\ref{ch:contract}, extended into the laziness machinery.
+
+Pending operations are pure, so running one twice yields structurally identical
+results. That is what makes a concurrent force benign: two threads may duplicate
+the bounded computation, but they converge on one published value, and no reader
+observes a partially initialized node or two different element sequences.
+\end{contractbox}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7node] (v1) at (-42,0) {$v_1$};
+  \node[d7node] (v2) at (-21,0) {$v_2$};
+  \node[d7node] (v3) at (  0,0) {$v_3$};
+  \node[d7label] at (16,0) {$\cdots$};
+  \node[d7node] (v49) at ( 34,0) {$v_{49}$};
+  \node[d7newnode] (S) at (0,-19) {one suspended middle};
+  \draw[d7edge] (v1) -- (S);
+  \draw[d7edge] (v2) -- (S);
+  \draw[d7edge] (v3) -- (S);
+  \draw[d7edge] (v49) -- (S);
+  \node[d7leafnode] (T) at (0,-38) {the forced spine, memoized in that cell};
+  \draw[d7newedge] (S) -- (T);
+  \node[d7label, anchor=west, text=d7copper] at (6,-28.5)
+    {first force: 3{,}336 combines};
+  \node[d7label, anchor=north, align=center, text width=110mm] at (0,-45)
+    {Each of the other 48 versions then pays 5 --- only for the digits it does
+     not share. Without memoization every one of them replays the spine.};
+\end{tikzpicture}
+\caption{Memoization under branching. Forty-nine versions retain the same
+unforced spine. The suspension is a cell they share, not a computation each of
+them owns, so the deferred work happens once and is read forty-eight times.
+These are the numbers the library's probes assert.}
+\label{fig:suspension}
+\end{figure}
+
+\section{Nine languages, nine publication primitives}
+\label{sec:nine-cells}
+
+In Haskell the compiler supplies all of this: a thunk is a memoized suspension,
+and the tree is written the way the paper writes it. In the other eight
+workspaces the cell has to be built by hand, and the interesting question is not
+whether a strict language can do it --- it is what each language's atomic
+publication primitive turns out to be.
+
+\begin{d7tablethree}{0.13}{0.33}
+\toprule
+\thead{Language} & \thead{Suspension cell} & \thead{Note} \\
+\midrule
+C\#         & One field holding either the pending operation or the tree,
+published by an \code{Interlocked} compare-exchange & The reference. A pending
+\emph{push} reports its measure without forcing; a pending pop cannot, so the
+node's measure is memoized separately. \\
+C\texttt{++} & An atomic box over \code{shared\_ptr}, published by
+compare-exchange & Cells force themselves without external locking. \\
+C           & Hand-rolled memoized middle cells over reference counts & The
+existence proof that this needs no runtime support at all. \\
+Haskell     & The language & Native laziness; nothing to build. \\
+\midrule
+Rust        & \code{Arc} plus \code{OnceLock} & A lost race discards the
+duplicate result. Also needs an iterative \code{Drop}. \\
+Kotlin      & An \code{AtomicReference} over sealed operation classes,
+published by \code{compareAndSet} & The JVM collector handles teardown. \\
+OCaml       & One mutable field, written under the runtime lock & Native
+\code{Lazy.t} deliberately not used --- see below. \\
+TypeScript  & Plain field assignment & The one single-threaded workspace, where
+assignment simply \emph{is} the atomic publication --- documented as such rather
+than left looking like an oversight. \\
+Python      & A thunk slot rewritten to its value under the GIL & \\
+\bottomrule
+\end{d7tablethree}
+
+The four above the rule always had this; the five below received it in the
+campaign of Section~\ref{sec:parity}. All nine publish identically: the result
+enters the cell only once the deferred computation has returned.
+
+\begin{caveatbox}[The one mutable cell in an immutable structure]
+Chapter~\ref{ch:persistence} said a reader holding a root is reading a frozen
+world, with no write in the read path. In the finger-tree spine that is very
+nearly, but not exactly, true: the first read that needs a suspended middle both
+computes and \emph{stores}. What survives is the part consumers depend on --- no
+torn read, no lock, no observable state change, no traversal that sees half of
+two versions. What does not survive is the literal claim of a write-free read
+path, which is why eight of the nine ports reach for an atomic publication
+primitive rather than a plain store. The user-visible consequence is stated
+wherever it applies: reading a whole tree's measure is \bigoh{1} \emph{amortized},
+not worst case, because the first such read on a freshly edited spine may force
+a chain of suspensions. Endpoint reads and length never force.
+\end{caveatbox}
+
+\section{The chain that eats the stack}
+
+Now run an ordinary loop: append $n$ elements and read nothing. Each overflow
+suspends a push into a middle that is itself an unforced suspension, holding a
+pending push into another. After the loop the spine carries a chain of pending
+operations $\Theta(n)$ links long, none of it forced.
+
+The natural implementation of a suspension is a closure capturing the next cell,
+and forcing it is a call --- one stack frame per link. This is where a technique
+that is correct on paper meets a machine, and the library learned it three times
+in three different ways.
+
+\textbf{Python made it immediate.} A default limit of a thousand frames turns a
+few thousand appends into a stack overflow, which at least has the virtue of
+failing in the first test run rather than in production.
+
+\textbf{OCaml made it instructive.} ``The language already has laziness'' looks
+like an exemption from the whole problem, and it is not: a direct experiment, run
+before the OCaml core was designed, established that native \code{Lazy.force}
+itself overflows on a chain 200,000 deep. \code{Lazy.t} was then banned from that
+workspace's spine --- a port declining a language feature precisely because it
+needs the property the feature is named after.
+
+\textbf{Rust contributed a variant nobody planned for.} A chain that is never
+forced still has to be \emph{released}. Under reference counting, dropping the
+last handle to the head cell runs the destructor of its pending payload, which
+drops the next cell, which drops the next: one frame per link again, on the
+teardown path this time. A tracing collector hides this completely; reference
+counting does not. Rust's suspension therefore implements an iterative
+\code{Drop} that unlinks the chain with \code{Arc::into\_inner}.
+
+The remedy is the same in every case, and older than any of them:
+\term{defunctionalize} the suspension.\index{defunctionalization} Instead of a
+closure, store the deferred operation as \emph{data} --- a sealed class, an enum,
+a variant type --- drawn from a small closed set: push an overflow node into the
+middle from the front, push one from the back, concatenate two middles around
+already-regrouped nodes, and, in the three workspaces where whole-value reversal
+is a lazy structural mirror (Chapter~\ref{ch:revdeque}), mirror a middle.
+Forcing is then an explicit-stack interpreter over that data, and depth costs
+heap rather than frames. Every rebuilt core forces a 200,000-element organically
+built chain in its probe suite on every build; Rust drops one, unforced, as well.
+
+How deep a suspension may nest is itself a design choice, and the reference
+answers it differently. C\# forces the captured source \emph{when the pending
+operation is created} --- the paper's own remark about forcing the middle
+subtree in the recursive case of \code{cons} to avoid building a chain of
+suspensions --- so a C\# cell is exactly one deferred step deep and the deepest
+chain a force can meet is the height of the tree. Both realizations deliver the
+same asymptotic bounds; they trade a bounded eager force at creation against an
+unbounded lazy one later. One gap was recorded rather than papered over: the
+three strict donor cores were never stress-tested against the same
+200,000-deep force-and-release the five rebuilt cores now run, and that probe is
+filed as open.
+
+\section{The parity campaign}
+\label{sec:parity}
+
+For most of this library's life, everything above described four workspaces.
+
+The discovery began with a small question during a port review: why did one
+Python collection document a $\Theta(s \log n)$ endpoint update where the C\#
+reference said \bigoh{s} amortized? The honest answer --- because Python's
+substrate was not a finger tree --- prompted a survey of what each workspace's
+substrate really was, and the survey immediately found worse. Rust's core module
+described itself as a 2-3 finger tree, documented \bigoh{1} \code{front} and
+\code{back} and \bigoh{\log \min} concatenation, and stored a node of
+\code{\{ left, right, len, height, measure \}} --- a plain height-balanced binary
+tree --- whose \code{front} recursed the entire left spine. The documentation was
+not conservative. It was false.
+
+Nine censuses then ran in parallel, one per workspace, reading node
+representations and delivered bounds \emph{from the code} and treating every
+documented bound as a claim to check. Four workspaces --- C\#, C, C\texttt{++},
+Haskell --- carried the real lazy Hinze--Paterson structure. Five carried
+height-balanced binary \term{join trees}\index{join tree} instead: AVL or
+weight-balanced, one element per node, a measure cached at each node. A join tree
+delivers the same \bigoh{\log n} interior operations and fundamentally cannot
+deliver \bigoh{1} ends or \bigoh{\log \min} concatenation, having neither digits
+nor laziness. Three of the five nevertheless \emph{called} themselves finger
+trees, and two documented bounds their code did not deliver.
+
+\begin{contractbox}[The parity principle]
+Every language uses the same algorithms and the same data structures and offers
+the same complexity guarantees, wherever that is possible at all. No fix may make
+any delivered bound asymptotically worse. When one workspace delivers a
+\emph{stronger} guarantee than the reference, that guarantee becomes the target
+for every workspace where it is achievable. And where a bound depends on
+laziness, strict languages implement memoized suspensions by hand --- which C\#,
+C\texttt{++}, and C had already proven feasible here, including in plain C.
+\end{contractbox}
+
+All five cores were rebuilt in place: same module, same public API, checked
+mechanically against the previous export lists, so every facade above them ---
+deques, sorted collections, priority queues, interval trees, ropes, chunked bit
+sets --- inherited the new bounds without a source change, and their existing
+behavioral tests served as free regression harnesses.
+
+\begin{d7tablethree}{0.24}{0.30}
+\toprule
+\thead{Operation} & \thead{Join-tree cores, before} & \thead{All nine cores,
+now} \\
+\midrule
+first / last read & $\Theta(\log n)$ spine descent (Rust's docs claimed
+\bigoh{1}) & \bigoh{1} worst case --- a digit field read \\
+endpoint push / pop & $\Theta(\log n)$, worst \emph{and} amortized: joining
+against a singleton rebuilds the spine & \bigoh{1} amortized, valid under
+persistent branching; \bigoh{\log n} worst case per call \\
+concatenation & \bigoh{\text{height difference}}, so appending a short run to a
+long sequence paid the long sequence's height & \bigoh{\log \min(n,m)}
+amortized --- the suspended middle recursion stops at the shallower operand \\
+split / index / locate & \bigoh{\log n} & \bigoh{\log n}, unchanged --- the
+no-regression rule \\
+whole-value \code{Reverse} & $\Theta(n)$ rebuild through an array (Python,
+TypeScript, OCaml) & \bigoh{1} --- a lazy structural mirror, the fourth deferred
+operation \\
+mixed-orientation concat & $\Theta(n+m)$ re-materialization (same three) &
+\bigoh{\log \min}, structural: mirror the smaller operand lazily \\
+\bottomrule
+\end{d7tablethree}
+
+The ``wherever possible at all'' clause was exercised twice, and both rulings
+were written down so a later maintainer can revisit them with the original
+reasoning in hand. One workspace's placeholder collections stored each version as
+a flat sorted array --- \bigoh{1} rank-select, $\Theta(n)$ writes; since no
+persistent structure is known that offers \bigoh{\log n} writes \emph{and}
+\bigoh{1} select, rank-select regressed to the reference's \bigoh{\log n}, and
+every affected interface says so. Separately, an append-only node arena shared by
+two of the newer collections has a $\Theta(\sqrt M)$ allocation spike at block
+boundaries; removing it would have cost permanent complexity in eight hot paths,
+so the spike was kept and all seven arena ports made to document it identically
+rather than let one quietly differ. A no-regression rule needs an escape valve
+with a paper trail. These are it.
+
+Equalizing \emph{upward} fired in a direction nobody planned. Python's first
+lazy \code{Reverse} reused each mirrored node's cached measure, which is correct
+only when \code{combine} commutes, and documented that as a caller obligation;
+the TypeScript port instead recombined each mirrored summary in mirrored order
+--- constant extra work per node, paid only when the reversal forces, correct
+under \emph{every} monoid. That is strictly stronger, so Python was rewritten to
+match the same day and OCaml was required to have the stronger shape from birth.
+
+\section{Pinning a claim that tests cannot see}
+
+The most transferable result of the whole campaign is one sentence:
+\textbf{asymptotic claims are invisible to correctness tests.} A join tree passes
+every behavioral test a finger tree passes. It returns the same elements in the
+same order, preserves the same representatives, honors the same no-op identities,
+fails atomically in the same places. Every suite in all five workspaces was green
+on the wrong data structure.
+
+So the library pins bounds the only way they can be pinned: with \term{counting
+probes}.\index{counting probe} Every policy object a structure takes ---
+comparator, measure, tag algebra --- has a counting variant, and the suites
+assert against the counters rather than against a stopwatch: an exact call count
+where the number is deterministic, and a size-independence equality plus a tight
+budget where it is not. What fails is then arithmetic, not intuition. The
+signature result of the campaign is that the five rebuilt cores produce
+\emph{byte-identical} numbers.
+
+\begin{d7table}{0.44}
+\toprule
+\thead{Probe} & \thead{Pinned result} \\
+\midrule
+512 endpoint pushes (256 at each end) onto a tree of 1{,}024, and onto one of
+32{,}768 & exactly 340 \code{combine} calls --- \emph{the same number at both
+sizes}, which is the amortized-\bigoh{1} claim written as an equality \\
+Concatenating a 4{,}096-element tree with a singleton, and with a
+1{,}024-element operand & 0 immediate combines, and 4 --- cost tracking the
+smaller operand, not the height difference \\
+A 10{,}000-append spine branched into 49 retained versions & 3{,}336 combines
+when the first branch forces it; exactly 5 per branch for the other 48 \\
+\code{front}, \code{back}, \code{length} & zero policy calls, at any size \\
+\bottomrule
+\end{d7table}
+
+The third row is Figure~\ref{fig:suspension}: the Hinze--Paterson argument turned
+into an observable quantity. Five languages, five different memoization
+primitives --- \code{OnceLock}, compare-and-set, plain assignment, a mutable
+field, a GIL-protected slot --- one algorithm, one fingerprint.
+
+A probe that has never been seen to fail proves nothing, so every load-bearing
+mechanism was deliberately broken, shown failing with a characteristic
+signature, and restored. The one that matters most here is the reversed view: its
+correctness under a non-commutative monoid is checked with a \emph{spelling}
+measure --- each element measures to its own string, \code{combine} is
+concatenation --- against the mirrored root summary, both halves of an interior
+split of the mirror, and a double reversal. The cached-measure implementation
+fails that probe; only reversed-order recombination passes it. And where the
+obvious counter cannot see a fix, the discipline is to measure something that
+can: replacing a flat-array sorted family is invisible to a comparator counter,
+because the array's binary search was already logarithmic and the $\Theta(n)$
+write copies perform no comparisons at all, so that probe pins bytes allocated
+per write instead.
+
+\begin{caveatbox}[What the fingerprint does not prove]
+Identical counts prove that the same algorithm is running in nine places. They do
+not prove it is the right algorithm, and they say nothing about constant factors.
+Representation differences that are not asymptotic are deliberately out of scope:
+ropes hold chunked leaves in some ports and one element per leaf in others, which
+is a real performance difference and not a parity violation. The rule the library
+enforces is about the exponents.
+\end{caveatbox}
+
+The durable artifact of all this is not any individual fix. It is the pinned
+number. A future substrate change that quietly breaks parity --- a well-meaning
+strictness annotation, a suspension replaced by an eager call, a memoization cell
+that stops being shared --- no longer produces a subtly slower library that
+passes its tests. It produces a failing equality, in nine workspaces, with the
+expected value printed next to the observed one.
+
 
 \chapter{The Shared Contract}
 \label{ch:contract}
@@ -1875,14 +2322,15 @@ predicate mapping. Lazy middle publication and cached measures must never expose
 partially initialized data to a reader.
 \end{contractbox}
 
-\begin{caveatbox}[Checkpoint ports and the lazy spine]
-The C\#, C\texttt{++}, and C implementations are the mature ones. Several other
-ports build their sorted collections, priority queues, and interval trees over a
-measured AVL or similar structure rather than a lazy-spine finger tree, and
-their API notes name the remaining parity boundary explicitly. The observable
-semantics --- ordering, representative retention, no-op identity, failure
-atomicity --- are identical; the asymptotic claim for a specific operation may
-be weaker, and where that is so, it is written down rather than inferred.
+\begin{caveatbox}[This was once a checkpoint boundary]
+Until August 2026 this box named a real gap: five ports built their sorted
+collections, priority queues, and interval trees over a measured AVL or another
+balanced tree rather than a lazy-spine finger tree, and their API notes recorded
+the weaker asymptotic claim rather than inferring the stronger one. All five have
+since been rebuilt, so every port now carries the lazy Hinze--Paterson core and
+the bounds above hold in all nine. Chapter~\ref{ch:laziness} is the account of
+why the difference mattered, how it was found, and what a strict language must
+build by hand to close it.
 \end{caveatbox}
 
 \chapter{Measures: Monoids as Connective Tissue}
@@ -2856,7 +3304,2048 @@ neither duplicates nor moves the key; stabbing and overlap queries return entrie
 in the local deterministic interval order.
 
 % ===========================================================================
-%  PART V -- AUTHENTICATED
+%  PART V -- RESEARCH-DERIVED COLLECTIONS
+% ===========================================================================
+\part{Narrow Questions}
+
+\chapter{Ancestry as a Sequence}
+\label{ch:ancestry}
+
+\motto{The sequence is not stored anywhere in particular. It is two boundaries
+on a path that already exists.}
+
+\noindent
+Seven of this library's collections did not arrive the way the others did.\index{research-derived collections}
+The finger tree, the hash trie, the RRB vector and their relatives are
+implementations of published structures: the paper came first, the library
+followed. These seven began instead as scoped design studies --- each one a
+normative proposal written before any code, asking whether a narrow question
+that the general structures answer badly could be answered well by giving
+something up.
+
+The proposals share a discipline that is worth naming before any of the
+structures are described, because it is the reason their claims can be trusted.
+
+\begin{contractbox}[How a research-derived collection is argued]
+\emph{It answers a narrow question.} Every proposal states the question, names
+the general structure that answers it worse, and says plainly when the general
+structure is the right choice anyway.
+
+\emph{It declares its non-goals.} Concatenation of unrelated histories, point
+replacement, middle editing, confluent merge --- whatever the design cannot do
+is listed, and no comparison table is ever allowed to count an omitted
+operation as a fast one.
+
+\emph{It separates two complexity statements and never conflates them.} One is
+the bound the shipped code delivers. The other is the bound the same reduction
+would deliver over a stronger component that exists in the literature but is not
+implemented here. Both appear; they are never merged into a single optimistic
+number.
+
+\emph{Its novelty claim is scoped.} ``Not found in a targeted literature
+search'' is written as exactly that, and never as priority.
+\end{contractbox}
+
+The seven are: \code{AncestralSliceQueue} and \code{BilateralAncestralDeque},
+the subjects of this chapter; \code{ContextualRankSequence} (Chapter~\ref{ch:contextual}), which ranks and
+selects events whose occurrence is not a property of an element but of the
+finite-state context to its left; \code{PersistentDeltaMap} (Chapter~\ref{ch:checkpoint}), an ordered map that
+maintains its own exact checkpoint-relative change set and emits it in time
+proportional to the number of changes rather than the size of the map;
+\code{PersistentRunDeltaVector}, in the same chapter, which does the same for a
+fixed-length vector
+and reports \emph{maximal dirty runs} rather than dirty positions;
+\code{PersistentMonotoneActionHeap} (Chapter~\ref{ch:actions}), a meldable min-heap
+that applies a monotone
+transformation to every entry in \bigoh{1} and still melds in \bigoh{1}
+afterwards, even when the transformation has no inverse; and
+\code{PersistentAncestralConnectionForest} (Chapter~\ref{ch:connectivity}), an
+insertion-only connectivity
+structure that can name the earliest version on a lineage at which two vertices
+became connected, for the price of one ordinary connectivity query.
+
+All seven were prototyped in C\#, lived for a time in \code{*.Experimental}
+namespaces, and were then promoted and ported to all nine languages --- the
+TypeScript port last, in August 2026. The proposals in \code{docs/proposals/}
+remain their normative documents; where this book states a bound, that bound
+comes from the shipped code and agrees with the proposal that predicted it.
+
+This chapter takes the two that share a substrate.
+
+\section{A forest that only grows leaves}
+
+Both structures rest on the same idea, and it is a strange one: \emph{a sequence
+value need not contain its elements}. It can be a pair of boundaries on a path
+through a structure that somebody else owns.
+
+The structure that owns the path is an \term{incremental level-ancestor
+arena}.\index{incremental ancestor arena}\index{level ancestor} It is a forest that grows one leaf at a time and answers exactly
+one interesting question:
+
+\begin{center}
+\fbox{\parbox{0.86\linewidth}{\centering\vspace{2pt}
+Which ancestor of node $v$ sits at absolute depth $d$?\vspace{2pt}}}
+\end{center}
+
+\begin{specimen}[Specimen --- the incremental ancestor arena]
+\index{IIncrementalAncestorArena@\texttt{IIncrementalAncestorArena}}\index{MyersIncrementalAncestorArena@\texttt{MyersIncrementalAncestorArena}}%
+\spec{Purpose}{An append-only monotone forest of immutable nodes, addressed by stable handles, answering level-ancestor queries. The shared substrate of the two ancestry-interval sequences.}
+\spec{Core}{\code{MyersIncrementalAncestorArena}: Myers' two-link applicative-stack scheme --- one parent link plus one coalesced jump link per node --- over a store of odd-sized blocks.}
+\spec{Leaf add}{\bigoh{1} amortized. A call that crosses a block boundary pays $\Theta(\sqrt{M})$ for the next odd block.}
+\spec{Ancestor query}{\bigoh{\log M} worst case after $M$ published nodes.}
+\spec{Primitive reads}{Depth, parent, and value are \bigoh{1}; the consuming collections' bounds assume it.}
+\spec{Space}{\bigoh{M} total; $M + 1 + \mathrm{O}(\sqrt{M+1})$ record slots, with an \bigoh{\sqrt{M+1}}-entry directory.}
+\spec{Mutability}{\textbf{The arena is mutable.} It accumulates nodes in place, under one private lock, while every collection value built on it stays immutable.}
+\spec{Ports}{All nine. Haskell has no arena at all --- see below.}
+\end{specimen}
+
+\noindent
+Three properties of the arena do the real work. Nodes are \emph{immutable} once
+published, so a handle retained forever keeps reading the same answer. Handles
+are \emph{never recycled}. And a leaf may be added below \emph{any} previously
+published node, not only below the most recent one --- which is what makes the
+arena a persistence substrate rather than a log. Appending to an old version
+does not extend the newest branch; it starts a sibling branch, and every earlier
+version's root-to-node path is untouched. A distinguished \term{bottom} node
+sits at depth $-1$, carries no value, and is the parent of every depth-zero
+node.
+
+\subsection{Two links per node}
+
+The shipped backend is Eugene Myers' applicative random-access stack from 1983,
+adapted from a single list to the root-to-node list of every branch in the
+forest.\index{Myers, Eugene}\index{applicative random-access stack} Each node
+stores its parent, its depth, its value, and one additional \term{jump} link
+with the distance that jump covers.
+
+The jump is chosen when the node is created, in constant time, by a rule that
+coalesces:\index{jump link} if the parent's jump target itself has a jump no
+longer than the parent's, the new node inherits the far end of that pair and
+records the summed distance; otherwise the new node's jump is a plain unit hop
+to its parent. A query then climbs from the starting node toward the root,
+taking the jump whenever the jump does not overshoot the requested depth and the
+parent link otherwise. The coalescing rule keeps the reachable distances
+growing geometrically, so a query finishes in \bigoh{\log M} hops.
+
+That logarithm is easy to lose by accident and impossible to see in a
+correctness test --- a broken jump rule returns exactly the same answers, only
+slower. The arena therefore exposes a statistics record with deterministic hop
+counters, and the test suites assert an envelope over them. The mutation check
+is worth recording: delete the coalescing case, and a query that took two hops
+takes 32{,}768, against an asserted bound of 64, while every answer stays
+correct.
+
+\subsection{Odd blocks, and the spike the library decided to keep}
+
+Node records live in blocks of sizes $1, 3, 5, 7, \dots$ The reason is
+arithmetic: the capacities before block $r$ sum to
+$1 + 3 + \cdots + (2r-1) = r^2$, so a zero-based handle $i$ lives in block
+$\lfloor\sqrt{i}\rfloor$ at offset $i - \lfloor\sqrt{i}\rfloor^2$. Addressing is
+\bigoh{1} with no indirection beyond the directory, unused slots after $M$ nodes
+are \bigoh{\sqrt{M}}, and the directory itself has \bigoh{\sqrt{M}}
+entries.\index{odd-block store}
+
+The cost of that arithmetic is a spike. When a block fills, the next one --- of
+size roughly $2\sqrt{M}$ --- is allocated in a single call, and in a managed
+runtime allocating an array also zeroes it. So leaf addition is \bigoh{1}
+\emph{amortized}, and one unlucky call in every $\Theta(\sqrt{M})$ pays
+$\Theta(\sqrt{M})$.
+
+\begin{caveatbox}[A recorded ruling, not an oversight]
+The spike can be removed. The mechanism is real-time two-table migration: keep
+the old and new backing tables live at once and move a constant number of slots
+on every operation, so no single call performs a large copy. (The obvious
+cheaper fix --- pre-initializing the next block incrementally --- does not work
+in a garbage-collected language, precisely because allocation zeroes.)
+
+Migration was analyzed, found implementable in all eight arena workspaces,
+costed --- permanent extra complexity in the hottest path of eight
+implementations, to shave an allocation the memory allocator performs anyway ---
+and \textbf{declined by the maintainer}. The $\Theta(\sqrt{M})$ boundary call is
+therefore the accepted shared contract, and every arena port carries the same
+two-part sentence: \bigoh{1} amortized, with a block-boundary call paying
+$\Theta(\sqrt{M})$ for the next odd block. The declined alternative is recorded
+so the decision can be revisited rather than rediscovered.
+\end{caveatbox}
+
+Haskell is the exception, and it is an interesting one. Its port has no arena
+object at all: a node is an ordinary immutable heap value that \emph{is} its own
+handle, with the same two links and the same coalescing rule. There is no block
+store, so there is no boundary call --- leaf addition is \bigoh{1} \emph{worst
+case}. There is also no lock, no handle-recycling question, and no way to
+present a node to the wrong forest, because there is no forest object to present
+it to. Under the library's parity rule a stronger guarantee anywhere becomes the
+target everywhere, so this one is documented explicitly as \emph{exceeding} the
+shared profile rather than being allowed to diverge from it silently.
+
+\subsection{Why the seam is parameterized}
+
+The arena is a public interface, not a private detail, and the collections above
+it state their bounds in terms of two parameters rather than in absolute terms:
+$U$, the time for one leaf addition, and $Q$, the time for one level-ancestor
+query, both after $M$ published nodes. The interface additionally requires that
+depth, parent, and value reads be \bigoh{1}, because every parameterized bound
+assumes it.
+
+This is not decoration. Alstrup and Holm proved in 2000 that a rooted tree
+updated \emph{only by adding leaves} --- exactly this arena's update --- admits
+level-ancestor queries and leaf additions in \bigoh{1} \emph{worst case} with
+linear space.\index{Alstrup and Holm} Instantiate the seam with that structure
+and $U = Q = \mathrm{O}(1)$: every scalar operation of both collections in this
+chapter, including indexed access and slice construction, becomes constant
+worst-case time.
+
+\begin{caveatbox}[The reduction is stated, not implemented]
+No Alstrup--Holm backend ships here. The shipped Myers arena gives
+$U = \mathrm{O}(1)$ amortized and $Q = \mathrm{O}(\log M)$, and nothing in the library
+upgrades those to worst-case constants. The stronger statement is a reduction
+to a published result; it is not evidence about this code.
+
+Two tempting substitutions are also invalid. Static level-ancestor
+preprocessing cannot be used, because retained handles are extended online after
+preprocessing would have finished. Binary lifting gives logarithmic update time
+and space, so it does not establish the constant bound either. And Alstrup and
+Holm's more general dynamic-forest result, which permits edge additions, carries
+an inverse-Ackermann aggregate bound rather than a constant one --- it is a
+different theorem and must not be substituted into the table.
+\end{caveatbox}
+
+\section[The ancestral slice queue]{\code{AncestralSliceQueue}}
+
+\begin{specimen}[Specimen --- \code{AncestralSliceQueue}]
+\index{AncestralSliceQueue@\texttt{AncestralSliceQueue}}%
+\spec{Purpose}{A fully persistent FIFO queue whose every value --- including every prefix, suffix, slice and split result --- is one contiguous interval of one root-to-node path, and remains appendable.}
+\spec{Core}{The pair (tail node, low depth), plus a redundant count cache, over a shared incremental ancestor arena.}
+\spec{Algebra}{Append at the right; read or remove either visible end; index; \code{Take}, \code{Drop}, \code{Slice}, \code{SplitAt}; enumerate.}
+\spec{Complexity}{\code{AddLast} costs $U$. \code{First}, the indexer, \code{Take}, \code{Slice} and a nontrivial \code{SplitAt} cost $Q$. \code{Last}, \code{RemoveFirst}, \code{RemoveLast} and \code{Drop} are \bigoh{1}.}
+\spec{Limits}{No prepend, no point replacement, no middle edit, no concatenation of unrelated histories. Arena space is charged to every historical append, not to the visible length.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+A handle is two numbers and a node. Let $t$ be the \term{tail} --- the node
+holding the last visible value --- and let $\ell$ be the \term{low depth}, the
+absolute depth of the first visible value. Then the queue denotes the labels of
+the ancestors of $t$ at depths $\ell, \ell+1, \dots, \mathrm{depth}(t)$, in that
+order, and its length is $\mathrm{depth}(t) - \ell + 1$. The count is cached, so
+\code{Count} and \code{IsEmpty} never touch the arena at all; the cache's
+agreement with the formula is part of the representation invariant.
+
+Every operation is then arithmetic on those two boundaries. \code{AddLast}
+publishes a leaf below $t$ and keeps $\ell$. \code{RemoveFirst} adds one to
+$\ell$. \code{RemoveLast} replaces $t$ by its parent. \code{Drop}($k$) adds $k$
+to $\ell$ --- in constant time, regardless of $k$. \code{Take}, \code{Slice} and
+the prefix half of \code{SplitAt} need a new tail, which is one ancestor query.
+Nothing is copied, nothing is rebalanced, and every result is itself a queue
+that can be appended to, which is the point: a slice of a history is not a
+read-only view of that history but a new branch point in it.
+
+\subsection{The anchored empty}
+
+The subtle part is what happens when the window closes.
+
+The invariant permits $\ell = \mathrm{depth}(t) + 1$, which denotes the empty
+sequence. But $t$ is still there, and it is still meaningful: it is the node
+\emph{immediately before} the window. The proposals call it the
+\term{anchor}.\index{anchored empty}
+
+The rule this buys is exact and worth stating precisely: appending to an empty
+slice yields a queue containing exactly the new value, and never resurrects a
+discarded prefix. Appending publishes a leaf below the anchor, at depth
+$\ell$, and the window --- which starts at $\ell$ --- admits that one node and
+nothing above it. Without the anchor there would be no node to append below and
+no way to keep zero-length results branchable; with a shared process-global
+empty value there would be one immortal arena coupling every unrelated workload
+in the process, which is why the factories always create or accept an arena and
+no such global exists.
+
+What is \emph{not} guaranteed is which node the anchor is --- and it genuinely
+differs (Figure~\ref{fig:anchoredempty}). Drain a queue from the front, and
+$\ell$ climbs past the tail: the retained anchor is the queue's own last value.
+Drain the same queue from the back, and the tail walks up the path: the retained
+anchor is the node before the queue's original first value. Both denote the
+empty sequence. Both obey the rule. But an append to the first lands as a
+sibling of whatever already grew below the old tail, and an append to the second
+lands high on the path as a sibling of the queue's old front --- two different
+branches of the arena, from two values that compare as equally empty. Empty
+values, in other words, have provenance; the library documents the rule as
+semantics and the anchor identity as provenance, and does not promise the
+latter.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7ghost]    (bot) at (-55,0) {$\bot$};
+  \node[d7node]     (a)   at (-33,0) {$a$};
+  \node[d7leafnode] (b)   at (-11,0) {$b$};
+  \node[d7leafnode] (c)   at ( 11,0) {$c$};
+  \node[d7leafnode] (d)   at ( 33,0) {$d$};
+  \node[d7ghost]    (e)   at ( 55,0) {$e$};
+  \foreach \s/\t in {bot/a, a/b, b/c, c/d, d/e} \draw[d7edge] (\s) -- (\t);
+  \foreach \n/\dd in {bot/{$-1$}, a/{0}, b/{1}, c/{2}, d/{3}, e/{4}}
+    \node[d7label,below=1.5pt] at (\n.south) {\dd};
+  \begin{scope}[on background layer]
+    \node[draw=d7copper, thick, rounded corners=2pt, inner sep=3.5pt,
+          fit=(b)(c)(d)] (win) {};
+  \end{scope}
+  \node[d7label,above=2.5pt,text=d7copper,align=center] at (win.north)
+    {handle $H$: tail $=d$, low depth $=1$};
+  \node[d7newnode] (y) at (-22,-26) {$y$};
+  \node[d7newnode] (x) at ( 44,-26) {$x$};
+  \draw[d7newedge] (a) -- (y);
+  \draw[d7newedge] (d) -- (x);
+  \node[d7label,anchor=north,text width=40mm,align=center] at (-22,-33)
+    {drained from the \emph{back}:\\ anchor $a$, then \code{AddLast(y)}};
+  \node[d7label,anchor=north,text width=40mm,align=center] at (44,-33)
+    {drained from the \emph{front}:\\ anchor $d$, then \code{AddLast(x)}};
+\end{tikzpicture}
+\caption{The anchored-empty rule. The handle $H$ denotes $[b,c,d]$; node $e$ is
+history below the window that $H$ cannot see. Emptying $H$ from either end
+leaves the node immediately before the window as the anchor --- but that is $a$
+in one case and $d$ in the other, so the two empty values append into different
+branches. Both are empty, and neither can resurrect a discarded value.}
+\label{fig:anchoredempty}
+\end{figure}
+
+\subsection{Which operations ask the arena}
+
+The query discipline is stated exactly, because the difference between a
+constant-time and a logarithmic operation here is precisely whether it needs an
+ancestor.
+
+\begin{d7tablethree}{0.34}{0.19}
+\toprule
+\thead{Operation} & \thead{Cost} & \thead{Shipped, Myers-backed} \\
+\midrule
+\code{AddLast} & $U$ & \bigoh{1} amortized \\
+\code{Count}, \code{IsEmpty}, \code{Last} & \bigoh{1} & \bigoh{1} worst case \\
+\code{RemoveFirst}, \code{RemoveLast}, \code{Drop}, \code{TryRemoveLast} & \bigoh{1} & \bigoh{1} worst case \\
+\code{First}, indexer, \code{TryRemoveFirst} & $Q$ & \bigoh{\log M} worst case \\
+\code{Take}, \code{Slice}, nontrivial \code{SplitAt} & $Q$ & \bigoh{\log M} worst case \\
+enumerate $n$ visible values & $\Theta(n)$ & $\Theta(n)$ time, $\Theta(n)$ transient slots \\
+\bottomrule
+\end{d7tablethree}
+
+\noindent
+Two rows deserve comment. \code{Last} is free and \code{First} is not, which
+looks like an asymmetry until one remembers what the handle stores: the tail is
+a node, so its value is a direct read, while the front is an ancestor selected
+jointly by the tail and the low depth. And \code{RemoveFirst} is free while
+\code{TryRemoveFirst} is not, for the same reason --- the removal moves an
+integer, but returning the removed value requires the query. Caching the front
+would not fix this; it would only move the query into the next
+\code{RemoveFirst}. Under a constant-query backend both become constant, which
+is the whole argument for parameterizing the seam.
+
+Boundary cases are specialized: \code{Take(Count)}, \code{Drop(0)}, a slice
+whose result keeps the current tail, and a split at \code{Count} all return
+without querying. The table gives the general case.
+
+Enumeration walks parent links from the tail into a temporary array and yields
+that array forwards, so it performs \emph{zero} ancestor queries at
+$\Theta(n)$ time and $\Theta(n)$ transient slots. With a constant-query backend
+one could instead run one query per output and keep \bigoh{1} iterator state.
+Both are output-optimal in time; the transient-space difference is part of the
+backend contract, and the shipped enumerator always buffers.
+
+\section[The bilateral ancestral deque]{\code{BilateralAncestralDeque}}
+
+\begin{specimen}[Specimen --- \code{BilateralAncestralDeque}]
+\index{BilateralAncestralDeque@\texttt{BilateralAncestralDeque}}%
+\spec{Purpose}{A fully persistent deque built from two oppositely oriented ancestry intervals, closed under reverse and arbitrary slicing.}
+\spec{Core}{Two \term{segments} over one shared arena. A segment is (anchor, base, tail, count); the handle's value is the reversed left segment followed by the right one.}
+\spec{Reverse}{\bigoh{1} --- the two segments change places. No flag, no rebuild.}
+\spec{Ends}{Insertion at either end costs $U$. Both endpoint \emph{reads} are query-free.}
+\spec{Removal}{\bigoh{1} on its own nonempty side; at most one query when it crosses the center.}
+\spec{Index / slice}{At most one query to index; at most two to slice or split --- including when the range crosses the center.}
+\spec{Limits}{No unrelated concatenation, no point replacement, no middle edit. Same retained-history model as the queue.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+The classical two-stack deque keeps a reversed front stack and a forward back
+stack, and pays for the arrangement by occasionally transferring one stack into
+the other. This structure keeps the arrangement and abolishes the transfer.
+
+Each arm is an interval on some root-to-node path, exactly as in the queue, but
+with two extra cached fields. Written $(\textsf{anchor}, \textsf{base},
+\textsf{tail}, \textsf{count})$, the invariant is that the anchor is an ancestor
+of the tail, that the count is the difference of their depths, and --- when the
+arm is nonempty --- that the base is the anchor's child on that path, that is,
+the first node strictly inside the interval. The handle's logical value is the
+left arm read \emph{in reverse}, followed by the right arm read forwards.
+
+Everything follows from that orientation. Adding at the front publishes a leaf
+below the left tail; because the left arm is read in reverse, the newest node
+reads first, which is precisely a prepend. Adding at the back publishes a leaf
+below the right tail, which is an ordinary append. Removing from an arm's own
+end moves its tail to its parent. Removing from the opposite side of an arm
+advances its anchor to its cached base.
+
+\subsection{Reverse is an exchange}
+
+$\mathrm{reverse}(\mathrm{reverse}(L) \mathbin{+\!\!+} R) = \mathrm{reverse}(R)
+\mathbin{+\!\!+} L$. The right-hand side is the representation of the handle
+whose left arm is $R$ and whose right arm is $L$. So \code{Reverse} constructs a
+new handle with the two segment records exchanged and the count unchanged: no
+orientation flag to interpret at every subsequent call, no materialization, and
+no lazy mirror to force. It is the cleanest reversal in the book, and it is
+cheap for a structural reason rather than a bookkeeping one.
+
+\subsection{Both ends, without asking}
+
+The \textsf{base} field is redundant --- it is recoverable by a query --- and it
+is the reason both endpoint reads are free. For the left arm the logical first
+element is at the tail and the logical last is at the base; for the right arm
+those roles are swapped. Whichever arm is empty, one of the four cached nodes
+holds the answer, so \code{First} and \code{Last} are value reads.
+
+That extends to indexing. Four positions are answered from cached endpoints with
+no query at all: index $0$, the last index of the left arm, the first index of
+the right arm, and the last index of the deque. Any other position costs exactly
+one query --- into the left arm counting down from its tail, or into the right
+arm counting up from its anchor.
+
+It is worth putting this next to the queue, because the two structures made
+opposite trades with the same budget. The queue does not cache its front, so
+reading the front costs a query while advancing it is free. The deque caches its
+bases, so reading either end is free while a removal that crosses the center ---
+one that must retire an arm's base and cache the next one --- costs a query.
+Neither is a mistake, and under an Alstrup--Holm backend the distinction
+evaporates entirely; with the shipped arena it determines which of your
+operations carry the logarithm.
+
+\subsection{Slice closure, and the ceiling of two}
+
+The central property is that the representation is \emph{closed} under
+arbitrary contiguous slicing: a slice of a bilateral handle is another
+bilateral handle, never a third fragment and never a rebuild. That is true
+because a contiguous range intersects each arm in at most one contiguous piece.
+
+The at-most-two-query ceiling follows from a case analysis that repays reading,
+because the crossing case is the one that looks expensive and is not.
+
+\begin{d7table}{0.30}
+\toprule
+\thead{The requested range} & \thead{What must move} \\
+\midrule
+Wholly inside one arm & Both endpoints of that arm's interval move; the other arm becomes empty. Two queries, fewer when a moved endpoint coincides with a cached one. \\
+Crossing the center & The left intersection is a \emph{suffix} of the reversed left arm, so it keeps that arm's anchor and base and moves only its tail. The right intersection is a \emph{prefix} of the right arm, so it keeps that arm's anchor and base and moves only its tail. One query per arm. \\
+Empty & No query. \\
+\bottomrule
+\end{d7table}
+
+\noindent
+So the expensive-looking case is the cheap one: crossing the center costs one
+query in each arm precisely because each intersection inherits one of its
+endpoints unchanged. \code{Take} and \code{Drop} are slices. \code{SplitAt} is
+expressed as a \code{Take} plus a \code{Drop} and still makes at most two
+queries in total, because the two results move complementary endpoints at the
+same boundary. The focused test suites assert the exact maximum query count per
+operation rather than a ceiling, which is how a claim like this stays true
+through nine ports.
+
+\begin{d7tablethree}{0.34}{0.24}
+\toprule
+\thead{Operation} & \thead{Cost} & \thead{Shipped, Myers-backed} \\
+\midrule
+\code{AddFirst}, \code{AddLast} & $U$ & \bigoh{1} amortized \\
+\code{Count}, \code{First}, \code{Last}, \code{Reverse}, \code{Clear} & \bigoh{1} & \bigoh{1} worst case \\
+\code{RemoveFirst}, \code{RemoveLast} & \bigoh{1}; at most one $Q$ across the center & \bigoh{1}; \bigoh{\log M} across the center \\
+indexer & at most one $Q$ & \bigoh{\log M} worst case \\
+\code{Take}, \code{Drop}, \code{Slice}, \code{SplitAt} & at most two $Q$ & \bigoh{\log M} worst case \\
+\code{ToArray}, enumerate $n$ values & $\Theta(n)$, no queries & $\Theta(n)$ time, up to $\Theta(n)$ transient slots \\
+\bottomrule
+\end{d7tablethree}
+
+\noindent
+The deque handles empties differently from the queue, and the difference is
+declared rather than incidental. An arm that empties while the other arm still
+holds values collapses its anchor, base and tail onto one node and keeps it. But
+a deque that empties completely --- and the value returned by \code{Clear} ---
+resets both arms to the arena's bottom node, so the next insertion starts a
+fresh branch at the root rather than continuing under an old anchor. Exact
+anchor provenance is explicitly \emph{not} part of the deque's public value
+semantics, where for the queue the anchoring rule is.
+
+\section{What the family costs}
+
+Both structures buy their bounds with the same three concessions, and the
+proposals insist on them being visible.
+
+\begin{caveatbox}[The logarithm is over the history, not the value]
+Every \bigoh{\log M} in this chapter is logarithmic in $M$, the number of nodes
+the arena has \emph{ever} published --- including nodes on branches no
+application variable can still reach. It is not logarithmic in the length of the
+handle you are holding. A thousand-element slice of a ten-million-append history
+indexes at the cost of the history.
+\end{caveatbox}
+
+\begin{caveatbox}[Nothing is ever reclaimed, and one handle retains everything]
+The arena keeps every node it has published, with its payload, until the arena
+itself becomes unreachable. Dropping a prefix does not release nodes; releasing
+a handle does not release nodes; garbage collection of a value must not be read
+as reclamation of its history. And because every handle retains its arena, one
+surviving handle retains the entire history --- which is normal for an
+arena-backed persistent structure and unacceptable for an unbounded service.
+Reclamation would require tracing from live handles, explicit epochs, or an
+ancestor index that tolerates deletion. None of the three is here.
+\end{caveatbox}
+
+The third concession is the algebra. Neither structure concatenates unrelated
+histories, replaces a point, or edits the middle, and neither is confluently
+persistent: two versions that branched apart cannot be merged. Equality is a
+further casualty --- two handles can enumerate identical values from different
+tails, different anchors, or different arenas, so reference identity is neither
+content equality nor a provenance test, and no constant-time sequence equality
+or canonical empty is promised.
+
+The concessions are the mechanism, not an accident of implementation. It is
+exactly because there is no concatenation and no point update that a value can
+be two boundaries on somebody else's path, and exactly because a value is two
+boundaries that indexing and slicing reduce to one ancestor query apiece. When
+the missing operations are needed, the library says so plainly and points at the
+general structures: \code{FingerTreeDeque} (Chapter~\ref{ch:fingertree}) for a
+persistent sequence with concatenation and arbitrary edits, and
+\code{ReversibleDeque} (Chapter~\ref{ch:revdeque}) when reversal is the primary
+operation over a full sequence algebra. These two are justified only
+when branching append histories with subrange and indexed access dominate, and
+when the operations they do not have are genuinely unnecessary.
+
+
+\chapter{Lifting a Machine into a Measure}
+\label{ch:contextual}
+
+\motto{When a summary cannot know what came before it, make it answer for every
+possible before.}
+
+\begin{specimen}[Specimen --- \code{ContextualRankSequence}]
+\index{ContextualRankSequence@\texttt{ContextualRankSequence}}%
+\spec{Purpose}{A persistent sequence that ranks and selects \emph{events} whose occurrence depends not on an element alone but on the finite context preceding it --- the comma that separates fields here and is quoted data there.}
+\spec{Core}{The measured finger tree under a lifted measure: for every subtree \emph{and every one of the machine's states}, the outgoing state and the number of events emitted.}
+\spec{Algebra}{A finite deterministic machine over $s$ states emitting nonnegative event counts. The lifted summary is an ordered monoid --- associative, and emphatically not commutative.}
+\spec{Operations}{\code{Evaluate}, \code{EvaluatePrefix}, \code{EventRank}, \code{TrySelectEvent}, over the ordinary positional surface: index, insert, replace, remove, split, slice, concatenate.}
+\spec{Complexity}{\bigoh{1} whole-sequence evaluation; \bigoh{s \log n} amortized for prefix evaluation, rank, select, and every edit; \bigoh{s} amortized endpoint updates; \bigoh{s \log \min(n,m)} amortized concatenation; \bigoh{s n} to build and to store.}
+\spec{Policies}{The machine is compile-time in C\#, C\texttt{++}, and Rust; a retained runtime object in Kotlin, TypeScript, and Python; a record of functions in Haskell; an identified callback struct in C and OCaml.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+Every measure in Chapter~\ref{ch:measures} shares an assumption so quiet that it
+is easy to miss: an element's contribution to the summary is a property of the
+element. A character contributes one to a length; a key contributes itself to a
+maximum; a newline contributes one to a line count. Nothing about the neighbors
+enters into it, which is exactly why the contributions can be combined in any
+grouping and cached on every subtree.
+
+Now take a rule that breaks the assumption. In a CSV line, a comma is a field
+separator --- unless it falls inside a quoted field, in which case it is data. The
+element is identical in both cases. What differs is everything that came before
+it. No fixed weight is correct for a comma, so no ordinary measure can rank
+commas, and the whole apparatus of measure-guided descent is unavailable for a
+question that is otherwise a textbook rank-and-select.
+
+This chapter is about the way out, and it is the most elegant construction in the
+repository.
+
+\section{Why the obvious repairs are linear}
+
+Keep the characters in any persistent sequence and run a two-state scanner over
+them. That works, and it is what almost everyone does. Its cost is structural:
+to know whether the comma at position $i$ is a separator you must know the
+scanner's state entering position $i$, and that state is a function of all $i$
+preceding characters. Asking for the event rank at a boundary $p$ costs
+$\Theta(p)$; asking which element emitted the $k$-th event costs $\Theta(n)$ in
+the worst case; and a single insertion at the front invalidates the entering
+state of everything after it.\index{contextual rank}
+
+The tempting fix --- cache the entering state on each node --- fails for the same
+reason, and it fails completely rather than partially. A cached entering state is
+valid for exactly one prefix. Prepend one quotation mark and every cached entry
+in the tree is wrong. What is expensive here is not the scan; it is the
+\emph{dependence of the cache on the prefix}. Any repair that leaves that
+dependence in place will be linear in disguise.
+
+Binary search does not rescue it either. One could search for the boundary at
+which the running event count first exceeds $k$, but evaluating the predicate at
+a candidate boundary is itself a prefix replay, so the first probe alone costs
+$\Theta(n)$.
+
+\section{The lift}
+
+\code{ContextualRankSequence<TElement, TMachine>} removes the dependence instead
+of trying to maintain it. Its measure caches not the answer, but the answer
+\emph{as a function of the entering state}.\index{effect table}
+
+The policy supplies a finite deterministic machine: a state count $s$, and a
+transition that consumes one element from one state and reports the outgoing
+state together with a nonnegative count of emitted events. A subtree's summary
+--- its \term{effect table} --- is then two arrays of length $s$ plus the ordinary
+element count:
+
+\begin{center}
+\fbox{\parbox{0.86\linewidth}{\centering\vspace{2pt}
+$A.\mathrm{next}(q)$ --- the state after consuming $A$ from $q$\\
+$A.\mathrm{events}(q)$ --- the events emitted while consuming $A$ from $q$
+\vspace{2pt}}}
+\end{center}
+
+\noindent
+tabulated for every $q$ in $0 \ldots s-1$. Ordered composition feeds the left
+table's outgoing state into the right table:
+
+\begin{align*}
+(A \otimes B).\mathrm{next}(q)   &= B.\mathrm{next}(A.\mathrm{next}(q)) \\
+(A \otimes B).\mathrm{events}(q) &= A.\mathrm{events}(q) + B.\mathrm{events}(A.\mathrm{next}(q)) \\
+(A \otimes B).\mathrm{count}     &= A.\mathrm{count} + B.\mathrm{count}
+\end{align*}
+
+The identity maps every state to itself, emits nothing, and holds no elements.
+That is a monoid, and a monoid is precisely what the measured finger tree wants.
+Associativity is not a coincidence and needs no clever argument: the state
+component is function composition, which is associative, and the event component
+is a sum of terms each indexed by the state its subtree is entered in, so both
+parenthesizations end at
+$C.\mathrm{next}(B.\mathrm{next}(A.\mathrm{next}(q)))$ with the identical three
+event terms. The algebraic shape is the machine's transition monoid decorated
+with additive output --- the same object one composes when composing
+deterministic weighted transducers, in Mohri's sense.\index{transition monoid}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7label] at (-31,9) {subtree $A$};
+  \node[d7label] at (5,9) {subtree $B$};
+  \node[d7label] at (43,9) {$A \otimes B$};
+  \foreach \x in {-38,-2,36} \node[d7label] at (\x,3.5) {$q$};
+  \foreach \x in {-31,5,43}  \node[d7label] at (\x,3.5) {next};
+  \foreach \x in {-24,12,50} \node[d7label] at (\x,3.5) {ev};
+
+  \foreach \yy/\qq/\nn/\ee in {-2/0/1/2, -8/1/1/0, -14/2/0/1} {
+    \node[d7cell] at (-38,\yy) {\qq};
+    \node[d7cell] at (-31,\yy) {\nn};
+    \node[d7cell] at (-24,\yy) {\ee};
+  }
+  \foreach \yy/\qq/\nn/\ee in {-2/0/0/0, -8/1/2/3, -14/2/2/1} {
+    \node[d7cell] at (-2,\yy) {\qq};
+    \node[d7cell] at (5,\yy)  {\nn};
+    \node[d7cell] at (12,\yy) {\ee};
+  }
+  \foreach \yy/\qq/\nn/\ee in {-2/0/2/5, -8/1/2/3, -14/2/0/1} {
+    \node[d7cell] at (36,\yy) {\qq};
+    \node[d7cell] at (43,\yy) {\nn};
+    \node[d7cell] at (50,\yy) {\ee};
+  }
+
+  \draw[d7copper,thick] (-33.4,-4.4) rectangle (-28.6,0.4);
+  \draw[d7copper,thick] (-4.4,-10.4) rectangle (0.4,-5.6);
+  \draw[d7newedge] (-21.4,-2) .. controls (-16,-2.5) and (-11,-7.5) .. (-4.8,-8);
+  \node[d7label,align=center,text width=54mm] at (-16,-25)
+    {entering $A$ in state $0$ leaves it in state $1$, so the composed
+     answer reads \emph{row $1$} of $B$};
+  \node[d7label,anchor=west,align=left,text width=44mm] at (24,-24)
+    {$(A \otimes B).\mathrm{events}(0) = 2 + 3 = 5$\\[2pt]
+     $(B \otimes A).\mathrm{events}(0) = 0 + 2 = 2$};
+\end{tikzpicture}
+\caption{An effect table is a subtree's entire behavior, tabulated for every
+state it might be entered in. Composition uses the left table's outgoing state as
+a row index into the right table --- which is why the order of the operands
+matters, and why no part of the construction ever needs to know the real entering
+state in advance.}
+\label{fig:effecttable}
+\end{figure}
+
+The $s$ columns are the price of not knowing the prefix, and it is worth naming
+the trade plainly: a factor of $s$ in storage and in every composition buys the
+disappearance of the prefix dependence. Nothing else changes. The tree is the
+same measured finger tree that carries a size or a maximum; only the monoid is
+new.
+
+\subsection{Not commutative, and it matters}
+
+Effect-table composition is associative but decidedly not
+commutative.\index{monoid!associativity} $A \otimes B$ and $B \otimes A$
+generally disagree in \emph{both} components --- in Figure~\ref{fig:effecttable}
+they report event counts of five and two from the same starting state. The left
+operand chooses which row of the right operand's table is read, and swapping the
+operands changes the choice.
+
+This is not a footnote. A measured tree that combines summaries in any order
+other than sequence order, or that reuses a cached summary for a subtree it has
+mirrored, silently produces a wrong answer here, and the answer is wrong in a way
+no type checker sees. The library is scrupulous about ordered combination for
+exactly this class of measure, and the discipline has been tested by events: when
+the complexity-parity campaign gave the deques an \bigoh{1} lazy reversal,
+Python's first implementation reused each mirrored node's cached summary ---
+correct only when \code{Combine} is commutative --- and was rewritten to match
+TypeScript's, which recombines the mirrored parts in mirrored order and is
+correct under every monoid, verified by a probe whose measure is a string and
+whose combine is concatenation. The contextual sequence is the kind of measure
+that makes that difference matter.
+
+\section{Rank and select in one descent}
+
+Because event counts are nonnegative, the running event total is monotone along
+the sequence, and so the predicate
+\[
+  P.\mathrm{events}(q_0) > r
+\]
+is false and then true as prefixes grow --- a lawful split predicate in the sense
+of Chapter~\ref{ch:measures}. Selecting the element that emitted event $r$ is
+therefore one measure-guided descent, with no binary search over boundaries and
+no prefix replay anywhere.\index{measure!guided descent}
+
+What comes back is not merely an index. The summary immediately before the
+located element already contains everything the caller needs, so
+\code{TrySelectEvent} reports five things at once: the index of the emitting
+element, the event's ordinal within that element's transition (a single
+transition may emit several events), the machine state before the element, the
+state after it, and the transition's total event count. Rank is the same descent
+stopped at a boundary: \code{EventRank} is \code{EvaluatePrefix}'s event
+component, and the two are exact inverses --- adding the ordinal within the
+transition to the preceding prefix's count reconstructs $r$.
+
+Notice which argument the initial state is. It is a parameter of the
+\emph{query}, not of the structure. Because every subtree is tabulated for every
+state, the same stored sequence answers ``what if the scanner arrives here
+already inside a quoted field?'' at no extra cost and with no rebuild.
+
+\subsection{A scanner, and its answers}
+
+The machine that motivates the structure is two states wide.
+
+\begin{lstlisting}[language={[Sharp]C}]
+readonly struct QuotedComma : IContextualEventMachine<char>
+{
+    public static int StateCount => 2;   // 0 = outside quotes, 1 = inside
+
+    public static ContextualEventTransition Transition(int state, char value) =>
+        value switch
+        {
+            '"' => new(1 - state, 0),             // toggle, emit nothing
+            ',' when state == 0 => new(state, 1), // a real separator
+            _ => new(state, 0)
+        };
+}
+
+var text = ContextualRankSequence<char, QuotedComma>.Create("\"a,b\",c,d".AsSpan());
+\end{lstlisting}
+
+\noindent
+Index those nine characters from zero: the quotation marks are at positions~0
+and~4, and the commas at 2, 5, and~7. One of the three commas is data and two are
+separators, and the structure knows which is which from either starting context:
+
+\begin{lstlisting}[language={[Sharp]C}]
+text.Evaluate(0);      // (FinalState 0, EventCount 2)
+text.Evaluate(1);      // (FinalState 1, EventCount 1)
+text.EventRank(5, 0);  // 0 -- no separator among the first five characters
+text.EventRank(6, 0);  // 1
+
+text.TrySelectEvent(0, 0, out var first);
+// (ElementIndex 5, EventIndexInElement 0, StateBefore 0, StateAfter 0,
+//  ElementEventCount 1)
+
+text.TrySelectEvent(0, 1, out var other);
+// other.ElementIndex == 2 -- entering mid-quote, the inner comma is the separator
+
+var edited = text.Insert(0, '"');
+// text is unchanged; edited ranks every later comma differently
+\end{lstlisting}
+
+Read the last two calls together. From the outside, the first separator is the
+comma at index~5 and the comma at index~2 is data. Entering already inside a
+quoted region, the first separator \emph{is} the comma at index~2 --- and the
+answer comes from the same cached tables that produced the first one, in one
+descent, with the machine consulted at most once. Prepending a quotation mark
+produces a new version with different ranks throughout while leaving the original
+version and its cached answers exactly as they were.
+
+\subsection{Writing your own machine}
+
+The recipe generalizes to anything expressible as a finite deterministic
+transducer with nonnegative output counts, and the proposal lists the family the
+design was drawn from: token or record boundaries in a finite-state lexer, frame
+boundaries in an escaped byte stream, delimiters outside quoted or commented
+regions, transitions into a selected protocol or workflow state, and Unicode text
+boundary policies once compiled to a finite-state machine --- Annex~\#29 calls out
+the random-access difficulty explicitly, and this is one answer to it.
+
+Four obligations make a machine lawful. Bound the context, so that a state count
+exists at all. Make the transition total and deterministic on every state, not
+merely on the states you expect to reach. Emit nonnegative counts, or select
+stops being monotone and the descent stops being meaningful. And if the rule
+needs \emph{right} context, compile it into a streaming machine or pair it with a
+reverse machine yourself --- the structure does not hide that transformation, and
+says so.
+
+\begin{asidebox}[Every state, not just the reachable ones]
+Because a leaf's table is filled for all $s$ states when the element is stored,
+the transition is validated for all $s$ states too. A machine that returns an
+out-of-range state or a negative count only from state~3 is rejected the moment
+an element is inserted, even if no version of the sequence ever enters state~3.
+The failure surfaces where the bug is, not months later in a query.
+\end{asidebox}
+
+\section{What it costs}
+
+Let $n$ be the element count and $s$ the machine's state count.
+
+\begin{d7tablethree}{0.30}{0.27}
+\toprule
+\thead{Operation} & \thead{Bound} & \thead{Why} \\
+\midrule
+\code{Evaluate} & \bigoh{1} & one read of the cached root table \\
+\code{EvaluatePrefix}, \code{EventRank} & \bigoh{s \log n} amortized &
+\bigoh{\log n} levels, one \bigoh{s} composition each; \bigoh{1} at either
+endpoint \\
+\code{TrySelectEvent} & \bigoh{s \log n} amortized & one monotone descent \\
+Indexing, \code{SetItem}, \code{Insert}, \code{RemoveAt}, \code{SplitAt},
+\code{GetRange} & \bigoh{s \log n} amortized & measured locate or split, then a
+path copy \\
+\code{Prepend}, \code{Append} & \bigoh{s} amortized, \bigoh{s \log n} worst case
+per call & digits absorb the work; see below \\
+\code{Concat} & \bigoh{s \log \min(n,m)} amortized & the suspended middle
+recursion stops at the shallower operand \\
+\code{Create}, \code{CreateRange} & \bigoh{s n} & one table per element \\
+Enumeration & \bigoh{n} & a traversal stack, composing nothing \\
+Storage & \bigoh{s n} & every node and every element caches an $s$-wide table; a
+changed spine adds \bigoh{s \log n} \\
+\bottomrule
+\end{d7tablethree}
+
+\noindent
+Two of those rows deserve their fine print. The whole-sequence \code{Evaluate} is
+\bigoh{1} in the reference because the wrapper forces the root summary before
+publishing a version --- the same forcing that makes a faulty machine fail before
+any successor becomes visible. The TypeScript port states the same operation as
+\bigoh{1} amortized on the ground that the first read of a freshly built spine
+may force its suspended middles once. The two ports are charging the same
+one-time work at different moments; the second wording is the more careful one.
+
+And the \bigoh{s n} storage should be read with its quantifier in place. For a
+fixed machine, $s$ is a constant: the contextual queries are \bigoh{\log n} and
+the storage is \bigoh{n}, which is why the structure is worth having at all. If
+instead $s$ is treated as an input, the library is explicit that this structure
+does \emph{not} dominate a plain persistent sequence --- its edits and its storage
+carry the $s$ factor openly, and a machine with a thousand states will feel like
+one.
+
+\section{Why this chapter is the parity campaign's best exhibit}
+
+Look again at the two rows that make this structure attractive rather than merely
+correct: \bigoh{s} amortized endpoint updates and \bigoh{s \log \min(n,m)}
+concatenation. Neither is a property of the effect-table monoid. Both are
+properties of the substrate underneath it, and they hold only on a genuine lazy
+Hinze--Paterson finger tree --- digits at both ends to absorb an endpoint push in
+constant node work, and a memoized suspension in every deep node's middle so that
+the amortization survives \emph{persistent branching} rather than merely
+ephemeral linear use (Chapter~\ref{ch:laziness}).\index{laziness}\index{amortization!under persistence}
+
+For a period, four of the nine ports could not state them. Rust, Kotlin, OCaml,
+and Python shipped this collection over height-balanced join trees --- one element
+per node, cached measures, no digits and no suspensions --- and each documented
+$\Theta(s \log n)$ endpoints and a concatenation bound keyed to how the two
+operands' shapes compared rather than to the smaller of them --- a height
+difference in three of the ports, a weight ratio in weight-balanced
+OCaml. Those were honest notes, not bugs, and they were
+measured rather than assumed: instrumenting Python's summary combiner showed a
+16{,}384-element sequence concatenated with a small one costing 28 compositions
+whether the small operand held 1 element or 1{,}024, which is the signature of a
+height-difference bound rather than a $\log \min$ one. All four carried
+substrate-divergence notes until their cores were rebuilt.\index{complexity parity}
+
+Wave~1 of the complexity-parity campaign replaced all of those cores in place,
+and every one of the four now states the reference's bounds with a probe behind
+them; the campaign's core measurements show concatenation of a 4{,}096-element
+tree costing zero immediate combines against a one-element operand and four
+against a 1{,}024-element one --- cost tracking the smaller operand, not the
+height difference. TypeScript, ported last, is the only port that never had to
+weaken the claim in the first place.
+
+The lesson generalizes past this one collection. A structure inherits its
+guarantees from whatever it is built on, and a collection can be entirely correct
+--- passing every behavioral test, in every language --- while quietly failing the
+bound that was the reason to choose it. That is the argument for the campaign in a
+single example.
+
+\begin{caveatbox}[Where the ports still differ]
+Three differences survive, all documented at their own function. Haskell's
+enumeration is $\Theta(s \cdot n)$ rather than \bigoh{n}, because its measured
+core's left-view fold rebuilds a spine node per step and each rebuild forces a
+fresh \bigoh{s} composition, where the reference's enumerator walks a traversal
+stack and combines nothing. Ports whose measured core carries an explicit element
+count alongside the measure --- Rust, Kotlin, OCaml, Python, TypeScript --- answer
+a positional index in \bigoh{\log n} composing no table at all, which is better
+than the reference's measure-directed \bigoh{s \log n}. And the ports that store
+each element's effect row beside the element (Kotlin, Python, TypeScript) invoke
+the machine \emph{zero} times on a successful select, where C\# and Rust invoke it
+exactly once to report the located transition.
+\end{caveatbox}
+
+\section{Where the guarantees stop}
+
+\begin{caveatbox}[Deliberate limits]
+\textbf{Context must be finite.} Parenthesis depth, indentation stacks, and
+general parsers do not fit unless their state is explicitly bounded. The state
+count is validated once and then fixed for the lifetime of the sequence.
+
+\textbf{Context flows left to right.} A right-context rule must be compiled into a
+streaming machine, delayed, or paired with a reverse machine by the caller.
+
+\textbf{Event weights must be nonnegative}, or the select predicate stops being
+monotone and measure-guided descent stops being sound.
+
+\textbf{Totals are checked.} Event counts accumulate in a checked 64-bit
+integer and element counts in a 32-bit one; a version whose composed total would
+overflow is rejected rather than wrapped. Haskell, whose counts are unbounded
+integers, keeps the negative-count rejection and drops the vacuous overflow
+contract.
+
+\textbf{One element per measured leaf.} This is not a chunked text rope and makes
+no cache-density claim.
+
+\textbf{The machine cannot be changed.} Concatenation requires identical machine
+semantics, enforced by the type system where a type system can carry the policy
+and by retained-policy or identifier equality where it cannot. Rebuilding an
+existing sequence under a different machine costs \bigoh{s n}.
+\end{caveatbox}
+
+\begin{contractbox}[Failure atomicity]
+Every operation builds its complete successor before returning it. A throwing
+transition, an out-of-range next state, a negative event count, or an overflowing
+total publishes no successor, and every retained version remains exactly as it
+was. In C\# one wrinkle is worth knowing in advance: because the machine's state
+count is validated in the closed generic type's static initializer, a nonpositive
+state count reaches the caller as a \code{TypeInitializationException} whose inner
+exception carries the real diagnostic, and every later use of that same
+constructed type reports the same wrapped failure. That is how the runtime
+reports faulted static initialization; the type is documented to be read through
+its inner exception.
+\end{contractbox}
+
+\section{On novelty, stated narrowly}
+
+The repository is careful about what it claims here, and the care is worth
+reproducing. Every ingredient is established: Driscoll, Sarnak, Sleator, and
+Tarjan formalized persistence; Hinze and Paterson supplied the measured sequence
+and the monotone measure-guided split; Frandsen, Miltersen, and Skyum studied
+updates and prefix products in a fixed finite monoid under the name of dynamic
+word problems; Mohri's survey covers weighted transducer composition. The lift is
+mathematically natural the moment weighted deterministic transitions and measured
+trees are set side by side, and a tree that already stored exactly these arrays
+with exactly this predicate would be this construction under another name.
+
+What the proposal records is therefore a deliberately small claim: a reproducible
+negative search result --- that the searched primary sources did not expose this
+particular public synthesis of a fully persistent, insert-and-concatenate-capable
+sequence with all-start-state additive summaries and one-descent contextual
+rank and select that reports the emitting input position. Not a priority claim,
+not a patentability claim. An earlier or differently named instance may exist. It
+is a good habit, and this is the collection that most tempts one to break it.
+
+
+\chapter{Checkpoints and Deltas}
+\label{ch:checkpoint}
+
+\motto{Two roots prove that a version changed. Neither says where.}
+
+\noindent
+Persistence makes versions cheap. Keep the old root, edit the new one, and both
+remain readable forever at the cost of a path copy. What persistence does not do
+by itself is answer the question a caller asks immediately afterwards:
+\emph{which} keys --- or which positions --- differ from the version I nominated
+as my baseline, and what did they hold before?\index{checkpoint}
+
+There are two obvious ways to answer it, and both are unsatisfying for the same
+reason. The first is to compare the two roots. That is correct, and a
+sharing-aware comparison can be very fast when the two versions share most of
+their structure, but its cost is set by the \emph{representation} rather than by
+the size of the answer: a single edit path-copies its whole spine, so even one
+change leaves a logarithmic frontier of unshared nodes for a differ to walk. The
+second is to keep a write log. A log is cheap to append and names every
+operation, but it names operations rather than net effect --- repeated writes to
+one key, a value that travels away and comes back, and the order a consumer
+should read the result in are all left to be resolved later, at a cost
+proportional to the log rather than to the difference.
+
+The two structures in this chapter take a third route. They maintain the exact
+net answer \emph{online}, while the edits are happening, so that asking the
+question later is a read rather than a computation. They differ in what they
+index: one records a change per changed key, the other records a change per
+contiguous \emph{run} of changed positions, which is the right granularity when
+the state is a slab rather than a sparse keyspace.\index{delta}
+
+Both began as research prototypes with normative design proposals of their own,
+were promoted out of the library's experimental namespaces once those proposals
+had been reviewed, and now ship in all nine languages.
+
+\section{The checkpoint-differential map}
+
+\begin{specimen}[Specimen --- \code{PersistentDeltaMap}]
+\index{PersistentDeltaMap@\texttt{PersistentDeltaMap}}%
+\spec{Purpose}{A fully persistent ordered map that also knows, at every moment, exactly which key classes differ from its own checkpoint and what their checkpoint and current values are.}
+\spec{Core}{Three immutable roots --- checkpoint state $B$, current state $S$, and an ordered change index $D$ carrying one presence-safe \code{(before, after)} record per key class on which $B$ and $S$ differ. All three are persistent sorted maps under the same key comparer.}
+\spec{Operations}{\bigoh{\log N} lookup, point update, removal, rank, and neighbor queries, where $N$ counts the key classes in $\mathrm{dom}(B) \cup \mathrm{dom}(S)$ --- the same bounds as the ordinary ordered map underneath.}
+\spec{Epoch control}{\code{Checkpoint} and \code{Rollback} are \bigoh{1}. They exchange roots; they do not scan.}
+\spec{Enumeration}{$\Theta(k + 1)$ to fully consume all $k$ changes in ascending key order. The range-restricted overload seeks in \bigoh{\log(k+1)} and then costs $\Theta(1)$ per change yielded.}
+\spec{Policies}{A key comparer defining order \emph{and} identity, and a value equality relation defining semantic no-ops and cancellation.}
+\spec{Limits}{Point mutation only. No \code{Clear}, no bulk or range update, no diff between two arbitrary retained versions, no confluent merge.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+The shape of the design is visible in the field list: a version is a wrapper
+around three roots and a policy. $S$ answers every ordinary map question and
+delegates to the underlying sorted dictionary without ceremony. $B$ is shared,
+not copied --- it is simply the state root some ancestor version published as
+its baseline. $D$ is where the work lives.\index{change index}
+
+What makes $D$ worth maintaining is that it holds the \emph{net} answer, not a
+history. Four rules produce that, and each one is a specific decision that could
+plausibly have gone the other way.
+
+\begin{contractbox}[The four rules that make ``net'' exact]
+\textbf{A relation-equal write is a semantic no-op.} Writing a value that the
+retained value relation calls equal to the value already stored returns the
+receiver unchanged --- the same object, not an equal one. No record is created,
+none is disturbed, and no successor is allocated. Removing an absent key behaves
+the same way.
+
+\textbf{The first effective write captures \code{before}.} When a key class
+enters $D$, the endpoint it records as \code{before} is the checkpoint-relative
+state it is about to displace: \code{Present(v)} if the class was in the
+checkpoint, \code{Absent} if it was not. Presence is carried separately from the
+value, so \code{Present(null)} and \code{Absent} are distinguishable --- a
+distinction the ports without a null-inhabited type spell as \code{Option} or
+\code{Maybe}.
+
+\textbf{Repeated writes coalesce.} Every later effective write to that class
+replaces only \code{after}; the captured \code{before} is never rewritten. A
+class written a thousand times still occupies one record, holding the first
+checkpoint-relative endpoint and the final current one.
+
+\textbf{Returning a key to its checkpoint state deletes its record.} After each
+effective write the two endpoints are compared --- presence first, then the
+value relation when both are present --- and if they agree the record is
+\emph{removed} rather than stored as a zero. A complete
+$v_0 \to v_1 \to v_0$ round trip therefore leaves no trace, and $D$ never
+contains a record that is not a real difference.
+\end{contractbox}
+
+The fourth rule has a consequence worth spelling out, because it is the one that
+makes the structure feel different in use: the change set can shrink. An epoch
+that touches five hundred keys and then puts four hundred and ninety of them
+back holds ten records, and \code{ChangeCount} reads that ten as an amortized
+\bigoh{1} field rather than recounting anything.
+
+\subsection{Canonicalization: a cancelled epoch is storage-clean}
+
+If the last surviving record is removed --- if the whole epoch cancels --- the
+successor does not merely hold a current root that is extensionally equal to the
+checkpoint. It holds the checkpoint root \emph{itself}. The state root snaps
+back, and both logical views name one object again.\index{canonicalization}
+
+This is not needed for the \bigoh{1} bound on \code{Checkpoint} and
+\code{Rollback}; those allocate a constant-size wrapper in any case. What the
+snap buys is that a wholly cancelled epoch is storage-clean as well as
+extensionally clean. The identity test at the head of \code{Checkpoint} and
+\code{Rollback} then recognizes the version as already clean and returns the
+receiver rather than a fresh wrapper, and a later root-identity equality test
+against the baseline settles in constant time instead of walking an unshared
+path that a state-only path-copied map would have left behind.
+
+The snap is also the place where the representative rule earns its keep, and it
+is subtler than it looks. Because the key comparer defines identity, several
+distinct key objects can name one class, and the map must decide which
+representative it stores. A changed class that existed in the checkpoint retains
+the checkpoint's representative through updates and through delete/re-add round
+trips; a class absent from the checkpoint retains the first insertion's
+representative for as long as its net-added record survives, and a later
+insertion after complete cancellation begins a fresh episode. That rule is what
+makes the snap sound: when $D$ empties, current and checkpoint agree not only
+extensionally but representative-wise, so substituting one root for the other
+changes nothing a caller can observe.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var map = PersistentDeltaMap<string, int>.CreateRange(
+    [new("a", 1), new("b", 2), new("c", 3)]);
+
+var edited = map.SetItem("b", 20)   // Updated: Present(2) -> Present(20)
+                .SetItem("b", 21)   // coalesces; before is still Present(2)
+                .Remove("c")        // Removed: Present(3) -> Absent
+                .SetItem("d", 4);   // Added:   Absent     -> Present(4)
+
+var count = edited.ChangeCount;     // 3, not 4: the two writes to "b" coalesced
+foreach (var change in edited.GetChanges())
+{
+    // ("b", Present(2), Present(21))
+    // ("c", Present(3), Absent)
+    // ("d", Absent,     Present(4))   -- ascending key order, once each
+}
+
+var restored = edited.SetItem("b", 2);   // b's record is deleted: 2 changes
+var clean    = edited.Rollback();        // O(1); map, edited, restored survive
+\end{lstlisting}
+
+\subsection{Why the enumeration is the point}
+
+The change index holds exactly $k$ records, so any operation that visits all of
+them has an information-theoretic $\Omega(k)$ output cost. An in-order walk of
+$D$ costs $\Theta(k + 1)$ --- the $+1$ is enumerator setup --- and is therefore
+output-optimal.\index{output-optimal} It invokes no key or value policy callback
+at all: the ordering work was done when the records were inserted.
+
+The comparison worth making is against the alternative the structure exists to
+replace: reconstructing the same change set from two state-only path-copied
+trees by pruning at reference-equal subtrees. That technique is genuinely good
+and is what a library like Rust's \code{im} offers, but its cost is the number
+of nodes the two operands do \emph{not} share, and a point edit necessarily
+copies its own search spine. Take a complete fixed-fanout tree with $N$ leaf key
+classes and change $k$ leaves spaced evenly through key order. The union of the
+copied root-to-leaf paths contains $\Theta(k)$ nodes above the point where the
+paths separate plus $\Theta(k \log(N/k + 1))$ nodes in the $k$ disjoint lower
+spines, so a differ whose only certificate of ``unchanged'' is node identity
+must inspect a $\Theta(k \log(N/k + 1))$ frontier. At $k = 1$ that is
+$\Theta(\log N)$ nodes walked to report one change; the delta map reports it in
+$\Theta(1)$.\index{adversary argument}
+
+The library is careful about what this does and does not claim. It is not a
+universal lower bound on change discovery. Canonical hashing, hash-consing,
+per-version logs, or any other maintained metadata changes the problem --- and
+the delta map is itself exactly such an auxiliary index. What it claims is the
+trade: the reconstruction work is moved forward into \code{SetItem} and
+\code{Remove}, where it costs one extra ordered-map edit --- and since $k \leq N$
+that edit's \bigoh{\log(k + 1)} is inside the state edit's \bigoh{\log N},
+changing the constants of a point update but not its asymptotic, and buying an
+output-optimal query in exchange. Liljenzin's confluent persistent maps, and the
+Blelloch--Reid-Miller and ``Just Join'' set-operation results, solve a strictly
+broader problem --- arbitrary operands, confluent combination --- and their
+$\Theta(m \log(n/m + 1))$ bound is in the smaller \emph{input} size, not in this
+structure's output size $k$. They do not contradict the $\Theta(k + 1)$ here,
+because the delta map is allowed to remember things while the edits happen.
+
+\subsection{The range-restricted overload is a seek, not a filter}
+
+\code{GetChanges(low, high)} yields the changes whose keys fall in an inclusive
+range, in the same ascending order. The important property is that it is a
+genuine boundary seek: the change index is itself an ordered map under the
+collection's key comparer, so restricting it is two boundary descents plus a
+bounded walk of the in-range sub-map. The bound is \bigoh{\log(k + 1)} for the
+seek --- performed on first enumeration, and invoking only key-order comparisons
+--- plus $\Theta(1)$ per change actually yielded. A window of four changes in an
+index of two thousand costs what four changes cost, not what two thousand cost.
+
+That distinction is not academic, and the library has the scar tissue to prove
+it. The C port's header promised the boundary-only comparison bound while its
+walk compared at every visited node --- $\Theta(\text{output} + \log k)$
+comparator invocations, observable through a counting comparer --- and the
+cross-language parity audit caught it. The walk was rewritten to propagate
+established bounds, so comparisons now occur only along the two boundary paths
+and the in-range interior is traversed comparison-free; the comparison-count
+test that guards it was tightened from 512 to 96. Haskell shipped a differently
+flawed version of the same idea: a real seek, but with a logarithmic per-element
+term rather than a constant one, because its shared sorted map exposed no
+key-range restriction at all. Adding one gave the delta map the baseline's shape
+and dropped a measured four-element window over a 2{,}048-record change index
+from 61 key comparisons to 22. Every port written afterwards states explicitly
+that its range enumeration is a seek through the substrate's own range
+restriction, and pins the claim with a mutation that reintroduces the filter and
+must fail.
+
+\begin{caveatbox}[There is no \code{Clear}, and that is deliberate]
+Clearing a checkpoint of $N$ keys creates $N$ net removal records. Maintaining
+$D$ eagerly through that costs $\Theta(N)$ time and space, and no lazy
+representation can both keep the explicit-record invariant and match an ordinary
+immutable map's root-dropping \bigoh{1} clear. Rather than ship a method whose
+cost violates the structure's own no-regression premise, the API omits it: start
+a fresh epoch from \code{Create} when no old-to-new patch is wanted, or remove
+entries explicitly when one is. Bulk set, union, merge, range mutation, and
+\code{Diff(otherVersion)} are absent for related reasons. \code{SetItems} exists,
+but it is documented as exactly the left fold of \code{SetItem} --- an allocation
+saving, not a different algorithm --- so every coalescing, cancellation, and
+representative rule holds verbatim through it.
+\end{caveatbox}
+
+A live version retains \bigoh{N + k} nodes: two state snapshots and a $k$-entry
+index, usually far less physically because of sharing. Retaining every successor
+adds \bigoh{\log N} nodes per changed point update --- the same asymptotic
+version-retention cost as an ordinary path-copied ordered map, with a roughly
+doubled constant for the second tree.
+
+\section{The run-delta vector}
+
+\begin{specimen}[Specimen --- \code{PersistentRunDeltaVector}]
+\index{PersistentRunDeltaVector@\texttt{PersistentRunDeltaVector}}%
+\spec{Purpose}{A fixed-length persistent vector with a checkpoint, indexing the exact \emph{maximal contiguous runs} of positions whose current values differ from that checkpoint --- and able to accept or revert one whole run.}
+\spec{Core}{Two equal-length immutable RRB vectors, current and checkpoint, plus a persistent ordered map holding one \code{start} $\to$ \code{endExclusive} record per maximal dirty run, plus a cached dirty-position count.}
+\spec{Operations}{\bigoh{\log n} indexed read of either view; \bigoh{\log n} point edit; \bigoh{\log(r+2)} dirty membership and run-by-rank selection over $r$ runs; \bigoh{1} fork, checkpoint, and rollback.}
+\spec{Enumeration}{$\Theta(r)$ run descriptors --- output-optimal --- against worst-case $\Theta(n)$ discovery from unindexed roots. Complete value enumeration is still \bigoh{n}.}
+\spec{Hunks}{Accepting or reverting one indexed run is \bigoh{\log n} through structural RRB splicing, \emph{independent of the run's length}, and invokes the value relation zero times.}
+\spec{Policies}{One retained value equality relation, stable for every derived version's lifetime.}
+\spec{Limits}{Length is fixed at construction. One checkpoint per version. No insert, delete, concat, split, rebase, or three-way merge.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+The delta map indexes changed keys. That is right when the changes are sparse
+and unrelated, and wrong when the state is a slab of positions --- a property
+grid, a page table, a simulation parameter vector, a build-state array --- where
+differences arrive in blocks and a consumer does not want them one at a time. A
+reviewer looking at edited configuration wants hunks, in the sense Git's
+interactive staging means it: contiguous regions to accept or reject as
+units.\index{dirty run}
+
+So the index here is not a set of dirty positions but the set of \term{maximal
+runs} of dirty positions. Maximality has two halves. Non-overlap is obvious.
+Non-adjacency is the load-bearing half: $\{[0,3), [3,7)\}$ and $\{[0,7)\}$
+describe the same dirty set, and only the second is the maximal encoding. The
+$\Theta(r)$ enumeration bound means nothing unless $r$ really is the number of
+maximal runs, so the invariant is stated as ordered, disjoint, \emph{and}
+nonadjacent, and the internal validator rejects a version whose records are
+overlapping, adjacent, or unordered.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7label,anchor=west] at (-3,9)
+    {\textbf{Before:} positions 2 and 4 differ --- \emph{two} records};
+  \foreach \i in {0,1,3,5,6,7}
+    {\node[d7cell] at ({8*\i},0) {\i};}
+  \foreach \i in {2,4}
+    {\node[d7cell,fill=d7sun,draw=d7copper,very thick] at ({8*\i},0) {\i};}
+  \draw[d7copper,thick] (13.7,-4.4) -- (18.3,-4.4);
+  \draw[d7copper,thick] (29.7,-4.4) -- (34.3,-4.4);
+  \node[d7label,anchor=north] at (16,-5.2) {\texttt{[2,3)}};
+  \node[d7label,anchor=north] at (32,-5.2) {\texttt{[4,5)}};
+
+  \node[d7label,anchor=west] at (-3,-19)
+    {\textbf{After} one effective write at position 3 --- \emph{one} record};
+  \foreach \i in {0,1,5,6,7}
+    {\node[d7cell] at ({8*\i},-28) {\i};}
+  \foreach \i in {2,3,4}
+    {\node[d7cell,fill=d7sun,draw=d7copper,very thick] at ({8*\i},-28) {\i};}
+  \draw[d7copper,thick] (13.7,-32.4) -- (34.3,-32.4);
+  \node[d7label,anchor=north] at (24,-33.2) {\texttt{[2,5)}};
+
+  \node[d7label,anchor=north west,align=left,text width=104mm] at (-3,-41)
+    {Filling the hole at position 3 does not add a record --- it \emph{removes}
+     one, by joining the run that ended at 3 with the run that began at 4. The
+     symmetric case is a cancellation at an interior position, which splits one
+     record into two. At most two neighboring records change per edit, which is
+     why the point bound stays logarithmic.};
+\end{tikzpicture}
+\caption{The maximal-run index. Run descriptors are stored as
+\texttt{start} $\to$ \texttt{endExclusive} in a persistent ordered map, so
+enumerating them is $\Theta(r)$ and locating the run containing a position is a
+floor query.}
+\label{fig:runindex}
+\end{figure}
+
+\subsection{The four transitions, and the local cases inside two of them}
+
+An edit at position $i$ compares the incoming value with the current value
+first, and then --- before allocating or publishing anything --- with the
+checkpoint value. Only four transitions exist, and only two of them touch the
+run index.
+
+\needspace{11\baselineskip}
+\begin{d7table}{0.31}
+\toprule
+\thead{Transition at position $i$} & \thead{What the run index does} \\
+\midrule
+relation-equal to the current value & Nothing. The receiver is returned. \\
+clean $\to$ dirty & Insert $i$, joining whatever it now touches: join a run
+ending at $i$ with one starting at $i+1$; extend the left run rightward; extend
+the right run leftward; or create the singleton \code{[i, i+1)}. \\
+dirty $\to$ dirty & Nothing. The record already covers $i$. \\
+dirty $\to$ clean & Remove $i$ from its unique containing run: delete a
+singleton record; trim its left edge; trim its right edge; or split it into two
+records. \\
+\bottomrule
+\end{d7table}
+
+\noindent
+At most two neighboring records change, so a point edit is one RRB path copy
+plus a constant number of logarithmic predecessor, successor, and update
+operations on the run map: \bigoh{\log n} time and fresh nodes. If removing the
+last dirty position empties the run index, the current root snaps back to the
+checkpoint root exactly as the delta map's does, and the validator enforces it
+--- a clean vector that has not been canonicalized is rejected.
+
+\subsection{What the run index buys}
+
+Two things, and they are different in kind.
+
+The first is discovery. Enumerating run descriptors is $\Theta(r)$, which is
+output-optimal because the answer has $r$ records. The baseline it improves on
+is worst-case $\Theta(n)$: from two unindexed roots, an exact set of run
+boundaries can require inspecting every position, because until a position is
+examined its two values can be equal or unequal without changing anything
+observed so far. The gap is unbounded --- one contiguous changed block gives
+$k = n$ dirty positions and $r = 1$ run, and the focused suite pins that with a
+clustered witness of 8{,}191 dirty positions represented by two descriptors.
+Against an explicit point-delta index the unconditional statement is about
+metadata rather than time: $\Theta(r)$ live records instead of $\Theta(k)$. A
+linear coalescing scan over point records costs $\Theta(k)$, and the library is
+candid that this is not a representation lower bound for every order-statistic
+point index, and that a balanced Discrete Interval Encoding Tree in Erwig's
+sense --- which is essentially what the run index is --- matches these bounds
+exactly. No new interval algorithm is claimed.\index{DIET}
+
+The second is the hunk operation, and it is the one that surprises. Accepting
+one run splices that range of the current root over the checkpoint root;
+reverting splices the checkpoint range back over the current root. Both are
+composed from four RRB splits and two concatenations, so both cost
+\bigoh{\log n} \emph{independently of the run's length} --- accepting a run of
+one position and a run of a million positions cost the same --- and both invoke
+the value relation zero times. The positions outside the interval keep both
+roots untouched. When the selected run is the only run, the operation folds into
+\code{Checkpoint} or \code{Rollback} and becomes a constant-time root exchange.
+
+\begin{lstlisting}[language={[Sharp]C}]
+var slab = PersistentRunDeltaVector<int>.CreateRange([0, 0, 0, 0, 0, 0, 0, 0]);
+
+var edited = slab.SetItem(2, 7).SetItem(4, 9).SetItem(3, 8);
+
+var dirty = edited.DirtyCount;      // 3
+var runs  = edited.DirtyRunCount;   // 1 -- writing 3 joined [2,3) and [4,5)
+var run   = edited.GetDirtyRunAt(0);// Start = 2, Length = 3
+
+var kept    = edited.AcceptDirtyRunAt(0);         // checkpoint takes 7, 8, 9
+var dropped = edited.RevertDirtyRunContaining(3); // current back to zeros
+var split   = edited.ResetItem(3);                // interior: one run becomes two
+
+// slab and edited remain valid and independently editable.
+\end{lstlisting}
+
+\begin{caveatbox}[Only the descriptors are run-sensitive]
+Enumerating, hashing, serializing, or applying all the \emph{changed values} is
+still $\Omega(k)$ for $k$ dirty positions, and the library says so rather than
+letting the $\Theta(r)$ headline imply otherwise. Nor is the vector globally
+optimal as a persistent array: Dietz's fully persistent arrays and Straka's
+worst-case refinement beat these \bigoh{\log n} point operations outright. They
+simply do not expose dirty-run semantics. The discovery result applies to the
+declared RRB comparator family and to nothing wider. Starting from one $n$-element
+version, $m$ retained effective point edits occupy \bigoh{n + m \log n}
+worst-case total structural space; that history bound is not collapsed to
+\bigoh{n}.
+\end{caveatbox}
+
+\section{The reference-identity invariant}
+
+Both structures canonicalize, and the vector's version of the rule is strict in
+a way that turns out to constrain the ports: a clean position must reuse its
+\emph{exact} checkpoint cell, not an equal one. The validator states it as such
+and fails a version in which a clean position's current and checkpoint entries
+are distinct objects.\index{reference identity}
+
+The rule earns its strictness by being load-bearing, and the cell is what makes
+it hold. The RRB substrate recognizes a leaf no-op with its \emph{own} default
+equality, while this collection decides dirtiness with a caller-supplied
+relation --- two different relations judging the same write. Wrapping each value
+in a private cell whose default equality \emph{is} reference identity reconciles
+them: a genuine edit installs a fresh cell, a cancellation installs the
+checkpoint's own cell, and the substrate can never quietly retain an
+equal-but-different object on the reasoning that its own comparer saw no change.
+Without that, a clean position could hold a value equal under one relation and
+distinct under the other, the two roots would drift apart physically while
+agreeing extensionally, and the canonicalization the run index depends on would
+be defeated.
+
+Stating the invariant is easy; making it \emph{testable} is where the languages
+diverge, because in several of them the natural identity operator on the payload
+types a test reaches for first is value equality. Python's \code{is} is true for
+equal small integers, booleans, and interned strings. TypeScript's \code{===} is
+value equality on numbers and interned strings. OCaml's \code{==} is value
+equality on immediates. In each of those workspaces the run-delta vector boxes
+every element in a private, identity-bearing cell so that the invariant has
+something to be about. In Python and TypeScript there was no substrate rule to
+defeat --- their leaf writers already short-circuit on identity rather than on
+equality --- so the boxing exists purely to make the invariant observable, and
+the ports say so. C\# uses the same device, a private sealed \code{Cell}
+class whose default equality is reference equality by construction. Rust
+replaces it with \code{Arc<T>} and \code{Arc::ptr\_eq}: the same reference
+identity with one fewer allocation layer. Haskell has the hardest problem, since
+pure code exposes no object identity at all, and solves it by giving each cell a
+globally unique token drawn from an atomic counter through the
+\code{unsafePerformIO}/\code{NOINLINE} device \code{Data.Unique} uses --- which
+makes the identity test available to the \emph{pure} validator, with
+\code{StableName} diagnostics confirming the same fact independently in the
+tests.
+
+\section{The relation that decides everything}
+
+Both structures retain a value equality relation, and it is not a convenience.
+It decides which writes are no-ops, and it decides when a delta cancels ---
+which is to say it decides the observable change set. Two versions built from
+identical operations under different relations are legitimately different
+values, which is why the relation is retained on the instance rather than taken
+as a static constraint.
+
+Its precondition is that it be a genuine equivalence relation: reflexive,
+symmetric, transitive, and stable for the lifetime of every version derived from
+it. Reflexivity is the one that gets violated in practice, and it fails in the
+most ordinary way imaginable.
+
+\begin{caveatbox}[A non-reflexive relation corrupts the accounting silently]
+IEEE floating point says \code{NaN != NaN}, so any relation that forwards to
+primitive floating-point equality is not reflexive. Rewriting a position with
+the identical \code{NaN} then fails the no-op test, the position is recorded as
+dirty against a checkpoint value it is bit-identical to, and the phantom run
+corrupts run counts, ranks, and the dirty count for every subsequent
+operation.\index{NaN}
+
+The reason this is worth a caveat box rather than a footnote is that
+\emph{no internal validation can detect it}. The index remains perfectly
+consistent with the relation it was given; the relation is simply not an
+equivalence relation. The library states that limitation outright rather than
+implying a validator that cannot exist.
+
+The ports therefore defend at the type level or at the policy level. Rust
+bounds its natural policy constructors on \code{Eq} rather than
+\code{PartialEq}, so \code{f64} --- which is not \code{Eq} --- fails to
+\emph{compile} against the natural policy instead of silently diverging, and
+canonical \code{EqualityPolicy::reflexive\_ieee} constructors supply the
+.NET-matching behavior for callers who do want floats.
+Python's \code{natural\_value\_equality} consults identity first and
+\code{reflexive\_ieee\_equality} collapses every \code{NaN} into one class.
+OCaml's default relation is \code{compare x y = 0} rather than \code{( = )},
+because on that toolchain \code{nan = nan} is false while \code{compare nan nan}
+is zero. Kotlin needs no escape hatch at all: its natural policy is generic, so
+it boxes and reaches \code{java.lang.Double.equals}, which compares raw bits and
+\emph{is} reflexive on \code{NaN} --- the residual difference from .NET being
+signed zero, which the boxed comparison separates and
+\code{EqualityComparer<double>.Default} does not.
+
+OCaml recovers a partial check the others do not attempt: its structural audit
+rejects a version whose relation is observably non-reflexive \emph{at a clean
+position}, where current and checkpoint are literally the same cell and the
+relation must therefore answer true. That catches the cause, even though the
+consequence at dirty positions stays invisible --- which is exactly the
+condition the Rust port documents as undetectable.
+\end{caveatbox}
+
+Failure atomicity follows the same discipline in both structures: every policy
+call happens before any successor is constructed, so a throwing relation or
+comparer publishes nothing and leaves the receiver and every retained branch
+intact. What cannot be undone is a side effect inside a callback, and the
+documentation says that plainly rather than implying transactionality it does
+not have.
+
+\section{Where the ports differ}
+
+The repository's cross-language parity work left these two structures unusually
+well characterized, including in the places where the ports are not equal.
+
+\begin{d7table}{0.30}
+\toprule
+\thead{Divergence} & \thead{Where, and why} \\
+\midrule
+Delta-map extremes &
+\bigoh{1} in C\#, C\texttt{++}, Haskell, OCaml, Python, and TypeScript, where the
+ordered substrate is a finger tree and \code{MinEntry}/\code{MaxEntry} are digit
+reads. $\Theta(\log N)$ in C, Kotlin, and Rust, whose ordered cores cache
+subtree sizes but no extremes, making an extreme a rank select like any other.
+Each port documents its own. \\
+Run-splice qualifier &
+C\#, Rust, Python, and OCaml state the point edit and the run splice worst case
+outright, their RRB and run-index substrates deferring nothing. TypeScript
+splits the claim: the splice is worst case, the run-index write amortized
+through its finger tree's concatenation. C\texttt{++} states every
+run-index-routed operation amortized, because that substrate may force a pending
+lazy spine on a read. \\
+Change-enumeration setup &
+C\#'s \code{GetChanges()} is a lazy iterator with $\Theta(1)$ setup; Rust's
+\code{get\_changes} materializes, so setup is $\Theta(k)$. Full consumption is
+$\Theta(k + 1)$ in both. \\
+\bottomrule
+\end{d7table}
+
+\noindent
+The run-splice row is a small monument to how that work proceeded. The reference
+implementations originally documented those bounds as amortized --- a true
+statement, but weaker than their eager code paths deliver. A freshly ported
+workspace stated the worst-case bound instead, and under a governing principle
+that says the stronger true statement wins, the C\# and Rust documentation was
+raised to match the port rather than the port lowered to match the
+reference.\index{complexity parity}
+
+
+% ---------------------------------------------------------------------------
+% Chapters: The Monotone-Action Heap; The Ancestral Connection Forest
+% Fragment for durable7-data-structures.tex -- \input at the right place.
+% ---------------------------------------------------------------------------
+
+\chapter{The Monotone-Action Heap}
+\label{ch:actions}
+
+\motto{Rewriting every priority should not cost you every entry.}
+
+\begin{specimen}[Specimen --- \code{PersistentMonotoneActionHeap}]
+\index{PersistentMonotoneActionHeap@\texttt{PersistentMonotoneActionHeap}}%
+\spec{Purpose}{Apply one order-preserving transformation to every priority currently in a heap, in constant time, without giving up meld, worst-case bounds, or persistence.}
+\spec{Core}{The bootstrapped skew-binomial representation of \code{BrodalOkasakiHeap} (Brodal and Okasaki, \textit{JFP} 1996), with one immutable \emph{pending action} on every tree node and forest spine cell.}
+\spec{Operations}{Insert, minimum, meld, and \code{TransformAll}: \bigoh{1} worst case. Delete-minimum: \bigoh{\log n} worst case. Enumeration and validation: $\Theta(n)$. Forking: \bigoh{1}.}
+\spec{Algebra}{Identity, identity test, associative \code{Compose(outer, inner)} denoting \code{outer(inner(p))}, and \code{Apply} --- each \bigoh{1} over fixed-size actions, every action monotone for the retained comparer.}
+\spec{Policies}{Trusted: no finite runtime check establishes associativity or monotonicity, so a policy that breaks its contract invalidates the semantics and the bounds together.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+A branchable scheduler holds a hundred thousand pending jobs in a persistent
+heap, and a policy change arrives: nothing may run before Tuesday. Every
+priority in the heap has to move up to that floor.
+
+The ordinary way to do that is to take the heap apart and put it back together.
+The Haskell \code{heaps} package's \code{Data.Heap} --- itself a persistent
+Brodal--Okasaki heap, with the same worst-case \bigoh{1} insert, minimum, and
+union and worst-case \bigoh{\log n} delete-minimum that this repository's
+\code{BrodalOkasakiHeap} delivers (Chapter~\ref{ch:priority}) --- offers
+\code{mapMonotonic} at \bigoh{n}, and that is an honest price for an arbitrary
+promised-monotone function. Emulating the same change through this library's
+own state-only heap costs the same: enumerate, transform, rebuild ---
+$\Theta(n)$.
+
+\code{PersistentMonotoneActionHeap<TElement, TPriority, TAction>} pays
+\bigoh{1} instead, worst case, allocating \bigoh{1} new structure --- and it does
+so without weakening any of the bounds it inherits. The trade that buys this is
+narrow and worth stating up front: the transformation may not be an arbitrary
+function. It must come from a fixed, closed family of actions that compose in
+constant time and preserve the priority order. Under that restriction, and only
+under it, transforming the whole heap becomes a single note written on the root.
+
+\begin{asidebox}[The scope of the claim]
+Recursively tagged heaps are, by construction, an equal-bound implementation of
+this idea; the proposal for this structure says so explicitly. What is claimed
+is the aggregate: a worst-case-optimal fully persistent meldable heap, a generic
+action policy that may be \emph{non}-invertible, constant-time whole-heap
+transformation with version-local temporal semantics, and exact priority
+representatives under comparer-equivalent clamp boundaries. Tarjan's
+\code{addtokeys} is the important ancestor here, and it is an invertible
+translation --- which, as the next pages show, is a materially easier problem.
+\end{asidebox}
+
+\section{The algebra, and the one law that carries the structure}
+
+The policy interface has four members and no others:
+
+\begin{itemize}
+\item an \term{identity} action;\index{action policy}
+\item \code{IsIdentity}, which recognizes it;
+\item \code{Compose(outer, inner)}, associative; and
+\item \code{Apply}, which runs an action on one priority.
+\end{itemize}
+
+\noindent
+The laws are the ones you would guess. Applying the identity returns the
+priority unchanged; applying a composite equals applying the inner action and
+then the outer one. Two further requirements are not laws about values but about
+cost, and they are just as binding. Every operation above must be \bigoh{1}, and
+every composed action must stay \emph{fixed size}. The second condition is the
+one that quietly kills naive designs: storing a chain of pending transformations
+instead of collapsing them would make \code{Minimum} linear in the number of
+retained transforms, and the advertised bound would evaporate without a single
+test failing.
+
+The law that actually holds the structure together, though, is monotonicity:
+
+\begin{contractbox}[The monotonicity requirement]
+For every action $a$ and all priorities $p$, $q$ ordered by the heap's retained
+comparer,
+\[ p \leq q \;\Longrightarrow\; \mathrm{Apply}(a, p) \leq \mathrm{Apply}(a, q). \]
+\end{contractbox}
+
+Everything depends on this. A tag attached to a node is a promise about that
+node \emph{and its entire subtree}: every priority underneath is logically the
+stored value with the pending action applied. The heap property says that each
+parent's priority is no greater than each child's. If the pending action can
+reverse a single one of those relations --- if some parent/child pair with
+$p \leq q$ becomes $a(p) > a(q)$ --- then attaching one tag has silently broken
+the heap, everywhere below that node at once, and nothing in the operation that
+attached it looked at those nodes to notice. A whole-heap transform is only
+sound because a monotone action preserves \emph{every} existing order relation
+simultaneously; that is precisely why \code{Minimum} may apply the root's tag and
+return the same root without re-examining anything, and why melding, linking,
+and splitting keep working on tagged components as if the tags were not there.
+
+Negation is the obvious excluded case, and it is excluded for exactly this
+reason. So is any permutation of the priority domain that reverses a pair.
+Neither is repairable by cleverness in the heap; both require a rebuild, and the
+structure does not pretend otherwise.
+
+\section{Composition has a direction}
+
+\begin{center}
+\fbox{\parbox{0.86\linewidth}{\centering\vspace{2pt}
+\code{Compose(outer, inner)} means: apply \emph{inner} first, \emph{outer}
+second.\vspace{2pt}}}
+\end{center}
+
+\noindent
+Equivalently, \code{Compose(outer, inner)} denotes \code{outer(inner(p))}. At
+every site where a tag is pushed down or merged, the \emph{newer} action is the
+outer one:\index{composition direction} a node already carrying a pending $b$
+that receives a fresh $a$ ends up carrying \code{Compose(a, b)}, because $a$
+arrived later and therefore runs last.
+
+This deserves the box because getting it backwards is a bug that hides. Swap the
+two arguments and the composite is still a member of the action family, and it
+is still monotone --- so the heap remains perfectly well formed. Ranks are
+untouched. Parents still compare no greater than children. The structural
+validator, which checks rank encodings, logical heap order through every pending
+action, and the count, passes without complaint. Only the \emph{values} are
+wrong, and only for entries that happened to accumulate two or more
+non-commuting actions. The C\texttt{++} port review treats this as a first-class
+hazard and confirms the composition-direction case by mutation: the test fails
+against a deliberately reversed kernel, which is the only evidence worth having
+for a property this quiet. The same book-wide convention appears in the
+range-update sequence's tag monoid (Chapter~\ref{ch:range}); the two structures
+state the direction in the same words for the same reason.
+
+\section{Where the tags live}
+
+A version retains a root tree, a count, the comparer, and the policy. Two kinds
+of cell carry pending actions, and both are load-bearing:
+
+\begin{d7table}{0.26}
+\toprule
+\thead{Cell} & \thead{Tag scope} \\
+\midrule
+Tree node & The node and every descendant. A tree can be relinked as a unit, so
+its action must travel with it. \\
+Forest spine cell & Uniformly, every tree in that spine \emph{suffix} --- which
+is what lets an action be pushed down one cell at a time without walking the
+rest of the suffix. \\
+\bottomrule
+\end{d7table}
+
+\noindent
+Three logical views do all the work. \code{TagTree} and \code{TagForest}
+compose a newer action onto a node or spine cell. \code{Expose} normalizes one
+tree: it applies the node's pending action to that node's own priority and moves
+the same action onto the child forest --- one new spine cell, not a traversal
+--- leaving an identity-tagged node behind. Every structural consumer reaches
+children through tag-composing accessors rather than through raw fields, so a
+detached tail can never lose the action that governed it.
+
+Two consequences follow. First, tags do not change ranks or forest shape, so the
+skew-binomial rank encoding is preserved by tagging exactly as it stands; the
+insert path exploits this by reading raw spine ranks to decide whether a link is
+needed \emph{before} materializing any tagged tail node. Second, tags are pushed
+down only at places where the underlying Brodal--Okasaki algorithm already
+exposes a component --- which is why the ordinary bounds are not merely
+preserved in spirit but unchanged: insert, minimum, and meld stay \bigoh{1}
+worst case, and delete-minimum stays \bigoh{\log n} worst case, each counting the
+\bigoh{1} policy calls and comparisons it performs.
+
+\section{The clamp family, and why it is the interesting case}
+
+\code{OrderClampPolicy<T>} ships one closed family:\index{OrderClamp@\texttt{OrderClamp}}
+\code{AtLeast} (a floor), \code{AtMost} (a cap), \code{Between} (a validated
+two-sided clamp, which rejects a lower bound comparing greater than the upper),
+and \code{Constant}. A missing bound denotes an infinity. The identity is the
+clamp with neither bound.
+
+Clamp is the interesting family precisely because, unlike the familiar additive
+heap offset, it is \emph{not invertible}. After flooring a heap's priorities at
+zero, there is in general no raw priority you could assign to a later insertion
+such that one flat normalization recovers the value the caller asked for. The
+proposal's witness is small enough to check by hand. Take a heap holding
+$-10$ and $100$, clamp it to $[0, 10]$, and then insert $50$. Draining must
+yield $0$, $10$, $50$: the new entry never existed when the clamp happened.
+Applying the old root's tag to the newcomer would produce $0$, $10$, $10$. And
+in a second retained branch off the same clamped heap, inserting $-20$ must
+yield $-20$, $0$, $10$ --- so there is no single flat clamp that could stand in
+for the pair of histories. Recursive fixed-size tags are what close the
+representation under the full operation set; a flat wrapper simply does not
+implement this ADT.
+
+Composition of two clamps must still be one clamp, in constant time. The rules
+are worth reading closely, because three of the four are asymmetric:
+
+\begin{d7table}{0.34}
+\toprule
+\thead{Case} & \thead{Result} \\
+\midrule
+Either side is the identity & The other side, unchanged. \\
+The \emph{outer} is a constant & The outer constant. Nothing the inner action
+did can survive a later constant function. \\
+The \emph{inner} is a constant & A constant carrying the outer action applied to
+the inner's value. \\
+Disjoint bounds & A constant carrying the \emph{outer} boundary. Cap everything
+at 5 and then floor at 10, and every output is 10. \\
+Overlapping bounds & The intersection $[\max(iL, oL), \min(iU, oU)]$, keeping the
+\emph{inner} representative when two boundary values compare equal. \\
+\bottomrule
+\end{d7table}
+
+\noindent
+Two of those rows encode a distinction that is easy to miss. Composition
+produces an explicit \code{Constant} rather than the inclusive interval
+$[k, k]$, and it keeps the older --- inner --- representative on tied
+boundaries. Both choices exist for the same reason: a comparer may treat
+distinct priority \emph{values} as equal. An inclusive $[k, k]$ clamp passes
+through an input that compares equal to $k$, preserving that input's own
+representative, whereas the constant function must return the exact $k$ the
+caller supplied. So the family preserves exact sequential results, not merely
+comparison equivalence --- which is a stronger promise than a heap has any
+obligation to make, and is the kind of promise that only survives if someone
+writes it down.
+
+Because monotonicity is a property \emph{relative to a comparer},
+\code{OrderClampPolicy} implements a second interface that names the exact
+comparer object for which it is monotone, and heap creation adopts that comparer
+and rejects any other. Melding likewise requires comparer and action-policy
+object identity. These are not defensive gestures; a policy monotone for one
+order is generally not monotone for another, and silently mixing the two would
+reintroduce the failure that monotonicity exists to prevent.
+
+\section{Temporal semantics: expose before you attach}
+
+\code{TransformAll} transforms every priority \emph{present in this version}.
+Entries inserted later are not retroactively transformed, and neither are
+entries arriving through a later meld. That sentence is the whole reason the
+structure is usable as a scheduling primitive: a floor imposed on Monday's
+backlog must not silently apply to a job filed on Wednesday under the current
+external priority scale.
+
+The mechanism is one ordering rule, applied everywhere components with different
+histories meet. \code{Insert} compares an untagged singleton against the
+\emph{logical} root. If the singleton wins, it becomes a fresh identity-tagged
+global root and the old tagged root becomes its child, carrying its own action
+down with it. If the old root wins, it is \emph{exposed first} --- its pending
+action pushed onto its own children --- and only then is the new singleton
+skew-inserted into the resulting child forest, through an identity-tagged spine
+cell (Figure~\ref{fig:actiontemporal}). \code{Meld}, \code{Link}, and
+\code{SkewLink} follow the same rule: compare logical roots, expose only the
+winner, attach the loser through an identity cell. Delete-minimum exposes the
+global root, selects the least logical tree in its child forest, and exposes
+that tree before splitting its fused children.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  % --- before ---
+  \node[d7label] at (-40,27) {\textbf{before} \code{Insert(x)}};
+  \node[d7node,align=center] (r0) at (-40,17)
+    {root\\[-1pt]{\scriptsize priority $p$, pending $a$}};
+  \node[d7node] (c01) at (-52,-2) {$c_1$};
+  \node[d7node] (c02) at (-30,-2) {$c_2$};
+  \draw[d7edge] (r0) -- (c01);
+  \draw[d7edge] (r0) -- (c02);
+  \draw[d7rule,dashed] (-60,-9) rectangle (-22,4);
+  \node[d7label] at (-41,-13) {logically $a(\cdot)$ throughout};
+
+  \node[d7label] at (-8,8) {\Large$\Rightarrow$};
+
+  % --- after ---
+  \node[d7label] at (30,27) {\textbf{after}, when the root wins};
+  \node[d7node,align=center] (r1) at (30,17)
+    {root\\[-1pt]{\scriptsize priority $a(p)$, pending identity}};
+  \node[d7node] (c11) at (10,-2) {$c_1$};
+  \node[d7node] (c12) at (30,-2) {$c_2$};
+  \node[d7newnode] (x) at (52,-2) {$x$};
+  \draw[d7edge] (r1) -- (c11);
+  \draw[d7edge] (r1) -- (c12);
+  \draw[d7newedge] (r1) -- (x);
+  \draw[d7rule,dashed] (2,-9) rectangle (40,4);
+  \node[d7label] at (21,-13) {suffix cell now carries $a$};
+  \node[d7label,text=d7copper] at (52,-13) {identity};
+
+  \node[d7label,anchor=north west,align=left,text width=116mm] at (-60,-20)
+    {The old root is \emph{exposed} --- its pending $a$ applied to its own
+     priority and moved onto its child suffix in one spine cell --- \emph{before}
+     the new entry is attached. The newcomer therefore enters through an
+     identity-tagged cell and inherits nothing. Exposure touches one node and one
+     spine cell, so insertion stays \bigoh{1} worst case.};
+\end{tikzpicture}
+\caption{Expose-before-attach. The rule is what makes ``every priority
+\emph{currently} in this version'' a meaningful phrase rather than an
+approximation.}
+\label{fig:actiontemporal}
+\end{figure}
+
+Melding two independently transformed heaps is the case that shows the design
+earning its keep. Continue the earlier example: a second heap holds $50$ and
+$200$ and is independently clamped to $[60, 70]$. Melding it with the
+$[0, 10]$-clamped heap must drain $0$, $10$, $60$, $70$. Losing the second
+heap's tag would expose $50$ and $200$; leaking the first heap's tag into the
+second would turn its entries into tens. Each operand keeps its own action
+history until an ordinary structural operation exposes a component --- and the
+meld itself remains \bigoh{1} worst case, with both operands still valid and
+independently extendable afterwards.
+
+\section{Where the guarantees stop}
+
+\begin{caveatbox}[The honest limits]
+Enumeration and \code{ValidateStructure} apply pending actions as they walk, so
+both are $\Theta(n)$; the \bigoh{1} claim is about transformation, not about
+reading everything.
+
+Persistence does not make total history free. A single current version occupies
+\bigoh{n}; starting from $n_0$ entries, $u$ retained updates use
+\bigoh{n_0 + u \log N} worst-case total structural space for the maximum size
+$N$ encountered --- a safe upper bound that is smaller for histories dominated
+by constant-allocation updates.
+
+The policy is trusted, and a throwing comparer or policy call publishes no
+successor, leaving every existing version untouched --- but side effects the
+callback performed cannot be rolled back.
+
+There are no element handles, no decrease-key, no deletion by handle, and no
+arbitrary heap mapping. Equal-priority tie order is unspecified. Payload
+identity is preserved when priorities collapse, which is why payload and
+priority are separate fields rather than one comparable value.
+\end{caveatbox}
+
+Two port notes are worth recording. Haskell takes the ordering and the action
+family from a retained policy \emph{value} rather than a class constraint, which
+keeps a fully drained heap usable --- but a record of functions has no identity
+to compare, so unlike the managed ports it cannot reject operands built with
+semantically different policies. Its documentation says so plainly, including the
+consequence that melding two non-empty heaps adopts the left operand's policy
+while an empty operand returns the other heap verbatim, so the surviving policy
+depends on emptiness. And in OCaml this heap held, for a while, the only genuine
+bootstrapped skew-binomial kernel in the workspace: when the complexity-parity
+campaign found that workspace's plain \code{Brodal\_okasaki\_heap} storing its
+elements in a list, the repair was to rebuild it as the untagged specialization
+of the kernel its own action heap already contained.
+
+\chapter{The Ancestral Connection Forest}
+\label{ch:connectivity}
+
+\motto{Not \emph{whether} two vertices are connected, but \emph{when} --- and
+answered without consulting the history.}
+
+\begin{specimen}[Specimen --- \code{PersistentAncestralConnectionForest}]
+\index{PersistentAncestralConnectionForest@\texttt{PersistentAncestralConnectionForest}}%
+\spec{Purpose}{Persistent, branching, insertion-only connectivity over a fixed integer vertex universe, plus one query ordinary union-find cannot answer: at which ancestor version did two vertices first become connected?}
+\spec{Core}{A union-by-size parent forest stored sparsely in a CHAMP map, with every union edge labelled by the version that created it.}
+\spec{Operations}{\code{Find}, \code{Connected}, \code{GetComponentSize}, \code{Link}, and \code{FirstConnected}: \bigoh{w \log n} worst case, for bounded CHAMP path cost $w$. \code{Create} and \code{ComponentCount}: \bigoh{1}. Forking: \bigoh{1}.}
+\spec{Complexity}{\code{FirstConnected} costs exactly one connectivity query and is independent of history depth. A black-box persistent disjoint-set forest needs \bigoh{w \log n \log(K+2)} for $K$ successful unions on the queried lineage.}
+\spec{Limits}{No deletion, no confluent merge of sibling versions, no retroactive update, no path compression, and no semantic guarantee on representative choice.}
+\spec{Ports}{All nine.}
+\end{specimen}
+
+\noindent
+Union-find answers ``are $x$ and $y$ connected?'' A persistent union-find answers
+it per version, which is already useful: retain a version, fork it, ask each
+branch separately. But there is a question just past that boundary which the
+persistent version still cannot answer without brute force. Given a version $v$
+and two vertices, \emph{which ancestor version of $v$ first put them in the same
+component?}
+
+The brute-force answer is a search. Connectivity along a lineage is monotone ---
+once connected, always connected, since edges are only added --- so the versions
+on the root-to-$v$ path split into a disconnected prefix and a connected suffix,
+and binary search finds the boundary. The strongest form of that comparator
+keeps an append-only index of only the successful-union versions and probes
+$\log(K + 2)$ of them, where $K$ is the number of successful unions on the
+lineage. Since $K$ can be $n - 1$, that is a full logarithmic factor above the
+cost of a single connectivity query --- \bigoh{\log^2 n} against \bigoh{\log n}
+in the CHAMP specialization, once the bounded trie factor is folded in.
+
+\code{PersistentAncestralConnectionForest} answers the question at the price of
+one connectivity query, and --- this is the part worth dwelling on --- it never
+looks at the version history at all.
+
+\section{The mechanism: an edge remembers its own birthday}
+
+Each successful \code{Link} does one thing beyond ordinary union by size: it
+labels the single new root-parent edge with the child version that created it.
+Nothing else is recorded. There is no per-version snapshot, no event log, no
+index over the lineage.
+
+The query then works entirely inside the queried version's own parent forest.
+Walk from each vertex to its root, collecting the edge labels on the way. If the
+two roots differ, the vertices are disconnected and the answer is nothing. If
+they agree, delete the shared rootward suffix of the two paths --- what remains
+is exactly the two paths strictly below their forest lowest common ancestor ---
+and return the \emph{latest} label among those remaining edges
+(Figure~\ref{fig:firstconnected}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1mm,y=1mm]
+  \node[d7ghost] (root) at (0,34) {root of the component};
+  \node[d7node]  (l)    at (0,18) {$\ell$ --- forest LCA of $x$ and $y$};
+  \node[d7node]  (a)    at (-30,4) {$a$};
+  \node[d7node]  (b)    at (30,4) {$b$};
+  \node[d7leafnode] (x) at (-42,-12) {$x$};
+  \node[d7leafnode] (y) at (30,-12) {$y$};
+
+  \draw[d7edge] (x) -- node[d7label,left=1pt] {$v_2$} (a);
+  \draw[d7edge] (a) -- node[d7label,left=1pt] {$v_5$} (l);
+  \draw[d7newedge] (y) -- node[d7label,right=1pt,text=d7copper] {$v_9$} (b);
+  \draw[d7edge] (b) -- node[d7label,right=1pt] {$v_3$} (l);
+  \draw[d7edge,draw=d7rule] (l) -- node[d7label,right=1pt] {$v_{12}$} (root);
+
+  \node[d7label,anchor=north west,align=left,text width=112mm] at (-56,-20)
+    {The answer is $v_9$: the latest label \emph{strictly below} $\ell$. Every
+     edge below $\ell$ must exist before the forest path from $x$ to $y$ exists,
+     so the pair cannot be connected any earlier; and at $v_9$ the last missing
+     edge closes the path, so it is connected then. The edge $v_{12}$ above
+     $\ell$ is deliberately excluded --- it attached an already-joined component
+     to something else and must not overwrite the pair's own history.};
+\end{tikzpicture}
+\caption{\code{FirstConnected}. Two parent-path walks and a maximum; no version
+is ever visited.}
+\label{fig:firstconnected}
+\end{figure}
+
+Why is that the right answer, and why does it need no history scan? The argument
+rests on a small fact about how union edges accumulate. When a root becomes a
+child, both endpoints were roots an instant earlier, so every edge already below
+the losing root was created strictly earlier --- and any edge later placed above
+the winner is created strictly later. Labels therefore \emph{strictly increase}
+toward the root along any path in any version's forest. Given that, the edges
+below the pair's lowest common ancestor are exactly the edges whose existence
+the connection required, and the last of them to appear is the moment the
+connection happened. Everything above the ancestor is later history that both
+vertices now share --- it moved them together, never joined them.
+
+So the version history is not consulted because the answer is not stored in the
+history. It is stored, distributed, one label at a time, in the shape of the
+forest the queried version is already holding. Reading it costs the same two
+root walks that any connectivity query costs: \bigoh{w \log n} worst case, with
+\bigoh{\log n} transient path space, and --- worth stating twice --- independent
+of how deep the history is.
+
+\begin{caveatbox}[Why a query must not shorten the path]
+Path compression, the reflex of every ephemeral union-find implementation, is
+excluded here.\index{path compression} There are two reasons, and the second is
+the load-bearing one.
+
+The mechanical reason is that compression is a \emph{write performed by a read}.
+In a structure whose queries must not disturb versions other readers hold, a
+find cannot rewrite shared parent cells; it could only publish a new version,
+which is not what a query is.
+
+The semantic reason is that compression destroys the very boundary
+\code{FirstConnected} reads. Union $a$ with $b$ at $t_1$, $c$ with $d$ at $t_2$,
+join the two components at $t_3$, then compress $a$ and $b$ straight to the
+final root. The correct answer for the pair $(a, b)$ is still $t_1$; but if the
+compressed edges carry the maximum label they skipped, both paths now report
+$t_3$, and the original lowest common ancestor --- the whole basis of the answer
+--- has vanished. Richer summaries could preserve selected history queries, but
+they are a different design and would owe a new proof.
+
+The price of the exclusion is stated rather than hidden: bounds here are
+worst-case logarithmic in component size, not the inverse-Ackermann amortized
+bound an ephemeral union-find enjoys.
+\end{caveatbox}
+
+\section{Union by size, and the ceiling it alone guarantees}
+
+With compression gone, the entire height argument rests on union by size. The
+larger component's root wins; on a tie, the first endpoint's root stays the
+representative, which makes results deterministic without touching the proof.
+Every time a vertex's distance to its root grows by one, the component
+containing it has at least doubled, and no component exceeds $n$ --- so every
+parent path in every version has at most $\lfloor \log_2 n \rfloor$ edges. The
+structural validator enforces exactly that number as a hard ceiling rather than
+a comfortable approximation.
+
+Persistence does not weaken the argument, because it applies independently to
+the one forest each queried version selects. Nor can a sibling branch's update
+contaminate a query: path copying gives siblings different roots at their
+changed paths and shared immutable nodes everywhere else, so every cell and
+every label a query observes belongs to the queried version or one of its
+ancestors. Labels are compared only within a lineage, and a version's depth is
+meaningful only against its own ancestors --- a sibling allocated later is not a
+later state of this branch.
+
+\section{What ``branching'' means here}
+
+Every \code{Link} produces a distinct child version. That includes a redundant
+one: linking two vertices already in the same component still yields a new
+version token, which shares the complete connectivity index unchanged and adds
+\bigoh{1} space. The parent is untouched, remains valid, and can be extended
+again in a different direction. That is the entire content of the word
+``branching'': the version graph is a tree, not a line, and old versions are not
+merely readable but independently queryable and independently extendable.
+
+Version identity is reference identity in the reference port, so two sibling
+versions at equal depth are different versions even though their depths match.
+Rust reproduces this with pointer identity behind a shared handle. Haskell
+diverges deliberately and documents it: a version there is an ordinary immutable
+value whose identity is structural, recording its link endpoints so that equal-depth
+siblings stay distinct --- with the visible consequence, asserted in its test
+suite rather than hidden, that two versions built by genuinely identical
+operations from the same parent are one value.
+
+The sparse representation is what keeps all this cheap. An absent cell means
+``singleton root'', so a million-vertex forest allocates nothing per vertex and
+\code{Create} is \bigoh{1} for any universe size. A stored root is therefore
+always non-singleton, and it caches its component's size --- which is why
+\code{GetComponentSize} is one root walk plus a cached read, at the same cost as
+\code{Find}. A successful \code{Link} allocates \bigoh{w} new CHAMP nodes; a
+redundant one allocates only its version wrapper and token.
+
+\section{The path factor, and a guarantee that was strengthened}
+
+\bigoh{w \log n} has two factors, and the second one has a story.
+
+The CHAMP path cost $w$ is bounded by the number of trie levels a hash can
+address --- at most seven for a 32-bit hash (Chapter~\ref{ch:champ}). For a
+general CHAMP with arbitrary user keys, that per-level cost is only
+\emph{expected} constant, because distinct keys can share a hash by pigeonhole
+and a collision bucket must then be scanned. Here the keys are vertices from a
+fixed integer universe, and distinct integers can be given distinct hashes ---
+so the bound is unconditional, and the whole operation cost is worst case in
+both factors.
+
+Seven of the nine ports had that property from the start. Two --- Rust and
+Haskell --- did not: each had reached for a general-purpose hasher whose output
+was truncated, so distinct vertices could in principle collide and the honest
+statement was ``expected''. The complexity-parity campaign of August 2026 treated
+that as a violation rather than a documentation matter, and both were fixed by
+pinning an injective 32-bit vertex hash --- MurmurHash3's \code{fmix32}
+bijection, every step invertible modulo $2^{32}$ --- so that no collision bucket
+can ever hold two distinct vertices. Haskell additionally caps its universe at
+$2^{31} - 1$, the universe its siblings already had, because no 32-bit hash is
+injective over a larger domain; \code{create} now rejects one, and the cap is
+load-bearing rather than cosmetic. Both ports carry an inverse round-trip test
+exhibiting the bijection.
+
+The episode is a small, clean example of the campaign's governing rule at work.
+The easy resolution --- write ``expected'' in two ports' documentation and move
+on --- was available and would have been perfectly truthful. It was rejected
+because a probabilistic guarantee and a worst-case guarantee are different
+promises, and the library's claim is that the same structure delivers the same
+bound in every language. Strengthening the code was cheaper than explaining the
+divergence forever.
+
+\section{Where the guarantees stop}
+
+\begin{caveatbox}[Deliberate non-goals]
+Edges can be added, never removed. After deletion, connectivity is no longer
+monotone along a lineage and the whole first-connected question would need
+redefining.
+
+There is no confluent merge of sibling versions, no retroactive update of an
+existing version, and no reconciliation across branches. \code{FirstConnected} is
+defined only relative to one version's ancestor chain; it never returns a version
+from another branch.
+
+The structure returns the first connectivity \emph{event}, not a shortest path,
+an original edge witness, bridge information, or an explanation. Representatives
+returned by \code{Find} are implementation artifacts offered for interoperability;
+the same component is not promised the same representative in sibling versions.
+
+Version tokens retain their parent chains, so a deep history stays reachable from
+any live version at \bigoh{\text{depth}} token space --- a cost per \code{Link},
+not per successful union.
+
+Finally, the comparison this structure wins is the \emph{online, branching} one.
+A sealed linear history can be preprocessed into a component tree with \bigoh{1}
+lowest-common-ancestor queries, and no superiority is claimed in that model.
+\end{caveatbox}
+
+
+% ===========================================================================
+%  PART VI -- AUTHENTICATED
 % ===========================================================================
 \part{Authenticated Collections}
 \label{part:authenticated}
@@ -3362,9 +5851,11 @@ without ever reshaping shared state.
 \label{app:complexity}
 
 \noindent
-Bounds are for the mature reference ports unless noted. Where a port ships a
-checkpoint with a weaker asymptotic claim, its own API notes are authoritative
---- see the checkpoint caveats in the relevant chapter. Throughout, $n$ is the
+Bounds hold in all nine ports unless a row says otherwise. That is a stronger
+statement than this appendix could make before August 2026, when five ports still
+ran balanced trees under finger-tree names; Chapter~\ref{ch:laziness} records how
+that was closed. Where a row does still differ it names the ports, and the
+workspace's own API notes remain authoritative. Throughout, $n$ is the
 receiver's size, $m$ the argument's, $c$ a collision-bucket or chunk count, and
 $d$ a distance from the nearer end.
 
@@ -3451,6 +5942,72 @@ lineage \\
 Cursor (checkpoint ports) & create, navigate, seek, snapshot & \bigoh{1} \\
  & peek, point edit, measure, search & \bigoh{\log n} $+$ chunk work \\
  & range insert of $m$ & \bigoh{m + \log n} \\
+% Splice into \chapter{Complexity at a Glance}'s d7tablethree, after the last
+% row of the "Lifecycle and navigation" group and before \bottomrule. The
+% leading \midrule opens the new group exactly as every other group opens.
+% New variables are introduced inline, in the Bound column, at first use:
+% M published arena nodes, s machine states, k changed entries, r dirty runs.
+
+\midrule
+\multicolumn{3}{@{}l}{\textit{\color{d7slate}Research-derived collections}}\\
+Incremental ancestor arena & leaf add & \bigoh{1} amortized, over $M$ the nodes
+the arena has ever published; a block-boundary call pays $\Theta(\sqrt{M})$ for
+the next odd block \\
+ & leaf add, Haskell & \bigoh{1} worst case --- that port has no arena; a node
+is its own handle \\
+ & ancestor at depth & \bigoh{\log M} worst case, over Myers jump links \\
+ & parent, depth, value & \bigoh{1} \\
+\code{AncestralSliceQueue} & \code{AddLast} & one leaf add \\
+ & \code{Count}, \code{Last}, \code{RemoveFirst}, \code{RemoveLast},
+\code{Drop} & \bigoh{1}, no arena call \\
+ & \code{First}, index, \code{Take}, \code{Slice}, nontrivial \code{SplitAt} &
+one ancestor query; \bigoh{\log M} on the shipped backend \\
+ & enumerate $n$ visible values & $\Theta(n)$ time and $\Theta(n)$ transient
+slots \\
+\code{BilateralAncestralDeque} & \code{AddFirst} / \code{AddLast} & one leaf add
+\\
+ & endpoint read, \code{Count}, \code{Reverse}, \code{Clear} & \bigoh{1}, no
+arena call \\
+ & end removal & \bigoh{1} on its own nonempty arm; one query when it crosses
+the centre \\
+ & index; slice, split & at most one query; at most two \\
+\code{ContextualRankSequence} & final state, total event count & \bigoh{1}, the
+cached root summary \\
+ & prefix evaluate, event rank, event select & \bigoh{s \log n} for a machine of
+$s$ states \\
+ & point edit, insert, remove, split, slice & \bigoh{s \log n} \\
+ & index & \bigoh{\log n} where the descent reads cached sizes and composes no
+summary; \bigoh{s \log n} in C\# and C\texttt{++} \\
+ & \code{Prepend} / \code{Append} & \bigoh{s} amortized; \bigoh{s \log n} worst
+case per call \\
+ & concat & \bigoh{s \log \min(n,m)} amortized \\
+ & summary space & \bigoh{s n}, not \bigoh{n} \\
+\code{PersistentDeltaMap} & lookup, rank, neighbour, effective point edit &
+\bigoh{\log n} over the $n$ key classes of checkpoint and current \\
+ & least, greatest current entry & \bigoh{1} digit read \\
+ & \code{Checkpoint}, \code{Rollback}, fork & \bigoh{1}, root exchange \\
+ & \code{TryGetChange} & \bigoh{\log(k+1)} for $k$ changed key classes \\
+ & consume the change stream & $\Theta(k+1)$, output-optimal and sorted \\
+\code{PersistentRun\allowbreak DeltaVector} & read, point edit & \bigoh{\log n}
+worst case,
+not amortized \\
+ & checkpoint, rollback, fork & \bigoh{1} \\
+ & dirty membership, run by rank & \bigoh{\log(r+2)} worst case, over $r$
+maximal dirty runs \\
+ & run descriptors & $\Theta(r)$; state-only roots need $\Theta(n)$ \\
+ & accept / revert one run & \bigoh{\log n}, independent of the run's length \\
+\code{PersistentMonotone\allowbreak ActionHeap} & minimum, insert, meld &
+\bigoh{1} \textbf{worst case} \\
+ & transform every current priority & \bigoh{1} worst case, \bigoh{1} new
+structure \\
+ & delete-minimum & \bigoh{\log n} worst case \\
+ & enumerate, validate & $\Theta(n)$ \\
+\code{PersistentAncestral\allowbreak ConnectionForest} & create, component
+count, fork & \bigoh{1}; absent cells denote singletons \\
+ & \code{Find}, \code{Connected}, \code{Link} & \bigoh{\log n} over $n$
+vertices, the CHAMP factor unconditional rather than expected \\
+ & \code{FirstConnected} & \bigoh{\log n} --- one connectivity query, without
+the extra logarithmic factor a search over the version lineage would pay \\
 \bottomrule
 \end{d7tablethree}
 
@@ -3570,6 +6127,91 @@ Derived compositions &
 \code{PersistentIndexedMap}, \code{PersistentChunkedBitSet} --- with
 \code{snake\_case} in C\texttt{++}/OCaml/Python, \code{d7\_}/\code{ft\_} prefixes
 in C, and bare names in Haskell. \\
+% Splice into \chapter{The Same Structure in Nine Languages}'s d7table, after
+% the "Derived compositions" row and before \bottomrule.
+
+Incremental ancestor arena &
+\code{MyersIncrementalAncestorArena<T>} behind
+\code{IIncrementalAncestorArena<T>} (C\#); the same class behind
+\code{IncrementalAncestorArena<T>} (Kotlin, TypeScript), and
+\code{MyersIncrementalAncestorArena} behind an
+\code{IncrementalAncestorArena} protocol in
+\code{durable7.finger\_tree.incremental\_ancestor} (Python);
+\code{MyersAncestorArena<T>} behind the \code{IncrementalAncestorArena<T>} trait
+(Rust); \code{myers\_incremental\_ancestor\_arena<T>} (C\texttt{++});
+\code{ft\_incremental\_ancestor\_arena}, created by
+\code{ft\_incremental\_ancestor\_myers\_arena\_create} (C);
+\code{Incremental\_ancestor} (OCaml);
+\code{Durable7.FingerTree.IncrementalAncestor} (Haskell) --- which ships no
+arena at all: a \code{Node a} is its own handle. \\
+Ancestral slice queue &
+\code{AncestralSliceQueue<T>} (C\#, Kotlin, TypeScript, Rust), and
+\code{AncestralSliceQueue} in
+\code{durable7.finger\_tree.ancestral\_slice\_queue} (Python);
+\code{ancestral\_slice\_queue<T, Arena>} (C\texttt{++});
+\code{AncestralSliceQueue a} (Haskell);
+\code{ft\_ancestral\_slice\_queue} (C);
+\code{Durable7.Finger\_tree.Ancestral\_slice\_queue} (OCaml). \\
+Bilateral ancestral deque &
+\code{BilateralAncestralDeque<T>} (C\#, Kotlin, TypeScript, Rust), and
+\code{BilateralAncestralDeque} in
+\code{durable7.finger\_tree.bilateral\_ancestral\_deque} (Python);
+\code{bilateral\_ancestral\_deque<T, Arena>} (C\texttt{++});
+\code{BilateralAncestralDeque a} (Haskell);
+\code{ft\_bilateral\_deque} --- the one spelling shortened away from its own
+header name (C);
+\code{Durable7.Finger\_tree.Bilateral\_ancestral\_deque} (OCaml). \\
+Contextual rank sequence &
+\code{ContextualRankSequence<TElement, TMachine>} (C\#);
+\code{ContextualRankSequence<T, M>} (Rust);
+\code{ContextualRankSequence<T>} (Kotlin, TypeScript), and
+\code{ContextualRankSequence} in
+\code{durable7.finger\_tree.contextual\_rank\_sequence} (Python);
+\code{contextual\_rank\_sequence<T, Machine>} (C\texttt{++});
+\code{ContextualRankSequence element} (Haskell);
+\code{ft\_contextual\_rank\_sequence}, with its machine carried by an
+\code{ft\_crs\_policy} handle (C);
+\code{Durable7.Finger\_tree.Contextual\_rank\_sequence} (OCaml). \\
+Checkpoint-differential map &
+\code{PersistentDeltaMap<TKey, TValue>} (C\#);
+\code{PersistentDeltaMap<K, V>} (Kotlin, TypeScript, Rust), and
+\code{PersistentDeltaMap} in
+\code{durable7.finger\_tree.persistent\_delta\_map} (Python);
+\code{persistent\_delta\_map<Key, Value, KeyLess, ValueEqual>} (C\texttt{++});
+\code{PersistentDeltaMap key value} (Haskell);
+\code{ft\_delta\_map} (C);
+\code{Durable7.Finger\_tree.Persistent\_delta\_map} (OCaml). \\
+Run-delta vector &
+\code{PersistentRunDeltaVector<T>} (C\#, Kotlin, TypeScript, Rust), and
+\code{PersistentRunDeltaVector} in
+\code{durable7.finger\_tree.persistent\_run\_delta\_vector} (Python);
+\code{persistent\_run\_delta\_vector<T, EqualityPolicy>} (C\texttt{++});
+\code{PersistentRunDeltaVector a} (Haskell);
+\code{ft\_run\_delta\_vector} (C);
+\code{Durable7.Finger\_tree.Persistent\_run\_delta\_vector} (OCaml). \\
+Monotone-action heap &
+\code{PersistentMonotoneActionHeap<TElement, TPriority, TAction>} (C\#);
+\code{PersistentMonotoneActionHeap<E, P, A>} (Kotlin, TypeScript, Rust), and
+\code{PersistentMonotoneActionHeap} in
+\code{durable7.finger\_tree.persistent\_monotone\_action\_heap} (Python);
+\code{persistent\_monotone\_action\_heap<Element, Priority, Policy>}
+(C\texttt{++});
+\code{PersistentMonotoneActionHeap element priority action} (Haskell);
+\code{ft\_monotone\_action\_heap} (C);
+\code{Durable7.Finger\_tree.Persistent\_monotone\_action\_heap} (OCaml). \\
+Ancestral connection forest &
+\code{PersistentAncestralConnectionForest} with
+\code{AncestralConnectionVersion} --- alone in this group it takes no type
+parameter anywhere, its vertices being a fixed integer universe (C\#, Kotlin,
+TypeScript, Rust), and
+\code{PersistentAncestralConnectionForest} in
+\code{durable7.hamt.persistent\_ancestral\_connection\_forest} (Python);
+\code{persistent\_ancestral\_connection\_forest} (C\texttt{++});
+\code{Durable7.Hamt.PersistentAncestralConnectionForest} (Haskell);
+\code{d7\_hamt\_ancestral\_connection\_forest} --- the one member of this group
+that lives in the hash-trie library, so it carries the \code{d7\_hamt\_} prefix
+rather than \code{ft\_} (C);
+\code{Durable7.Hamt.Persistent\_ancestral\_connection\_forest} (OCaml). \\
 \bottomrule
 \end{d7table}
 
@@ -3658,6 +6300,103 @@ edits. This is a composition showcase, and by the repository's own
 parity-economics rule it ships as a \emph{sample plus documentation pattern}
 rather than as a tenth family in nine languages. The editor samples are its
 natural home.
+\end{description}
+
+% Splice into \chapter{Roads Not Taken}, after \section{Shipped as documentation
+% rather than as a type} and before \chapter{Further Reading}. Both sections
+% follow the chapter's existing shape: a \section with a description list whose
+% item states the decision, the mechanism, and the reason that would have to
+% change.
+
+\section{Analyzed, found implementable, and declined}
+
+\begin{description}
+\item[Real-time two-table migration for the ancestor arena.] The append-only
+arena beneath the two ancestry-backed collections keeps its nodes in blocks of
+odd sizes $1, 3, 5, \ldots$. The scheme is chosen for its arithmetic: because
+the slots before block $r$ number exactly $r^2$, a handle resolves to a block
+and an offset by an integer square root and a subtraction, and wasted capacity
+after $M$ published nodes is bounded by \bigoh{\sqrt{M}}. The price is paid all
+at once. When a block fills, the next one --- about $2\sqrt{M}$ slots --- is
+allocated in a single step, so adding a leaf is \bigoh{1} \emph{amortized} and
+one unlucky call pays $\Theta(\sqrt{M})$.\index{arena, incremental ancestor}
+
+The Haskell port has no arena. A node there is an ordinary heap object that is
+its own handle, so its leaf add is \bigoh{1} worst case. Under the parity
+campaign's charter --- a stronger guarantee anywhere becomes the target
+everywhere, \emph{where possible at all} --- that made the spike a candidate for
+removal rather than a fact of life, and the question was whether the other eight
+workspaces could be brought up to it.
+
+They could. The mechanism is \term{real-time two-table
+migration}\index{two-table migration}: keep the old and the new backing tables
+live simultaneously and migrate a constant number of slots on every operation,
+so that no single call ever performs a large copy. It was analyzed, found
+implementable in all eight arena workspaces, costed --- permanent extra
+complexity in the hottest path of eight implementations, to shave off an
+allocation the memory allocator performs anyway --- and declined.
+
+One correction is worth recording, because it is what made the analysis honest.
+The first mechanism written into the work order was the obvious one:
+pre-initialize the next block incrementally, a few slots per call. That cannot
+deliver the bound in a garbage-collected language, because allocating an array
+\emph{zeroes} it, which is $\Theta(\text{block})$ work inside one call; growing a
+list by appends instead merely relocates the spike into the allocator's own
+geometric resizes. The proposal was corrected before anyone implemented it, and
+only then was there a real alternative to decline.
+
+What parity demanded afterwards was uniform documentation rather than uniform
+code. All eight arena workspaces now carry the identical two-part statement ---
+\bigoh{1} amortized, with a block-boundary call paying $\Theta(\sqrt{M})$ for the
+next odd block --- and Haskell's module documentation marks its \bigoh{1} worst
+case as \emph{exceeding} the shared profile rather than quietly diverging from
+it. The reason that would have to change is a consumer with a latency bound on a
+single append, at which point the mechanism is already written down and costed.
+\end{description}
+
+\section{Regressions taken in the open}
+
+\begin{description}
+\item[The flat array's constant-time rank-select, in OCaml.] The OCaml workspace
+began as a deliberately simplified checkpoint port: correct public surface,
+simplest possible storage underneath, weaker bounds honestly documented. Six of
+its structures were still those checkpoints when the parity campaign reached
+them, and several stored each version as a flat immutable array --- in key order
+for the sorted families. Such an
+array is a wonderful \emph{read-only} structure. Selecting by rank is direct
+indexing, \bigoh{1}; the extremes are its two ends; binary search gives
+\bigoh{\log n} lookup. Its catastrophe is writing: an immutable array cannot be
+edited in place, so every insertion or removal copies all $n$ slots. That is
+$\Theta(n)$ per write, $\Theta(n^2)$ to build a collection by repeated
+insertion, and $\Theta(n \cdot m)$ set algebra. The placeholders were therefore
+simultaneously \emph{better} than the reference at rank-select and
+catastrophically worse at everything that writes.
+
+Fixing the writes forces a trade, and the trade has no clever way out: no known
+persistent structure supports both \bigoh{\log n} writes and \bigoh{1}
+rank-select. Constant-time select effectively requires array-like contiguity ---
+an element's position must be computable without traversal --- and persistent
+updates to a contiguous representation are exactly the $\Theta(n)$ copies being
+eliminated. A tree representation makes both operations logarithmic. One cannot
+keep the array's select and gain the tree's write in the same persistent value.
+
+The ruling was to adopt the reference profile: \bigoh{\log n} writes,
+\bigoh{\log n} rank-select, and \bigoh{1} extremes, which a finger tree keeps
+through its digits, so the most common fast read is not the one that is lost.
+For the sorted map, concretely: writes went from $\Theta(n)$ to \bigoh{\log n},
+bulk construction from $\Theta(n^2)$ to \bigoh{n \log n}, union from
+$\Theta(n \cdot m)$ to \bigoh{m \log(n+m)}, extremes stayed at \bigoh{1}, and
+\code{nth} went from \bigoh{1} to \bigoh{\log n} --- the single loss.
+
+The discipline is in the last step. The regression was not absorbed quietly: it
+is stated in every affected interface file --- the sorted set, bag, and map, the
+priority search queue, the range-update sequence's point index, the
+insertion-ordered family, and the checkpoint-differential map that sits on top
+of them --- so that nobody reading the OCaml documentation can mistake it for an
+accident, and nobody ``fixes'' it back. The reason that would have to
+change is a consumer that selects by rank constantly and writes almost never,
+which is not a persistent collection at all but a frozen read tier, and is
+recorded above as its own gated project.
 \end{description}
 
 \chapter{Further Reading}

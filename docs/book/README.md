@@ -1,7 +1,7 @@
 # The Durable7 Field Guide
 
 - Created (UTC): 2026-07-26T00:00:00Z
-- Repository HEAD: e7fcb3517991ee2c0915e28e19916aa2ccfd21d7
+- Repository HEAD: see git log; last expanded 2026-08-06
 - Audience: Anyone choosing, using, or porting a Durable7 collection
 - Scope: A single long-form document covering every data structure in the repository
 - Format: LaTeX source plus the built PDF, both committed
@@ -9,7 +9,7 @@
 ## The document
 
 [**Persistent Data Structures: The Durable7 Field Guide**](durable7-data-structures.pdf)
-— 133 pages covering every collection family in the repository: what each one is,
+— 209 pages covering every collection family in the repository: what each one is,
 how it is represented, why it exists, where its guarantees stop, and how it is
 spelled in each of the nine ports.
 
@@ -21,7 +21,9 @@ spelled in each of the nine ports.
 ## What it covers
 
 - **Part I** — persistence, path copying, the version DAG, the branching-amortization
-  hazard, and the shared cross-port contract (policies, representatives, no-op
+  hazard and the laziness that answers it (suspended work, memoized forcing, and
+  what a strict language must build by hand to keep an amortized bound honest under
+  branching), and the shared cross-port contract (policies, representatives, no-op
   identity, failure atomicity, ordering).
 - **Part II** — CHAMP and the composition-first families built on it, Patricia
   integer tries, the Ctrie, and the builder/session/frozen lifecycle.
@@ -29,9 +31,16 @@ spelled in each of the nine ports.
   the range-update sequence, the reversible deque, and DABA Lite.
 - **Part IV** — sorted collections, canonical zip-zip sets, the insertion-ordered
   family, the three priority structures, and interval trees and maps.
-- **Part V** — Merkle search trees, blocks, packs, proofs, synchronization, and
+- **Part V** — the research-derived collections — the seven structures that began as scoped
+- **Part VI** — Merkle search trees, blocks, packs, proofs, synchronization, and
   three-way merge.
-- **Part VI** — cursors.
+- **Part VII** — cursors.
+  design studies and are now shipped in every port: the ancestry-interval queue and
+  the bilateral ancestral deque over their shared incremental level-ancestor arena,
+  the contextual rank/select sequence, the checkpoint-differential delta map and
+  run-delta vector, the monotone action heap, and the ancestral connection forest —
+  each with the claims, prior-art boundary, and deliberate limitations its proposal
+  records.
 - **Reference** — a complexity table for the whole library, a nine-language name
   index, the recorded rejections and postponements, further reading, and a subject
   index.

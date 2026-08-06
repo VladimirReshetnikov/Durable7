@@ -500,8 +500,9 @@ class ContextualRankSequence(Generic[T]):
         :class:`~durable7.finger_tree.range_update_sequence.RangeUpdateSequence`.  An empty
         operand is not copied: the result is the other operand itself.
 
-        Theta(s * (log m + |h_left - h_right|)) for an ``m``-element suffix, which is
-        O(s log(max(n, m))).  The reference's O(s log(min(n, m))) does not hold here.
+        O(s log(min(n, m))) amortized, the reference bound: the substrate suspends its middle
+        recursion, so the descent terminates at the shallower operand rather than tracking the
+        operands' height difference.
         """
 
         if not isinstance(other, ContextualRankSequence):

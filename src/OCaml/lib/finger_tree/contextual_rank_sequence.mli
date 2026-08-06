@@ -202,7 +202,7 @@ val concat : 'element t -> 'element t -> ('element t, string) result
     policy's id and a range-update algebra's id. Also fails when the composed event total would
     overflow.
 
-    [Theta (s (1 + log (max (n, m) / min (n, m))))]; see the module's bounds. *)
+    [O(s log (min (n, m)))] amortized; see the module's bounds. *)
 
 val insert_at : int -> 'element -> 'element t -> ('element t, string) result
 (** A sequence with the element inserted so that [index] old elements precede it. [O(s log n)].
