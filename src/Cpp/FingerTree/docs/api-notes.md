@@ -510,9 +510,32 @@ Notable C++ differences from C#:
 `brodal_okasaki_heap<T, Less>` is the C++23 port of C# `BrodalOkasakiHeap<T>`. It retains the fused
 bootstrapped skew-binomial representation rather than substituting a conventional binomial heap:
 
-Its `skew_meld` consolidates the child forest through rank buckets with carry. This is intentionally
-equivalent to, but internally shaped differently from, the C#/Haskell/Kotlin/Rust
-`uniquify`-then-`unionUnique` formulation.
+Its `skew_meld` consolidates the child forest through rank buckets with carry, rather than through the
+C#/Haskell/Kotlin/Rust `uniquify`-then-`unionUnique` formulation. The two agree on the multiset of
+stored elements, on every structural invariant the validator checks, and on the stated bounds. They do
+**not** agree on which of several comparator-equal elements is returned first, and that difference is
+observable:
+
+- the reference uniquifies each operand independently and then merges the two unique forests
+  *pairwise*, so a left tree is linked against the right tree of the same rank;
+- this port pours the trees of both operands into one rank-indexed bin array in traversal order and
+  links whatever collides, so a different pair meets at a given rank.
+
+`link` keeps one operand as the winner on a tie, so different pairings elect different
+representatives. Measured against the reference pairing order, 379 of 400 randomized insert-and-meld
+histories over comparator-equal elements drain in a different order. Pure insertion sequences agree;
+melding separately built heaps is what separates them.
+
+This is a permitted degree of freedom rather than a parity defect. The C# API specification states
+that "equal-priority tie order is unspecified" for this structure, no port's tests assert a tie
+order, and the repository's [priority-queue contract](../../../../docs/reference/semantic-contracts.md#priority-queues)
+requires only that tie behaviour be documented — expressly warning against promising stability where
+it is unspecified. Callers who need a determinate order among equal priorities should give the
+comparator a tiebreaker; `priority_queue` is the member of this family that does promise stability.
+
+For contrast, the sibling `persistent_monotone_action_heap` deliberately follows the reference
+`uniquify`/`union_unique` shape rather than reusing this bucket shortcut, so its tie representatives
+do match C# and Rust.
 
 - `insert`, `minimum`, `try_minimum`, and compatible `meld` are worst-case O(1); `delete_minimum` and
   `try_delete_minimum` are worst-case O(log n);
@@ -522,7 +545,9 @@ equivalent to, but internally shaped differently from, the C#/Haskell/Kotlin/Rus
   copies/updates retain it; independently supplied comparator objects are deliberately incompatible even when
   their runtime state compares equal. Compatibility is checked before empty-heap identities;
 - comparer-equivalent values are never coalesced. C# `Compare(left, right) <= 0` is represented by one reverse
-  strict-less call, so ties retain the same root-choice semantics and every distinct stored representative;
+  strict-less call, so a *single* link resolves a tie toward the same operand as the reference and every
+  distinct stored representative is retained. That is a statement about one link, not about the order the heap
+  drains in: which pairs get linked differs, as described above;
 - values live behind `std::shared_ptr<const T>`, permitting rvalue insertion, moved bulk construction, and meld
   for move-only `T`. `minimum_handle()` and the first component of `try_delete_minimum()` retain the exact
   representative independently of later remainder destruction;
