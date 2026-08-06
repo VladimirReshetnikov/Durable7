@@ -138,9 +138,11 @@ val split_at : int -> 'element t -> ('element t * 'element t, string) result
 (** The appendable prefix holding the first n visible elements and the appendable suffix holding the
     rest. Costs [Q]: the prefix performs the one ancestor-seeking query and the suffix only moves
     the low boundary. Only a split at the length is query-free, where the prefix is the source value
-    itself. A split at zero of a non-empty queue still costs [Q] and cannot be specialized away,
-    because the anchored-empty rule makes the empty prefix retain the node at [low_depth - 1] and
-    only an ancestor query can name that node from the retained tail; on an {e empty} queue the two
+    itself. A split at zero of a non-empty queue still costs [Q] here, because the anchored-empty
+    rule makes the empty prefix retain the node at [low_depth - 1]. That is forced when [low_depth]
+    is positive, since only an ancestor query can name that node from the retained tail; when
+    [low_depth] is zero the node is the arena's bottom, which the seam also names in [O(1)], so the
+    uniform query there is a choice rather than a necessity. On an {e empty} queue the two
     boundaries coincide, so its only split is query-free. Fails when n is negative or exceeds the
     length. *)
 

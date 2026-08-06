@@ -432,9 +432,11 @@ impl<T> AncestralSliceQueue<T> {
     ///
     /// Only a split at `len()` makes no query: the prefix is the source handle itself and the
     /// suffix moves the low boundary past the tail. A split at `0` on a non-empty queue still costs
-    /// `Q(M)`, and cannot be specialized away — the anchored-empty rule requires the empty prefix to
-    /// retain the node at depth `low_depth - 1`, and only an ancestor query can name that node from
-    /// the retained tail.
+    /// `Q(M)` here — the anchored-empty rule requires the empty prefix to retain the node at depth
+    /// `low_depth - 1`. That is forced when `low_depth > 0`, since only an ancestor query can name
+    /// that node from the retained tail; when `low_depth == 0` it is the arena's bottom node, which
+    /// the seam also names in O(1), so the uniform query there is a choice rather than a
+    /// necessity.
     #[must_use]
     pub fn split_at(&self, index: usize) -> Option<AncestralSliceQueueSplit<T>> {
         if index > self.count {

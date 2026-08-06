@@ -245,9 +245,11 @@ ft_status ft_ancestral_slice_queue_slice(
 /* Produces the prefix holding the first index visible values and the suffix holding the rest. Costs
  * Q: the prefix performs the one ancestor-seeking query and the suffix only moves the low boundary.
  * Both results are real ancestry slices and can independently start new branches. Only a split at
- * the count makes no query; a split at zero on a nonempty queue still costs Q and cannot be
- * specialized away, because the anchored-empty rule requires the empty prefix to retain the node at
- * depth low_depth - 1 and only an ancestor query can name that node from the retained tail. Both
+ * the count makes no query; a split at zero on a nonempty queue still costs Q here, because the
+ * anchored-empty rule requires the empty prefix to retain the node at depth low_depth - 1. That is
+ * forced when low_depth is positive, since only an ancestor query can name that node from the
+ * retained tail; when low_depth is zero the node is the arena's bottom, which the seam also names
+ * in O(1), so the uniform query there is a choice rather than a necessity. Both
  * handles are published together or not at all; an index beyond the queue is rejected with
  * FT_STATUS_OUT_OF_RANGE. */
 ft_status ft_ancestral_slice_queue_split_at(
