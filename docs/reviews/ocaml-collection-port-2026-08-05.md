@@ -1,5 +1,11 @@
 # OCaml Collection Port — 2026-08-05
 
+> **Current-state note (2026-08-05, later the same day).** A Python port of the same seven
+> collections shipped after this one, so coverage is now eight languages and only TypeScript
+> remains. This review's scope and findings are unchanged and still describe the OCaml shipment; the
+> Python port carries its own verification, recorded in
+> [the Python port review](python-collection-port-2026-08-05.md).
+
 - Created (UTC): 2026-08-05
 - Repository HEAD (reviewed): `experimental` branch, post C++ port
 - Audience: Maintainers reviewing the seven-language shipment of the seven research-derived collections

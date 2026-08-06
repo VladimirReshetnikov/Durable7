@@ -1,5 +1,18 @@
 """Persistent measured sequences and derived collection families."""
 
+from .ancestral_slice_queue import (
+    AncestralSliceQueue,
+    AncestralSliceQueuePop,
+    AncestralSliceQueueSplit,
+    AncestralSliceQueueStatistics,
+)
+from .bilateral_ancestral_deque import (
+    BilateralAncestralDeque,
+    BilateralAncestralDequeInterval,
+    BilateralAncestralDequePop,
+    BilateralAncestralDequeSplit,
+    BilateralAncestralDequeStatistics,
+)
 from .brodal_okasaki_heap import (
     BrodalMinimumView,
     BrodalOkasakiHeap,
@@ -15,6 +28,16 @@ from .canonical_sorted_set import (
     ZipTreeRank,
     ZipTreeRankPolicy,
     stable_rank_hash,
+)
+from .contextual_rank_sequence import (
+    ContextualEventLocation,
+    ContextualEventMachine,
+    ContextualEventTransition,
+    ContextualPrefixSummary,
+    ContextualRankSequence,
+    ContextualRankSequenceSplit,
+    ContextualRankSequenceStatistics,
+    create_contextual_event_machine,
 )
 from .core import (
     DequeItemSplit,
@@ -33,6 +56,16 @@ from .core import (
     SequenceCursorPeek,
 )
 from .daba_lite import DabaLite, DabaLiteStatistics
+from .equality import (
+    ValueEquality,
+    natural_value_equality,
+    reflexive_ieee_equality,
+)
+from .incremental_ancestor import (
+    IncrementalAncestorArena,
+    MyersIncrementalAncestorArena,
+    MyersIncrementalAncestorStatistics,
+)
 from .measured_sequence import MeasuredSequence, SequenceLocate, SequenceSplit
 from .measures import (
     BigIntSumMeasure,
@@ -57,6 +90,13 @@ from .persistent_chunked_bit_set import (
     PersistentChunkedBitSet,
     PersistentChunkedBitSetCursor,
 )
+from .persistent_delta_map import (
+    DeltaMapStatistics,
+    DeltaMapValue,
+    PersistentDeltaMap,
+    PersistentMapChange,
+    PersistentMapChangeKind,
+)
 from .persistent_interval_map import (
     DuplicateIntervalError,
     IntervalMapAddResult,
@@ -66,6 +106,21 @@ from .persistent_interval_map import (
     IntervalMapLookup,
     PersistentIntervalMap,
     PersistentIntervalMapCursor,
+)
+from .persistent_monotone_action_heap import (
+    ComparatorBoundMonotoneHeapAction,
+    MonotoneActionMinimumView,
+    MonotoneHeapAction,
+    MonotoneHeapEntry,
+    OrderClamp,
+    OrderClampPolicy,
+    PersistentMonotoneActionHeap,
+    PersistentMonotoneActionHeapStatistics,
+)
+from .persistent_run_delta_vector import (
+    PersistentDirtyRun,
+    PersistentRunDeltaVector,
+    RunDeltaVectorStatistics,
 )
 from .priority_interval import (
     Interval,
@@ -138,7 +193,16 @@ from .sorted import (
 )
 
 __all__ = [
+    "AncestralSliceQueue",
+    "AncestralSliceQueuePop",
+    "AncestralSliceQueueSplit",
+    "AncestralSliceQueueStatistics",
     "BigIntSumMeasure",
+    "BilateralAncestralDeque",
+    "BilateralAncestralDequeInterval",
+    "BilateralAncestralDequePop",
+    "BilateralAncestralDequeSplit",
+    "BilateralAncestralDequeStatistics",
     "BrodalMinimumView",
     "BrodalOkasakiHeap",
     "BrodalOkasakiHeapStatistics",
@@ -153,8 +217,18 @@ __all__ = [
     "ChunkedBitSetStatistics",
     "ChunkedBitSetUpdateResult",
     "Comparator",
+    "ComparatorBoundMonotoneHeapAction",
+    "ContextualEventLocation",
+    "ContextualEventMachine",
+    "ContextualEventTransition",
+    "ContextualPrefixSummary",
+    "ContextualRankSequence",
+    "ContextualRankSequenceSplit",
+    "ContextualRankSequenceStatistics",
     "DabaLite",
     "DabaLiteStatistics",
+    "DeltaMapStatistics",
+    "DeltaMapValue",
     "DequeItemSplit",
     "DequePop",
     "DequeRangeSplit",
@@ -162,6 +236,7 @@ __all__ = [
     "DuplicateIntervalError",
     "FingerTree",
     "FingerTreeCursor",
+    "IncrementalAncestorArena",
     "IntegerSumMeasure",
     "Interval",
     "IntervalCursorPeek",
@@ -189,17 +264,31 @@ __all__ = [
     "MeasuredSplit",
     "MinMeasure",
     "Monoid",
+    "MonotoneActionMinimumView",
+    "MonotoneHeapAction",
+    "MonotoneHeapEntry",
+    "MyersIncrementalAncestorArena",
+    "MyersIncrementalAncestorStatistics",
     "NewlineMeasure",
     "NumberSumMeasure",
     "OptionalValue",
+    "OrderClamp",
+    "OrderClampPolicy",
     "OrderedCursorPeek",
     "OrderedCursorSearch",
     "PersistentChunkedBitSet",
     "PersistentChunkedBitSetCursor",
+    "PersistentDeltaMap",
     "PersistentDeque",
     "PersistentDequeCursor",
+    "PersistentDirtyRun",
     "PersistentIntervalMap",
     "PersistentIntervalMapCursor",
+    "PersistentMapChange",
+    "PersistentMapChangeKind",
+    "PersistentMonotoneActionHeap",
+    "PersistentMonotoneActionHeapStatistics",
+    "PersistentRunDeltaVector",
     "PriorityDequeue",
     "PriorityEntry",
     "PriorityQueue",
@@ -229,6 +318,7 @@ __all__ = [
     "RrbVectorCursor",
     "RrbVectorSplit",
     "RrbVectorStatistics",
+    "RunDeltaVectorStatistics",
     "SequenceCursorPeek",
     "SequenceLocate",
     "SequenceSplit",
@@ -248,11 +338,15 @@ __all__ = [
     "TextRope",
     "TextRopeCursor",
     "TextRopeCursorSearch",
+    "ValueEquality",
     "ZipTreeRank",
     "ZipTreeRankPolicy",
+    "create_contextual_event_machine",
     "create_measure_policy",
     "create_range_update_algebra",
     "default_comparator",
+    "natural_value_equality",
+    "reflexive_ieee_equality",
     "reverse_comparator",
     "stable_rank_hash",
 ]

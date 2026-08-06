@@ -37,6 +37,45 @@ exact policy identity, `MST2` block encoding, and `MSP2` proof envelope used acr
   ranges, and stable one-shot sorting; the set also provides receiver-ordered algebra. The subpackage
   builds entirely on the public `hamt` and `finger_tree` surfaces and adds no runtime dependency.
 
+The seven research-derived collections ship here too: six in `finger_tree`
+(`AncestralSliceQueue`, `BilateralAncestralDeque`, `ContextualRankSequence`, `PersistentDeltaMap`,
+`PersistentRunDeltaVector`, `PersistentMonotoneActionHeap`) and
+`PersistentAncestralConnectionForest` in `hamt`. Two share `incremental_ancestor`, the append-only
+level-ancestor seam: an `IncrementalAncestorArena` `Protocol` plus the shipped
+`MyersIncrementalAncestorArena`. Because the protocol is structural, a backend satisfies the seam
+without declaring that it does. The arena is the one deliberately mutable core in these families, in
+the sense this README reserves for builders and cursors — nodes accumulate in place under a private
+lock while every collection value built on them stays immutable. `equality` is the value-side
+counterpart of `ordering`: the two delta-tracking collections retain a `ValueEquality` relation from
+it, because that relation decides which writes are semantic no-ops and when a recorded change
+cancels, so it must be remembered rather than passed per call.
+
+Their bounds are stated against this workspace's substrates rather than inherited from the managed
+baseline, and they move in both directions. `MeasuredSequence` is an implicit AVL join tree, not a
+Hinze–Paterson finger tree, so `ContextualRankSequence` states Θ(s log n) endpoint updates rather
+than O(s) amortized, and a concatenation bound keyed to the operands' *height difference* rather
+than to the smaller operand — measured, not assumed: concatenating a 16384-element sequence with a
+1-element one costs the same 28 measure compositions as with a 1024-element one. `SortedMap` caches
+subtree sizes but no extremes, so `PersistentDeltaMap.min_entry` and `max_entry` are Θ(log N) where
+the baseline claims O(1). In the other direction, neither `RrbVector` nor `SortedMap` defers
+rebalancing, so `PersistentRunDeltaVector` states *worst-case* splice bounds where the C# and Rust
+baselines say amortized. None of that touches the load-bearing properties: run splices stay
+independent of run length and comparison-free, and range-restricted change enumeration is a real
+boundary seek through `SortedMap.get_key_range`.
+
+Four Python-specific hazards are handled rather than documented away. Python integers are arbitrary
+precision, so the baseline's three overflow ceilings cannot arise and no artificial limit is
+synthesized to imitate them; growth is bounded by memory. `is` degenerates on small integers, `bool`,
+and interned strings, so the run-delta vector boxes elements in a private identity-bearing cell —
+otherwise "a clean position reuses its exact checkpoint cell" would be vacuous for exactly the
+payload types tests reach for first. Python's recursion limit is 1000 frames, so every forest, spine,
+version-chain, and parent-path walk is iterative, and the tests assert depths past that limit rather
+than trusting it. And `float("nan") == float("nan")` is false, which would silently leave a position
+permanently dirty, so `natural_value_equality` consults identity first and `reflexive_ieee_equality`
+is the .NET-compatible escape hatch. Separately, the connection forest earns an *unconditional*
+CHAMP path factor — the bound Rust and Haskell must state as expected — by pinning an injective
+`fmix32` vertex hash, so no collision bucket can ever hold two distinct vertices.
+
 The root namespace re-exports every public family member:
 
 ```python

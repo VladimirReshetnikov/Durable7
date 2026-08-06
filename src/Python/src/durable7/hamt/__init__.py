@@ -69,6 +69,13 @@ from .merkle_search_tree import (
     MerkleSearchTreeCursor,
     MerkleSearchTreeStatistics,
 )
+from .persistent_ancestral_connection_forest import (
+    MAXIMUM_VERTEX_COUNT,
+    VERTEX_HASH_POLICY,
+    AncestralConnectionForestStatistics,
+    AncestralConnectionVersion,
+    PersistentAncestralConnectionForest,
+)
 from .persistent_bi_map import (
     BiMapAddResult,
     BiMapConflictError,
@@ -132,10 +139,14 @@ from .persistent_relation import PersistentRelation, RelationEntry
 __all__ = [
     "INT32_MERKLE_CODEC",
     "INT64_MERKLE_CODEC",
+    "MAXIMUM_VERTEX_COUNT",
     "NULLABLE_BYTES_MERKLE_CODEC",
     "NULLABLE_UTF8_MERKLE_CODEC",
     "RFC4122_UUID_MERKLE_CODEC",
+    "VERTEX_HASH_POLICY",
     "AddResult",
+    "AncestralConnectionForestStatistics",
+    "AncestralConnectionVersion",
     "BiMapAddResult",
     "BiMapConflictError",
     "BiMapLookupResult",
@@ -203,6 +214,7 @@ __all__ = [
     "NullableUtf8MerkleCodec",
     "PatriciaCursorSearch",
     "PatriciaMapEntry",
+    "PersistentAncestralConnectionForest",
     "PersistentBiMap",
     "PersistentDirectedGraph",
     "PersistentHashBag",

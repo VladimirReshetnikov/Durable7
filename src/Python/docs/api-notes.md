@@ -302,6 +302,74 @@ O(1) in queue-structure work by publishing a fresh one-block chain after obtaini
 The detached bidirectional chunk chain may be reclaimed later by Python's cyclic collector, so the
 operation does not provide the prompt deterministic O(n+c) destruction contract of the native ports.
 
+## Research-derived collections
+
+The seven research-derived collections live in `finger_tree` (six) and `hamt` (the connection
+forest), with two shared seams: `incremental_ancestor` supplies the append-only level-ancestor
+service, and `equality` supplies the retained value-equality relation that `ordering` is the
+order-side counterpart of.
+
+The backend seam is an `IncrementalAncestorArena` **`Protocol`**, matching this package's policy
+idiom rather than C#'s interface. Because protocols are structural, a backend satisfies the seam
+without declaring that it does, and no registration step exists to forget. `statistics()` is
+deliberately *not* on the protocol: it describes one backend's representation, so it belongs to
+`MyersIncrementalAncestorArena`. A consumer that wants a query profile constructs that class
+directly and passes it in, which is also how the query-profile tests read exact counts without
+casting.
+
+Complexity claims are stated against this workspace's substrates, and they move in both directions
+relative to the managed baseline:
+
+- `ContextualRankSequence` states **Θ(s log n)** endpoint updates, not the reference's amortized
+  O(s), and a concatenation bound keyed to the operands' *height difference* rather than to the
+  smaller operand. `MeasuredSequence` is an implicit AVL join tree, not a Hinze–Paterson finger
+  tree with digits and a lazy middle. This was measured rather than inferred: concatenating a
+  16384-element sequence with a 1-element one costs the same 28 measure compositions as with a
+  1024-element one. Indexing is *better* than the reference at O(log n) composing no summary at all,
+  because the substrate descends by cached sizes.
+- `PersistentDeltaMap.min_entry` and `max_entry` are **Θ(log N)**. `SortedMap` caches subtree sizes
+  but no extremes, so reaching the leftmost leaf costs the same descent as any other rank; the
+  baseline's O(1) is not available and is not claimed. Its writes, lookups, rank, and neighbour
+  queries *are* genuinely logarithmic, and range-restricted change enumeration is a real boundary
+  seek through `SortedMap.get_key_range`, performing zero value-equality callbacks.
+- `PersistentRunDeltaVector` states **worst-case** splice bounds where the C# and Rust baselines say
+  amortized, because neither `RrbVector` nor `SortedMap` defers rebalancing. The bound it does *not*
+  inherit is stated too: `RrbVector.concat` rebalances only the seam, so each O(log n) is really
+  O(h) in tree height, which grows by at most one per concatenation.
+- `PersistentAncestralConnectionForest` claims an **unconditional** CHAMP path factor — the bound
+  Rust and Haskell must weaken to *expected* — by pinning an injective `fmix32` vertex hash over a
+  universe capped at 2**31 − 1. Every step of that hash is a bijection of the 32-bit word, so no
+  collision bucket can hold two distinct vertices and any two diverge within `ceil(32/5) = 7`
+  levels. Pinning is what earns the claim; the workspace default policy would also be injective
+  here, but only as a property of CPython's int-hash contract rather than of this module.
+
+Four Python-specific hazards are handled rather than documented away:
+
+- **Arbitrary-precision integers.** The baseline raises at three ceilings — ancestry depth, node
+  count, and a coalesced jump distance. None can arise here, so no artificial limit is synthesized
+  to imitate them and the saturating counter arithmetic is dropped in favour of exact counters.
+  Growth is bounded by memory, reported as `MemoryError`.
+- **Degenerate identity.** `is` is true for equal small integers, `bool`, and interned strings, so
+  "a clean position reuses its exact checkpoint cell" would be vacuous for exactly the payloads a
+  test reaches for first. `PersistentRunDeltaVector` boxes elements in a private identity-bearing
+  cell. `AncestralConnectionVersion` is a plain slotted class, not a dataclass, so `==` stays
+  reference identity: a dataclass with `eq=True` would have merged sibling branches that agree on
+  depth, parent, and root.
+- **The 1000-frame recursion limit.** Every forest, spine, version-chain, and parent-path walk is
+  iterative, including walks the reference and the un-tagged sibling recurse through. The tests
+  assert depths past the limit rather than trusting it.
+- **Non-reflexive equality.** `float("nan") == float("nan")` is false, and a non-reflexive relation
+  leaves a position permanently dirty in a way no internal validation can detect.
+  `natural_value_equality` consults identity first; `reflexive_ieee_equality` collapses every `NaN`
+  into one class, reproducing .NET's default comparer and Rust's `EqualityPolicy::reflexive_ieee`.
+
+Other divergences: presence is an explicit `DeltaMapValue` wrapper because `None` is a legal stored
+value; `TryXxx(out)` pairs become `Xxx | None` results; `Slice` becomes `get_range` because `slice`
+is a builtin; melding or concatenating across two different retained policy objects raises
+`TypeError`, following `BrodalOkasakiHeap.meld` and `RangeUpdateSequence.concat`; and change
+enumeration returns a lazy single-pass iterator rather than a repeatable `IEnumerable`, so
+abandoning it early really does save the rest.
+
 ## Persistent cursors
 
 Every public Python cursor is a **Profile R root-plus-position semantic checkpoint** in the sense of

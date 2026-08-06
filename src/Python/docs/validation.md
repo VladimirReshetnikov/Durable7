@@ -65,6 +65,37 @@ reentrant hash/equality-policy hooks exercise `set`, `try_add`, `get_or_put`, an
 same-key and different-key nested publications, including exact return values, cached factory use,
 and generation accounting.
 
+The seven research-derived collections are validated by properties chosen so that a plausible defect
+fails them, and each load-bearing case was mutation-checked rather than assumed to bite.
+
+The level-ancestor arena's hop bound is the one that matters most: Myers' coalesced jump links are
+the entire reason that backend exists over a parent array, and removing them leaves every ancestor
+*answer* correct while turning each query into an O(depth) walk. Only a hop-count assertion can see
+that, so the bound is stated to fail without coalescing — over a 32768-node chain the shipped arena
+needs 2 hops against a stated ceiling of 64, where a coalescing-free arena needs 32768, and both
+return identical answers. The ancestry-interval sequences assert **exact** ancestor-query profile
+tables rather than ceilings: `get_at` across an eight-element deque is pinned at
+`(0, 1, 1, 0, 0, 1, 1, 0)`, whose four zeros are precisely the four cached endpoints, and the
+two-query slicing ceiling is asserted to be reached, not merely respected.
+
+The delta-tracking collections assert callback budgets, since output-optimality is invisible to a
+correctness test: range-restricted change enumeration performs zero value-equality callbacks and a
+number of key comparisons independent of the change count, and accepting or reverting a run performs
+no value comparison at all — each paired with a positive control proving the counting relation is
+live. Cancellation is checked to restore the *exact* checkpoint representative through a payload
+whose identity is observable, in the shape where another run stays dirty, so the canonicalizing root
+swap cannot mask a fresh cell. Sharing assertions are made across two genuinely distinct values or
+paired with a negative control, because an operation that returns its receiver makes the naive form
+unfalsifiable.
+
+Composition order is pinned with genuinely non-commutative actions. A pure floor composes
+commutatively under the clamp policy, so a test built from floors alone cannot see a reversed
+composition; the drain test therefore applies a collapsing floor/cap pair, and a dedicated case
+stacks two non-identity tags on one forest spine cell, which is the only shape that reaches the
+forest-side pushdown. Both tag-pushdown sites, the meld root tie-break, the insert tie, the forest
+minimum tie, and the split-forest branches were each verified by mutating the module and confirming
+a named case fails.
+
 Use `test.ps1 -SkipInstall` after the pinned tools in `requirements-dev.txt` are already installed.
 `-SkipPackageSmoke` is reserved for narrow local iteration and is not a complete validation result.
 All commands in the launcher run sequentially. Do not overlap Ruff, Mypy, pytest, package building,
