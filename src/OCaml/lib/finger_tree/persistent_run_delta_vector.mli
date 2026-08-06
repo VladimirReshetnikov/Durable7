@@ -22,28 +22,29 @@
     - Build [n] values: [Theta (n)].
     - {!length}, {!dirty_count}, {!dirty_run_count}, {!has_changes}: [O(1)].
     - {!nth} and {!checkpoint_nth}: [O(log n)] worst case.
-    - {!set} and {!reset}: [O(log n)] for the root edit plus [O(r)] for the run-index edit.
+    - {!set} and {!reset}: [O(log n)] for the root edit plus [O(log (r + 1))] for the run-index
+      edit.
     - Fork by retaining a value: [O(1)]. {!checkpoint} and {!rollback}: [O(1)] root swaps.
     - {!to_list} and {!checkpoint_to_list}: [Theta (n)].
     - {!is_dirty} and {!dirty_run_containing}: [O(log r)] worst case.
-    - {!dirty_run_at}: [O(1)]. {!dirty_runs}: [Theta (r)].
+    - {!dirty_run_at}: [O(log (r + 1))]. {!dirty_runs}: [Theta (r)].
     - {!accept_dirty_run_at}, {!revert_dirty_run_at}, {!accept_dirty_run_containing} and
-      {!revert_dirty_run_containing}: [O(log n)] for the splice, {e independent of the selected
-      run's length}, plus [O(r)] for the run-index edit, and {e no} calls to the retained relation
-      at all.
+      {!revert_dirty_run_containing}: [O(log n)] {e worst case} for the splice, {e independent of
+      the selected run's length}, plus [O(log (r + 1))] for the run-index edit, and {e no} calls
+      to the retained relation at all.
     - {!validate}: [Theta (n + r)] plus [n] relation calls. An auditor, not a hot-path operation.
 
-    Two substrate facts back those numbers and both differ from the reference ports. The vector
-    roots are [Rrb_vector], a facade over the lazy finger-tree measured core rather than a real
-    32-way radix trie, so indexed read, split and concatenation are [O(log n)] {e amortized}: a
-    call may force memoized deferred spine work, paid once per suspension across all versions.
-    (Until the Wave-1 core upgrade the facade's substrate was eager and these were worst-case
-    bounds; the pending Wave-2 rebuild onto a genuine RRB restores the reference shape outright.) The run index is [Sorted_map],
-    a sorted array, so a key lookup is [O(log r)] worst case and rank selection is [O(1)], but
-    inserting or replacing a record copies the array, which is [Theta (r)] rather than [O(log r)].
-    Run-index mutation is consequently the one place where this port is asymptotically weaker than
-    its C# and Rust baselines. It never affects the load-bearing property that accepting or
-    reverting a run costs the same whether the run covers one position or a million.
+    Two substrate facts back those numbers. The vector roots are [Rrb_vector], since the Wave-2
+    rebuild a genuine 32-way relaxed radix-balanced tree: packed regular branches address by
+    5-bit-radix arithmetic, size tables exist only on relaxed branches, concatenation rebalances
+    only the seam, and every operation is eager — indexed read and point write are [O(log32 n)]
+    worst case and split and concatenation [O(log n)] worst case, restoring the reference ports'
+    eager worst-case splice shape outright. The run index is [Sorted_map], an order-statistic map
+    over the lazy measured core, so a key lookup, rank selection, and a record write are all
+    [O(log (r + 1))]; the array-era [Theta (r)] record-write copy is gone, and no run-delta bound
+    remains weaker than its C# and Rust baselines. None of this affects the load-bearing property
+    that accepting or reverting a run costs the same whether the run covers one position or a
+    million.
 
     Accepting or reverting a run is implemented by splitting both roots at the run's boundaries and
     concatenating the pieces, never by walking the run's positions. That is what makes it

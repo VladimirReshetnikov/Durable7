@@ -219,9 +219,9 @@ let changes map = List.map change_of_pair (Sorted_map.to_list map.changes)
 let find_change key map = Option.map change_of_entry (Sorted_map.find_entry key map.changes)
 
 (* A boundary seek over the change index followed by a bounded walk of the entries between the two
-   boundaries. The substrate restricts by two binary searches and one contiguous copy, so the cost
-   is O(log (k + 1)) comparisons plus Theta (output) and never touches an out-of-range record. No
-   value-equality callback is reachable from here. *)
+   boundaries. The substrate restricts by two measure-directed seeks and a structurally shared
+   split, so the cost is O(log (k + 1)) comparisons plus Theta (output) and never touches an
+   out-of-range record. No value-equality callback is reachable from here. *)
 let changes_in_range ~minimum ~maximum map =
   List.map change_of_pair (Sorted_map.to_list (Sorted_map.key_range ~minimum ~maximum map.changes))
 

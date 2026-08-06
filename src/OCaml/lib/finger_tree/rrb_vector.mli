@@ -1,4 +1,9 @@
-(** Persistent indexed vector facade over the shared balanced sequence. *)
+(** Persistent relaxed radix-balanced vector with 32-way branching.
+
+    A genuine RRB tree: 5-bit-radix packed branches address arithmetically, size tables exist only
+    on relaxed branches, and concatenation rebalances only the seam between its operands. Indexing
+    and point writes are O(log32 n) worst case, splits and concatenations O(log n) worst case, and
+    every operation is eager — no amortization and no deferred work. *)
 
 type 'element t
 type 'element cursor

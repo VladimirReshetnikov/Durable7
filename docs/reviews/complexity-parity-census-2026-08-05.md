@@ -47,7 +47,7 @@ donor-mechanism extractions (C#, C++, Haskell lazy cores): `donors-full.json`.
 
 | # | Where | Delivered today | Target (reference profile) | Fix |
 | --- | --- | --- | --- | --- |
-| A1 | OCaml `Sorted_set`/`Sorted_bag`/`Sorted_map`: flat immutable arrays | Θ(n) point writes, Θ(n·m) set algebra, Θ(n²) `of_list` | O(log n) writes, O(1) extremes | Rebuild on the new OCaml finger-tree core (order-statistic measure), as C#/C/C++ do |
+| ~~A1~~ | ~~OCaml `Sorted_set`/`Sorted_bag`/`Sorted_map`: flat immutable arrays~~ | **FIXED (Wave 2a).** Rebuilt on the lazy finger-tree core with a (count, last-key) order-statistic measure: O(log n) point writes (probe: 31 comparisons at n=1024 vs 50 at n=32768; one write allocates ~29 KB at n=32768 where the array copied ≥256 KB), O(1) comparator-free extremes (mutation-checked), O(m log(n+m)) iterate-and-insert set algebra, O(n log n) `of_list`. Rank select regressed to O(log n) exactly as ruled below. `Persistent_delta_map` write bounds flipped Θ(N+k) → O(log N) with its comparison-budget tests unchanged | done |
 | ~~A2~~ | ~~OCaml `Brodal_okasaki_heap`~~ | **FIXED.** Rebuilt as the untagged specialization of the monotone action heap's skew-binomial kernel: O(1) worst-case insert/meld/minimum, O(log n) delete-min, O(1) count; `statistics` measures the real forest shape, and a linking-disabled mutant fails the forest-length ceiling (4095 vs 14 at n=4096) | done |
 | A3 | OCaml `Priority_search_queue`: flat sorted array | Θ(n) writes and pops | O(log n) writes/pops, O(1) find-min | Winner-cached AVL, as all eight siblings |
 | A4 | OCaml `Range_update_sequence`: flat array, tags applied eagerly per element | Θ(n) range update / insert / split | O(log n) range edit independent of range length | Path-copied implicit AVL with composable pending tags, as siblings |
@@ -124,9 +124,12 @@ pigeonhole) — that is parity, not a violation.
 Rust `measured.rs` header ("2-3 finger tree", O(1) front/back, O(log min) concat — all currently
 false, become true after Wave 1); Kotlin `Core.kt` amortized-O(1)/log-min claims (same); TS
 `core.ts` "finger tree" naming (same); OCaml `rrb_vector.ml` "effectively constant-time indexing"
-(true once a real 32-way RRB replaces the facade in Wave 2); OCaml `sorted_map.mli` "built in bulk"
-vs Θ(n²) `of_list` (resolved by A1); Python `measured_sequence.py` concat docstring omitting the
-remove-min term (superseded by Wave 1).
+(**now true — Wave 2a replaced the facade with a genuine eager 32-way RRB**: 5-bit-radix packed
+regular branches, size tables only on relaxed branches, seam-only concat rebalance, endpoint push
+via singleton concat; `Persistent_run_delta_vector` flipped to the reference's eager worst-case
+O(log n) splice wording); OCaml `sorted_map.mli` "built in bulk" vs Θ(n²) `of_list` (resolved by
+A1); Python `measured_sequence.py` concat docstring omitting the remove-min term (superseded by
+Wave 1).
 
 ### Deliberate non-violations (recorded so nobody "fixes" them)
 
@@ -149,7 +152,8 @@ remove-min term (superseded by Wave 1).
 2. **Wave 1 — keystone:** the five finger-tree cores + facade rebases + doc/test tightening.
    Order: Python (freshest workspace knowledge, strictest gates) → Rust → Kotlin → TypeScript →
    OCaml (whose Wave-2 rebuilds sit on its new core).
-3. **Wave 2 — OCaml catch-up:** A1, A3, A4, A5, real RRB, on the new core.
+3. **Wave 2 — OCaml catch-up:** ~~A1~~, A3, A4, A5, ~~real RRB~~, on the new core — Wave 2a
+   (sorted family + real RRB) landed; A3, A4, A5 remain as Wave 2b.
 4. **Wave 3 — Haskell sorted family:** A6.
 5. ~~**Wave 4 — arena worst-case O(1)**~~ — dissolved by the C1 ruling; the documentation pass landed with the ruling itself.
 

@@ -34,24 +34,23 @@
     {1 Bounds delivered by the substrate}
 
     Let [N] be the number of key classes in the current state and [k] the number of net-changed
-    classes. This port is built on [Sorted_map], which is an {e immutable sorted array}, not a
-    path-copied balanced tree. The bounds below are what that substrate actually delivers and they
-    deliberately differ from the C# and Rust ports in two directions.
+    classes. This port is built on [Sorted_map], now an order-statistic sorted map over the lazy
+    Hinze–Paterson measured core rather than the immutable sorted array it began as. The Wave-2
+    rebuild flips this module's write bounds to the C# baseline's shape with no change to this
+    file's logic: writes went from [Theta (N + k)] to [O(log N)], and extremes stay [O(1)] — now
+    as worst-case digit reads rather than array indexing.
 
-    - {!count}, {!is_empty}, {!change_count}, {!has_changes}, {!nth}, {!minimum}, {!maximum},
+    - {!count}, {!is_empty}, {!change_count}, {!has_changes}, {!minimum}, {!maximum},
       {!checkpoint}, {!rollback}, {!current_snapshot}, {!checkpoint_snapshot}, {!is_clean} and
-      {!shares_storage_with} are [O(1)]. {!minimum} and {!maximum} are genuinely [O(1)] here, a
-      constant-time index into the array rather than the [Theta (log N)] descent the tree-backed
-      Rust port must pay.
+      {!shares_storage_with} are [O(1)]. {!minimum} and {!maximum} are [O(1)] worst case: digit
+      reads that invoke no comparator.
+    - {!nth} is [O(log N)]: rank select left the array substrate's [O(1)] with it, the regression
+      the complexity-parity census ruled acceptable — flagged, not silent.
     - {!find_opt}, {!find_entry}, {!mem}, {!index_of_key}, {!floor}, {!ceiling}, {!lower},
       {!higher} are [O(log N)] comparisons, and {!find_change} is [O(log (k + 1))].
-    - {!set} and {!remove} are [Theta (N + k)], {e not} the [O(log N)] the C# baseline documents.
-      Locating the key is [O(log N)], but publishing a successor copies the current array and, when
-      a record is written or cancelled, the change array too. A retained successor therefore costs
-      [Theta (N + k)] words rather than [O(log N)] fresh nodes. This is a substrate cost, not an
-      algorithmic one: the coalescing, cancellation, and representative rules are identical, and
-      dropping this module onto a path-copied ordered map would restore the logarithmic bound with
-      no change to this file's logic.
+    - {!set} and {!remove} are [O(log N)] comparisons and fresh nodes for the state edit plus
+      [O(log (k + 1))] for the change-index edit — the baseline bound the array substrate could
+      not deliver, since publishing a successor there copied [Theta (N + k)] words.
     - {!changes} is [Theta (k + 1)] and invokes no comparator and no value-equality callback.
     - {!changes_in_range} is [O(log (k + 1))] comparisons to seek the two boundaries plus
       [Theta (output)] to copy them, and invokes the value-equality relation zero times. The change
@@ -132,9 +131,8 @@ val of_list :
   ('key, 'value) t
 (** [of_list order ~equal_values entries] is a clean map whose current state and checkpoint are both
     [entries], with the last member of a comparator-equivalent class supplying both the retained key
-    representative and the value. It records no changes. [Theta (m^2)] for [m] entries on this array
-    substrate, where a tree would give [O(m log m)]: each entry is placed by a binary search
-    followed by an array copy. *)
+    representative and the value. It records no changes. [O(m log m)] for [m] entries: each entry
+    is placed by an [O(log m)] seek and split-and-join write. *)
 
 val comparator : ('key, 'value) t -> 'key Common.Comparator.t
 (** The retained policy defining key equivalence and ascending order. [O(1)]. *)
@@ -184,13 +182,15 @@ val index_of_key : 'key -> ('key, 'value) t -> int option
 (** The zero-based ascending rank of the key's class in the current state. [O(log N)]. *)
 
 val nth : int -> ('key, 'value) t -> ('key * 'value) option
-(** The current entry at the given zero-based rank. [O(1)] on this array substrate. *)
+(** The current entry at the given zero-based rank. [O(log N)]: a comparator-free size-directed
+    descent — the census-ruled regression from the array substrate's [O(1)]. *)
 
 val minimum : ('key, 'value) t -> ('key * 'value) option
-(** The least current entry by key. [O(1)] here, an array index rather than a tree descent. *)
+(** The least current entry by key. [O(1)] worst case: a digit read that invokes no comparator. *)
 
 val maximum : ('key, 'value) t -> ('key * 'value) option
-(** The greatest current entry by key. [O(1)] here, an array index rather than a tree descent. *)
+(** The greatest current entry by key. [O(1)] worst case: a digit read that invokes no
+    comparator. *)
 
 val floor : 'key -> ('key, 'value) t -> ('key * 'value) option
 (** The greatest current entry whose key is not greater than the probe. [O(log N)]. *)
@@ -211,11 +211,9 @@ val key_range :
     comparator, so under a descending order the low endpoint is the numerically greater key. This is
     a read: the result opens no delta epoch of its own.
 
-    [Theta (log N + output)], not the baseline's [O(log N)]. Both boundaries are found by binary
-    search, but this workspace's ordered map is an immutable entry array, so the selected window is
-    copied rather than shared as a subtree; a full-width range therefore costs [Theta (N)]. The
-    managed and Rust ports return a structurally shared restriction. The seek itself is still a real
-    boundary seek — the cost tracks the output, never the number of excluded entries. *)
+    [O(log N)]: two boundary seeks and a structurally shared restriction, matching the managed and
+    Rust baselines now that the substrate splits share subtrees instead of copying a window. The
+    cost depends neither on the selected width nor on the number of excluded entries. *)
 
 val keys : ('key, 'value) t -> 'key list
 (** The current keys in ascending order. [Theta (N)]. *)
@@ -237,7 +235,7 @@ val set : 'key -> 'value -> ('key, 'value) t -> ('key, 'value) t
     removes the record, and if that empties the index the current root snaps back to the checkpoint
     root. A class present in the current state keeps its stored representative, a still-active
     addition episode keeps its first representative, and only a genuinely new class takes [key].
-    [Theta (N + k)] on this substrate; see the bounds section. *)
+    [O(log N)] plus [O(log (k + 1))] for the change-index edit; see the bounds section. *)
 
 val set_list : ('key * 'value) list -> ('key, 'value) t -> ('key, 'value) t
 (** [set_list entries map] applies [entries] in order, exactly as the left fold of {!set} over them:
@@ -251,7 +249,8 @@ val remove : 'key -> ('key, 'value) t -> ('key, 'value) t
 
     Removing an absent key is a no-op that returns the receiver itself. Removing a class added since
     the checkpoint cancels its record rather than recording a removal, and if that empties the index
-    the current root snaps back to the checkpoint root. [Theta (N + k)] on this substrate. *)
+    the current root snaps back to the checkpoint root. [O(log N)] plus [O(log (k + 1))] for the
+    change-index edit. *)
 
 val checkpoint : ('key, 'value) t -> ('key, 'value) t
 (** Makes the current state the new checkpoint and empties the change index. An already-clean value

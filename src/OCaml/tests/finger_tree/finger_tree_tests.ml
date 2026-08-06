@@ -742,6 +742,8 @@ let () =
             test_interval_map_and_bit_set_cursors;
         ] );
       ("measured-core-probes", Measured_core_probe_tests.tests);
+      ("sorted-family-probes", Sorted_family_probe_tests.tests);
+      ("rrb-vector-probes", Rrb_vector_probe_tests.tests);
       ("incremental-ancestor", Incremental_ancestor_tests.tests);
       ("ancestral-slice-queue", Ancestral_slice_queue_tests.tests);
       ("bilateral-ancestral-deque", Bilateral_ancestral_deque_tests.tests);
