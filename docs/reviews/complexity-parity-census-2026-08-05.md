@@ -48,7 +48,7 @@ donor-mechanism extractions (C#, C++, Haskell lazy cores): `donors-full.json`.
 | # | Where | Delivered today | Target (reference profile) | Fix |
 | --- | --- | --- | --- | --- |
 | A1 | OCaml `Sorted_set`/`Sorted_bag`/`Sorted_map`: flat immutable arrays | Θ(n) point writes, Θ(n·m) set algebra, Θ(n²) `of_list` | O(log n) writes, O(1) extremes | Rebuild on the new OCaml finger-tree core (order-statistic measure), as C#/C/C++ do |
-| A2 | OCaml `Brodal_okasaki_heap`: plain element list | Θ(n) find-min/delete-min, Θ(left) meld | O(1) insert/meld/find-min, O(log n) delete-min | Real bootstrapped skew-binomial forest; the kernel already exists in `persistent_monotone_action_heap.ml` |
+| ~~A2~~ | ~~OCaml `Brodal_okasaki_heap`~~ | **FIXED.** Rebuilt as the untagged specialization of the monotone action heap's skew-binomial kernel: O(1) worst-case insert/meld/minimum, O(log n) delete-min, O(1) count; `statistics` measures the real forest shape, and a linking-disabled mutant fails the forest-length ceiling (4095 vs 14 at n=4096) | done |
 | A3 | OCaml `Priority_search_queue`: flat sorted array | Θ(n) writes and pops | O(log n) writes/pops, O(1) find-min | Winner-cached AVL, as all eight siblings |
 | A4 | OCaml `Range_update_sequence`: flat array, tags applied eagerly per element | Θ(n) range update / insert / split | O(log n) range edit independent of range length | Path-copied implicit AVL with composable pending tags, as siblings |
 | A5 | OCaml ordered family: flat arrays with linear scans | Θ(n) membership, Θ(n) writes, Θ(n·m) algebra | expected O(1) membership; O(log n) positional | CHAMP stamp map + stamped sequence composite, as siblings (`Persistent_hamt` is real and ready) |
@@ -118,8 +118,7 @@ remove-min term (superseded by Wave 1).
 
 ## Remediation Waves (dependency-ordered)
 
-1. **Wave 0 — small, independent, immediate:** A2 (OCaml Brodal), ~~A7~~ (done, commit ac8e02f),
-   ~~D1~~ (done), ~~C2~~ (done, commit 375e269).
+1. **Wave 0 — small, independent, immediate:** ~~A2~~ ~~A7~~ ~~D1~~ ~~C2~~ — **all done** (commits 375e269, ac8e02f, 564de90, and the A2 commit).
 2. **Wave 1 — keystone:** the five finger-tree cores + facade rebases + doc/test tightening.
    Order: Python (freshest workspace knowledge, strictest gates) → Rust → Kotlin → TypeScript →
    OCaml (whose Wave-2 rebuilds sit on its new core).

@@ -370,12 +370,14 @@ encoding, not of the surrounding immutability model.
 - `Canonical_sorted_set` derives the shared `ZZT2` HMAC-SHA256 ranks and preserves canonical sorted
   contents across insertion histories. Its initial storage delegates to `Sorted_set`, so it does
   not claim canonical zip-tree topology or zip-zip complexity bounds.
-- `Brodal_okasaki_heap` and `Daba_lite` preserve the public semantic and failure-atomic contracts,
-  but the initial simple OCaml storage does not claim the specialized sibling cores' worst-case
-  asymptotic or callback bounds. `Brodal_okasaki_heap.statistics` reports only the element count for
-  the same reason: the sibling ports' root-forest length, maximum rank, and maximum depth describe a
-  skew-binomial forest, and this list storage has none, so those fields are absent rather than
-  derived from the count.
+- `Brodal_okasaki_heap` is now the bootstrapped skew-binomial heap every sibling workspace ships —
+  the untagged specialization of `Persistent_monotone_action_heap`'s kernel — delivering the
+  namesake bounds: O(1) worst-case insert, meld, and minimum, O(log n) worst-case delete-minimum,
+  O(1) count. Its `statistics` walks the real forest and reports the same shape fields the sibling
+  audits report (walked count, root-forest length, maximum rank, maximum depth), measured from the
+  nodes rather than synthesized. `Daba_lite` still preserves the public semantic and failure-atomic
+  contracts under simple OCaml storage and does not claim the specialized sibling core's worst-case
+  callback bounds.
 
 The shared semantic authority remains the repository
 [semantic contracts](../../../docs/reference/semantic-contracts.md); this document records the OCaml

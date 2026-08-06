@@ -407,7 +407,56 @@ let test_meldable_heap () =
   let minimum, remainder = Option.get (Brodal_okasaki_heap.minimum_view heap) in
   Alcotest.(check int) "minimum view" 1 minimum;
   Alcotest.(check int) "persistent remainder" 5 (Brodal_okasaki_heap.count remainder);
-  Alcotest.(check int) "source retained" 6 (Brodal_okasaki_heap.count heap)
+  Alcotest.(check int) "source retained" 6 (Brodal_okasaki_heap.count heap);
+  (* A different comparator object is rejected even when it orders identically. *)
+  let foreign = Brodal_okasaki_heap.empty (Common.Comparator.create compare) in
+  (match Brodal_okasaki_heap.meld heap foreign with
+  | exception Invalid_argument _ -> ()
+  | _ -> Alcotest.fail "melding across comparator objects must be rejected")
+
+(* The heap is a real skew-binomial forest, and the audit measures that shape rather than
+   synthesizing it. An ascending build routes every insert into the root's forest, so that build
+   must obey the logarithmic forest ceilings a list storage cannot meet. A descending build nests
+   each losing root as a single child - the flattened-bootstrap representation every sibling port
+   shares - so its depth is linear BY DESIGN and no ceiling applies: no operation walks that
+   chain, and the assertions there are the sorted drain and the walked-count agreement. *)
+let test_meldable_heap_forest_shape () =
+  let size = 4096 in
+  let ceiling =
+    let rec bits value = if value <= 1 then 0 else 1 + bits (value / 2) in
+    bits size + 2
+  in
+  let ascending = List.init size (fun index -> index + 1) in
+  let grown = Brodal_okasaki_heap.of_list int_order ascending in
+  let shape = Brodal_okasaki_heap.statistics grown in
+  Alcotest.(check int) "ascending walked count" size shape.Brodal_okasaki_heap.count;
+  Alcotest.(check bool)
+    (Printf.sprintf "ascending forest length %d within %d"
+       shape.Brodal_okasaki_heap.root_forest_length ceiling)
+    true
+    (shape.Brodal_okasaki_heap.root_forest_length <= ceiling);
+  Alcotest.(check bool)
+    (Printf.sprintf "ascending maximum rank %d within %d" shape.Brodal_okasaki_heap.maximum_rank
+       ceiling)
+    true
+    (shape.Brodal_okasaki_heap.maximum_rank <= ceiling);
+  Alcotest.(check bool)
+    (Printf.sprintf "ascending maximum depth %d within %d" shape.Brodal_okasaki_heap.maximum_depth
+       ((2 * ceiling) + 2))
+    true
+    (shape.Brodal_okasaki_heap.maximum_depth <= (2 * ceiling) + 2);
+  Alcotest.(check bool) "ascending build grows real ranks" true
+    (shape.Brodal_okasaki_heap.maximum_rank >= 1);
+  check_int_list "ascending drain is sorted" ascending (Brodal_okasaki_heap.to_sorted_list grown);
+  let descending = List.init size (fun index -> size - index) in
+  let nested = Brodal_okasaki_heap.of_list int_order descending in
+  let chain = Brodal_okasaki_heap.statistics nested in
+  Alcotest.(check int) "descending walked count" size chain.Brodal_okasaki_heap.count;
+  Alcotest.(check (option int)) "descending minimum" (Some 1) (Brodal_okasaki_heap.minimum nested);
+  check_int_list "descending drain is sorted" ascending (Brodal_okasaki_heap.to_sorted_list nested);
+  let empty_statistics = Brodal_okasaki_heap.statistics (Brodal_okasaki_heap.empty int_order) in
+  Alcotest.(check int) "empty forest length" 0
+    empty_statistics.Brodal_okasaki_heap.root_forest_length
 
 let test_priority_search_queue () =
   let queue =
@@ -678,6 +727,7 @@ let () =
           Alcotest.test_case "text rope cursors" `Quick test_text_rope_and_cursor;
           Alcotest.test_case "canonical sorted set" `Quick test_canonical_sorted_set;
           Alcotest.test_case "meldable heap" `Quick test_meldable_heap;
+    Alcotest.test_case "meldable heap forest shape" `Quick test_meldable_heap_forest_shape;
           Alcotest.test_case "priority search queue" `Quick test_priority_search_queue;
           Alcotest.test_case "DABA Lite" `Quick test_daba_lite;
           Alcotest.test_case "sorted ordered-search cursors" `Quick
