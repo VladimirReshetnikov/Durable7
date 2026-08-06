@@ -1,5 +1,14 @@
 # Python Collection Port — 2026-08-05
 
+> **Current-state note (2026-08-06).** A TypeScript port of the same seven collections shipped
+> afterwards, completing all nine languages, and the complexity-parity campaign that ran between the
+> two rebuilt Python's measured core as a lazy Hinze–Paterson finger tree. Two bounds this review
+> records as Python-substrate divergences — the contextual sequence's Θ(s log n) endpoints and its
+> height-difference concatenation — no longer hold: both now match the reference. This review's scope
+> and findings otherwise stand and still describe the Python shipment; see
+> [the TypeScript port review](typescript-collection-port-2026-08-06.md) and
+> [the parity retrospective](complexity-parity-retrospective-2026-08-06.md).
+
 - Created (UTC): 2026-08-05
 - Repository HEAD (reviewed): `main`, post OCaml port
 - Audience: Maintainers reviewing the eight-language shipment of the seven research-derived collections

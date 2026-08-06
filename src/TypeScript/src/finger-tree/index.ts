@@ -16,3 +16,13 @@ export * from "./brodal-okasaki-heap.js";
 export * from "./priority-search-queue.js";
 export * from "./range-update-algebra.js";
 export * from "./range-update-sequence.js";
+
+// Six of the seven research-derived collections, plus the level-ancestor seam two of them
+// share; the seventh, PersistentAncestralConnectionForest, ships from the hamt subpath.
+export * from "./incremental-ancestor.js";
+export * from "./ancestral-slice-queue.js";
+export * from "./bilateral-ancestral-deque.js";
+export * from "./contextual-rank-sequence.js";
+export * from "./persistent-delta-map.js";
+export * from "./persistent-run-delta-vector.js";
+export * from "./persistent-monotone-action-heap.js";

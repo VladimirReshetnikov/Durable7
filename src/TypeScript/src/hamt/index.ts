@@ -17,3 +17,4 @@ export * from "./merkle-encoding.js";
 export * from "./merkle-search-tree.js";
 export * from "./merkle-persistence.js";
 export * from "./merkle-proofs-merge.js";
+export * from "./persistent-ancestral-connection-forest.js";

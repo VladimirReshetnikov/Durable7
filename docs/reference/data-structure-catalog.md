@@ -350,11 +350,10 @@ isolated session.
 Seven collections originated as scoped design studies, each with a normative proposal under
 [`docs/proposals`](../proposals/) recording its claims, prior-art boundary, and deliberate
 limitations. They were promoted out of the former `*.Experimental` namespaces into the ordinary
-family namespaces and ported to Rust, C, Haskell, Kotlin, C++, OCaml, and Python. Coverage is **C#,
-Rust, C, Haskell, Kotlin, C++, OCaml, and Python** — only TypeScript remains deliberately unported
-pending a named consumer, so absence there is a scheduling decision rather than a gap. Every one of
-them separates shipped bounds from theoretical instantiations; read the proposal before relying on a
-headline complexity.
+family namespaces and ported to every other workspace. Coverage is **all nine languages** — C#,
+Rust, C, Haskell, Kotlin, C++, OCaml, Python, and TypeScript — with no scheduling gap left. Every one
+of them separates shipped bounds from theoretical instantiations; read the proposal before relying on
+a headline complexity.
 
 | Collection | Role | Proposal |
 | --- | --- | --- |
@@ -376,6 +375,7 @@ headline complexity.
 | Kotlin | `durable7.fingertree.AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, `IncrementalAncestorArena<T>` with the shipped `MyersIncrementalAncestorArena<T>` (a faithful arena port — the JVM supplies the mutable state and monitor the reference assumes), `ContextualRankSequence<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>` with its `OrderClamp` family (FingerTree); `durable7.hamt.PersistentAncestralConnectionForest` (Hamt) | [FingerTree API notes](../../src/Kotlin/FingerTree/docs/api-notes.md), [Hamt API notes](../../src/Kotlin/Hamt/docs/api-notes.md), [workspace README](../../src/Kotlin/README.md) |
 | Haskell | `Durable7.FingerTree.AncestralSliceQueue`, `.BilateralAncestralDeque`, `.IncrementalAncestor` (the shared seam, with no arena object), `.ContextualRankSequence`, `.PersistentDeltaMap`, `.PersistentRunDeltaVector`, `.PersistentMonotoneActionHeap` (FingerTree); `Durable7.Hamt.PersistentAncestralConnectionForest` (Hamt). Each is reachable through its own module rather than the family umbrella, because several export a `ValidationStatistics` type | [FingerTree README](../../src/Haskell/FingerTree/README.md), [Hamt README](../../src/Haskell/Hamt/README.md), [workspace README](../../src/Haskell/README.md) |
 | Python | `durable7.finger_tree.AncestralSliceQueue`, `BilateralAncestralDeque`, the `IncrementalAncestorArena` **Protocol** with the shipped `MyersIncrementalAncestorArena` (structural typing, so a backend conforms without declaring it), `ContextualRankSequence`, `PersistentDeltaMap`, `PersistentRunDeltaVector`, `PersistentMonotoneActionHeap` with its `OrderClamp` family, and the shared `ValueEquality` relation in `durable7.finger_tree.equality` (FingerTree); `durable7.hamt.PersistentAncestralConnectionForest` (Hamt). All are re-exported from the root `durable7` namespace | [API notes](../../src/Python/docs/api-notes.md), [validation](../../src/Python/docs/validation.md), [workspace README](../../src/Python/README.md) |
+| TypeScript | `AncestralSliceQueue<T>`, `BilateralAncestralDeque<T>`, the `IncrementalAncestorArena<T>` interface with the shipped `MyersIncrementalAncestorArena<T>`, `ContextualRankSequence<T>`, `PersistentDeltaMap<K, V>`, `PersistentRunDeltaVector<T>`, `PersistentMonotoneActionHeap<E, P, A>` with its `OrderClamp` family (finger-tree); `PersistentAncestralConnectionForest` (hamt). Reached through the `durable7/finger-tree` and `durable7/hamt` subpaths or the root re-export. Ported last, after the complexity-parity campaign, so it is the only port whose contextual sequence states the reference's O(s) amortized endpoints and O(s log(min(n, m))) concatenation from the outset rather than weakening them | [API notes](../../src/TypeScript/docs/api-notes.md), [workspace README](../../src/TypeScript/README.md) |
 
 The Rust port makes three intentional, documented divergences, all recorded in the local API notes:
 it consolidates C#'s two duplicate level-ancestor arenas into one shared backend; it replaces the

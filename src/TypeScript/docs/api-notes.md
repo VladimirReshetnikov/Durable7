@@ -507,6 +507,57 @@ The store API is synchronous because Node's in-memory and common embedded stores
 Custom remote stores should stage blocks asynchronously outside the tree, then call verified import
 or load against a synchronous snapshot.
 
+## Research-derived collections
+
+Six ship in `finger-tree` (`AncestralSliceQueue`, `BilateralAncestralDeque`,
+`ContextualRankSequence`, `PersistentDeltaMap`, `PersistentRunDeltaVector`,
+`PersistentMonotoneActionHeap`) and the connection forest in `hamt`. Two share
+`IncrementalAncestorArena`, the append-only level-ancestor seam: an interface plus the shipped
+`MyersIncrementalAncestorArena`. `statistics()` is deliberately **not** on the interface — it
+describes one backend's representation — so each collection takes a caller-supplied arena through a
+`withArena` factory, and a test wanting a query profile constructs the Myers arena itself and reads
+counters off its own reference.
+
+TypeScript received these last of the nine workspaces, after the complexity-parity campaign, so it
+is the only port that inherits reference-strength substrates rather than working around weaker ones:
+
+- `ContextualRankSequence` states the reference's own bounds — **O(s) amortized endpoint updates**
+  (valid under persistent branching) and **O(s log(min(n, m))) amortized concatenation** — because
+  `measured-sequence.ts` is a genuine lazy Hinze–Paterson finger tree. Every earlier port originally
+  had to weaken both, and four of them carried substrate-divergence notes until their cores were
+  rebuilt.
+- `PersistentDeltaMap` gets O(1) worst-case extremes: `SortedMap.minEntry`/`maxEntry` are
+  `front()`/`back()` digit reads. Its range-restricted change enumeration is a genuine boundary seek
+  through `SortedMap.getKeyRange` — two measured splits under the retained comparator — and performs
+  zero value-equality callbacks.
+- `PersistentRunDeltaVector` states **worst-case** splice bounds, because `rrb-vector.ts` is a real
+  eager 32-way RRB that defers nothing.
+- `PersistentMonotoneActionHeap` inherits O(1) worst-case insert/meld/minimum and O(log n)
+  delete-min from a real bootstrapped skew-binomial forest.
+
+Four JavaScript-specific decisions are worth stating plainly:
+
+- **No lock is documented on the arena.** The managed reference serializes every operation under a
+  private lock; JavaScript has no shared-memory concurrency for ordinary objects, so there is no
+  such contract to reproduce.
+- **The baseline's three arithmetic ceilings are unreachable and are not imitated.** Ancestry depth,
+  node count, and coalesced jump distance are all bounded by memory long before
+  `Number.MAX_SAFE_INTEGER`, so no artificial limit is synthesized and the arena's counters are
+  exact rather than saturating.
+- **Identity needs boxing.** `===` on numbers and interned strings is value equality, so the
+  run-delta vector boxes every element in a private identity-bearing cell; without it the invariant
+  "a clean position reuses its exact checkpoint cell" would be vacuous for precisely the payload
+  types a test reaches for first. `Object.is` is used where reflexive-on-NaN equality is wanted.
+- **Presence is explicit.** `undefined` is a legal stored value, so change endpoints and absent
+  results use explicit wrappers rather than a bare `T | undefined` wherever the two could be
+  confused.
+
+Naming follows the sibling ports rather than the reference where JavaScript idiom demands it:
+`Slice` becomes `getRange` (`slice` reads as `Array.prototype.slice`'s start/end convention), C#
+indexers become `getAt`, `TryXxx(out)` pairs become `Xxx(): Result | undefined`, and
+`Create`/`CreateRange` become the workspace's `empty`/`from` static factories. Mixing two retained
+policy objects throws `TypeError`, matching `BrodalOkasakiHeap.meld`.
+
 ## Deliberate non-ports
 
 The repository's frozen CHAMP tier, order-maintenance list, styled-text rope, and other unshipped

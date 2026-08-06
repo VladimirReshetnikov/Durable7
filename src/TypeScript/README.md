@@ -13,9 +13,24 @@ declaration files alongside ES modules.
 
 | Import | Main types |
 | --- | --- |
-| `durable7/hamt` | `PersistentHashMap` with one-descent factory updates, `PersistentHashSet`, `PersistentHashBag`, set-valued `PersistentHashMultimap`, bidirectional `PersistentRelation`, strict `PersistentBiMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, reusable `HashMapBulkBuilder`, map/set single-owner transients, the isolate-local snapshotting `ConcurrentHashTrie` facade, 32/64-bit Patricia maps and sets, and the exact-wire Merkle family |
-| `durable7/finger-tree` | `PersistentDeque`, general measured `FingerTree`, payload-bearing `PersistentIntervalMap`, `PersistentChunkedBitSet`, lazy algebraic `RangeUpdateSequence`, `ReversibleDeque`, `RrbVector`, sorted bag/set/map, canonical zip-zip set, measured and Brodal–Okasaki priority queues, priority-search queue, interval tree, rope/measured-rope/text cursors, and `DabaLite` |
+| `durable7/hamt` | `PersistentHashMap` with one-descent factory updates, `PersistentHashSet`, `PersistentHashBag`, set-valued `PersistentHashMultimap`, bidirectional `PersistentRelation`, strict `PersistentBiMap`, `PersistentMapPatch`, `PersistentDirectedGraph`, `PersistentIndexedMap`, reusable `HashMapBulkBuilder`, map/set single-owner transients, the isolate-local snapshotting `ConcurrentHashTrie` facade, 32/64-bit Patricia maps and sets, the exact-wire Merkle family, and the branching `PersistentAncestralConnectionForest` |
+| `durable7/finger-tree` | `PersistentDeque`, general measured `FingerTree`, payload-bearing `PersistentIntervalMap`, `PersistentChunkedBitSet`, lazy algebraic `RangeUpdateSequence`, `ReversibleDeque`, `RrbVector`, sorted bag/set/map, canonical zip-zip set, measured and Brodal–Okasaki priority queues, priority-search queue, interval tree, rope/measured-rope/text cursors, `DabaLite`, and six of the seven research-derived collections (`AncestralSliceQueue`, `BilateralAncestralDeque`, `ContextualRankSequence`, `PersistentDeltaMap`, `PersistentRunDeltaVector`, `PersistentMonotoneActionHeap`) over the shared `IncrementalAncestorArena` seam |
 | `durable7/ordered` | independent insertion-ordered `PersistentOrderedSet`, `PersistentOrderedMap`, and grouped `PersistentOrderedMultimap` with positional movement/ranges, stable one-shot sorting, sparse labels, and first-representative retention |
+
+The seven research-derived collections ship here too — six in `finger-tree`, the connection forest
+in `hamt` — over `IncrementalAncestorArena`, the append-only level-ancestor seam two of them share.
+TypeScript was the ninth and last workspace to receive them, which is why it is the only port that
+states the reference's own bounds for `ContextualRankSequence` (O(s) amortized endpoint updates,
+O(s log(min(n, m))) amortized concatenation) rather than weakening them: it was written after the
+complexity-parity campaign gave this workspace a genuine lazy Hinze–Paterson measured core, a real
+32-way RRB, and a real bootstrapped skew-binomial heap to build on. Three consequences are worth
+knowing. The arena documents no lock, because JavaScript has no shared-memory concurrency for
+ordinary objects, where the managed reference serializes under a private one. The baseline's three
+arithmetic overflow ceilings are unreachable and are not imitated: depth, node count, and coalesced
+jump distance are all memory-bound long before `Number.MAX_SAFE_INTEGER`. And because `===` on
+numbers and interned strings is value equality, the run-delta vector boxes elements in an
+identity-bearing cell, without which "a clean position reuses its exact checkpoint cell" would be
+vacuous for exactly the payloads a test reaches for first.
 
 The root `durable7` import re-exports all three subpaths, so `import { … } from "durable7"` reaches
 every public type; the subpath imports exist for consumers who want a narrower dependency surface.
