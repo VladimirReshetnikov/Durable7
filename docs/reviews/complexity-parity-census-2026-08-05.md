@@ -89,7 +89,7 @@ finger-tree-with-orientation representation (fixes A8/A9 as a by-product).
 
 | # | Where | Gap | Fix |
 | --- | --- | --- | --- |
-| C1 | Incremental ancestor arena, 7 workspaces | Haskell delivers O(1) **worst-case** leaf add (no arena; a node is its own handle); all arena implementations are O(1) amortized, and C's is O(√M) worst at a directory doubling | Incremental next-block pre-initialization makes block allocation worst-case O(1); C's directory doubling likewise incremental. Equalize upward to worst-case O(1) everywhere |
+| C1 | Incremental ancestor arena, 7 workspaces | Haskell delivers O(1) **worst-case** leaf add (no arena; a node is its own handle); all arena implementations are O(1) amortized, and C's is O(√M) worst at a directory doubling | **Mechanism corrected after analysis:** naive next-block pre-initialization does NOT reach worst-case O(1) in GC languages, because array allocation itself zeroes Θ(block) there, and CPython/JVM list growth reallocs in Θ(length) spikes. The honest fix is the classic real-time deamortization: keep old and new backing tables live and migrate a constant number of slots per add, so no single operation ever pays a Θ(√M) or Θ(M) copy; implementable in all eight arena workspaces (C's uninitialized malloc makes it simpler there, not different). Equalize upward to worst-case O(1) everywhere |
 | C2 | C# run-delta-vector doc wording | Claims "O(log n) amortized" splices over a fully eager RRB path — delivered is worst-case | Raise the documented claim to worst-case (Python already states it; verify Rust/others in passing) |
 
 ### Class D — conditional vs unconditional guarantees
