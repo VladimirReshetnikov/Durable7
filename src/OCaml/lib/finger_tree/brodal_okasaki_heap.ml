@@ -1,10 +1,17 @@
 (** Implementation of the persistent meldable minimum heap surface.
 
-    Melding links two forests rather than merging their contents, which is what keeps it constant
-    time in the worst case rather than only amortized. *)
+    This is deliberately simple storage, not the bootstrapped skew-binomial structure the name refers
+    to: elements live in a plain list, so melding appends the two lists, the minimum is a linear
+    fold, and the count is a walk. Persistence and comparator identity are exact, but none of the
+    namesake worst-case bounds are delivered or claimed — the workspace API notes record that
+    divergence, and {!statistics} reports only what this representation can actually measure.
+
+    If the namesake bounds are ever wanted here, {!Persistent_monotone_action_heap} already carries a
+    full bootstrapped skew-binomial kernel ported from the managed and Rust sources, and is the
+    in-repo model to follow. *)
 
 type 'element t = { order : 'element Common.Comparator.t; values : 'element list }
-type statistics = { count : int; root_forest_length : int; maximum_rank : int; maximum_depth : int }
+type statistics = { count : int }
 
 let empty order = { order; values = [] }
 let comparator heap = heap.order
@@ -42,11 +49,7 @@ let minimum_view heap =
 let delete_minimum heap = Option.map snd (minimum_view heap)
 let to_sorted_list heap = List.sort (Common.Comparator.compare heap.order) heap.values
 
-let statistics heap =
-  let count = count heap in
-  let rec log2 value result = if value <= 1 then result else log2 (value lsr 1) (result + 1) in
-  let rec popcount value result =
-    if value = 0 then result else popcount (value land (value - 1)) (result + 1)
-  in
-  let maximum_rank = if count = 0 then 0 else log2 count 0 in
-  { count; root_forest_length = popcount count 0; maximum_rank; maximum_depth = maximum_rank + 1 }
+(* Only the count is reported. The shape fields the sibling ports carry were previously synthesized
+   here as [popcount count] and [log2 count] — the shape a real skew-binomial forest would have had —
+   which made the audit describe a structure this storage does not build. *)
+let statistics heap = { count = count heap }

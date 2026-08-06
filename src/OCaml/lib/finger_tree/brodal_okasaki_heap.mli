@@ -1,8 +1,15 @@
 (** Persistent meldable minimum heap surface. *)
 
 type 'element t
-type statistics = { count : int; root_forest_length : int; maximum_rank : int; maximum_depth : int }
-(** Shape measurements returned by a structural audit. *)
+type statistics = { count : int }
+(** What a structural audit can measure on this storage.
+
+    The sibling ports additionally report a root-forest length, a maximum rank, and a maximum depth,
+    which describe a skew-binomial forest's shape. This module stores elements in a plain list and
+    has no forest, so those fields are deliberately absent rather than synthesized: reporting
+    numbers that describe a structure the representation does not have would make the audit
+    manufacture its own evidence. The storage divergence itself is recorded in the workspace
+    {{:../../docs/api-notes.md} API notes}. *)
 
 val empty : 'element Common.Comparator.t -> 'element t
 (** The empty heap. *)
@@ -38,4 +45,5 @@ val to_sorted_list : 'element t -> 'element list
 (** The elements in ascending order. *)
 
 val statistics : 'element t -> statistics
-(** Shape measurements from a structural audit. *)
+(** The measurements a structural audit can take on this storage. [Theta (n)], since the count is
+    derived by walking the list rather than cached. *)
