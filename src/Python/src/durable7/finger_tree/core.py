@@ -240,12 +240,26 @@ class PersistentDeque(Generic[T]):
             raise AssertionError("Validated view split failed.")
         return DequePop(cast(T, self.back()), split.left)
 
+    def reversed_view(self) -> PersistentDeque[T]:
+        """Return the deque in reverse order, sharing storage lazily.
+
+        O(1) immediate work over the size-measured substrate (a commutative measure, so cached
+        node measures survive mirroring); the middle's reversal rides the suspensions. This is
+        the structural primitive the reversible deque's cross-orientation concatenation uses.
+        """
+
+        return PersistentDeque(self._items.reversed_view())
+
     def reverse(self) -> PersistentDeque[T]:
-        """Return a deque with the elements in reverse order."""
+        """Return a deque with the elements in reverse order.
+
+        O(1): a lazy structural mirror sharing storage, not a rebuild. (This was previously a
+        Theta(n) materialization.)
+        """
 
         if len(self) < 2:
             return self
-        return PersistentDeque.from_iterable(reversed(self.to_list()))
+        return self.reversed_view()
 
     def to_list(self) -> list[T]:
         """Copy the elements into a list, in sequence order."""
@@ -363,10 +377,13 @@ class ReversibleDeque(Generic[T]):
         return ReversibleDeque(items, self._reversed)
 
     def concat(self, other: ReversibleDeque[T]) -> ReversibleDeque[T]:
-        """Return this deque's elements followed by ``other``'s. Joins the two trees rather than
-        copying either, so the cost follows their height difference and not their sizes. Two
-        deques with the same orientation join structurally; opposite orientations fall back to
-        materializing.
+        """Return this deque's elements followed by ``other``'s.
+
+        O(log(min(n, m))) amortized in every orientation combination, matching the reference.
+        Same-orientation operands join structurally; opposite orientations lazily mirror the
+        smaller operand into the larger one's orientation first - an O(1) structural reversal
+        whose work rides the suspensions - and then join structurally. (This previously fell back
+        to a Theta(n + m) materialization.)
         """
 
         if self.is_empty:
@@ -380,7 +397,19 @@ class ReversibleDeque(Generic[T]):
                 else self._items.concat(other._items)
             )
             return ReversibleDeque(joined, self._reversed)
-        return ReversibleDeque.from_iterable((*self, *other))
+        if len(self) >= len(other):
+            # Keep the receiver's orientation; mirror the smaller right operand into it.
+            if self._reversed:
+                joined = other._items.reversed_view().concat(self._items)
+            else:
+                joined = self._items.concat(other._items.reversed_view())
+            return ReversibleDeque(joined, self._reversed)
+        # Keep the larger right operand's orientation; mirror the receiver into it.
+        if other._reversed:
+            joined = other._items.concat(self._items.reversed_view())
+        else:
+            joined = self._items.reversed_view().concat(other._items)
+        return ReversibleDeque(joined, other._reversed)
 
     def split_at(self, index: int) -> tuple[ReversibleDeque[T], ReversibleDeque[T]] | None:
         """Split into the elements before ``index`` and those from ``index`` on, or ``None`` when

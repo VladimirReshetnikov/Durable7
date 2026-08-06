@@ -44,6 +44,7 @@ _PENDING = object()
 _OP_PUSH_FRONT = 1
 _OP_PUSH_BACK = 2
 _OP_CONCAT = 3
+_OP_REVERSE = 4
 
 
 class _Susp:
@@ -92,6 +93,10 @@ class _Susp:
     def concat(cls, policy: object, left: _Susp, between: list[object], right: _Susp) -> _Susp:
         return cls(_OP_CONCAT, policy, (left, right), between)
 
+    @classmethod
+    def reverse_of(cls, policy: object, inner: _Susp) -> _Susp:
+        return cls(_OP_REVERSE, policy, inner, None)
+
     @property
     def is_forced(self) -> bool:
         return self._value is not _PENDING
@@ -119,6 +124,12 @@ class _Susp:
                     stack.append(inner)
                     continue
                 current._publish(_snoc(policy, cast("_Tree", inner._value), current._second))
+            elif operation == _OP_REVERSE:
+                inner = cast("_Susp", current._first)
+                if inner._value is _PENDING:
+                    stack.append(inner)
+                    continue
+                current._publish(_reverse_tree(policy, cast("_Tree", inner._value)))
             else:
                 pair = cast("tuple[_Susp, _Susp]", current._first)
                 left, right = pair
@@ -485,6 +496,37 @@ def _item_to_tree(policy: MeasurePolicy[T, M], item: object) -> _Tree:
 
 def _item_digit(item: object) -> tuple[object, ...]:
     return item.children if isinstance(item, _Node) else (item,)
+
+
+def _reverse_item(item: object) -> object:
+    """Mirror one item. Sizes and cached measures survive: reversal is only offered under a
+    commutative measure (see :meth:`MeasuredSequence.reversed_view`), where a subtree's combined
+    measure is order-independent."""
+
+    if not isinstance(item, _Node):
+        return item
+    children = tuple(_reverse_item(child) for child in reversed(item.children))
+    return _Node(children, item.size, item.measure, item.last, item.first)
+
+
+def _reverse_digit(digit: tuple[object, ...]) -> tuple[object, ...]:
+    return tuple(_reverse_item(item) for item in reversed(digit))
+
+
+def _reverse_tree(policy: MeasurePolicy[T, M], tree: _Tree) -> _Tree:
+    """Mirror a tree with the middle's reversal deferred: O(1) immediate work per level."""
+
+    if tree is None:
+        return None
+    if isinstance(tree, _Single):
+        return _Single(_reverse_item(tree.item))
+    return _Deep(
+        tree.size,
+        _reverse_digit(tree.suffix),
+        _Susp.reverse_of(policy, tree.middle),
+        tree.middle_size,
+        _reverse_digit(tree.prefix),
+    )
 
 
 def _deep_left(
@@ -972,6 +1014,18 @@ class MeasuredSequence(Generic[T, M]):
 
         found = scan_tree(self._root)
         return len(self) if found is None else found
+
+    def reversed_view(self) -> MeasuredSequence[T, M]:
+        """Return the sequence in reverse order, sharing storage lazily.
+
+        O(1) immediate work: digits mirror eagerly, the middle's reversal rides a suspension, and
+        cached node measures are reused. Reuse is only sound when the measure is **commutative**
+        (a reversed subtree then combines to the same measure), which is the caller's obligation -
+        the reversible deque's size measure is the intended consumer. Under a non-commutative
+        measure the reversed view's cached measures would be wrong, so do not use it there.
+        """
+
+        return MeasuredSequence(_reverse_tree(self.policy, self._root), self.policy)
 
     def shares_structure_with(self, other: MeasuredSequence[T, M]) -> bool:
         """Whether the two sequences have any node in common by object identity.

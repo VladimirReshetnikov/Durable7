@@ -228,3 +228,40 @@ def test_sharing_probe_is_free_on_a_warmed_spine() -> None:
     policy.reset()
     assert not independent.shares_structure_with(base)
     assert policy.reset() == 0
+
+
+def test_reversed_view_is_lazy_and_correct() -> None:
+    """Mirroring defers the middle's reversal: O(1) policy work immediately, full order on read."""
+
+    policy = _CountingSize()
+    sequence = _build(16_384, policy)
+    assert sequence.measure == 16_384
+    policy.reset()
+    mirrored = sequence.reversed_view()
+    assert policy.reset() == 0, "mirroring reuses cached measures and defers the middle"
+    assert mirrored.front() == 16_383
+    assert mirrored.back() == 0
+    assert mirrored.at(0) == 16_383
+    assert mirrored.at(16_383) == 0
+    assert mirrored.to_list() == list(reversed(range(16_384)))
+
+
+def test_cross_orientation_concat_is_structural() -> None:
+    """The reversible deque's mismatched concat must join structurally, not materialize.
+
+    Measured here at the substrate level: mirror-then-concat of a 16384-element sequence with a
+    small one costs the same handful of immediate policy calls as a same-orientation concat -
+    the Theta(n + m) materialization this replaced would pay tens of thousands.
+    """
+
+    policy = _CountingSize()
+    big = _build(16_384, policy)
+    small = _build(9, policy)
+    assert big.measure == 16_384
+    assert small.measure == 9
+    policy.reset()
+    joined = big.concat(small.reversed_view())
+    immediate = policy.reset()
+    assert immediate <= 40, immediate
+    assert len(joined) == 16_393
+    assert joined.at(16_392) == 0
