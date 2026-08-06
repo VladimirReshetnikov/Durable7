@@ -59,9 +59,13 @@ donor-mechanism extractions (C#, C++, Haskell lazy cores): `donors-full.json`.
 
 ### Class B — the keystone: join-tree cores (blocks most of Class A's siblings)
 
-Five workspaces (~~Rust~~, Kotlin, OCaml, ~~Python~~, TypeScript) must replace their join-tree
+Five workspaces (~~Rust~~, ~~Kotlin~~, OCaml, ~~Python~~, TypeScript) must replace their join-tree
 measured cores with genuine lazy Hinze–Paterson finger trees, **in place, same module, same public
-API**. **Rust landed second** (18d216d + docs): same probe shape — 340 combines for 512 endpoint
+API**. **Kotlin landed third** (0e8aaba + docs): identical probe shape once more (340/340 endpoint
+combines, 3,336 vs 5-per-branch memoization, 0-vs-4 concat), sealed-class suspensions published by
+`AtomicReference.compareAndSet`, no iterative teardown needed (JVM GC); its formerly false Core.kt
+claims are now delivered, and its arena carries the C1 ruling sentence deferred from 932d670.
+**Rust landed second** (18d216d + docs): same probe shape — 340 combines for 512 endpoint
 pushes at both n=1024 and n=32768, first force 3,336 vs 5 per later branch, 200k chains force AND
 drop iteratively (Rust adds the iterative `Drop`, since Arc-chain drop recursion overflows where
 Python's GC hides it); its formerly false module claims are now true. **Python landed first** (its core, probes, and consumer upgrades): endpoints O(s)/O(1)

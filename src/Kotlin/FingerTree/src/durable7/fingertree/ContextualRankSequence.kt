@@ -165,26 +165,20 @@ public data class ContextualRankSequenceStatistics(
  * | [get] | O(log n), composing no summary |
  * | [evaluatePrefix], [eventRank], [trySelectEvent] | O(s log n) |
  * | [setItem], [insertAt], [removeAt], [splitAt], [getRange] | O(s log n) |
- * | [prepend], [append] | Θ(s log n) |
- * | [concat] | Θ(s · (log m + \|h − h'\|)) for operand heights `h` and `h'` |
+ * | [prepend], [append] | O(s) amortized, O(s log n) worst case per call |
+ * | [concat] | O(s log(min(n, m))) amortized |
  * | [from], [validateStructure] | O(s n) |
  * | [toList], [iterator] | O(n) |
  *
- * Two of those are weaker than the C# reference's, and the cause is the substrate rather than a
- * different algorithm.
- *
- * **Endpoint updates are Θ(s log n), not O(s) amortized.** A finger tree earns amortized O(1) node
- * work at either end from its digits; this package's substrate is a height-balanced join tree with no
- * finger, so pushing one element joins a singleton against a tree of height Θ(log n) and rebuilds
- * every node on that spine, each rebuild composing an O(s) effect table. [insertAt] at a boundary
- * inherits the same cost, so it too is Θ(s log n) rather than O(s).
- *
- * **Concatenation is Θ(s · (log m + |h − h'|)), which is not O(s log(min(n, m))).** The substrate's
- * join first extracts the leading element of the right operand, walking that operand's left spine at
- * Θ(s log m), and then descends the taller operand until the heights meet, rebuilding Θ(|h − h'|)
- * nodes at O(s) each. Appending a short run to a long sequence therefore costs Θ(s log n), and
- * prepending a long sequence to a short one costs Θ(s log m); in general the honest bound is
- * O(s log(n + m)). The C# reference's log(min(n, m)) form does not hold here in either direction.
+ * Both formerly weaker bounds now match the C# reference, because the substrate is a lazy
+ * Hinze-Paterson finger tree: digits give amortized O(1) node work at either end (each node
+ * composing one O(s) effect table, so endpoint updates are O(s) amortized, valid under
+ * persistent branching through memoized shared suspensions), and concatenation's suspended
+ * middle recursion terminates at the shallower operand, giving O(s log(min(n, m))) amortized.
+ * [insertAt] at a boundary delegates to the endpoint operations and inherits O(s) amortized.
+ * (An earlier revision sat on a height-balanced join tree and honestly documented
+ * Θ(s log n) endpoints and height-difference concatenation here; the substrate upgrade
+ * removed the divergence.)
  *
  * Storage is O(s n): every node caches an O(s) table and every element caches its own. A path-copying
  * edit adds O(s log n) fresh summary storage while untouched structure stays shared. When the machine

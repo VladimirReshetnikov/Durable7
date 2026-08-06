@@ -108,7 +108,10 @@ public data class MyersIncrementalAncestorStatistics(
  * Each immutable node keeps one parent link and one coalesced jump link. Adding a leaf performs O(1)
  * link work. Nodes are retained in blocks of sizes 1, 3, 5, ..., whose square boundaries provide
  * O(1) addressing and O(sqrt(M)) unused slots after `M` published nodes; managed block and directory
- * allocation makes insertion O(1) amortized rather than worst case. An ancestor query follows
+ * allocation makes insertion O(1) amortized rather than worst case: a single addition at a
+ * square boundary pays Θ(√M) to allocate the next odd block, the accepted contract of the
+ * shared odd-block representation (deamortizing it was considered and declined; Haskell's
+ * arena-free port exceeds this profile at O(1) worst case). An ancestor query follows
  * O(log M) parent/jump links in the worst case. Total arena storage is O(M), and every published
  * value stays reachable until the arena is collected.
  *
@@ -143,7 +146,8 @@ public class MyersIncrementalAncestorArena<T> : IncrementalAncestorArena<T> {
     /**
      * Adds a labelled leaf below a previously published node.
      *
-     * This addition is O(1) amortized over the block and directory allocations.
+     * This addition is O(1) amortized over the block and directory allocations; a
+     * block-boundary call pays Θ(√M) for the new odd block.
      *
      * @throws IllegalArgumentException when [parent] was never published by this arena.
      * @throws ArithmeticException when the depth, the node count, or a coalesced jump distance

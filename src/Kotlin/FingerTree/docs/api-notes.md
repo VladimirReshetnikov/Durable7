@@ -617,13 +617,14 @@ under the ceiling would still fail.
 summary monoid. The machine is a retained `ContextualEventMachine<T>` policy object rather than C#'s
 static-abstract type parameter, so `stateCount` is instance-level and is read once per lineage.
 Each element is stored wrapped with its own cached effect table, which is what keeps rank, select,
-and indexed descent free of machine invocations on this node-oriented substrate. **Two bounds are
-weaker than the managed reference and are stated as such:** endpoint updates are Θ(s log n) rather
-than O(s) amortized, and concatenation is Θ(s·(log m + |h − h′|)) — that is O(s log(n + m)) — rather
-than O(s log(min(n, m))). Both follow from the strict measured AVL engine: it has no digits to give
-amortized endpoints, and `concatNodes` walks the right operand's left spine unconditionally before
-joining by height difference, so the `log(min(n, m))` form fails in both directions here rather than
-only for asymmetric operands as in the Rust port.
+and indexed descent free of machine invocations on this node-oriented substrate. **Both formerly weaker bounds now match the managed
+reference:** the measured engine is a lazy Hinze-Paterson finger tree (memoized defunctionalized
+suspensions, iterative force, CAS publication), so endpoint updates are O(s) amortized — valid
+under persistent branching — and concatenation is O(s log(min(n, m))) amortized. (An earlier
+revision's engine was a measured AVL join tree and this note honestly recorded Θ(s log n)
+endpoints and height-difference concatenation; the substrate upgrade removed the divergence, and
+the workspace's probe tests pin the new bounds — 512 endpoint pushes cost 340 combines at both
+n=1024 and n=32768.)
 
 `PersistentDeltaMap<K, V>` pairs current state with a designated checkpoint and a coalesced exact
 net-change index. Every load-bearing rule survives: a policy-equal write is a no-op returning a
