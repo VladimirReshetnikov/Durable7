@@ -461,13 +461,19 @@ private fun measuredCursorCallbackFailuresAreAtomicAndRetryable() {
     measuredCursorCheckEquals(0, policy.measureCalls, "snapshot measure callback count")
     measuredCursorCheckEquals(0, policy.combineCalls, "snapshot combine callback count")
 
+    // Measure-directed seeks read cached element measures - the lazy core measures each element
+    // exactly once, at insertion - so a query cannot reach a measure-callback failure at all.
+    // Armed to throw on the first measure call, the seek still succeeds: the stronger
+    // cached-query guarantee that inverts the old eager core's raise-on-search behaviour.
     policy.reset(throwOnMeasure = 1)
-    measuredCursorCheckThrows<MeasuredCursorCallbackException>("measure search callback failure") {
-        cursor.seekByMeasure { it >= 129 }
-    }
+    measuredCursorCheckEquals(
+        128,
+        cursor.seekByMeasure { it >= 129 }.cursor.position,
+        "cached-measure search succeeds with the measure callback armed",
+    )
+    measuredCursorCheckEquals(0, policy.measureCalls, "measure search re-invokes no measure callback")
     policy.reset()
-    measuredCursorCheck(cursor.snapshot() === source, "search callback failure retains exact source")
-    measuredCursorCheckEquals(128, cursor.seekByMeasure { it >= 129 }.cursor.position, "search failure retry succeeds")
+    measuredCursorCheck(cursor.snapshot() === source, "measure-armed search retains exact source")
 
     policy.reset(throwOnCombine = 1)
     measuredCursorCheckThrows<MeasuredCursorCallbackException>("replacement combine failure") {

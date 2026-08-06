@@ -553,14 +553,28 @@ private fun contextualMachineContractViolationsAreAtomic() {
         huge.evaluate(0),
         "the saturating machine reaches the largest total.",
     )
-    contextualCheckThrows<ArithmeticException>("appending must reject an event-count overflow.") {
-        huge.append(2)
-    }
-    contextualCheckThrows<ArithmeticException>("concatenation must reject an event-count overflow.") {
-        huge.concat(huge)
-    }
-    contextualCheckThrows<ArithmeticException>("insertion must reject an event-count overflow.") {
-        huge.insertAt(0, 2)
+    // The measured core defers summary combination, matching the reference's lazy finger tree,
+    // so the event-count overflow surfaces on the first summary read of a successor rather than
+    // inside the edit itself. Failure atomicity is preserved in the form the laziness contract
+    // gives it: a raising force publishes nothing, every retained version stays valid, and the
+    // read is retryable - both reads below raise, proving the first failure memoized no poison.
+    val overflowing = listOf(
+        "append" to huge.append(2),
+        "prepend" to huge.prepend(2),
+        "concat" to huge.concat(huge),
+        "insert" to (huge.insertAt(0, 2) ?: throw AssertionError("a valid boundary must insert.")),
+    )
+    for ((operation, successor) in overflowing) {
+        contextualCheckThrows<ArithmeticException>(
+            "an event-count overflow via $operation must surface on the first forced summary read.",
+        ) {
+            successor.evaluate(0)
+        }
+        contextualCheckThrows<ArithmeticException>(
+            "a failed force via $operation publishes nothing, so the read stays retryable.",
+        ) {
+            successor.evaluate(0)
+        }
     }
     contextualCheckEquals(listOf(1), huge.toList(), "the retained version survives a rejected successor.")
     contextualCheckEquals(

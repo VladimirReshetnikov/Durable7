@@ -189,12 +189,12 @@ private fun realTreeSubstrateBalancesAndSharesAcrossFacades() {
     val values = (0 until 4096).toList()
     val deque = PersistentDeque.from(values)
     val dequeEdit = deque.setItem(2048, -1) ?: throw AssertionError("deque edit")
-    check(deque.debugIsBalanced() && dequeEdit.debugIsBalanced(), "deque AVL invariant")
+    check(deque.debugIsBalanced() && dequeEdit.debugIsBalanced(), "deque structural invariant")
     check(deque.sharesStorageWith(dequeEdit), "deque edit shares untouched nodes")
 
     val measuredTree = FingerTree.from(values, SizeMeasure<Int>())
     val measuredTreeEdit = measuredTree.insertAt(2048, -1) ?: throw AssertionError("tree insert")
-    check(measuredTree.debugIsBalanced() && measuredTreeEdit.debugIsBalanced(), "measured tree AVL invariant")
+    check(measuredTree.debugIsBalanced() && measuredTreeEdit.debugIsBalanced(), "measured tree structural invariant")
     check(measuredTree.sharesStorageWith(measuredTreeEdit), "measured tree insert shares untouched nodes")
     checkEquals(4097, measuredTreeEdit.measure(), "cached size measure after insert")
     val compatible = FingerTree.from(listOf(4096, 4097), SizeMeasure<Int>())
@@ -203,15 +203,15 @@ private fun realTreeSubstrateBalancesAndSharesAcrossFacades() {
     val descending = values.asReversed()
     val bag = SortedBag.from(descending)
     val bagEdit = bag.add(2048)
-    check(bag.debugIsBalanced() && bagEdit.debugIsBalanced(), "sorted bag AVL invariant")
+    check(bag.debugIsBalanced() && bagEdit.debugIsBalanced(), "sorted bag structural invariant")
     check(bag.sharesStorageWith(bagEdit), "sorted bag edit shares untouched nodes")
     val set = SortedSet.from(descending)
     val setEdit = set.add(5000)
-    check(set.debugIsBalanced() && setEdit.debugIsBalanced(), "sorted set AVL invariant")
+    check(set.debugIsBalanced() && setEdit.debugIsBalanced(), "sorted set structural invariant")
     check(set.sharesStorageWith(setEdit), "sorted set edit shares untouched nodes")
     val map = SortedMap.from(descending.map { it to -it })
     val mapEdit = map.setItem(2048, 1)
-    check(map.debugIsBalanced() && mapEdit.debugIsBalanced(), "sorted map AVL invariant")
+    check(map.debugIsBalanced() && mapEdit.debugIsBalanced(), "sorted map structural invariant")
     check(map.sharesStorageWith(mapEdit), "sorted map edit shares untouched nodes")
 
     var queue = PriorityQueue.empty<Int, Int>()
@@ -219,27 +219,27 @@ private fun realTreeSubstrateBalancesAndSharesAcrossFacades() {
         queue = queue.enqueue(value, 4096 - value)
     }
     val queueEdit = queue.enqueue(-1, -1)
-    check(queue.debugIsBalanced() && queueEdit.debugIsBalanced(), "priority queue AVL invariant")
+    check(queue.debugIsBalanced() && queueEdit.debugIsBalanced(), "priority queue structural invariant")
     check(queue.sharesStorageWith(queueEdit), "priority enqueue shares untouched nodes")
     checkEquals(-1, queueEdit.peekEntry()?.value, "cached priority summary")
 
     val intervalTree = IntervalTree.from(values.map { Interval(it * 2, it * 2 + 1) })
     val intervalEdit = intervalTree.insert(Interval(4095, 10000))
-    check(intervalTree.debugIsBalanced() && intervalEdit.debugIsBalanced(), "interval tree AVL invariant")
+    check(intervalTree.debugIsBalanced() && intervalEdit.debugIsBalanced(), "interval tree structural invariant")
     check(intervalTree.sharesStorageWith(intervalEdit), "interval insertion shares untouched nodes")
     checkEquals(Interval(4095, 10000), intervalEdit.findOverlap(Interval(9000, 9001)), "max-high search")
 
     val rope = Rope.from(values)
     val ropeEdit = rope.setItem(2048, -1) ?: throw AssertionError("rope set")
-    check(rope.debugIsBalanced() && ropeEdit.debugIsBalanced(), "rope AVL invariant")
+    check(rope.debugIsBalanced() && ropeEdit.debugIsBalanced(), "rope structural invariant")
     check(rope.sharesStorageWith(ropeEdit), "rope edit shares untouched nodes")
     val measuredRope = MeasuredRope.from(values, IntSumMeasure)
     val measuredRopeEdit = measuredRope.setItem(2048, -1) ?: throw AssertionError("measured rope set")
-    check(measuredRope.debugIsBalanced() && measuredRopeEdit.debugIsBalanced(), "measured rope AVL invariant")
+    check(measuredRope.debugIsBalanced() && measuredRopeEdit.debugIsBalanced(), "measured rope structural invariant")
     check(measuredRope.sharesStorageWith(measuredRopeEdit), "measured rope edit shares untouched nodes")
     checkEquals(values.sum() - 2048 - 1, measuredRopeEdit.measure(), "cached rope measure after set")
     val text = TextRope.fromText((0 until 4096).joinToString("\n"))
-    check(text.debugIsBalanced(), "text rope measured AVL invariant")
+    check(text.debugIsBalanced(), "text rope measured structural invariant")
     checkEquals(4096, text.lineCount(), "text rope cached newline measure")
 }
 
@@ -283,7 +283,7 @@ private fun generatedRealTreeEditsMatchListModel() {
             }
         }
 
-        check(actual.debugIsBalanced(), "generated AVL invariant at step $step")
+        check(actual.debugIsBalanced(), "generated structural invariant at step $step")
         if (step % 64 == 0) {
             checkEquals(model, actual.toList(), "generated tree model at step $step")
         }
@@ -298,9 +298,9 @@ private fun largeRealTreeConstructionKeepsCachedMeasures() {
     val tree = FingerTree.from(values, SizeMeasure<Int>())
     checkEquals(count, deque.size, "large deque size")
     checkEquals(count - 1, deque[count - 1], "large deque tail")
-    check(deque.debugIsBalanced(), "large deque AVL invariant")
+    check(deque.debugIsBalanced(), "large deque structural invariant")
     checkEquals(count, tree.measure(), "large measured tree cached size")
-    check(tree.debugIsBalanced(), "large measured tree AVL invariant")
+    check(tree.debugIsBalanced(), "large measured tree structural invariant")
 }
 
 private fun sortedCollectionsKeepOrderAndRelations() {
@@ -840,11 +840,13 @@ private class CountingComparator : Comparator<Int> {
 private fun sortedBoundsDescendOnceOnLargeCollections() {
     val upper = 65_536
     val target = 53_217
-    // An AVL tree over 65,536 elements is at most ~23 levels deep, so a single
-    // guided descent stays well under 64 comparisons, while the former binary
-    // search over indexing would burn one comparison per probe but visit
-    // O(log² n) nodes; the budget guards the descent count per bound query.
-    val budget = 64
+    // The finger tree over 65,536 elements has a spine at most ~17 levels deep. One guided
+    // descent inspects at most a digit's four items plus the middle's cached last element per
+    // spine level, and at most three children per node level, so the comparison count is bounded
+    // by a constant times the depth - unlike binary search over indexing, whose every probe
+    // repeats an O(log n) positional walk. The budget is derived from the depth, not guessed.
+    val depth = 32 - Integer.numberOfLeadingZeros(upper)
+    val budget = 10 * depth
     val comparator = CountingComparator()
 
     val bag = SortedBag.from((0 until upper) + target, comparator)
@@ -998,7 +1000,8 @@ public fun main() {
         incrementalAncestorArenaTestCases() +
         ancestralSliceQueueTestCases() + bilateralAncestralDequeTestCases() +
         contextualRankSequenceTestCases() + persistentDeltaMapTestCases() +
-        persistentRunDeltaVectorTestCases() + persistentMonotoneActionHeapTestCases()
+        persistentRunDeltaVectorTestCases() + persistentMonotoneActionHeapTestCases() +
+        measuredFingerTreeProbeTestCases()
 
     for ((name, test) in tests) {
         test()

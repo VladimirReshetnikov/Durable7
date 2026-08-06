@@ -180,7 +180,7 @@ public class PersistentDeque<T> private constructor(
             PersistentDeque(PersistentMeasuredTree.from(values, SizeMeasure()))
     }
 
-    /** Number of elements. O(1), from the cached measure at the root. */
+    /** Number of elements. O(1), from the strict cached sizes; no suspension is forced. */
     public val size: Int
         get() = items.size
 
@@ -195,24 +195,29 @@ public class PersistentDeque<T> private constructor(
     public fun cursorAt(position: Int): PersistentDequeCursor<T>? =
         if (position < 0 || position > size) null else PersistentDequeCursor.create(this, position)
 
-    /** The first element, or `null` when empty. */
+    /** The first element, or `null` when empty. O(1) worst-case: a digit read. */
     public fun front(): T? = items.front()
 
-    /** The last element, or `null` when empty. */
+    /** The last element, or `null` when empty. O(1) worst-case: a digit read. */
     public fun back(): T? = items.back()
 
     /** The element at [index], or `null` when the index is out of range. */
     public operator fun get(index: Int): T? = items[index]
 
-    /** A deque with [value] added at the front. Amortized O(1); the receiver is unchanged. */
+    /**
+     * A deque with [value] added at the front. Amortized O(1) and O(log n) worst-case: a digit
+     * overflow is pushed into the middle inside a memoized suspension, so the bound survives
+     * persistent branching. The receiver is unchanged.
+     */
     public fun prepend(value: T): PersistentDeque<T> = PersistentDeque(items.prepend(value))
 
-    /** A deque with [value] added at the back. Amortized O(1); the receiver is unchanged. */
+    /** A deque with [value] added at the back. Amortized O(1); the mirror image of [prepend]. */
     public fun append(value: T): PersistentDeque<T> = PersistentDeque(items.append(value))
 
     /**
-     * A deque holding this one's elements followed by [other]'s. O(log(min(m, n))): the two spines are joined
-     * rather than one sequence being copied into the other, which is what makes this a catenable deque rather than
+     * A deque holding this one's elements followed by [other]'s. O(log(min(m, n))) amortized: the
+     * recursion into the two middles is suspended, so the two spines are joined rather than one
+     * sequence being copied into the other, which is what makes this a catenable deque rather than
      * a list.
      */
     public fun concat(other: PersistentDeque<T>): PersistentDeque<T> =
@@ -295,14 +300,19 @@ public class PersistentDeque<T> private constructor(
 
     /**
      * The first element together with the deque that remains, or `null` when empty. The nonfailing pair form, for
-     * callers that would otherwise call [front] and then drop it.
+     * callers that would otherwise call [front] and then drop it. Amortized O(1): pulling the
+     * replacement digit up from the middle forces one memoized suspension.
      */
-    public fun tryViewLeft(): DequePop<T>? =
-        if (isEmpty) null else DequePop(itemAt(0), splitAt(1)!!.right)
+    public fun tryViewLeft(): DequePop<T>? {
+        val view = items.viewLeft() ?: return null
+        return DequePop(view.first, PersistentDeque(view.second))
+    }
 
-    /** The last element together with the deque that remains, or `null` when empty. */
-    public fun tryViewRight(): DequePop<T>? =
-        if (isEmpty) null else DequePop(itemAt(size - 1), splitAt(size - 1)!!.left)
+    /** The last element together with the deque that remains, or `null` when empty. Amortized O(1). */
+    public fun tryViewRight(): DequePop<T>? {
+        val view = items.viewRight() ?: return null
+        return DequePop(view.first, PersistentDeque(view.second))
+    }
 
     /**
      * A deque with the elements in the opposite order. O(n): this rebuilds. Use [ReversibleDeque] when reversal
@@ -892,22 +902,30 @@ public class FingerTree<T, M> private constructor(
         )
     }
 
-    /** The measure of the whole tree, read from the cached root measure rather than recomputed. O(1). */
+    /**
+     * The measure of the whole tree, read from the memoized root measure rather than recomputed.
+     * O(1) amortized: the first read of a freshly edited spine may force suspended middles before
+     * memoizing, and the memoized cells are shared by every version that references them.
+     */
     public fun measure(): M = items.measure()
 
-    /** The first element, or `null` when empty. */
+    /** The first element, or `null` when empty. O(1) worst-case: a digit read. */
     public fun front(): T? = items.front()
 
-    /** The last element, or `null` when empty. */
+    /** The last element, or `null` when empty. O(1) worst-case: a digit read. */
     public fun back(): T? = items.back()
 
     /** The element at [index], or `null` when the index is out of range. */
     public operator fun get(index: Int): T? = items[index]
 
-    /** A tree with [value] added at the front. Amortized O(1). */
+    /**
+     * A tree with [value] added at the front. Amortized O(1) and O(log n) worst-case: a digit
+     * overflow is pushed into the middle inside a memoized suspension, so the bound survives
+     * persistent branching.
+     */
     public fun prepend(value: T): FingerTree<T, M> = FingerTree(items.prepend(value), policy)
 
-    /** A tree with [value] added at the back. Amortized O(1). */
+    /** A tree with [value] added at the back. Amortized O(1); the mirror image of [prepend]. */
     public fun append(value: T): FingerTree<T, M> = FingerTree(items.append(value), policy)
 
     /**
@@ -1020,13 +1038,17 @@ public class FingerTree<T, M> private constructor(
         return FingerTree(items.removeAt(index)!!, policy)
     }
 
-    /** The first element together with the tree that remains, or `null` when empty. */
-    public fun tryViewLeft(): Pair<T, FingerTree<T, M>>? =
-        if (isEmpty) null else itemAt(0) to splitAtIndex(1)!!.right
+    /** The first element together with the tree that remains, or `null` when empty. Amortized O(1). */
+    public fun tryViewLeft(): Pair<T, FingerTree<T, M>>? {
+        val view = items.viewLeft() ?: return null
+        return view.first to FingerTree(view.second, policy)
+    }
 
-    /** The last element together with the tree that remains, or `null` when empty. */
-    public fun tryViewRight(): Pair<T, FingerTree<T, M>>? =
-        if (isEmpty) null else itemAt(size - 1) to splitAtIndex(size - 1)!!.left
+    /** The last element together with the tree that remains, or `null` when empty. Amortized O(1). */
+    public fun tryViewRight(): Pair<T, FingerTree<T, M>>? {
+        val view = items.viewRight() ?: return null
+        return view.first to FingerTree(view.second, policy)
+    }
 
     /** The elements in order. */
     public fun toList(): List<T> = items.toList()
@@ -1046,7 +1068,4 @@ public class FingerTree<T, M> private constructor(
     internal fun measureSuffix(startIndex: Int): M = items.measureSuffix(startIndex)
 
     override fun iterator(): Iterator<T> = items.iterator()
-
-    @Suppress("UNCHECKED_CAST")
-    private fun itemAt(index: Int): T = items[index] as T
 }
