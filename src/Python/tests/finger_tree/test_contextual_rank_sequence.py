@@ -403,18 +403,24 @@ def test_contextual_machine_contract_violations_are_failure_atomic() -> None:
 
     source = ContextualRankSequence.empty(_HugeEventMachine()).append(1)
     assert source.evaluate(0) == ContextualPrefixSummary(0, _INT64_MAX)
-    with pytest.raises(OverflowError):
-        source.append(2)
-    with pytest.raises(OverflowError):
-        source.prepend(2)
-    with pytest.raises(OverflowError):
-        source.concat(source)
-    with pytest.raises(OverflowError):
-        source.insert(0, 2)
-    with pytest.raises(OverflowError):
-        source.insert(1, 2)
+    # The substrate defers summary combination, matching the reference's lazy core, so the
+    # overflow surfaces on the first summary read of a successor rather than inside the edit
+    # itself. Failure atomicity is preserved in the form the laziness contract gives it: a
+    # raising force publishes nothing, every retained version stays valid, and the read is
+    # retryable - both reads below raise, proving the first failure memoized no poison value.
+    for overflowing in (
+        source.append(2),
+        source.prepend(2),
+        source.concat(source),
+        source.insert(0, 2),
+        source.insert(1, 2),
+    ):
+        with pytest.raises(OverflowError):
+            overflowing.evaluate(0)
+        with pytest.raises(OverflowError):
+            overflowing.evaluate(0)
 
-    # Every rejected successor published nothing, so the retained version is untouched.
+    # The retained version is untouched and fully usable after every failed force.
     assert source.to_list() == [1]
     assert source.evaluate(0) == ContextualPrefixSummary(0, _INT64_MAX)
     assert source.validate_structure().maximum_total_event_count == _INT64_MAX

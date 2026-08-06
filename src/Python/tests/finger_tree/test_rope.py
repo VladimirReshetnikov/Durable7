@@ -150,6 +150,9 @@ def test_cursor_replacement_always_publishes_a_fresh_edit_without_equality() -> 
     measured_edit = measured.get_cursor().replace_next(value).snapshot()
     assert measured_edit is not measured
     assert measured_edit.get(0) is value
+    # The lazy core may defer the new element's measurement past the edit itself; reading the
+    # successor's measure forces it, which is what keeps this a live positive control.
+    assert measured_edit.measure == 1
     assert policy.calls > 0
 
 

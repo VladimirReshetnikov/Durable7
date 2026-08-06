@@ -1,171 +1,627 @@
-"""A persistent monoid-measured implicit AVL sequence."""
+"""A persistent monoid-measured Hinze-Paterson finger tree with memoized lazy spines.
+
+This module was previously an implicit AVL join tree, which delivered O(log n) endpoint updates
+and a concatenation bound keyed to the operands' height difference. It is now the same structure
+the reference workspaces carry: 1-4-element digits at each end, 2-3 nodes below them, and a middle
+subtree per deep node held behind a **memoized suspension**, which is Hinze and Paterson's lazy
+finger tree realized in a strict language, exactly as the C#, C++, and C workspaces realize it.
+
+Bounds (with O(1) policy operations): ``front``/``back`` are O(1) worst-case digit reads;
+``prepend``/``append`` and the endpoint views are O(1) amortized and O(log n) worst-case per call;
+``concat`` is O(log(min(n, m))) amortized; ``split_at``, ``at``, ``insert_at``, ``set_at``,
+``remove_at``, ``locate``, ``prefix_measure``, ``lower_bound``, and ``upper_bound`` are O(log n);
+iteration is O(n). The amortized bounds hold under fully persistent branching histories, not
+merely ephemeral linear use, because a forced suspension is memoized in a cell shared by every
+version that references it: work deferred by one version and forced by another is never repeated.
+
+Laziness is load-bearing in exactly two places, and eager everywhere else. A digit overflow on
+``prepend``/``append`` pushes a 2-3 node into the middle *inside* a suspension, and ``concat``
+recurses into the two middles *inside* a suspension; every size is computed strictly at
+construction, so index arithmetic never forces structure it does not enter. A deep node's measure
+is memoized separately and forcing it may force the middle spine - the reason ``measure`` is O(1)
+amortized rather than worst-case. A suspension whose computation raises publishes nothing and may
+be retried, so policy failures keep every retained version valid.
+
+Each 2-3 node also caches its first and last descendant elements, which is what keeps
+``lower_bound``/``upper_bound`` at O(log n) - each level inspects at most eight digit items by
+their cached extremes - and makes ``front``/``back`` worst-case O(1).
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, cast
 
 from .measures import MeasurePolicy
 
 T = TypeVar("T")
 M = TypeVar("M")
 
-
-@dataclass(frozen=True, slots=True)
-class _Node(Generic[T, M]):
-    left: _Node[T, M] | None
-    value: T
-    right: _Node[T, M] | None
-    height: int
-    size: int
-    measure: M
+_PENDING = object()
 
 
-def _height(node: _Node[T, M] | None) -> int:
-    return 0 if node is None else node.height
+_OP_PUSH_FRONT = 1
+_OP_PUSH_BACK = 2
+_OP_CONCAT = 3
 
 
-def _size(node: _Node[T, M] | None) -> int:
-    return 0 if node is None else node.size
+class _Susp:
+    """A memoized suspension of a tree, defunctionalized.
+
+    The three deferred operations - push an overflow node into the middle from either end, and
+    concatenate two middles around regrouped nodes - are stored as data rather than closures, so
+    :meth:`force` can interpret an arbitrarily long chain of pending suspensions with an explicit
+    stack. Organic append loops build Theta(n)-deep chains, far past Python's recursion limit; a
+    closure-based force would recurse once per link and die, which is exactly the hazard every
+    other structure in this workspace handles by iterating.
+
+    Forcing memoizes the result in this cell under the GIL, so every version sharing the cell
+    reads the same forced tree and deferred work is never repeated. A raising policy leaves every
+    cell on the failure path pending, so a failed force publishes nothing and is retryable.
+    """
+
+    __slots__ = ("_first", "_operation", "_policy", "_second", "_value")
+
+    def __init__(self, operation: int, policy: object, first: object, second: object) -> None:
+        self._operation = operation
+        self._policy = policy
+        self._first = first
+        self._second = second
+        self._value: object = _PENDING
+
+    @classmethod
+    def ready(cls, value: object) -> _Susp:
+        suspension = cls.__new__(cls)
+        suspension._operation = 0
+        suspension._policy = None
+        suspension._first = None
+        suspension._second = None
+        suspension._value = value
+        return suspension
+
+    @classmethod
+    def push_front(cls, policy: object, item: object, middle: _Susp) -> _Susp:
+        return cls(_OP_PUSH_FRONT, policy, item, middle)
+
+    @classmethod
+    def push_back(cls, policy: object, middle: _Susp, item: object) -> _Susp:
+        return cls(_OP_PUSH_BACK, policy, middle, item)
+
+    @classmethod
+    def concat(cls, policy: object, left: _Susp, between: list[object], right: _Susp) -> _Susp:
+        return cls(_OP_CONCAT, policy, (left, right), between)
+
+    @property
+    def is_forced(self) -> bool:
+        return self._value is not _PENDING
+
+    def force(self) -> object:
+        if self._value is not _PENDING:
+            return self._value
+        stack: list[_Susp] = [self]
+        while stack:
+            current = stack[-1]
+            if current._value is not _PENDING:
+                stack.pop()
+                continue
+            operation = current._operation
+            policy = cast("MeasurePolicy[object, object]", current._policy)
+            if operation == _OP_PUSH_FRONT:
+                inner = cast("_Susp", current._second)
+                if inner._value is _PENDING:
+                    stack.append(inner)
+                    continue
+                current._publish(_cons(policy, current._first, cast("_Tree", inner._value)))
+            elif operation == _OP_PUSH_BACK:
+                inner = cast("_Susp", current._first)
+                if inner._value is _PENDING:
+                    stack.append(inner)
+                    continue
+                current._publish(_snoc(policy, cast("_Tree", inner._value), current._second))
+            else:
+                pair = cast("tuple[_Susp, _Susp]", current._first)
+                left, right = pair
+                if left._value is _PENDING:
+                    stack.append(left)
+                    continue
+                if right._value is _PENDING:
+                    stack.append(right)
+                    continue
+                current._publish(
+                    _app3(
+                        policy,
+                        cast("_Tree", left._value),
+                        cast("list[object]", current._second),
+                        cast("_Tree", right._value),
+                    )
+                )
+        return self._value
+
+    def _publish(self, value: object) -> None:
+        self._value = value
+        self._policy = None
+        self._first = None
+        self._second = None
 
 
-def _make_node(
-    left: _Node[T, M] | None,
-    value: T,
-    right: _Node[T, M] | None,
-    policy: MeasurePolicy[T, M],
-) -> _Node[T, M]:
-    left_measure = policy.identity if left is None else left.measure
-    right_measure = policy.identity if right is None else right.measure
-    return _Node(
-        left,
-        value,
-        right,
-        max(_height(left), _height(right)) + 1,
-        _size(left) + _size(right) + 1,
-        policy.combine(policy.combine(left_measure, policy.measure(value)), right_measure),
+class _Node:
+    """A 2-3 node: strict size, measure, and cached first/last descendant elements."""
+
+    __slots__ = ("children", "first", "last", "measure", "size")
+
+    def __init__(
+        self, children: tuple[object, ...], size: int, measure: object, first: object, last: object
+    ) -> None:
+        self.children = children
+        self.size = size
+        self.measure = measure
+        self.first = first
+        self.last = last
+
+
+class _Single:
+    """A one-item tree."""
+
+    __slots__ = ("item",)
+
+    def __init__(self, item: object) -> None:
+        self.item = item
+
+
+class _Deep:
+    """Digits at both ends around a suspended middle of one-level-deeper nodes.
+
+    ``size`` and ``middle_size`` are strict - every construction site knows them arithmetically -
+    so no size read ever forces the middle. The total measure is memoized on first read.
+    """
+
+    __slots__ = ("_measure", "middle", "middle_size", "prefix", "size", "suffix")
+
+    def __init__(
+        self,
+        size: int,
+        prefix: tuple[object, ...],
+        middle: _Susp,
+        middle_size: int,
+        suffix: tuple[object, ...],
+    ) -> None:
+        self.size = size
+        self.prefix = prefix
+        self.middle = middle
+        self.middle_size = middle_size
+        self.suffix = suffix
+        self._measure: object = _PENDING
+
+
+_Tree = _Single | _Deep | None
+
+_EMPTY_SUSP = _Susp.ready(None)
+
+
+# --- item helpers: an item is a user element at level zero, a _Node below ---------------------
+
+
+def _item_size(item: object) -> int:
+    return item.size if isinstance(item, _Node) else 1
+
+
+def _item_measure(policy: MeasurePolicy[T, M], item: object) -> object:
+    if isinstance(item, _Node):
+        return item.measure
+    return policy.measure(cast("T", item))
+
+
+def _item_first(item: object) -> object:
+    return item.first if isinstance(item, _Node) else item
+
+
+def _item_last(item: object) -> object:
+    return item.last if isinstance(item, _Node) else item
+
+
+def _make_node(policy: MeasurePolicy[T, M], children: tuple[object, ...]) -> _Node:
+    size = 0
+    measure: object = None
+    for position, child in enumerate(children):
+        size += _item_size(child)
+        child_measure = _item_measure(policy, child)
+        measure = (
+            child_measure
+            if position == 0
+            else policy.combine(cast("M", measure), cast("M", child_measure))
+        )
+    return _Node(children, size, measure, _item_first(children[0]), _item_last(children[-1]))
+
+
+def _digit_size(digit: tuple[object, ...]) -> int:
+    return sum(_item_size(item) for item in digit)
+
+
+def _digit_measure(policy: MeasurePolicy[T, M], digit: tuple[object, ...]) -> object:
+    measure: object = _item_measure(policy, digit[0])
+    for item in digit[1:]:
+        measure = policy.combine(cast("M", measure), cast("M", _item_measure(policy, item)))
+    return measure
+
+
+# --- tree helpers ------------------------------------------------------------------------------
+
+
+def _tree_size(tree: _Tree) -> int:
+    if tree is None:
+        return 0
+    if isinstance(tree, _Single):
+        return _item_size(tree.item)
+    return tree.size
+
+
+def _tree_measure(policy: MeasurePolicy[T, M], tree: _Tree) -> object:
+    if tree is None:
+        return policy.identity
+    if isinstance(tree, _Single):
+        return _item_measure(policy, tree.item)
+    measure = tree._measure
+    if measure is _PENDING:
+        measure = _digit_measure(policy, tree.prefix)
+        middle = cast("_Tree", tree.middle.force())
+        if middle is not None:
+            measure = policy.combine(cast("M", measure), cast("M", _tree_measure(policy, middle)))
+        measure = policy.combine(cast("M", measure), cast("M", _digit_measure(policy, tree.suffix)))
+        tree._measure = measure
+    return measure
+
+
+def _tree_first(tree: _Tree) -> object:
+    assert tree is not None
+    if isinstance(tree, _Single):
+        return _item_first(tree.item)
+    return _item_first(tree.prefix[0])
+
+
+def _tree_last(tree: _Tree) -> object:
+    assert tree is not None
+    if isinstance(tree, _Single):
+        return _item_last(tree.item)
+    return _item_last(tree.suffix[-1])
+
+
+def _deep(
+    prefix: tuple[object, ...], middle: _Susp, middle_size: int, suffix: tuple[object, ...]
+) -> _Deep:
+    return _Deep(
+        _digit_size(prefix) + middle_size + _digit_size(suffix), prefix, middle, middle_size, suffix
     )
 
 
-def _balance(
-    left: _Node[T, M] | None,
-    value: T,
-    right: _Node[T, M] | None,
-    policy: MeasurePolicy[T, M],
-) -> _Node[T, M]:
-    if _height(left) > _height(right) + 1:
-        if left is None:
-            raise AssertionError("Invalid AVL left imbalance.")
-        if _height(left.left) >= _height(left.right):
-            return _make_node(
-                left.left, left.value, _make_node(left.right, value, right, policy), policy
-            )
-        middle = left.right
-        if middle is None:
-            raise AssertionError("Invalid AVL double rotation.")
-        return _make_node(
-            _make_node(left.left, left.value, middle.left, policy),
-            middle.value,
-            _make_node(middle.right, value, right, policy),
-            policy,
-        )
-    if _height(right) > _height(left) + 1:
-        if right is None:
-            raise AssertionError("Invalid AVL right imbalance.")
-        if _height(right.right) >= _height(right.left):
-            return _make_node(
-                _make_node(left, value, right.left, policy), right.value, right.right, policy
-            )
-        middle = right.left
-        if middle is None:
-            raise AssertionError("Invalid AVL double rotation.")
-        return _make_node(
-            _make_node(left, value, middle.left, policy),
-            middle.value,
-            _make_node(middle.right, right.value, right.right, policy),
-            policy,
-        )
-    return _make_node(left, value, right, policy)
+def _digit_to_tree(policy: MeasurePolicy[T, M], digit: tuple[object, ...]) -> _Tree:
+    if len(digit) == 1:
+        return _Single(digit[0])
+    half = len(digit) // 2
+    return _deep(digit[:half], _EMPTY_SUSP, 0, digit[half:])
 
 
-def _remove_min(node: _Node[T, M], policy: MeasurePolicy[T, M]) -> tuple[T, _Node[T, M] | None]:
-    if node.left is None:
-        return node.value, node.right
-    value, rest = _remove_min(node.left, policy)
-    return value, _balance(rest, node.value, node.right, policy)
+# --- endpoint operations -----------------------------------------------------------------------
 
 
-def _join(
-    left: _Node[T, M] | None,
-    value: T,
-    right: _Node[T, M] | None,
-    policy: MeasurePolicy[T, M],
-) -> _Node[T, M]:
-    if _height(left) > _height(right) + 1:
-        if left is None:
-            raise AssertionError("Invalid AVL join.")
-        return _balance(left.left, left.value, _join(left.right, value, right, policy), policy)
-    if _height(right) > _height(left) + 1:
-        if right is None:
-            raise AssertionError("Invalid AVL join.")
-        return _balance(_join(left, value, right.left, policy), right.value, right.right, policy)
-    return _make_node(left, value, right, policy)
+def _cons(policy: MeasurePolicy[T, M], item: object, tree: _Tree) -> _Tree:
+    if tree is None:
+        return _Single(item)
+    if isinstance(tree, _Single):
+        return _deep((item,), _EMPTY_SUSP, 0, (tree.item,))
+    if len(tree.prefix) < 4:
+        return _deep((item, *tree.prefix), tree.middle, tree.middle_size, tree.suffix)
+    overflow = _make_node(policy, tree.prefix[1:])
+    return _deep(
+        (item, tree.prefix[0]),
+        # The push into the middle is the suspended step Hinze-Paterson amortization needs.
+        _Susp.push_front(policy, overflow, tree.middle),
+        tree.middle_size + overflow.size,
+        tree.suffix,
+    )
 
 
-def _concat_nodes(
-    left: _Node[T, M] | None,
-    right: _Node[T, M] | None,
-    policy: MeasurePolicy[T, M],
-) -> _Node[T, M] | None:
+def _snoc(policy: MeasurePolicy[T, M], tree: _Tree, item: object) -> _Tree:
+    if tree is None:
+        return _Single(item)
+    if isinstance(tree, _Single):
+        return _deep((tree.item,), _EMPTY_SUSP, 0, (item,))
+    if len(tree.suffix) < 4:
+        return _deep(tree.prefix, tree.middle, tree.middle_size, (*tree.suffix, item))
+    overflow = _make_node(policy, tree.suffix[:3])
+    return _deep(
+        tree.prefix,
+        _Susp.push_back(policy, tree.middle, overflow),
+        tree.middle_size + overflow.size,
+        (tree.suffix[3], item),
+    )
+
+
+def _view_left(policy: MeasurePolicy[T, M], tree: _Tree) -> tuple[object, _Tree] | None:
+    if tree is None:
+        return None
+    if isinstance(tree, _Single):
+        return (tree.item, None)
+    head = tree.prefix[0]
+    if len(tree.prefix) > 1:
+        return (head, _deep(tree.prefix[1:], tree.middle, tree.middle_size, tree.suffix))
+    middle = cast("_Tree", tree.middle.force())
+    if middle is None:
+        return (head, _digit_to_tree(policy, tree.suffix))
+    pulled = _view_left(policy, middle)
+    assert pulled is not None
+    node, rest = pulled
+    return (
+        head,
+        _deep(
+            _item_digit(node), _Susp.ready(rest), tree.middle_size - _item_size(node), tree.suffix
+        ),
+    )
+
+
+def _view_right(policy: MeasurePolicy[T, M], tree: _Tree) -> tuple[_Tree, object] | None:
+    if tree is None:
+        return None
+    if isinstance(tree, _Single):
+        return (None, tree.item)
+    last = tree.suffix[-1]
+    if len(tree.suffix) > 1:
+        return (_deep(tree.prefix, tree.middle, tree.middle_size, tree.suffix[:-1]), last)
+    middle = cast("_Tree", tree.middle.force())
+    if middle is None:
+        return (_digit_to_tree(policy, tree.prefix), last)
+    pulled = _view_right(policy, middle)
+    assert pulled is not None
+    rest, node = pulled
+    return (
+        _deep(
+            tree.prefix, _Susp.ready(rest), tree.middle_size - _item_size(node), _item_digit(node)
+        ),
+        last,
+    )
+
+
+# --- concatenation -----------------------------------------------------------------------------
+
+
+def _group_nodes(policy: MeasurePolicy[T, M], items: list[object]) -> list[object]:
+    """Group 2..12 items into 2-3 nodes, standard Hinze-Paterson grouping."""
+
+    nodes: list[object] = []
+    index = 0
+    remaining = len(items)
+    while remaining > 0:
+        if remaining == 2 or remaining == 4:
+            nodes.append(_make_node(policy, (items[index], items[index + 1])))
+            index += 2
+            remaining -= 2
+        else:
+            nodes.append(_make_node(policy, (items[index], items[index + 1], items[index + 2])))
+            index += 3
+            remaining -= 3
+    return nodes
+
+
+def _app3(policy: MeasurePolicy[T, M], left: _Tree, between: list[object], right: _Tree) -> _Tree:
     if left is None:
-        return right
+        result = right
+        for item in reversed(between):
+            result = _cons(policy, item, result)
+        return result
     if right is None:
-        return left
-    value, rest = _remove_min(right, policy)
-    return _join(left, value, rest, policy)
+        result = left
+        for item in between:
+            result = _snoc(policy, result, item)
+        return result
+    if isinstance(left, _Single):
+        return _cons(policy, left.item, _app3(policy, None, between, right))
+    if isinstance(right, _Single):
+        return _snoc(policy, _app3(policy, left, between, None), right.item)
+    nodes = _group_nodes(policy, [*left.suffix, *between, *right.prefix])
+    nodes_size = sum(_item_size(node) for node in nodes)
+    return _deep(
+        left.prefix,
+        # Concatenation recurses into both middles inside a suspension, which is what makes it
+        # O(log(min(n, m))) amortized instead of costing its whole recursion up front.
+        _Susp.concat(policy, left.middle, nodes, right.middle),
+        left.middle_size + nodes_size + right.middle_size,
+        right.suffix,
+    )
 
 
-def _split_nodes(
-    node: _Node[T, M] | None,
-    index: int,
+# --- index-directed access and splitting -------------------------------------------------------
+
+
+def _item_at(item: object, index: int) -> object:
+    while isinstance(item, _Node):
+        for child in item.children:
+            child_size = _item_size(child)
+            if index < child_size:
+                item = child
+                break
+            index -= child_size
+    return item
+
+
+def _tree_at(tree: _Tree, index: int) -> object:
+    while True:
+        assert tree is not None
+        if isinstance(tree, _Single):
+            return _item_at(tree.item, index)
+        for item in tree.prefix:
+            item_size = _item_size(item)
+            if index < item_size:
+                return _item_at(item, index)
+            index -= item_size
+        if index < tree.middle_size:
+            tree = cast("_Tree", tree.middle.force())
+            continue
+        index -= tree.middle_size
+        for item in tree.suffix:
+            item_size = _item_size(item)
+            if index < item_size:
+                return _item_at(item, index)
+            index -= item_size
+
+
+def _split_digit(
+    digit: tuple[object, ...], index: int
+) -> tuple[tuple[object, ...], object, tuple[object, ...], int]:
+    """Split a digit at an element index, returning (before, item, after, index_into_item)."""
+
+    for position, item in enumerate(digit):
+        item_size = _item_size(item)
+        if index < item_size:
+            return (digit[:position], item, digit[position + 1 :], index)
+        index -= item_size
+    raise AssertionError("Digit split index out of range.")
+
+
+def _item_to_tree(policy: MeasurePolicy[T, M], item: object) -> _Tree:
+    if isinstance(item, _Node):
+        return _digit_to_tree(policy, item.children)
+    return _Single(item)
+
+
+def _item_digit(item: object) -> tuple[object, ...]:
+    return item.children if isinstance(item, _Node) else (item,)
+
+
+def _deep_left(
     policy: MeasurePolicy[T, M],
-) -> tuple[_Node[T, M] | None, _Node[T, M] | None]:
-    if node is None:
-        return None, None
-    left_size = _size(node.left)
-    if index <= left_size:
-        left, right = _split_nodes(node.left, index, policy)
-        return left, _join(right, node.value, node.right, policy)
-    left, right = _split_nodes(node.right, index - left_size - 1, policy)
-    return _join(node.left, node.value, left, policy), right
+    before: tuple[object, ...],
+    middle: _Susp,
+    middle_size: int,
+    suffix: tuple[object, ...],
+) -> _Tree:
+    """Rebuild a tree whose prefix digit may be empty."""
+
+    if before:
+        return _deep(before, middle, middle_size, suffix)
+    forced = cast("_Tree", middle.force())
+    if forced is None:
+        return _digit_to_tree(policy, suffix)
+    pulled = _view_left(policy, forced)
+    assert pulled is not None
+    node, rest = pulled
+    return _deep(_item_digit(node), _Susp.ready(rest), middle_size - _item_size(node), suffix)
 
 
-def _build_balanced(
-    values: list[T], start: int, count: int, policy: MeasurePolicy[T, M]
-) -> _Node[T, M] | None:
+def _deep_right(
+    policy: MeasurePolicy[T, M],
+    prefix: tuple[object, ...],
+    middle: _Susp,
+    middle_size: int,
+    after: tuple[object, ...],
+) -> _Tree:
+    """Rebuild a tree whose suffix digit may be empty."""
+
+    if after:
+        return _deep(prefix, middle, middle_size, after)
+    forced = cast("_Tree", middle.force())
+    if forced is None:
+        return _digit_to_tree(policy, prefix)
+    pulled = _view_right(policy, forced)
+    assert pulled is not None
+    rest, node = pulled
+    return _deep(prefix, _Susp.ready(rest), middle_size - _item_size(node), _item_digit(node))
+
+
+def _split_item(
+    policy: MeasurePolicy[T, M], item: object, index: int
+) -> tuple[list[object], object, list[object]]:
+    """Split an item at an element index, collapsing its path into flat item lists."""
+
+    before: list[object] = []
+    after: list[object] = []
+    while isinstance(item, _Node):
+        found = None
+        for position, child in enumerate(item.children):
+            if found is None:
+                child_size = _item_size(child)
+                if index < child_size:
+                    found = child
+                    after = [*item.children[position + 1 :], *after]
+                else:
+                    index -= child_size
+                    before.append(child)
+        assert found is not None
+        item = found
+    return (before, item, after)
+
+
+def _split_tree(
+    policy: MeasurePolicy[T, M], tree: _Tree, index: int
+) -> tuple[_Tree, object, _Tree]:
+    """Split at an element index: (elements before, the element, elements after)."""
+
+    assert tree is not None
+    if isinstance(tree, _Single):
+        before_items, element, after_items = _split_item(policy, tree.item, index)
+        left: _Tree = None
+        for item in before_items:
+            left = _snoc(policy, left, item)
+        right: _Tree = None
+        for item in reversed(after_items):
+            right = _cons(policy, item, right)
+        return (left, element, right)
+    prefix_size = _digit_size(tree.prefix)
+    if index < prefix_size:
+        before, item, after, inner = _split_digit(tree.prefix, index)
+        item_before, element, item_after = _split_item(policy, item, inner)
+        left = None
+        for piece in (*before, *item_before):
+            left = _snoc(policy, left, piece)
+        right = _deep_left(policy, tuple(after), tree.middle, tree.middle_size, tree.suffix)
+        for piece in reversed(item_after):
+            right = _cons(policy, piece, right)
+        return (left, element, right)
+    index -= prefix_size
+    if index < tree.middle_size:
+        # The recursion already collapses down to the element level, so its halves are complete.
+        middle = cast("_Tree", tree.middle.force())
+        middle_left, element, middle_right = _split_tree(policy, middle, index)
+        left = _deep_right(
+            policy, tree.prefix, _Susp.ready(middle_left), _tree_size(middle_left), ()
+        )
+        right = _deep_left(
+            policy, (), _Susp.ready(middle_right), _tree_size(middle_right), tree.suffix
+        )
+        return (left, element, right)
+    index -= tree.middle_size
+    before, item, after, inner = _split_digit(tree.suffix, index)
+    item_before, element, item_after = _split_item(policy, item, inner)
+    left = _deep_right(policy, tree.prefix, tree.middle, tree.middle_size, tuple(before))
+    for piece in item_before:
+        left = _snoc(policy, left, piece)
+    right = None
+    for piece in reversed((*item_after, *after)):
+        right = _cons(policy, piece, right)
+    return (left, element, right)
+
+
+def _build_eager(policy: MeasurePolicy[T, M], items: list[object]) -> _Tree:
+    """Build a tree bottom-up with ready middles: bulk construction defers nothing.
+
+    Deferral pays off when later operations may never force the work; a bulk build's caller
+    almost always consumes the result, so suspending every third append would only add cells to
+    force and then discard. Grouping level by level costs the same O(n) with none of that churn.
+    """
+
+    count = len(items)
     if count == 0:
         return None
-    left_count = count // 2
-    value_index = start + left_count
-    return _make_node(
-        _build_balanced(values, start, left_count, policy),
-        values[value_index],
-        _build_balanced(values, value_index + 1, count - left_count - 1, policy),
-        policy,
-    )
+    if count == 1:
+        return _Single(items[0])
+    if count <= 8:
+        half = count // 2
+        return _deep(tuple(items[:half]), _EMPTY_SUSP, 0, tuple(items[half:]))
+    middle_items = _group_nodes(policy, items[3:-3])
+    middle = _build_eager(policy, middle_items)
+    return _deep(tuple(items[:3]), _Susp.ready(middle), _tree_size(middle), tuple(items[-3:]))
 
 
-def _iterate_nodes(root: _Node[T, M]) -> Iterator[T]:
-    stack: list[_Node[T, M]] = []
-    current: _Node[T, M] | None = root
-    while current is not None or stack:
-        while current is not None:
-            stack.append(current)
-            current = current.left
-        current = stack.pop()
-        yield current.value
-        current = current.right
+# --- public dataclasses ------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,11 +646,11 @@ class SequenceSplit(Generic[T, M]):
 
 
 class MeasuredSequence(Generic[T, M]):
-    """Persistent implicit AVL tree with cached monoid measures."""
+    """Persistent measured finger tree with memoized lazy spines."""
 
     __slots__ = ("_root", "policy")
 
-    def __init__(self, root: _Node[T, M] | None, policy: MeasurePolicy[T, M]) -> None:
+    def __init__(self, root: _Tree, policy: MeasurePolicy[T, M]) -> None:
         """Wrap an already-built root; use :meth:`empty` or :meth:`from_iterable` instead."""
 
         self._root = root
@@ -214,15 +670,14 @@ class MeasuredSequence(Generic[T, M]):
     def from_iterable(
         cls, values: Iterable[T], policy: MeasurePolicy[T, M]
     ) -> MeasuredSequence[T, M]:
-        """Build a balanced sequence from ``values`` in one pass, not by repeated appending."""
+        """Build a sequence from ``values`` in one eager bottom-up O(n) pass."""
 
-        materialized = list(values)
-        return cls(_build_balanced(materialized, 0, len(materialized), policy), policy)
+        return cls(_build_eager(policy, list(values)), policy)
 
     def __len__(self) -> int:
-        """Number of elements, read from the cached subtree size."""
+        """Number of elements, read from strict cached sizes."""
 
-        return _size(self._root)
+        return _tree_size(self._root)
 
     @property
     def is_empty(self) -> bool:
@@ -234,58 +689,49 @@ class MeasuredSequence(Generic[T, M]):
     def measure(self) -> M:
         """The combined measure of every element, in sequence order.
 
-        Read from the root's cached measure rather than recomputed; an empty sequence measures as
-        the policy identity.
+        O(1) amortized: the root's measure is memoized, and the first read of a fresh spine may
+        force a chain of suspended middles before memoizing. An empty sequence measures as the
+        policy identity.
         """
 
-        return self.policy.identity if self._root is None else self._root.measure
+        return cast("M", _tree_measure(self.policy, self._root))
 
     def front(self) -> T | None:
-        """The first element, or ``None`` when the sequence is empty."""
+        """The first element, or ``None`` when the sequence is empty. O(1) worst-case."""
 
-        return self.at(0)
+        return None if self._root is None else cast("T", _tree_first(self._root))
 
     def back(self) -> T | None:
-        """The last element, or ``None`` when the sequence is empty."""
+        """The last element, or ``None`` when the sequence is empty. O(1) worst-case."""
 
-        return self.at(len(self) - 1)
+        return None if self._root is None else cast("T", _tree_last(self._root))
 
     def at(self, index: int) -> T | None:
         """The element at ``index``, or ``None`` when the index is out of range.
 
-        Descends by cached subtree sizes, so this is logarithmic rather than a walk.
+        Descends by strict cached sizes, so it forces only the middles it actually enters.
         """
 
         if index < 0 or index >= len(self):
             return None
-        current = self._root
-        remaining = index
-        while current is not None:
-            left_size = _size(current.left)
-            if remaining < left_size:
-                current = current.left
-            elif remaining == left_size:
-                return current.value
-            else:
-                remaining -= left_size + 1
-                current = current.right
-        return None
+        return cast("T", _tree_at(self._root, index))
 
     def prepend(self, value: T) -> MeasuredSequence[T, M]:
-        """Return a sequence with ``value`` added at the front."""
+        """Return a sequence with ``value`` added at the front. O(1) amortized."""
 
-        return MeasuredSequence(_join(None, value, self._root, self.policy), self.policy)
+        return MeasuredSequence(_cons(self.policy, value, self._root), self.policy)
 
     def append(self, value: T) -> MeasuredSequence[T, M]:
-        """Return a sequence with ``value`` added at the back."""
+        """Return a sequence with ``value`` added at the back. O(1) amortized."""
 
-        return MeasuredSequence(_join(self._root, value, None, self.policy), self.policy)
+        return MeasuredSequence(_snoc(self.policy, self._root, value), self.policy)
 
     def concat(self, other: MeasuredSequence[T, M]) -> MeasuredSequence[T, M]:
         """Return the elements of this sequence followed by those of ``other``.
 
-        Joins the two trees rather than copying either, so the cost depends on their height
-        difference and not on their sizes. Both sequences must retain the same policy object.
+        O(log(min(n, m))) amortized: the recursion into the two middles is suspended, and the
+        digits between them are regrouped into 2-3 nodes. Both sequences must retain the same
+        policy object.
         """
 
         if self.policy is not other.policy:
@@ -294,13 +740,13 @@ class MeasuredSequence(Generic[T, M]):
             return self
         if self.is_empty:
             return other
-        return MeasuredSequence(_concat_nodes(self._root, other._root, self.policy), self.policy)
+        return MeasuredSequence(_app3(self.policy, self._root, [], other._root), self.policy)
 
     def split_at(self, index: int) -> SequenceSplit[T, M] | None:
         """Split into the elements before ``index`` and those from ``index`` on.
 
-        Returns ``None`` when ``index`` falls outside ``0..len``. Splitting at either end shares the
-        receiver's root rather than rebuilding it.
+        Returns ``None`` when ``index`` falls outside ``0..len``. Splitting at either end shares
+        the receiver's root rather than rebuilding it.
         """
 
         if index < 0 or index > len(self):
@@ -309,15 +755,16 @@ class MeasuredSequence(Generic[T, M]):
             return SequenceSplit(MeasuredSequence.empty(self.policy), self)
         if index == len(self):
             return SequenceSplit(self, MeasuredSequence.empty(self.policy))
-        left, right = _split_nodes(self._root, index, self.policy)
+        left, element, right = _split_tree(self.policy, self._root, index)
         return SequenceSplit(
-            MeasuredSequence(left, self.policy), MeasuredSequence(right, self.policy)
+            MeasuredSequence(left, self.policy),
+            MeasuredSequence(_cons(self.policy, element, right), self.policy),
         )
 
     def insert_at(self, index: int, value: T) -> MeasuredSequence[T, M] | None:
         """Return a sequence with ``value`` inserted so that it ends up at ``index``. ``None`` when
-        ``index`` falls outside ``0..len``. Implemented as a split and two joins, so it does not
-        shift the tail.
+        ``index`` falls outside ``0..len``. A split and two concatenations, so it does not shift
+        the tail.
         """
 
         split = self.split_at(index)
@@ -328,150 +775,224 @@ class MeasuredSequence(Generic[T, M]):
 
         if index < 0 or index >= len(self):
             return None
-        split = self.split_at(index)
-        if split is None:
-            raise AssertionError("Validated split failed.")
-        tail = split.right.split_at(1)
-        if tail is None:
-            raise AssertionError("Validated tail split failed.")
-        return split.left.append(value).concat(tail.right)
+        left, _, right = _split_tree(self.policy, self._root, index)
+        return MeasuredSequence(
+            _app3(self.policy, _snoc(self.policy, left, value), [], right), self.policy
+        )
 
     def remove_at(self, index: int) -> MeasuredSequence[T, M] | None:
         """Return a sequence without the element at ``index``, or ``None`` when out of range."""
 
         if index < 0 or index >= len(self):
             return None
-        split = self.split_at(index)
-        if split is None:
-            raise AssertionError("Validated split failed.")
-        tail = split.right.split_at(1)
-        if tail is None:
-            raise AssertionError("Validated tail split failed.")
-        return split.left.concat(tail.right)
+        left, _, right = _split_tree(self.policy, self._root, index)
+        return MeasuredSequence(_app3(self.policy, left, [], right), self.policy)
 
     def prefix_measure(self, count: int) -> M | None:
         """The combined measure of the first ``count`` elements, or ``None`` when ``count`` exceeds
-        the length. Sums cached subtree measures on the way down, so it does not visit the
-        elements it skips.
+        the length. Sums cached measures on the way down, so it does not visit the elements it
+        skips.
         """
 
         if count < 0 or count > len(self):
             return None
-        result = self.policy.identity
-        remaining = count
-        current = self._root
-        while current is not None and remaining > 0:
-            left_size = _size(current.left)
-            if remaining <= left_size:
-                current = current.left
-                continue
-            left_measure = self.policy.identity if current.left is None else current.left.measure
-            result = self.policy.combine(result, left_measure)
-            element_measure = self.policy.measure(current.value)
-            if remaining == left_size + 1:
-                return self.policy.combine(result, element_measure)
-            result = self.policy.combine(result, element_measure)
-            remaining -= left_size + 1
-            current = current.right
-        return result
+        if count == 0:
+            return self.policy.identity
+        if count == len(self):
+            return self.measure
+
+        policy = self.policy
+        result: object = policy.identity
+
+        def take_items(items: Iterable[object], remaining: int) -> int:
+            nonlocal result
+            for item in items:
+                if remaining == 0:
+                    return 0
+                item_size = _item_size(item)
+                if item_size <= remaining:
+                    result = policy.combine(
+                        cast("M", result), cast("M", _item_measure(policy, item))
+                    )
+                    remaining -= item_size
+                elif isinstance(item, _Node):
+                    remaining = take_items(item.children, remaining)
+                else:
+                    raise AssertionError("An element has size one.")
+            return remaining
+
+        def take_tree(tree: _Tree, remaining: int) -> int:
+            nonlocal result
+            if tree is None or remaining == 0:
+                return remaining
+            if isinstance(tree, _Single):
+                return take_items((tree.item,), remaining)
+            if tree.size <= remaining:
+                result = policy.combine(cast("M", result), cast("M", _tree_measure(policy, tree)))
+                return remaining - tree.size
+            remaining = take_items(tree.prefix, remaining)
+            if remaining > 0:
+                remaining = take_tree(cast("_Tree", tree.middle.force()), remaining)
+            if remaining > 0:
+                remaining = take_items(tree.suffix, remaining)
+            return remaining
+
+        leftover = take_tree(self._root, count)
+        assert leftover == 0
+        return cast("M", result)
 
     def locate(self, predicate: Callable[[M], bool]) -> SequenceLocate[T, M]:
         """Find the first position whose inclusive prefix measure satisfies ``predicate``.
 
-        This is the sequence's central operation: because every node caches its measure, the search
-        descends without visiting the elements it skips. ``predicate`` is expected to be monotone -
-        false for every prefix up to some boundary and true from there on - which is what makes "the
-        first satisfying position" well defined; a non-monotone predicate gives an unspecified but
-        still valid result. A miss reports the end position with ``found`` false.
+        This is the sequence's central operation: because every node caches its measure, the
+        search descends without visiting the elements it skips. ``predicate`` is expected to be
+        monotone - false for every prefix up to some boundary and true from there on - which is
+        what makes "the first satisfying position" well defined; a non-monotone predicate gives an
+        unspecified but still valid result. A miss reports the end position with ``found`` false.
         """
 
-        before = self.policy.identity
+        policy = self.policy
+        before: object = policy.identity
         index = 0
-        current = self._root
-        while current is not None:
-            left_measure = self.policy.identity if current.left is None else current.left.measure
-            through_left = self.policy.combine(before, left_measure)
-            if current.left is not None and predicate(through_left):
-                current = current.left
-                continue
-            index += _size(current.left)
-            through_value = self.policy.combine(through_left, self.policy.measure(current.value))
-            if predicate(through_value):
-                return SequenceLocate(index, through_left, current.value, True)
-            before = through_value
-            index += 1
-            current = current.right
-        return SequenceLocate(len(self), before, None, False)
+
+        def descend_item(item: object) -> SequenceLocate[T, M]:
+            nonlocal before, index
+            while isinstance(item, _Node):
+                for child in item.children:
+                    with_child = policy.combine(
+                        cast("M", before), cast("M", _item_measure(policy, child))
+                    )
+                    if predicate(with_child):
+                        item = child
+                        break
+                    before = with_child
+                    index += _item_size(child)
+            return SequenceLocate(index, cast("M", before), cast("T", item), True)
+
+        def scan_items(items: Iterable[object]) -> SequenceLocate[T, M] | None:
+            nonlocal before, index
+            for item in items:
+                with_item = policy.combine(
+                    cast("M", before), cast("M", _item_measure(policy, item))
+                )
+                if predicate(with_item):
+                    return descend_item(item)
+                before = with_item
+                index += _item_size(item)
+            return None
+
+        def scan_tree(tree: _Tree) -> SequenceLocate[T, M] | None:
+            nonlocal before, index
+            if tree is None:
+                return None
+            if isinstance(tree, _Single):
+                return scan_items((tree.item,))
+            with_tree = policy.combine(cast("M", before), cast("M", _tree_measure(policy, tree)))
+            if not predicate(with_tree):
+                before = with_tree
+                index += tree.size
+                return None
+            found = scan_items(tree.prefix)
+            if found is None:
+                found = scan_tree(cast("_Tree", tree.middle.force()))
+            if found is None:
+                found = scan_items(tree.suffix)
+            return found
+
+        found = scan_tree(self._root)
+        if found is not None:
+            return found
+        return SequenceLocate(len(self), cast("M", before), None, False)
 
     def lower_bound(self, probe: T, comparator: Callable[[T, T], int]) -> int:
-        """Index of the first element not ordering below ``probe``, assuming the sequence is sorted.
-
-        That is, where ``probe`` would be inserted before its equals. The sequence must already be
-        sorted by ``comparator``; this neither checks nor establishes that.
+        """Index of the first element not ordering below ``probe``, assuming the sequence is
+        sorted. That is, where ``probe`` would be inserted before its equals. The sequence must
+        already be sorted by ``comparator``; this neither checks nor establishes that.
         """
 
-        current = self._root
-        base = 0
-        result = len(self)
-        while current is not None:
-            index = base + _size(current.left)
-            if comparator(current.value, probe) < 0:
-                base = index + 1
-                current = current.right
-            else:
-                result = index
-                current = current.left
-        return result
+        return self._bound(probe, comparator, strict=False)
 
     def upper_bound(self, probe: T, comparator: Callable[[T, T], int]) -> int:
-        """Index just past the elements equivalent to ``probe``, assuming the sequence is sorted.
+        """Index of the first element ordering above ``probe``, assuming the sequence is sorted.
 
-        Together with :meth:`lower_bound` this brackets the run of elements equivalent to ``probe``.
+        That is, where ``probe`` would be inserted after its equals.
         """
 
-        current = self._root
-        base = 0
-        result = len(self)
-        while current is not None:
-            index = base + _size(current.left)
-            if comparator(current.value, probe) <= 0:
-                base = index + 1
-                current = current.right
-            else:
-                result = index
-                current = current.left
-        return result
+        return self._bound(probe, comparator, strict=True)
+
+    def _bound(self, probe: T, comparator: Callable[[T, T], int], strict: bool) -> int:
+        """One descent guided by each item's cached last element: O(log n)."""
+
+        threshold = 1 if strict else 0
+
+        def reaches(item: object) -> bool:
+            return comparator(cast("T", _item_last(item)), probe) >= threshold
+
+        index = 0
+
+        def descend_item(item: object) -> int:
+            nonlocal index
+            while isinstance(item, _Node):
+                for child in item.children:
+                    if reaches(child):
+                        item = child
+                        break
+                    index += _item_size(child)
+            return index
+
+        def scan_items(items: Iterable[object]) -> int | None:
+            nonlocal index
+            for item in items:
+                if reaches(item):
+                    return descend_item(item)
+                index += _item_size(item)
+            return None
+
+        def scan_tree(tree: _Tree) -> int | None:
+            nonlocal index
+            if tree is None:
+                return None
+            if isinstance(tree, _Single):
+                return scan_items((tree.item,))
+            found = scan_items(tree.prefix)
+            if found is not None:
+                return found
+            middle = tree.middle
+            if tree.middle_size > 0:
+                forced = cast("_Tree", middle.force())
+                assert forced is not None
+                if reaches(_tree_last_item(forced)):
+                    found = scan_tree(forced)
+                    if found is not None:
+                        return found
+                else:
+                    index += tree.middle_size
+            found = scan_items(tree.suffix)
+            return found
+
+        found = scan_tree(self._root)
+        return len(self) if found is None else found
 
     def shares_structure_with(self, other: MeasuredSequence[T, M]) -> bool:
         """Whether the two sequences have any node in common by object identity.
 
-        Used by the tests to show that a derived version really does share structure with the
-        version it came from, rather than having been rebuilt.
+        A representation probe for structural-sharing tests, not an equality test. The walk
+        forces suspended middles: deferred structure captures shared subtrees inside pending
+        suspensions where no identity walk can see them, so a non-forcing probe would report
+        false negatives. Forcing replays the deferred construction work - once, memoized, shared
+        by every version - so probing an already-forced spine costs nothing.
         """
 
         if self._root is other._root:
+            # Two empty sequences share by root identity, matching the join-tree convention.
             return True
         if self._root is None or other._root is None:
             return False
-        nodes: set[int] = set()
-        stack = [self._root]
-        while stack:
-            node = stack.pop()
-            nodes.add(id(node))
-            if node.left is not None:
-                stack.append(node.left)
-            if node.right is not None:
-                stack.append(node.right)
-        probe = [other._root]
-        while probe:
-            node = probe.pop()
-            if id(node) in nodes:
-                return True
-            if node.left is not None:
-                probe.append(node.left)
-            if node.right is not None:
-                probe.append(node.right)
-        return False
+        mine: set[int] = set()
+        _collect_ids(self._root, mine)
+        theirs: set[int] = set()
+        _collect_ids(other._root, theirs)
+        return not mine.isdisjoint(theirs)
 
     def to_list(self) -> list[T]:
         """Copy the elements into a list, in sequence order."""
@@ -479,9 +1000,64 @@ class MeasuredSequence(Generic[T, M]):
         return list(self)
 
     def __iter__(self) -> Iterator[T]:
-        """Iterate the elements in sequence order."""
+        """Iterate the elements in sequence order. O(n) total."""
 
-        return iter(()) if self._root is None else _iterate_nodes(self._root)
+        return cast("Iterator[T]", _iter_tree(self._root))
+
+
+def _tree_last_item(tree: _Tree) -> object:
+    assert tree is not None
+    if isinstance(tree, _Single):
+        return tree.item
+    return tree.suffix[-1]
+
+
+def _collect_ids(tree: _Tree, into: set[int]) -> None:
+    stack: list[object] = [tree]
+    while stack:
+        current = stack.pop()
+        if current is None:
+            continue
+        if isinstance(current, _Single):
+            into.add(id(current))
+            if isinstance(current.item, _Node):
+                stack.append(current.item)
+        elif isinstance(current, _Deep):
+            into.add(id(current))
+            if current.middle is not _EMPTY_SUSP:
+                # The module-level empty-middle singleton appears in every shallow deep node;
+                # counting it would make any two nonempty sequences "share".
+                into.add(id(current.middle))
+            for item in (*current.prefix, *current.suffix):
+                if isinstance(item, _Node):
+                    stack.append(item)
+            stack.append(cast("_Tree", current.middle.force()))
+        elif isinstance(current, _Node):
+            into.add(id(current))
+            for child in current.children:
+                if isinstance(child, _Node):
+                    stack.append(child)
+
+
+def _iter_item(item: object) -> Iterator[object]:
+    if isinstance(item, _Node):
+        for child in item.children:
+            yield from _iter_item(child)
+    else:
+        yield item
+
+
+def _iter_tree(tree: _Tree) -> Iterator[object]:
+    if tree is None:
+        return
+    if isinstance(tree, _Single):
+        yield from _iter_item(tree.item)
+        return
+    for item in tree.prefix:
+        yield from _iter_item(item)
+    yield from _iter_tree(cast("_Tree", tree.middle.force()))
+    for item in tree.suffix:
+        yield from _iter_item(item)
 
 
 __all__ = ["MeasuredSequence", "SequenceLocate", "SequenceSplit"]
