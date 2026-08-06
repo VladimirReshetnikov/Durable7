@@ -310,4 +310,5 @@ let () =
           Alcotest.test_case "ordered multimap nan cursor" `Quick test_ordered_multimap_cursor_nan;
           Alcotest.test_case "ordered-set model" `Quick test_model;
         ] );
+      ("probes", Ordered_probe_tests.tests);
     ]

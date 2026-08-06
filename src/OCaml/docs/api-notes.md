@@ -57,9 +57,9 @@ failure channels are not uniform across the port and callers must read them per 
 ### Stored-Key And No-Op Rules
 
 OCaml **retains the stored key representative** on every cursor replacement. `Sorted_map.set`,
-`Priority_search_queue.set`, and `Persistent_ordered_map.set` all rebuild the entry as
-`{ key = entries.(index).key; value }`, so a supplied key that is equivalent to but not physically
-the stored key does not replace it. The repository design delegates this to each port's stored-key
+`Priority_search_queue.set`, and `Persistent_ordered_map.set` all rebuild the entry from the
+stored key — `{ key = stored.key; value }` — so a supplied key that is equivalent to but not
+physically the stored key does not replace it. The repository design delegates this to each port's stored-key
 contract; this is what the OCaml source does. (Cross-port comparison is out of scope for this
 document, which is verified only against OCaml source.)
 
@@ -72,8 +72,8 @@ Value no-op rules are not uniform:
   leaf when `stored_value != value` is false, i.e. when the new value is the same boxed object, and
   otherwise rebuilds the path. A structurally-equal but physically-distinct value is not a no-op.
 - `Sorted_map` and `Priority_search_queue` carry no value-equality policy, so a present-key `set`
-  always copies the array and publishes a new version (the queue additionally recomputes its winner)
-  even when the payload is equal.
+  always publishes a new version by rebuilding one root path (the queue additionally recomputes
+  the winner caches along that path) even when the payload is equal.
 
 `result` payloads carry human-readable prose rather than a structured code or an error variant, so
 how precisely a rejection can be identified varies by family:
@@ -274,11 +274,15 @@ carried by the retained snapshot and are never re-derived by the cursor.
 
 Honest costs for this group, all verified against the implementation bodies:
 
-- `Sorted_bag`, `Sorted_set`, `Sorted_map`, and `Canonical_sorted_set` are immutable-array backed.
-  Bound and rank lookups are O(log n) binary searches, peeks are O(1), and **every cursor edit copies
-  the whole array, so insertion and deletion are O(n) with no structural sharing.**
-- `Priority_search_queue` uses a key-sorted immutable array and a cached winner, so key search is
-  O(log n) and edits are O(n); it makes no pruned-query claim, as already recorded below.
+- `Sorted_bag`, `Sorted_set`, `Sorted_map`, and `Canonical_sorted_set` are backed by the lazy
+  measured finger-tree core (Wave 2a). Bound and rank lookups are O(log n) measure- or
+  size-directed descents, cursor edits are O(log n) split-and-join writes sharing structure, and
+  peeks are O(log n) rank reads — the census-ruled regression from the array's O(1) indexing,
+  while extremes stay O(1) digit reads.
+- `Priority_search_queue` is the winner-cached key-ordered AVL (Wave 2b): key search and bound
+  ranks are O(log n), cursor edits are O(log n) path-copied writes, the minimum is the root's O(1)
+  cached winner, and rank peeks are O(log n) size-directed descents. It still exposes no pruned
+  range-enumeration query, as already recorded below.
 - `Canonical_sorted_set` delegates its storage to `Sorted_set` and has no Cartesian tree; the cursor
   inherits that, so no canonical zip-zip bound applies. See the existing note in
   [Language-Local Semantics](#language-local-semantics).
@@ -316,14 +320,16 @@ are never exposed through any cursor operation.
 
 Two deviations must be read before relying on any repository-level bound for this family:
 
-- **The OCaml neutral Ordered collections have no hash index at all.**
-  `Persistent_ordered_set.t` is `{ equality; values : 'element array }`, `Persistent_ordered_map.t`
-  is an `entry array`, and the multimap is an ordered map of ordered sets. `Hash_policy.hash` is
-  never called anywhere under `lib/ordered` — the retained policy is used only for `equal`.
-  Consequently `index_of`, and therefore every `find`, is a **linear O(n) equality scan**, and every
-  insertion or deletion **copies the whole array**. The repository-level O(w + c + log n) figure and
-  the root `README.md` statement that the Ordered indexes "compose public CHAMP and FingerTree
-  surfaces" **do not hold for OCaml**; this port composes neither.
+- **The OCaml neutral Ordered collections are the CHAMP-plus-stamped-sequence composite
+  (Wave 2b).** `Persistent_ordered_set.t` and `Persistent_ordered_map.t` pair a CHAMP stamp index
+  (`Hamt.Persistent_hamt`) with a maximum-stamp-measured order sequence (`Ordered.Stamped_order`
+  over `Finger_tree.Measured_tree`), and the multimap is an ordered map of ordered sets over the
+  same pair. Membership and `find` are expected-O(1) hashed lookups, `index_of` is one O(log n)
+  measure-directed descent, and every insertion, deletion, or movement is an O(log n) structural
+  write. The root `README.md` statement that the Ordered indexes "compose public CHAMP and
+  FingerTree surfaces" now holds for OCaml. Rank access (`nth`, and therefore the set and map
+  cursor peeks) is O(log n) — the census-ruled regression from the array placeholder's O(1)
+  indexing.
 - On a miss, `ordered_set_find`, `ordered_map_find`, `ordered_multimap_find`, and
   `ordered_multimap_find_group` return a cursor at the **end gap**, not at a lower bound. `found` is
   the only usable discriminator.
@@ -362,12 +368,14 @@ encoding, not of the surrounding immutability model.
   complete authenticated block set rather than a minimized path proof.
 - `Text_rope` validates UTF-8 and indexes Unicode scalar values (`Uchar.t`), matching OCaml's natural
   text element rather than UTF-16 code units or raw bytes.
-- `Range_update_sequence` requires an explicit law-verification admission flag. Its initial OCaml
-  storage rebuilds affected immutable arrays and cached measures, so it does not claim the sibling
-  implicit-AVL lazy-update bound.
-- `Rrb_vector` reuses the persistent balanced sequence facade and does not claim relaxed-radix
-  topology or a transient RRB kernel. `Priority_search_queue` uses a key-sorted immutable array and
-  cached winner, so it makes no winner-cached balanced-tree or pruned-query complexity claim.
+- `Range_update_sequence` requires an explicit law-verification admission flag. Its storage is the
+  sibling path-copied implicit AVL with composable pending tags (Wave 2b), so it delivers the
+  sibling lazy-update bound: a range update is O(log n) independent of the range's length.
+- `Rrb_vector` is a genuine eager 32-way relaxed radix-balanced tree (Wave 2a) — 5-bit radix,
+  size tables only on relaxed branches, seam-only concat rebalance — though it still ships no
+  transient RRB kernel. `Priority_search_queue` is the winner-cached key-ordered AVL (Wave 2b) and
+  delivers the sibling winner-cached bounds; it exposes no pruned range-enumeration query on its
+  OCaml surface, so no pruned-query bound is claimed.
 - `Canonical_sorted_set` derives the shared `ZZT2` HMAC-SHA256 ranks and preserves canonical sorted
   contents across insertion histories. Its initial storage delegates to `Sorted_set`, so it does
   not claim canonical zip-tree topology or zip-zip complexity bounds.

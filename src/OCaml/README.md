@@ -101,8 +101,11 @@ The remaining advanced facades are `Canonical_sorted_set` with seeded determinis
 policies, `Brodal_okasaki_heap`, the key-ordered winner-cached `Priority_search_queue`, and mutable
 `Daba_lite` FIFO aggregation. They preserve canonical insertion-history independence, comparator
 identity, priority-then-key tie breaking, persistent heap/queue snapshots, FIFO monoid order, and
-failure-atomic callback publication. The initial heap and DABA implementations favor simple OCaml
-storage and do not claim the specialized sibling cores' worst-case callback or asymptotic bounds.
+failure-atomic callback publication. `Brodal_okasaki_heap` is the bootstrapped skew-binomial heap
+with its namesake bounds, and `Priority_search_queue` is the winner-cached key-ordered AVL every
+sibling ships (Wave 2b): O(log n) keyed writes, O(1) find-min from the root's cached winner. The
+initial DABA implementation favors simple OCaml storage and does not claim the specialized sibling
+core's worst-case callback bounds.
 
 The seven research-derived collections ship here too, six in `Finger_tree` and
 `Persistent_ancestral_connection_forest` in `Hamt`. `Incremental_ancestor` is the append-only
@@ -115,11 +118,11 @@ concatenation and melding are gated on declared policy identity rather than on o
 Their bounds are stated against this workspace's substrates rather than inherited from the managed
 baseline. `Measured_tree` is now a lazy Hinze–Paterson finger tree (Wave 1 of the complexity-parity
 campaign), so `Contextual_rank_sequence` delivers the reference bounds: O(s) amortized endpoint
-updates — valid under persistent branching — and O(s log(min(n, m))) amortized concatenation. `Sorted_map` is an immutable
-entry array, so `Persistent_delta_map` writes are Θ(N + k) while its extremes are O(1) — weaker in
-one direction and stronger in the other than the tree-backed ports. `Rrb_vector` is a facade over
-the same measured tree rather than a relaxed radix trie, so the run-delta vector's splice bounds are
-worst case rather than amortized. None of that touches the load-bearing properties: run splices stay
+updates — valid under persistent branching — and O(s log(min(n, m))) amortized concatenation.
+`Sorted_map` rides the same lazy core with an order-statistic measure (Wave 2a), so
+`Persistent_delta_map` writes are O(log N) while its extremes stay O(1) digit reads. `Rrb_vector`
+is a genuine eager 32-way relaxed radix tree (Wave 2a), and the run-delta vector's splice bounds
+are the reference's eager worst case. The load-bearing properties hold as before: run splices stay
 independent of run length and comparison-free, and range-restricted change enumeration is a real
 boundary seek through `Sorted_map.key_range`.
 
@@ -133,11 +136,14 @@ run-delta vector's default relation is `compare x y = 0`, its `reflexive_ieee` h
 position, which the Rust port documents as undetectable.
 
 The independently owned neutral ordered family provides `Persistent_ordered_set`,
-`Persistent_ordered_map`, and grouped `Persistent_ordered_multimap`. Equality policy defines
-identity while array position defines order; first key/value representatives survive equivalent
-lookups and replacements. The facades own insertion, final-index movement, positional ranges,
-reversal, stable one-shot sorting, receiver-policy set algebra, independent key/value policies, and
-nested value movement. These modules depend only on general repository code.
+`Persistent_ordered_map`, and grouped `Persistent_ordered_multimap`, composed from the CHAMP and
+measured finger-tree substrates (Wave 2b): a CHAMP stamp index answers membership in expected
+O(1), and a maximum-stamp-measured order sequence resolves keyed positions in one O(log n)
+descent. Equality policy defines identity while a private stamp order defines position; first
+key/value representatives survive equivalent lookups and replacements. The facades own insertion,
+final-index movement, positional ranges, reversal, stable one-shot sorting, receiver-policy set
+algebra, independent key/value policies, and nested value movement. These modules depend only on
+general repository code.
 
 All repository-owned collection families now have OCaml modules and focused tests in
 this workspace. The [API notes](docs/api-notes.md) record the public module inventory and every

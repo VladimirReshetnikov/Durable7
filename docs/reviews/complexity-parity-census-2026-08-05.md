@@ -5,8 +5,8 @@
 - Audience: Maintainers executing the complexity-equalization campaign
 - Scope: Every place where a workspace's data-structure representation or delivered asymptotic
   bound diverges from the library's shared profile, ranked, with the target guarantee and the fix
-- Status: **Identification complete; remediation in progress.** This document is the campaign's
-  work order; strike through rows as they land.
+- Status: **Remediation complete (2026-08-06).** Every ranked row is struck; this document remains
+  the campaign's record, with each row carrying its landing evidence and probe numbers.
 
 ## Governing Principle
 
@@ -35,11 +35,11 @@ donor-mechanism extractions (C#, C++, Haskell lazy cores): `donors-full.json`.
 | C | Lazy H–P finger tree, hand-rolled memoized middle, persistence-safe | conforming donor |
 | C++ | Lazy H–P finger tree, atomic immutable publication | conforming donor |
 | Haskell | H–P finger tree, native laziness | conforming donor |
-| **Rust** | Height-balanced join tree **named `FingerTree`** | **violating** |
-| **Kotlin** | Measured AVL join tree | **violating** |
-| **OCaml** | Weight-balanced join tree | **violating** |
-| **Python** | Implicit AVL join tree | **violating** |
-| **TypeScript** | Measured AVL join tree named "finger tree" | **violating** |
+| Rust | Lazy H–P finger tree, `OnceLock` suspensions, iterative force AND drop (18d216d) | conforming |
+| Kotlin | Lazy H–P finger tree, sealed suspensions, CAS publication (0e8aaba) | conforming |
+| OCaml | Lazy H–P finger tree, defunctionalized force, field publication (b9434bb) | conforming |
+| Python | Lazy H–P finger tree, memoized thunk slots (bc238ca) | conforming |
+| TypeScript | Lazy H–P finger tree, plain-assignment publication (9e4a1e1) | conforming |
 
 ## Ranked Violations
 
@@ -53,7 +53,7 @@ donor-mechanism extractions (C#, C++, Haskell lazy cores): `donors-full.json`.
 | ~~A4~~ | ~~OCaml `Range_update_sequence`: flat array, tags applied eagerly per element~~ | **FIXED (Wave 2b).** Rebuilt as the path-copied implicit-key AVL with composable pending tags (node's own value/measure reflect its tag, children defer; `compose newer older`; the pending marker is the option slot, never a sentinel): tagging a 10-element and a 10,000-element range of the same 16,384-element sequence costs 124 vs 162 algebra calls — apply+compose 6 vs 22, where the eager per-element mutant pays 20,118 and fails the probe — a whole-sequence tag is exactly 1 apply_element + 1 apply_measure, a 10,000-element range measure is 9 calls, and a covered point read is 1. Point indexing regressed O(1) → O(log n) per the ruling precedent, stated in the `.mli` | done |
 | ~~A5~~ | ~~OCaml ordered family: flat arrays with linear scans~~ | **FIXED (Wave 2b).** Rebuilt as the CHAMP-plus-stamped-sequence composite with the stamp-measured single-descent design from Python's A7 fix (`Ordered.Stamped_order`, max-stamp measure over the lazy finger-tree core): expected-O(1) membership (3 policy calls at both n=1024 and n=32768), stamp→position one measure-directed locate — 29 combines at n=1024 vs 50 at n=32768, delta 21, where the purged binary-search-through-indexing shape performs 0 combines and fails the probe's lower bound — O(log n) positional writes (one add allocates ~4 KB at n=32768 vs the ≥256 KB array copy), sparse 2{^20} stamp stride with deterministic full relabel, first-representative retention and move semantics pinned by the unchanged tests; the multimap composes the rebuilt pair. Rank access regressed O(1) → O(log n) per the ruling precedent, stated in the `.mli`s | done |
 | ~~A6~~ | ~~Haskell `SortedSet`/`SortedMap`: facades over `Data.Set`/`Data.Map`~~ | **FIXED (Wave 3).** Rebuilt on the workspace's own finger tree with `SortedBag`'s (count, last-key) measure: extremes O(log n) → O(1) digit reads (probe: 0 comparisons at n=4096, negative-control seek 30; comparator-seek mutant fails at 2); `SortedSet` rank-slice Θ(position+length) → two comparison-free count-splits (0 comparisons and 108 KB vs 139 KB allocation at positions 10 vs 30,000 of n=32,768; toList/take/drop mutant fails both gates at 63 comparisons and 60.6 MB far-position allocation); point writes stay O(log n) (26 → 40 comparisons across 32× growth). Set algebra kept the hedge class O(m log(n/m+1)) via run-adopting boundary-split merges — disjoint ranges 2 comparisons, interleaved equal sizes 5.0/element flat across 4× growth, 32-into-32,768 at 1,015 — no regression. `PersistentDeltaMap` untouched atop it: budgets green with the two-split `keyRange` at 32 comparisons for its 40-ceiling window, extremes doc flipped Θ(log N) → O(1) | done |
-| A7 | Python ordered map/set/multimap keyed position ops | **O(log² n)** (`_index_of_stamp` binary search × O(log n) probes) | O(log n): one measure-directed descent | Give `_order` a last-stamp measure and locate by monotone predicate, as TypeScript does |
+| ~~A7~~ | ~~Python ordered map/set/multimap keyed position ops~~ | **FIXED in Wave 0** (ac8e02f, before the strike convention started): `StampedOrder` max-stamp measure, one locate descent; counting-policy probe pins ≤24 extra combines across a 32× size jump. OCaml's Wave-2b `Stamped_order` reuses the same shape | done |
 | ~~A8~~ | ~~Reversible-deque cross-orientation concat: TS, Python, OCaml~~ — **closed everywhere** | Θ(n+m) re-materialization (**Python FIXED**: lazy structural `reversed_view` as a fourth defunctionalized suspension op — O(1) mirror, O(log min) mismatched concat, plain-deque `reverse()` upgraded from Θ(n) to O(1) as a by-product; probe-pinned) | O(log(min)) — C# delivers `a.Reverse().Concat(b)` at O(log min) | Orientation-aware concat; falls out of the Wave-1 rebase for TS/OCaml |
 | ~~A9~~ | ~~OCaml reversible deque~~ | **FIXED with the Wave-1 core** (b9434bb): orientation-aware structural concat across all four flag pairings, O(log n) cursor splices | done | done |
 
@@ -108,7 +108,7 @@ finger-tree-with-orientation representation (fixes A8/A9 as a by-product).
 | # | Where | Gap | Fix |
 | --- | --- | --- | --- |
 | ~~C1~~ | ~~Incremental ancestor arena, 7 workspaces~~ | **RESOLVED BY RULING (2026-08-06): the Θ(√M) block-boundary spike is accepted as the shared contract.** Real-time two-table migration was analyzed, found implementable in all eight arena workspaces, and declined by the maintainer in favour of the simpler odd-block representation. All seven arena workspaces now document the identical contract explicitly — O(1) amortized leaf add, a single block-boundary call paying Θ(√M) for the next odd block — and Haskell's arena-free port is recorded in its own docs as *exceeding* the shared profile at O(1) worst case, sanctioned under the "if possible at all" clause the same way the OCaml rank-select regression was. (Kotlin's arena doc gets the same sentence when its in-flight core lands, to avoid touching an active workspace.) | done — by documentation, per ruling |
-| C2 | C# run-delta-vector doc wording | Claims "O(log n) amortized" splices over a fully eager RRB path — delivered is worst-case | Raise the documented claim to worst-case (Python already states it; verify Rust/others in passing) |
+| ~~C2~~ | ~~C# run-delta-vector doc wording~~ | **FIXED in Wave 0** (375e269, before the strike convention started): C# and Rust run-delta docs raised to the delivered worst-case wording | done |
 
 ### Class D — conditional vs unconditional guarantees
 
@@ -155,7 +155,7 @@ Wave 1).
 3. **Wave 2 — OCaml catch-up:** ~~A1~~, ~~A3~~, ~~A4~~, ~~A5~~, ~~real RRB~~, on the new core —
    Wave 2a (sorted family + real RRB) landed; Wave 2b (A3 + A4 + A5) landed. **Wave 2 is
    closed.**
-4. ~~**Wave 3 — Haskell sorted family:** A6~~ — **done**; with it Class A is closed except OCaml's Wave-2b rows (A3, A4, A5).
+4. ~~**Wave 3 — Haskell sorted family:** A6~~ — **done**; with Wave 2b landed alongside it, **Class A is fully closed**.
 5. ~~**Wave 4 — arena worst-case O(1)**~~ — dissolved by the C1 ruling; the documentation pass landed with the ruling itself.
 
 Verification per wave: existing suites stay green (no-regression); the combine-counting probes that

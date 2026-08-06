@@ -1,4 +1,10 @@
-(** Neutral grouped insertion-ordered persistent multimap. *)
+(** Neutral grouped insertion-ordered persistent multimap.
+
+    A composition of the insertion-ordered map (key groups) and the insertion-ordered set (each
+    group's values), so it inherits their rebuilt CHAMP-plus-stamped-sequence bounds: key and pair
+    membership are expected O(1) through the hashed indexes, and additions, removals, and
+    positional movement are O(log n) — replacing the flat placeholders' Theta(n) scans and
+    copies. *)
 
 type ('key, 'value) entry
 type ('key, 'value) t
@@ -39,10 +45,10 @@ val entry_value : ('key, 'value) entry -> 'value
 (** The entry's value. *)
 
 val mem_key : 'key -> ('key, 'value) t -> bool
-(** Whether the key is present. *)
+(** Whether the key is present. Expected O(1). *)
 
 val mem : 'key -> 'value -> ('key, 'value) t -> bool
-(** Whether the element is present. *)
+(** Whether the element is present. Expected O(1). *)
 
 val find_key : 'key -> ('key, 'value) t -> 'key option
 (** The key bound to the value. *)
