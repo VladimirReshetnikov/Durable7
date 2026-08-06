@@ -328,8 +328,7 @@ class PersistentOrderedMultimap(Generic[K, V]):
         return PersistentOrderedMultimap(groups, self._value_policy, self._pair_count - 1)
 
     def remove_key(self, key: K) -> PersistentOrderedMultimap[K, V]:
-        """Return a multimap without ``key`` and all of its values; a no-op when the key is absent.
-        """
+        """Return a multimap without ``key`` and all its values; a no-op when it is absent."""
 
         group = self._groups.try_get_entry(key)
         if not group.found or group.entry is None:
@@ -351,8 +350,7 @@ class PersistentOrderedMultimap(Generic[K, V]):
         return self._groups.keys()
 
     def groups(self) -> Iterator[tuple[K, PersistentOrderedSet[V]]]:
-        """Iterate each key with its ordered value set, keys in key order. Every set is non-empty.
-        """
+        """Iterate each key with its ordered value set, in key order. Every set is non-empty."""
 
         for group in self._groups:
             yield group.key, group.value

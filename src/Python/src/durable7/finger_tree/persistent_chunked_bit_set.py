@@ -97,8 +97,7 @@ class PersistentChunkedBitSet:
     __slots__ = ("_chunks",)
 
     def __init__(self, chunks: MeasuredSequence[_BitSetChunk, _BitSetSummary]) -> None:
-        """Wrap an already-built chunk sequence; use :meth:`empty` or :meth:`from_values` instead.
-        """
+        """Wrap an already-built chunk sequence; prefer :meth:`empty` or :meth:`from_values`."""
 
         self._chunks = chunks
 
@@ -110,8 +109,7 @@ class PersistentChunkedBitSet:
 
     @classmethod
     def from_values(cls, bit_indexes: Iterable[int]) -> PersistentChunkedBitSet:
-        """Build a bit set with every listed index set, sorting and deduplicating them in one pass.
-        """
+        """Build a bit set with every listed index set, sorting and deduplicating in one pass."""
 
         if bit_indexes is None:
             raise TypeError("bit_indexes must be iterable.")
@@ -521,8 +519,7 @@ class PersistentChunkedBitSetCursor:
         return PersistentChunkedBitSetCursor(updated, position + 1)
 
     def delete_previous(self) -> PersistentChunkedBitSetCursor:
-        """Clear the set bit before the gap and return a cursor in its place, raising at the start.
-        """
+        """Clear the set bit before the gap, returning a cursor there; raises at the start."""
 
         bit = self.peek_previous()
         if bit is None:

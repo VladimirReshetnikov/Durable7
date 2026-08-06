@@ -1175,8 +1175,7 @@ class RangeUpdateSequenceCursor(Generic[T, M, U]):
         )
 
     def delete_previous(self) -> RangeUpdateSequenceCursor[T, M, U]:
-        """Remove the element before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the element before the gap, returning a cursor there; raises at the start."""
 
         if self.is_at_start:
             raise IndexError("range-update cursor has no previous element")

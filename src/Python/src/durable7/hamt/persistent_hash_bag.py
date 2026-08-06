@@ -212,8 +212,7 @@ class PersistentHashBag(Generic[T]):
         )
 
     def remove_all(self, value: T) -> PersistentHashBag[T]:
-        """Return a bag without ``value``'s class, whatever its multiplicity; a no-op when absent.
-        """
+        """Return a bag without ``value``'s class, whatever its count; a no-op when absent."""
 
         removed = self._counts.try_remove_entry(value)
         if removed is None:
@@ -334,8 +333,7 @@ class PersistentHashBag(Generic[T]):
         return PersistentHashBag(counts, total_count)
 
     def __iter__(self) -> Iterator[T]:
-        """Iterate occurrences expanded, yielding each representative ``count`` times contiguously.
-        """
+        """Iterate occurrences expanded, yielding each representative ``count`` times in a row."""
 
         for entry in self._counts:
             for _ in range(entry.value):

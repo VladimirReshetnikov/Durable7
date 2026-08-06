@@ -936,8 +936,7 @@ class MerkleSearchTreeCursor(Generic[K, V]):
         return self if edited is self.tree else MerkleSearchTreeCursor(edited, self.position)
 
     def delete_previous(self) -> MerkleSearchTreeCursor[K, V]:
-        """Remove the entry before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the entry before the gap, returning a cursor there; raises at the start."""
 
         previous = self.peek_previous()
         if previous is None:

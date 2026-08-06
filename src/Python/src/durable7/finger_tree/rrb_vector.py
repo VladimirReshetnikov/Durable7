@@ -465,8 +465,7 @@ class RrbVector(Generic[T]):
         return first.left.concat(second.right)
 
     def try_remove_last(self) -> RrbPop[T] | None:
-        """Remove the last element, returning it with the remaining vector, or ``None`` when empty.
-        """
+        """Remove the last element, returning it with the rest, or ``None`` when empty."""
 
         if self.is_empty:
             return None
@@ -695,8 +694,7 @@ class RrbVectorCursor(Generic[T]):
         return RrbVectorCursor(updated, self.position + len(materialized))
 
     def delete_previous(self) -> RrbVectorCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the element before the gap, returning a cursor there; raises at the start."""
 
         if self.is_at_start:
             raise IndexError("RRB vector cursor has no previous element")

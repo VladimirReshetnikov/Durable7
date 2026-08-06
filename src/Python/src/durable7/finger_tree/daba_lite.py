@@ -147,8 +147,7 @@ class _ChunkedQueue(Generic[T]):
             current.previous = None
 
     def trim_before(self, front: _Cursor[T]) -> None:
-        """Drop the chunks entirely behind ``front`` so evicted slots stop retaining their values.
-        """
+        """Drop the chunks entirely behind ``front``, so evicted slots stop retaining values."""
 
         if self._first is front.block:
             return

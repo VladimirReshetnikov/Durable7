@@ -269,8 +269,7 @@ class _CountingIdentityAlgebra(_AffineAlgebra):
 
     @property
     def identity(self) -> _Measure:
-        """Return the identity and count the call, so the test can assert it is captured only once.
-        """
+        """Return the identity and count the call, so a test can assert it is captured once."""
 
         self.identity_reads += 1
         return _Measure(0, 0, 0)

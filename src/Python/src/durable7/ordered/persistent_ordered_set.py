@@ -806,8 +806,7 @@ class PersistentOrderedSetCursor(Generic[T]):
         return cursor is not self, cursor
 
     def delete_previous(self) -> PersistentOrderedSetCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the element before the gap, returning a cursor there; raises at the start."""
 
         if self.is_at_start:
             raise IndexError("The ordered-set cursor has no previous representative.")

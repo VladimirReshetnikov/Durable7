@@ -619,8 +619,7 @@ class IntervalTreeCursor(Generic[T]):
         return self._delete_at(self.position - 1, self.position - 1)
 
     def delete_next(self) -> IntervalTreeCursor[T]:
-        """Remove the interval after the gap and return a cursor in its place, raising at the end.
-        """
+        """Remove the interval after the gap, returning a cursor there; raises at the end."""
 
         if self.is_at_end:
             raise IndexError("No occurrence follows the cursor.")

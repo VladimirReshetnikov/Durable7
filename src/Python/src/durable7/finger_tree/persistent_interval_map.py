@@ -614,8 +614,7 @@ class PersistentIntervalMapCursor(Generic[T, V]):
         return PersistentIntervalMapCursor(self.map.set(entry.value.interval, value), self.position)
 
     def delete_previous(self) -> PersistentIntervalMapCursor[T, V]:
-        """Remove the entry before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the entry before the gap, returning a cursor there; raises at the start."""
 
         entry = self.peek_previous()
         if entry is None:

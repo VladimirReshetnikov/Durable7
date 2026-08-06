@@ -471,8 +471,7 @@ class MeasuredRope(Generic[T, M]):
         )
 
     def locate_by_measure(self, predicate: Callable[[M], bool]) -> MeasuredRopeLocate[T, M]:
-        """Report where the first element satisfying the predicate sits, without splitting the rope.
-        """
+        """Report where the first element satisfying the predicate sits, without splitting."""
 
         result = self._items.try_locate(predicate)
         return MeasuredRopeLocate(result.index, result.measure_before, result.item, result.found)

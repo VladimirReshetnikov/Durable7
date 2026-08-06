@@ -81,8 +81,7 @@ class MerkleDigest:
     BYTE_LENGTH: ClassVar[int] = 32
 
     def __post_init__(self) -> None:
-        """Normalize the payload to ``bytes`` and reject anything that is not exactly 32 bytes long.
-        """
+        """Normalize the payload to ``bytes``, rejecting anything not exactly 32 bytes long."""
 
         value = bytes(self._bytes)
         if len(value) != self.BYTE_LENGTH:

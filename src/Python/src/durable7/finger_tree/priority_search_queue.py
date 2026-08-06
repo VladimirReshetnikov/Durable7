@@ -95,8 +95,7 @@ class PrioritySearchCursorSearch(Generic[K, P, V]):
 
 @dataclass(frozen=True, slots=True)
 class PrioritySearchAddResult(Generic[K, P, V]):
-    """The outcome of a non-overwriting insertion; the queue is the receiver when nothing was added.
-    """
+    """A non-overwriting insertion's outcome; the queue is the receiver when nothing was added."""
 
     added: bool
     queue: PrioritySearchQueue[K, P, V]
@@ -744,8 +743,7 @@ class PrioritySearchQueueCursor(Generic[K, P, V]):
         )
 
     def delete_previous(self) -> PrioritySearchQueueCursor[K, P, V]:
-        """Remove the entry before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the entry before the gap, returning a cursor there; raises at the start."""
 
         entry = self.peek_previous()
         if entry is None:

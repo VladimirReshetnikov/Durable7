@@ -222,8 +222,7 @@ class PersistentDirectedGraph(Generic[V]):
         return self if self.is_empty else self.empty(self.policy)
 
     def __iter__(self) -> Iterator[DirectedEdge[V]]:
-        """Iterate the directed edges. Isolated vertices do not appear here; use :meth:`vertices`.
-        """
+        """Iterate the directed edges. Isolated vertices do not appear; use :meth:`vertices`."""
 
         for edge in self._edges:
             yield DirectedEdge(edge.left, edge.right)

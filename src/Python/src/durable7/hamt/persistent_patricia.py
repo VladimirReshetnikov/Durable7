@@ -721,8 +721,7 @@ class PersistentIntMapCursor(Generic[V]):
         return self if edited is self.map else PersistentIntMapCursor(edited, self.position)
 
     def delete_previous(self) -> PersistentIntMapCursor[V]:
-        """Remove the entry before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the entry before the gap, returning a cursor there; raises at the start."""
 
         previous = self.peek_previous()
         if previous is None:
@@ -846,8 +845,7 @@ class PersistentLongMapCursor(Generic[V]):
         return self if edited is self.map else PersistentLongMapCursor(edited, self.position)
 
     def delete_previous(self) -> PersistentLongMapCursor[V]:
-        """Remove the entry before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the entry before the gap, returning a cursor there; raises at the start."""
 
         previous = self.peek_previous()
         if previous is None:
@@ -1189,8 +1187,7 @@ class PersistentIntSetCursor:
         return self if found else PersistentIntSetCursor(self.set.add(value), self.position + 1)
 
     def delete_previous(self) -> PersistentIntSetCursor:
-        """Remove the element before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the element before the gap, returning a cursor there; raises at the start."""
 
         previous = self.peek_previous()
         if previous is None:
@@ -1288,8 +1285,7 @@ class PersistentLongSetCursor:
         return self if found else PersistentLongSetCursor(self.set.add(value), self.position + 1)
 
     def delete_previous(self) -> PersistentLongSetCursor:
-        """Remove the element before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the element before the gap, returning a cursor there; raises at the start."""
 
         previous = self.peek_previous()
         if previous is None:

@@ -87,8 +87,7 @@ class PersistentDeque(Generic[T]):
     __slots__ = ("_items",)
 
     def __init__(self, items: MeasuredSequence[T, int]) -> None:
-        """Wrap an already-built representation; use :meth:`empty` or :meth:`from_iterable` instead.
-        """
+        """Wrap an already-built representation; prefer :meth:`empty` or :meth:`from_iterable`."""
 
         self._items = items
 
@@ -277,8 +276,7 @@ class ReversibleDeque(Generic[T]):
     __slots__ = ("_items", "_reversed")
 
     def __init__(self, items: PersistentDeque[T], reversed_: bool = False) -> None:
-        """Wrap an already-built representation; use :meth:`empty` or :meth:`from_iterable` instead.
-        """
+        """Wrap an already-built representation; prefer :meth:`empty` or :meth:`from_iterable`."""
 
         self._items = items
         self._reversed = reversed_
@@ -467,8 +465,7 @@ class FingerTree(Generic[T, M]):
     __slots__ = ("_items", "policy")
 
     def __init__(self, items: MeasuredSequence[T, M], policy: MeasurePolicy[T, M]) -> None:
-        """Wrap an already-built representation; use :meth:`empty` or :meth:`from_iterable` instead.
-        """
+        """Wrap an already-built representation; prefer :meth:`empty` or :meth:`from_iterable`."""
 
         self._items = items
         self.policy = policy

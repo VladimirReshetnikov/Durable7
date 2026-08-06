@@ -214,8 +214,7 @@ class MeasuredSequence(Generic[T, M]):
     def from_iterable(
         cls, values: Iterable[T], policy: MeasurePolicy[T, M]
     ) -> MeasuredSequence[T, M]:
-        """Build a balanced sequence from ``values`` in one pass, rather than by repeated appending.
-        """
+        """Build a balanced sequence from ``values`` in one pass, not by repeated appending."""
 
         materialized = list(values)
         return cls(_build_balanced(materialized, 0, len(materialized), policy), policy)
@@ -325,8 +324,7 @@ class MeasuredSequence(Generic[T, M]):
         return None if split is None else split.left.append(value).concat(split.right)
 
     def set_at(self, index: int, value: T) -> MeasuredSequence[T, M] | None:
-        """Return a sequence with the element at ``index`` replaced, or ``None`` when out of range.
-        """
+        """Return a sequence with ``index``'s element replaced, or ``None`` when out of range."""
 
         if index < 0 or index >= len(self):
             return None

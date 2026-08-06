@@ -273,8 +273,7 @@ class PersistentOrderedMap(Generic[K, V]):
         return self._insert_core(self.size, key, value)
 
     def add_first(self, key: K, value: V) -> PersistentOrderedMap[K, V]:
-        """Insert a new entry at the front, raising :class:`DuplicateKeyError` on an existing key.
-        """
+        """Insert a new entry at the front; an existing key raises :class:`DuplicateKeyError`."""
 
         result = self._insert_core(0, key, value)
         if not result.added:
@@ -779,8 +778,7 @@ class PersistentOrderedMapCursor(Generic[K, V]):
         return PersistentOrderedMapCursor(self.map.set(entry.key, value), self.position)
 
     def delete_previous(self) -> PersistentOrderedMapCursor[K, V]:
-        """Remove the entry before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the entry before the gap, returning a cursor there; raises at the start."""
 
         if self.is_at_start:
             raise IndexError("The ordered-map cursor has no previous entry.")

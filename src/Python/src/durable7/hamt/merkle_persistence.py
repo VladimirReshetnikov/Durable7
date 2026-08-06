@@ -481,8 +481,7 @@ class _OverlayStore:
         return str(digest) in self.staged or self.destination.contains(digest)
 
     def digests(self) -> tuple[MerkleDigest, ...]:
-        """Always empty; enumeration is not needed during verification and would be misleading here.
-        """
+        """Always empty; enumeration is not needed during verification and would mislead."""
 
         return ()
 

@@ -52,8 +52,7 @@ class _BitmapNode(_Node[K, V]):
     entry_count: int = field(init=False)
 
     def __post_init__(self) -> None:
-        """Cache the subtree's entry count by summing this node's inline entries and its children.
-        """
+        """Cache the subtree's entry count from this node's inline entries and its children."""
 
         object.__setattr__(
             self,
@@ -1006,8 +1005,7 @@ class PersistentHashMap(Generic[K, V]):
         return None if result is None else MapRemoveResult(result.map, result.entry.value)
 
     def try_remove_entry(self, key: K) -> MapRemoveEntryResult[K, V] | None:
-        """Remove ``key`` and report the stored representative and value, or ``None`` when absent.
-        """
+        """Remove ``key`` and report its stored representative and value, or ``None`` if absent."""
 
         if self._root is None:
             return None
@@ -1249,8 +1247,7 @@ class PersistentHashSet(Generic[T]):
         return TransientHashSet(cls.empty(policy))
 
     def to_transient(self) -> TransientHashSet[T]:
-        """Return a single-owner editing session starting from this set, which is itself unaffected.
-        """
+        """Return a single-owner editing session from this set, which is itself unaffected."""
 
         return TransientHashSet(self)
 
@@ -1332,8 +1329,7 @@ class PersistentHashSet(Generic[T]):
         return self._with_map(self._map.remove(value))
 
     def try_remove(self, value: T) -> SetRemoveResult[T] | None:
-        """Remove ``value``'s class and report the stored representative, or ``None`` when absent.
-        """
+        """Remove ``value``'s class and report its representative, or ``None`` when absent."""
 
         result = self._map.try_remove_entry(value)
         if result is None:

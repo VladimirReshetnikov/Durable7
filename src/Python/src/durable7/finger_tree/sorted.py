@@ -33,8 +33,7 @@ class SortedDuplicateKeyError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class SortedAddResult(Generic[R]):
-    """The outcome of a non-overwriting insertion; the value is the receiver when nothing was added.
-    """
+    """A non-overwriting insertion's outcome; the value is the receiver when nothing was added."""
 
     value: R
     added: bool
@@ -154,8 +153,7 @@ class SortedBag(Generic[T]):
         return self.count_at_most(value) - self.count_less_than(value)
 
     def add(self, value: T) -> SortedBag[T]:
-        """Return a bag with ``value`` inserted at its sorted position, after any existing equals.
-        """
+        """Return a bag with ``value`` inserted at its sorted position, after existing equals."""
 
         items = self._items.insert_at(self.count_at_most(value), value)
         if items is None:
@@ -183,8 +181,7 @@ class SortedBag(Generic[T]):
         return SortedBag(items, self.comparator)
 
     def remove_all(self, value: T) -> SortedBag[T]:
-        """Remove every occurrence of ``value`` in one split and join, regardless of multiplicity.
-        """
+        """Remove every occurrence of ``value`` in one split and join, whatever its count."""
 
         start, end = self.count_less_than(value), self.count_at_most(value)
         if start == end:
@@ -714,8 +711,7 @@ class SortedMap(Generic[K, V]):
         return self.entry_at(self._upper_bound(key) - 1)
 
     def ceiling_entry(self, key: K) -> SortedMapEntry[K, V] | None:
-        """The entry with the smallest key at least ``key``, or ``None`` when every key is below it.
-        """
+        """The entry with the smallest key at least ``key``, or ``None`` if none qualifies."""
 
         return self.entry_at(self._lower_bound(key))
 

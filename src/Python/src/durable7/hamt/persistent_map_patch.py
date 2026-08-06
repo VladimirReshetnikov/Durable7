@@ -118,8 +118,7 @@ class PersistentMapPatch(Generic[K, V]):
         key_policy: HashPolicy[K] | None = None,
         value_equals: Callable[[V, V], bool] = same_value,
     ) -> PersistentMapPatch[K, V]:
-        """Return a patch that changes nothing, retaining the exact key policy and value comparison.
-        """
+        """Return a patch that changes nothing, keeping the key policy and value comparison."""
 
         effective = default_hash_policy() if key_policy is None else key_policy
         return cls(PersistentHashMap.empty(effective), value_equals)

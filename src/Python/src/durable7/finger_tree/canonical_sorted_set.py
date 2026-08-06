@@ -873,8 +873,7 @@ class CanonicalSortedSetCursor(Generic[T]):
         return CanonicalSortedSetCursor(self.set.add(value), position + 1)
 
     def delete_previous(self) -> CanonicalSortedSetCursor[T]:
-        """Remove the element before the gap and return a cursor in its place, raising at the start.
-        """
+        """Remove the element before the gap, returning a cursor there; raises at the start."""
 
         item = self.peek_previous()
         if item is None:
