@@ -89,7 +89,7 @@ finger-tree-with-orientation representation (fixes A8/A9 as a by-product).
 
 | # | Where | Gap | Fix |
 | --- | --- | --- | --- |
-| C1 | Incremental ancestor arena, 7 workspaces | Haskell delivers O(1) **worst-case** leaf add (no arena; a node is its own handle); all arena implementations are O(1) amortized, and C's is O(√M) worst at a directory doubling | **Mechanism corrected after analysis:** naive next-block pre-initialization does NOT reach worst-case O(1) in GC languages, because array allocation itself zeroes Θ(block) there, and CPython/JVM list growth reallocs in Θ(length) spikes. The honest fix is the classic real-time deamortization: keep old and new backing tables live and migrate a constant number of slots per add, so no single operation ever pays a Θ(√M) or Θ(M) copy; implementable in all eight arena workspaces (C's uninitialized malloc makes it simpler there, not different). Equalize upward to worst-case O(1) everywhere |
+| ~~C1~~ | ~~Incremental ancestor arena, 7 workspaces~~ | **RESOLVED BY RULING (2026-08-06): the Θ(√M) block-boundary spike is accepted as the shared contract.** Real-time two-table migration was analyzed, found implementable in all eight arena workspaces, and declined by the maintainer in favour of the simpler odd-block representation. All seven arena workspaces now document the identical contract explicitly — O(1) amortized leaf add, a single block-boundary call paying Θ(√M) for the next odd block — and Haskell's arena-free port is recorded in its own docs as *exceeding* the shared profile at O(1) worst case, sanctioned under the "if possible at all" clause the same way the OCaml rank-select regression was. (Kotlin's arena doc gets the same sentence when its in-flight core lands, to avoid touching an active workspace.) | done — by documentation, per ruling |
 | C2 | C# run-delta-vector doc wording | Claims "O(log n) amortized" splices over a fully eager RRB path — delivered is worst-case | Raise the documented claim to worst-case (Python already states it; verify Rust/others in passing) |
 
 ### Class D — conditional vs unconditional guarantees
@@ -116,6 +116,9 @@ remove-min term (superseded by Wave 1).
   both O(log n) writes and O(1) select; the O(1) select was an artifact of the placeholder. The
   reference profile (O(log n) select, O(1) extremes, O(log n) writes) is the contract. Ruled
   acceptable under "if possible at all" — flagged, not silent.
+- **The arena's Θ(√M) block-boundary spike (former C1) is the accepted shared contract** by
+  maintainer ruling: every arena workspace documents O(1) amortized adds with the explicit
+  spike, and Haskell's arena-free O(1) worst case is a recorded over-delivery, not a target.
 - Rope chunking (chunked leaves in C#/C/C++/Rust/Haskell vs per-element in Kotlin/Python/TS):
   constant-factor, not asymptotic. Representation-parity follow-up, not part of this campaign's
   hard constraint.
@@ -130,7 +133,7 @@ remove-min term (superseded by Wave 1).
    OCaml (whose Wave-2 rebuilds sit on its new core).
 3. **Wave 2 — OCaml catch-up:** A1, A3, A4, A5, real RRB, on the new core.
 4. **Wave 3 — Haskell sorted family:** A6.
-5. **Wave 4 — arena worst-case O(1):** C1 across all seven arena workspaces.
+5. ~~**Wave 4 — arena worst-case O(1)**~~ — dissolved by the C1 ruling; the documentation pass landed with the ruling itself.
 
 Verification per wave: existing suites stay green (no-regression); the combine-counting probes that
 today *prove the weak bounds* are inverted to prove the strong ones (endpoint cost independent of

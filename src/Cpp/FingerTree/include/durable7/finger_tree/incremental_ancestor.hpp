@@ -84,7 +84,10 @@ concept incremental_ancestor_arena = requires(Arena& arena, const Arena& constan
 /// Each immutable node keeps one parent link and one coalesced jump link. Adding a leaf performs
 /// O(1) link work. Nodes are retained in blocks of sizes 1, 3, 5, ..., whose square boundaries give
 /// O(1) addressing and O(sqrt(M)) unused slots after `M` published nodes; block allocation makes
-/// insertion O(1) amortized rather than worst case. An ancestor query follows O(log M) parent/jump
+/// insertion O(1) amortized rather than worst case: a single addition at a square boundary pays Θ(√M) to allocate the next odd block,
+/// the accepted contract of the shared odd-block representation (deamortizing it was considered
+/// and declined; Haskell's arena-free port exceeds this profile at O(1) worst case). An ancestor
+/// query follows O(log M) parent/jump
 /// links in the worst case. Total storage is O(M), and every published value stays reachable until
 /// the arena is destroyed.
 ///
@@ -124,7 +127,8 @@ public:
 
     /// Adds a labelled leaf below a previously published node and returns its stable handle.
     ///
-    /// This addition is O(1) amortized over the block allocations.
+    /// This addition is O(1) amortized over the block allocations; a block-boundary call pays
+    /// Θ(√M) for the new odd block.
     ///
     /// @throws std::out_of_range when `parent` was never published by this arena.
     /// @throws std::overflow_error when the depth, node count, or a coalesced jump distance cannot

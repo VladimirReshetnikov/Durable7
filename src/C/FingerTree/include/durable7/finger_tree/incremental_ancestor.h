@@ -17,7 +17,10 @@
  * per immutable node, so a leaf addition does O(1) link work and an ancestor query follows O(log M)
  * parent/jump links in the worst case after M published nodes. Nodes live in blocks of sizes
  * 1, 3, 5, ..., whose square boundaries give O(1) addressing and O(sqrt(M)) unused slots. Block and
- * directory allocation makes an addition O(1) amortized rather than worst case. Total arena storage
+ * directory allocation makes an addition O(1) amortized rather than worst case: a single addition
+ * at a square boundary pays Theta(sqrt(M)) to allocate the next odd block, the accepted contract
+ * of the shared odd-block representation (deamortizing it was considered and declined; Haskell's
+ * arena-free port exceeds this profile at O(1) worst case). Total arena storage
  * is O(M), and every published value stays reachable until the arena is disposed.
  *
  * An Alstrup-Holm incremental level-ancestor backend would supply O(1) worst-case addition and
@@ -260,7 +263,8 @@ ft_status ft_incremental_ancestor_arena_published_node_count(
     size_t* count);
 /* Adds a labelled leaf below the bottom node or a labelled node owned by this arena, publishing the
  * caller's value as an owned copy made through the policy. On the Myers backend this addition is
- * O(1) amortized over the block and directory allocations. Outputs are written only on success; a
+ * O(1) amortized over the block and directory allocations; a block-boundary call pays
+ * Theta(sqrt(M)) for the new odd block. Outputs are written only on success; a
  * failed addition leaves the arena exactly as it was, including its counters. */
 ft_status ft_incremental_ancestor_arena_add_leaf(
     const ft_incremental_ancestor_arena* arena,

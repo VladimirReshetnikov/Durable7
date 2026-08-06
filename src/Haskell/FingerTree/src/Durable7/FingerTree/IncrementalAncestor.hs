@@ -10,7 +10,8 @@
 --
 -- Each node keeps one parent link and one coalesced jump link, the two-link
 -- applicative-stack scheme of Myers. Adding a leaf does @O(1)@ link work in
--- the worst case, the primitive reads 'nodeDepth', 'nodeParent', and
+-- the worst case — exceeding the shared profile, whose arena-backed ports
+-- accept a Θ(√M) block-boundary allocation spike and state O(1) amortized — the primitive reads 'nodeDepth', 'nodeParent', and
 -- 'nodeValue' are @O(1)@, and 'ancestorAtDepth' follows @O(log M)@
 -- parent\/jump links after @M@ additions on the queried branch.
 --

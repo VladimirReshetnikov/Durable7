@@ -12,7 +12,10 @@
 //! leaf addition does O(1) link work and an ancestor query follows O(log M) parent/jump links in
 //! the worst case after M published nodes. Nodes live in blocks of sizes 1, 3, 5, ..., whose square
 //! boundaries give O(1) addressing and O(sqrt(M)) unused slots. Block and directory allocation
-//! makes an addition O(1) *amortized* rather than worst case. Total arena storage is O(M), and
+//! makes an addition O(1) *amortized* rather than worst case: a single addition at a square boundary pays Θ(√M) to allocate the next odd block —
+//! the accepted contract of the shared odd-block representation (deamortizing it was considered
+//! and declined; Haskell's arena-free port exceeds this profile at O(1) worst case). Total arena
+//! storage is O(M), and
 //! every published value stays reachable until the arena itself is dropped.
 //!
 //! An Alstrup-Holm incremental level-ancestor backend would supply O(1) worst-case addition *and*
@@ -204,7 +207,7 @@ struct ArenaState<T> {
 ///
 /// Each immutable node keeps one parent link and one coalesced jump link. Adding a leaf performs
 /// O(1) link work; because block and directory allocation is amortized, an addition is O(1)
-/// amortized rather than O(1) worst case. An ancestor query follows O(log M) parent/jump links in
+/// amortized rather than O(1) worst case (a block-boundary call pays Θ(√M) for the new block). An ancestor query follows O(log M) parent/jump links in
 /// the worst case after M published nodes. Nodes live in blocks of sizes 1, 3, 5, ..., whose square
 /// boundaries give O(1) addressing and O(sqrt(M)) unused slots. Total arena storage is O(M), and
 /// every published value remains reachable until the arena itself is dropped.

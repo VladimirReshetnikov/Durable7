@@ -70,7 +70,9 @@ val published_node_count : 'value t -> int
 
 val add_leaf : 'value t -> parent:int -> 'value -> (int, string) result
 (** [add_leaf arena ~parent value] publishes a labelled leaf below [parent] and returns its stable
-    handle. This addition is [O(1)] amortized over the block allocations. Fails when [parent] was
+    handle. This addition is [O(1)] amortized over the block allocations; a block-boundary call
+    pays [Theta (sqrt M)] for the new odd block, the accepted contract of the shared odd-block
+    representation. Fails when [parent] was
     never published by this arena, or when the depth, the node count, or a coalesced jump distance
     cannot grow further. *)
 
