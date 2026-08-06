@@ -38,12 +38,12 @@ Two divergences are worth stating. A version is an ordinary immutable value whos
 *structural* rather than referential, recording its link endpoints so sibling branches with equal
 depth stay distinct; the visible consequence is that two versions built by genuinely identical
 operations from the same parent are one value, which the test suite asserts explicitly rather than
-hides. And the CHAMP path factor is **expected** rather than worst-case, because `Hashable` mixes to
-an `Int` that `HashMap` truncates to 32 bits: the trie is unconditionally at most seven levels, but
-two distinct vertices colliding in those 32 bits share a list-scanned bucket. The Rust port reaches
-the same conclusion for a related reason; the difference worth noting is that this mixer is
-deterministic, so a colliding vertex set is a property of the universe rather than of the run. The
-union-by-size parent-path factor remains worst-case O(log n).
+hides. And the CHAMP path factor is **worst-case**, matching the reference: the forest pins its
+cell map to an injective `fmix32` vertex hash over a universe capped at `2^31 - 1` — the universe
+every sibling workspace already has, since their vertices are 32-bit integers — so no collision
+bucket can ever hold two distinct vertices. The cap is load-bearing: no 32-bit hash is injective
+over a larger domain, which is why `create` now rejects one. The union-by-size parent-path factor
+remains worst-case O(log n).
 
 ## One-Descent Map Factories
 

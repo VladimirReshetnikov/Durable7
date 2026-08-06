@@ -73,7 +73,8 @@ version-chain, and parent-path walk is iterative, and the tests assert depths pa
 than trusting it. And `float("nan") == float("nan")` is false, which would silently leave a position
 permanently dirty, so `natural_value_equality` consults identity first and `reflexive_ieee_equality`
 is the .NET-compatible escape hatch. Separately, the connection forest earns an *unconditional*
-CHAMP path factor — the bound Rust and Haskell must state as expected — by pinning an injective
+CHAMP path factor — now the bound in every workspace, since Rust and Haskell pinned the same
+finalizer — by pinning an injective
 `fmix32` vertex hash, so no collision bucket can ever hold two distinct vertices.
 
 The root namespace re-exports every public family member:

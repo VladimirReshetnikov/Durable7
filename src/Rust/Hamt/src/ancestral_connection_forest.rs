@@ -14,22 +14,18 @@
 //! O(w log n) time, where w is the CHAMP path cost defined below. It does *not* search the version
 //! history, so its cost is independent of history depth.
 //!
-//! # Cost of the CHAMP path, and a divergence from the managed reference
+//! # Cost of the CHAMP path
 //!
 //! Throughout this module w denotes the cost of one [`PersistentHashMap`](crate::PersistentHashMap)
-//! cell lookup or insertion. That cost is bounded **in expectation**, not unconditionally: the map
-//! hashes keys with [`RandomState`] and truncates the result to 32 bits, so distinct `i32` vertices
-//! can collide and be stored in a collision bucket whose scan is linear in the bucket's occupancy.
-//! Over a fixed vertex universe the expected bucket occupancy is O(1) and the expected trie depth is
-//! O(1) (at most seven levels at five hash bits per level), so w is O(1) in expectation and every
-//! per-operation bound stated here is an expected bound.
-//!
-//! This is a deliberate divergence from the managed reference, which states O(w log n) with w
-//! unconditionally bounded. The reference relies on a hash policy under which the CHAMP path length
-//! admits a worst-case bound; this port retains the standard library's `RandomState` over a
-//! 32-bit hash space, under which collisions genuinely form. Only the hash policy differs — the
-//! forest algorithm, the union-by-size height argument, and the O(log n) parent-path factor are
-//! identical, and that factor remains worst-case.
+//! cell lookup or insertion, and it is bounded **unconditionally**, matching the managed reference:
+//! the cell map is pinned to [`VertexHashState`], whose 32-bit output is a MurmurHash3 `fmix32`
+//! bijection of the vertex. Every step of that finalizer — two xor-shifts by at least half the
+//! width around multiplications by odd constants — is invertible modulo 2^32, so distinct `i32`
+//! vertices can never share a hash, no collision bucket ever holds two distinct vertices, and any
+//! two vertices diverge within ceil(32/5) = 7 trie levels. w is therefore O(1) worst-case and
+//! every per-operation bound stated here is worst-case in both factors. Pinning is what earns the
+//! claim: the standard library's `RandomState`, which this map previously retained, genuinely
+//! collides after 32-bit truncation and could only support an expected bound.
 //!
 //! Instances and version tokens are immutable snapshots safe for concurrent readers. Deletion,
 //! confluent merging, retroactive updates, and path compression are deliberately outside this
@@ -42,11 +38,10 @@
 //! and the cached component count.
 
 use crate::PersistentHashMap;
-use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasher, Hash, Hasher};
 use std::sync::Arc;
 
 /// A recoverable failure reported by a connection-forest operation.
@@ -286,13 +281,71 @@ struct PathStep<'a> {
 
 /// A fully branching persistent insertion-only connectivity forest that can report the first
 /// ancestor version in which two vertices became connected.
+
+/// The pinned injective vertex-hash policy behind the forest's cell map.
+///
+/// `fmix32` (MurmurHash3's finalizer) composes xor-shifts by at least half the word with
+/// multiplications by odd constants; each step is a bijection of the 32-bit word, so the whole is
+/// injective over every `i32` vertex. That injectivity is what upgrades the CHAMP factor from
+/// expected to worst-case: no collision bucket can ever hold two distinct vertices. The same
+/// finalizer is pinned by the C++ and Python ports. Only injectivity is promised — the value may
+/// differ across platforms — and only 32-bit lanes are supported, which covers the one key type
+/// the forest stores.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VertexHashState;
+
+impl BuildHasher for VertexHashState {
+    type Hasher = VertexHasher;
+
+    fn build_hasher(&self) -> VertexHasher {
+        VertexHasher(0)
+    }
+}
+
+/// The single-lane hasher produced by [`VertexHashState`].
+#[derive(Clone, Copy, Debug)]
+pub struct VertexHasher(u64);
+
+fn fmix32(mut value: u32) -> u32 {
+    value ^= value >> 16;
+    value = value.wrapping_mul(0x85EB_CA6B);
+    value ^= value >> 13;
+    value = value.wrapping_mul(0xC2B2_AE35);
+    value ^ (value >> 16)
+}
+
+impl Hasher for VertexHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        // Fallback for the byte-slice route some `Hash` impls take: fold at most one 32-bit lane.
+        // Reading native-endian bytes as little-endian is itself a bijection of the lane, so
+        // injectivity does not depend on endianness.
+        let mut lane = [0u8; 4];
+        for (index, byte) in bytes.iter().take(4).enumerate() {
+            lane[index] = *byte;
+        }
+        self.write_u32(u32::from_le_bytes(lane));
+    }
+
+    fn write_u32(&mut self, value: u32) {
+        self.0 = u64::from(fmix32(value));
+    }
+
+    fn write_i32(&mut self, value: i32) {
+        self.write_u32(value as u32);
+    }
+}
+
 ///
 /// Cloning is O(1) and yields the same version; a clone and its source are indistinguishable.
 #[derive(Clone)]
 pub struct PersistentAncestralConnectionForest {
     vertex_count: i32,
     component_count: i32,
-    cells: PersistentHashMap<i32, Cell, RandomState>,
+    cells: PersistentHashMap<i32, Cell, VertexHashState>,
     version: AncestralConnectionVersion,
 }
 
@@ -312,7 +365,7 @@ impl PersistentAncestralConnectionForest {
         Ok(Self {
             vertex_count,
             component_count: vertex_count,
-            cells: PersistentHashMap::new(),
+            cells: PersistentHashMap::with_hasher(VertexHashState),
             version: AncestralConnectionVersion::new_root(),
         })
     }
@@ -336,7 +389,7 @@ impl PersistentAncestralConnectionForest {
     }
 
     /// Returns the current union-find representative of `vertex`. O(w log n), worst-case in the
-    /// O(log n) path factor and expected in the CHAMP factor w (see the module-level note).
+    /// O(log n) path factor and in the CHAMP factor w alike (see the module-level note).
     ///
     /// The representative is selected by deterministic union-by-size history and is an
     /// implementation artifact: sibling versions need not agree on it.
@@ -346,7 +399,7 @@ impl PersistentAncestralConnectionForest {
     }
 
     /// Reports whether two vertices are connected, that is, whether they have the same current
-    /// root. O(w log n), worst-case in the O(log n) path factor and expected in the CHAMP factor w
+    /// root. O(w log n), worst-case in the O(log n) path factor and in the CHAMP factor w alike
     /// (see the module-level note).
     pub fn connected(&self, left: i32, right: i32) -> Result<bool, AncestralConnectionError> {
         self.check_vertices(left, right)?;
@@ -354,7 +407,7 @@ impl PersistentAncestralConnectionForest {
     }
 
     /// Returns the number of vertices in the connected component containing `vertex`. O(w log n),
-    /// worst-case in the O(log n) path factor and expected in the CHAMP factor w (see the
+    /// worst-case in the O(log n) path factor and in the CHAMP factor w alike (see the
     /// module-level note).
     ///
     /// An isolated vertex is still a singleton root and reports 1. The answer is the union-by-size
@@ -374,7 +427,7 @@ impl PersistentAncestralConnectionForest {
     /// root stays the representative.
     ///
     /// O(w log n) time and O(w) new CHAMP nodes for a successful union; O(w log n) time and O(1)
-    /// space when redundant. The O(log n) path factor is worst-case; the CHAMP factor w is expected
+    /// space when redundant. The O(log n) path factor and the CHAMP factor w are both worst-case
     /// rather than worst-case (see the module-level note). The receiver is left untouched,
     /// including on failure.
     pub fn link(&self, left: i32, right: i32) -> Result<Self, AncestralConnectionError> {
@@ -422,7 +475,7 @@ impl PersistentAncestralConnectionForest {
     /// A vertex is connected to itself at the history root. The answer is computed from the two
     /// current parent paths as the latest union-edge version strictly below their forest lowest
     /// common ancestor; the version history is never searched. O(w log n) time — worst-case in the
-    /// O(log n) path factor, expected in the CHAMP factor w (see the module-level note) — and
+    /// O(log n) path factor and in the CHAMP factor w alike (see the module-level note) — and
     /// O(log n) worst-case temporary path space, independent of history depth.
     ///
     /// The result is never a version on another branch, and a later merge of the pair's component
@@ -709,6 +762,47 @@ mod tests {
             .expect("valid vertices are accepted")
     }
 
+
+    #[test]
+    fn the_pinned_vertex_hash_is_injective_by_inverse_round_trip() {
+        // Invert fmix32 step by step: an xor-shift by >= 16 is self-inverse, the 13-bit xor-shift
+        // inverts by applying its expansion twice, and each odd multiplier inverts by its
+        // Newton-iterated modular inverse. A successful round trip proves injectivity on the
+        // tested values by exhibiting the inverse, which no sampling-only test can.
+        fn modular_inverse(value: u32) -> u32 {
+            let mut inverse = value;
+            for _ in 0..5 {
+                inverse = inverse.wrapping_mul(2u32.wrapping_sub(value.wrapping_mul(inverse)));
+            }
+            inverse
+        }
+        let first_inverse = modular_inverse(0x85EB_CA6B);
+        let second_inverse = modular_inverse(0xC2B2_AE35);
+        assert_eq!(first_inverse.wrapping_mul(0x85EB_CA6B), 1);
+        assert_eq!(second_inverse.wrapping_mul(0xC2B2_AE35), 1);
+
+        let unmix = |mut value: u32| -> u32 {
+            value ^= value >> 16;
+            value = value.wrapping_mul(second_inverse);
+            value ^= (value >> 13) ^ (value >> 26);
+            value = value.wrapping_mul(first_inverse);
+            value ^ (value >> 16)
+        };
+
+        let hash_of = |vertex: i32| -> u32 {
+            let mut hasher = VertexHashState.build_hasher();
+            vertex.hash(&mut hasher);
+            hasher.finish() as u32
+        };
+
+        let samples = (0i32..8_192)
+            .map(|index| index.wrapping_mul(524_287))
+            .chain([i32::MIN, -1, 0, 1, i32::MAX]);
+        for vertex in samples {
+            let hashed = hash_of(vertex);
+            assert_eq!(unmix(hashed) as i32, vertex, "fmix32 must round-trip {vertex}");
+        }
+    }
     #[test]
     fn new_produces_singleton_components_and_root_history() {
         let root = forest(5);

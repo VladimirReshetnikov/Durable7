@@ -21,23 +21,22 @@
 -- type's contract. The @O(log n)@ parent-path factor is worst-case logarithmic in component size
 -- rather than the inverse-Ackermann amortized bound of an ephemeral linear-history union-find.
 --
--- == Cost of the CHAMP path, and a divergence from the managed reference
+-- == Cost of the CHAMP path
 --
 -- Throughout this module @w@ denotes the cost of one "Durable7.Hamt.HashMap" cell lookup or
--- insertion. That cost is bounded /in expectation/, not unconditionally. The map hashes a key with
--- 'Durable7.Hamt.Hashable.hash' and truncates the result to 32 bits, branching five bits per
--- level, so the trie itself is at most seven levels deep unconditionally; but two distinct 'Int'
--- vertices whose 32-bit hashes agree share a collision bucket whose scan is linear in that
--- bucket's occupancy. Because the mixing function is a fixed deterministic one rather than a
--- per-process randomized hasher, a colliding vertex set is a property of the universe rather than
--- of the run. Over an ordinary vertex universe the expected bucket occupancy is @O(1)@, so @w@ is
--- @O(1)@ in expectation and every per-operation bound stated here is an expected bound in @w@ and
--- a worst-case bound in the @O(log n)@ parent-path factor.
+-- insertion, and it is bounded /unconditionally/, matching the managed reference. The cell map is
+-- pinned to 'vertexHashPolicy', whose hash is the MurmurHash3 @fmix32@ bijection of the vertex:
+-- every step -- two xor-shifts by at least half the word around multiplications by odd constants
+-- -- is invertible modulo @2^32@, so no two vertices of the capped universe can share a hash, no
+-- collision bucket ever holds two distinct vertices, and any two vertices diverge within
+-- @ceil 32 5 = 7@ trie levels. @w@ is therefore @O(1)@ worst-case and every per-operation bound
+-- stated here is worst-case in both factors.
 --
--- This is a deliberate divergence from the managed reference, which states @O(w log n)@ with @w@
--- unconditionally bounded. Only the hash policy differs: the forest algorithm, the union-by-size
--- height argument, and the @O(log n)@ parent-path factor are identical, and that factor remains
--- worst-case.
+-- The pinning is what earns the claim, and it needs the universe cap 'maximumVertexCount': a
+-- 32-bit hash cannot be injective over a larger domain by pigeonhole. The cap is @2^31 - 1@, the
+-- same universe every sibling workspace already has because its vertices are 32-bit integers, so
+-- rejecting a larger universe restores parity rather than shrinking a usable feature. (This port
+-- previously hashed vertices with the workspace default and could state only an expected bound.)
 --
 -- == Version identity
 --
@@ -64,6 +63,8 @@ module Durable7.Hamt.PersistentAncestralConnectionForest
   , AncestralConnectionVersion
   , AncestralConnectionForestStatistics(..)
   , create
+  , maximumVertexCount
+  , vertexHashPolicy
   , vertexCount
   , componentCount
   , version
@@ -85,6 +86,9 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust)
 import GHC.Exts (isTrue#, reallyUnsafePtrEquality#)
 import System.Mem.StableName (eqStableName, makeStableName)
+
+import Data.Bits (shiftR, xor)
+import Data.Word (Word32)
 
 import Durable7.Hamt.HashMap (HashMap)
 import qualified Durable7.Hamt.HashMap as HashMap
@@ -148,16 +152,46 @@ data AncestralConnectionForestStatistics = AncestralConnectionForestStatistics
   }
   deriving (Eq, Show)
 
--- | An edgeless root version over vertices @0 .. count - 1@, or 'Nothing' for a negative universe.
--- @O(1)@.
+-- | An edgeless root version over vertices @0 .. count - 1@, or 'Nothing' for a negative universe
+-- or one larger than 'maximumVertexCount'. @O(1)@.
 --
 -- Every vertex starts as its own component. Because a singleton is represented by the /absence/ of
--- a cell, construction costs the same for a universe of two vertices and for one of 'maxBound'.
+-- a cell, construction costs the same for a universe of two vertices and for the maximal one.
 create :: Int -> Maybe PersistentAncestralConnectionForest
 create count
-  | count < 0 = Nothing
+  | count < 0 || count > maximumVertexCount = Nothing
   | otherwise =
-      Just (PersistentAncestralConnectionForest count count HashMap.empty (HistoryRoot count))
+      Just
+        (PersistentAncestralConnectionForest
+           count
+           count
+           (HashMap.emptyWith vertexHashPolicy)
+           (HistoryRoot count))
+
+-- | The largest admissible vertex universe: @2^31 - 1@, the universe every sibling workspace has
+-- because its vertices are 32-bit integers. The cap is also what the unconditional CHAMP bound
+-- needs -- 'vertexHashPolicy' is injective over exactly this domain, and no 32-bit hash can be
+-- injective over a larger one.
+maximumVertexCount :: Int
+maximumVertexCount = 2 ^ (31 :: Int) - 1
+
+-- | The pinned injective vertex-hash policy behind the forest's cell map.
+--
+-- The hash is MurmurHash3's @fmix32@ finalizer of the vertex. Each of its steps is a bijection of
+-- the 32-bit word, so the whole is injective over the capped universe and no collision bucket can
+-- ever hold two distinct vertices -- which is what upgrades the CHAMP factor @w@ from expected to
+-- worst-case. The same finalizer is pinned by the C++, Python, and Rust ports.
+vertexHashPolicy :: HashMap.HashPolicy Int
+vertexHashPolicy = HashMap.HashPolicy (fromIntegral . fmix32 . fromIntegral) (==)
+
+-- | MurmurHash3's 32-bit finalizer; every step is invertible modulo @2^32@.
+fmix32 :: Word32 -> Word32
+fmix32 value0 = value4 `xor` (value4 `shiftR` 16)
+  where
+    value1 = value0 `xor` (value0 `shiftR` 16)
+    value2 = value1 * 0x85EBCA6B
+    value3 = value2 `xor` (value2 `shiftR` 13)
+    value4 = value3 * 0xC2B2AE35
 
 -- | The fixed number of vertices in this forest. @O(1)@.
 vertexCount :: PersistentAncestralConnectionForest -> Int
@@ -188,7 +222,7 @@ versionRoot token@(HistoryRoot _) = token
 versionRoot (HistoryLink _ _ _ _ root) = root
 
 -- | The current union-find representative of a vertex, or 'Nothing' outside the universe.
--- @O(w log n)@: worst-case in the @O(log n)@ path factor and expected in the CHAMP factor @w@.
+-- @O(w log n)@: worst-case in the @O(log n)@ path factor and in the CHAMP factor @w@ alike.
 --
 -- The representative is selected by deterministic union-by-size history and is an implementation
 -- artifact: sibling versions need not agree on it.
@@ -198,7 +232,7 @@ find vertex forest@(PersistentAncestralConnectionForest _ _ cells _)
   | otherwise = Nothing
 
 -- | Whether two vertices have the same current root, or 'Nothing' when either lies outside the
--- universe. @O(w log n)@: worst-case in the path factor, expected in @w@.
+-- universe. @O(w log n)@: worst-case in the path factor and in @w@ alike.
 connected :: Int -> Int -> PersistentAncestralConnectionForest -> Maybe Bool
 connected leftVertex rightVertex forest@(PersistentAncestralConnectionForest _ _ cells _)
   | inUniverse leftVertex forest && inUniverse rightVertex forest =
@@ -206,7 +240,7 @@ connected leftVertex rightVertex forest@(PersistentAncestralConnectionForest _ _
   | otherwise = Nothing
 
 -- | The number of vertices in a vertex's connected component, or 'Nothing' outside the universe.
--- @O(w log n)@: worst-case in the path factor, expected in @w@.
+-- @O(w log n)@: worst-case in the path factor and in @w@ alike.
 --
 -- An isolated vertex is still a singleton root and reports @1@. The answer is the union-by-size
 -- count cached at the component's current root, so the walk reads the structure without
@@ -265,7 +299,7 @@ link leftVertex rightVertex forest@(PersistentAncestralConnectionForest count co
 -- strictly below their forest lowest common ancestor; the version history is never searched. On
 -- equal candidate depths the earlier-encountered candidate is kept, which is immaterial because
 -- union-edge versions on one lineage are unique per depth. @O(w log n)@ time -- worst-case in the
--- path factor, expected in @w@ -- and @O(log n)@ worst-case temporary path space, independent of
+-- path factor and in @w@ alike -- and @O(log n)@ worst-case temporary path space, independent of
 -- history depth.
 --
 -- The result is never a version on another branch, and a later merge of the pair's component into

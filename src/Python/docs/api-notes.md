@@ -339,7 +339,8 @@ relative to the managed baseline:
   inherit is stated too: `RrbVector.concat` rebalances only the seam, so each O(log n) is really
   O(h) in tree height, which grows by at most one per concatenation.
 - `PersistentAncestralConnectionForest` claims an **unconditional** CHAMP path factor — the bound
-  Rust and Haskell must weaken to *expected* — by pinning an injective `fmix32` vertex hash over a
+  every workspace now shares, Rust and Haskell having since pinned the same finalizer — by pinning
+  an injective `fmix32` vertex hash over a
   universe capped at 2**31 − 1. Every step of that hash is a bijection of the 32-bit word, so no
   collision bucket can hold two distinct vertices and any two diverge within `ceil(32/5) = 7`
   levels. Pinning is what earns the claim; the workspace default policy would also be injective

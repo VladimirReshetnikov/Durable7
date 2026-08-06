@@ -90,7 +90,7 @@ finger-tree-with-orientation representation (fixes A8/A9 as a by-product).
 
 | # | Where | Gap | Fix |
 | --- | --- | --- | --- |
-| D1 | Connection forest, Rust + Haskell | CHAMP path factor *expected* (truncated/collision-prone hashes) vs unconditional in C#, C, C++, Kotlin, OCaml, Python | Pin an injective full-width vertex hash (fmix32-style bijection over the capped universe), as C++/OCaml/Python did |
+| ~~D1~~ | ~~Connection forest, Rust + Haskell~~ | **FIXED.** Both pin the MurmurHash3 fmix32 bijection; Haskell additionally caps the universe at 2^31 − 1 (the universe every sibling already has — no 32-bit hash is injective over a larger domain), and both carry inverse-round-trip tests exhibiting the bijection | done |
 
 General CHAMP maps are expected-O(1) in **all nine** workspaces (arbitrary user keys collide by
 pigeonhole) — that is parity, not a violation.
@@ -118,8 +118,8 @@ remove-min term (superseded by Wave 1).
 
 ## Remediation Waves (dependency-ordered)
 
-1. **Wave 0 — small, independent, immediate:** A2 (OCaml Brodal), A7 (Python ordered O(log²)),
-   D1 (Rust+Haskell hash pinning), C2 (doc alignment).
+1. **Wave 0 — small, independent, immediate:** A2 (OCaml Brodal), ~~A7~~ (done, commit ac8e02f),
+   ~~D1~~ (done), ~~C2~~ (done, commit 375e269).
 2. **Wave 1 — keystone:** the five finger-tree cores + facade rebases + doc/test tightening.
    Order: Python (freshest workspace knowledge, strictest gates) → Rust → Kotlin → TypeScript →
    OCaml (whose Wave-2 rebuilds sit on its new core).

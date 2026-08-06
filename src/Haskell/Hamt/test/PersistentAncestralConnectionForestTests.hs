@@ -5,16 +5,17 @@
 module PersistentAncestralConnectionForestTests (run) where
 
 import Control.Monad (forM_)
-import Data.Bits (shiftR)
+import Data.Bits (shiftR, xor)
 import qualified Data.List as List
 import Data.Maybe (isNothing)
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 
 import Durable7.Hamt.PersistentAncestralConnectionForest
   ( AncestralConnectionForestStatistics(..)
   , AncestralConnectionVersion
   , PersistentAncestralConnectionForest
   )
+import qualified Durable7.Hamt.HashMap as HashMap
 import qualified Durable7.Hamt.PersistentAncestralConnectionForest as Forest
 
 -- | Runs this module's test cases.
@@ -34,6 +35,49 @@ run = do
   testHugeSparseUniverseStoresOnlyTouchedVertices
   testOperationsRejectVerticesOutsideTheUniverse
   testVersionIdentityIsStructural
+  testThePinnedVertexHashIsInjectiveByInverseRoundTrip
+  testCreateRejectsAUniverseTheInjectiveHashCannotCover
+
+
+-- | Inverting the pinned hash step by step proves injectivity on the tested vertices: an
+-- xor-shift by at least half the word is self-inverse, the 13-bit xor-shift inverts by applying
+-- its expansion twice, and each odd multiplier inverts by its Newton-iterated modular inverse.
+-- Exhibiting the inverse is what a sampling-only test cannot do.
+testThePinnedVertexHashIsInjectiveByInverseRoundTrip :: IO ()
+testThePinnedVertexHashIsInjectiveByInverseRoundTrip = do
+  let modularInverse :: Word32 -> Word32
+      modularInverse value = iterate step value !! 5
+        where step inverse = inverse * (2 - value * inverse)
+      firstInverse = modularInverse 0x85EBCA6B
+      secondInverse = modularInverse 0xC2B2AE35
+  assertEqual "first multiplier inverts" 1 (firstInverse * 0x85EBCA6B)
+  assertEqual "second multiplier inverts" 1 (secondInverse * 0xC2B2AE35)
+  let unmix :: Word32 -> Word32
+      unmix hashed = original
+        where
+          step4 = hashed `xor` (hashed `shiftR` 16)
+          step3 = step4 * secondInverse
+          step2 = step3 `xor` (step3 `shiftR` 13) `xor` (step3 `shiftR` 26)
+          step1 = step2 * firstInverse
+          original = step1 `xor` (step1 `shiftR` 16)
+      hashOf :: Int -> Word32
+      hashOf = fromIntegral . HashMap.hashKey Forest.vertexHashPolicy
+      samples =
+        [index * 524287 `mod` Forest.maximumVertexCount | index <- [0 .. 8191]]
+          ++ [0, 1, Forest.maximumVertexCount - 1, Forest.maximumVertexCount]
+  forM_ samples $ \vertex ->
+    assertEqual ("fmix32 round-trips " ++ show vertex)
+      vertex
+      (fromIntegral (unmix (hashOf vertex)))
+
+-- | The universe cap is load-bearing: a 32-bit hash cannot be injective over a larger domain.
+testCreateRejectsAUniverseTheInjectiveHashCannotCover :: IO ()
+testCreateRejectsAUniverseTheInjectiveHashCannotCover = do
+  assertBool "the maximal universe is admitted"
+    (not (isNothing (Forest.create Forest.maximumVertexCount)))
+  assertBool "one past the cap is rejected"
+    (isNothing (Forest.create (Forest.maximumVertexCount + 1)))
+  assertBool "a negative universe is still rejected" (isNothing (Forest.create (-1)))
 
 -- | An edgeless root uses the fixed universe and root-version semantics.
 testCreateProducesSingletonComponentsAndRootHistory :: IO ()
@@ -396,10 +440,12 @@ testLongRedundantHistoryKeepsTheUnionWitness = do
   assertEqual "still disconnected" (Just Nothing) (Forest.firstConnected 0 2 final)
   assertShares "the whole redundant tail shares one index" first final
 
--- | Sparse construction and validation do not scan an untouched huge universe.
+-- | Sparse construction and validation do not scan an untouched huge universe. The maximal
+-- admissible universe is 'Forest.maximumVertexCount': a larger one is rejected, because the
+-- pinned injective vertex hash cannot cover it (see the cap test below).
 testHugeSparseUniverseStoresOnlyTouchedVertices :: IO ()
 testHugeSparseUniverseStoresOnlyTouchedVertices = do
-  let huge = maxBound :: Int
+  let huge = Forest.maximumVertexCount
       root = forestOf "huge root" huge
   rootStatistics <- expectValid "huge root" root
   assertEqual "huge root stores nothing" 0 (statisticsStoredCellCount rootStatistics)

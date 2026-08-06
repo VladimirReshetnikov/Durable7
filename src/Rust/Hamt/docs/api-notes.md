@@ -439,11 +439,13 @@ tie, and labels the one new root-parent edge with the child version. Union by si
 parent path at O(log n) cells, so `find`, `connected`, and `link` cost O(w log n) for CHAMP path
 cost `w`; a successful `link` allocates O(w) new CHAMP nodes and a redundant one allocates O(1).
 
-**`w` is an expected bound in this port, not the unconditional one the managed reference states.**
-C# can assert a bounded CHAMP path because it hashes over the full key width; this crate hashes
-integer keys through the retained `BuildHasher` truncated to 32 bits, so collision buckets genuinely
-can form. Every per-operation cost above is therefore expected under the retained hasher rather than
-worst-case. The divergence is in the hash policy, not the algorithm.
+**`w` is unconditionally bounded, matching the managed reference.** The cell map is pinned to
+`VertexHashState`, whose 32-bit output is the MurmurHash3 `fmix32` bijection of the vertex — every
+step is invertible modulo 2^32, so distinct vertices can never share a hash, no collision bucket
+ever holds two distinct vertices, and any two vertices diverge within 7 trie levels. Every
+per-operation cost above is therefore worst-case in both factors. (This port previously retained
+the standard library's `RandomState` and could state only an expected bound; the pinning removed
+that divergence, and an inverse-round-trip test exhibits the bijection.)
 
 `component_size` reads the count the union-by-size root cell already caches, so it costs one root
 walk plus a cached read — the same bound as `find` — and performs no path compression. An isolated

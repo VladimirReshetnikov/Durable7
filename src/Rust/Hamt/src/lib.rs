@@ -47,7 +47,7 @@ mod patricia;
 pub use ancestral_connection_forest::{
     AncestralConnectionError, AncestralConnectionForestInvariantError,
     AncestralConnectionForestStatistics, AncestralConnectionVersion,
-    PersistentAncestralConnectionForest,
+    PersistentAncestralConnectionForest, VertexHashState, VertexHasher,
 };
 pub use bi_map::{BiMapAddResult, BiMapConflict, BiMapRemoveResult, PersistentBiMap};
 pub use directed_graph::{
