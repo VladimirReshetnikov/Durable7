@@ -148,9 +148,20 @@ and last-word summaries provide logarithmic point edits, inclusive rank, and zer
 the number of represented words. Iteration is ascending and the four algebra operations merge word
 streams in linear represented-word time.
 
+The measured core is a lazy Hinze–Paterson finger tree (defunctionalized memoized suspensions
+forced by an explicit-stack interpreter; plain assignment is the publication primitive, which
+single-threaded JavaScript makes atomic): `front()`/`back()` are O(1) worst case, endpoint
+push/pop O(1) amortized — valid under persistent branching — and `concat` O(log(min(n, m)))
+amortized. `PersistentDeque.reverse()` and the reversible deque's cross-orientation `concat` are
+structural through the lazy reversed view (O(1) and O(log min) respectively), and mirrored node
+summaries recombine in mirrored order, so reversal is correct under every measure monoid,
+commutative or not. (An earlier revision's core was a measured AVL join tree with Θ(log n)
+endpoints, height-difference concatenation, and a Θ(n) deque reverse; the Wave-1 substrate
+upgrade removed those divergences, and the workspace's probe tests pin the new bounds.)
+
 ## Persistence and sharing
 
-The CHAMP, Patricia, measured AVL, lazy range-update AVL, RRB, canonical zip-zip,
+The CHAMP, Patricia, measured lazy finger-tree, lazy range-update AVL, RRB, canonical zip-zip,
 Brodal–Okasaki, priority-search, interval, and Merkle cores use immutable nodes and path copying.
 No-op operations return the receiver where the corresponding semantic contract defines a no-op.
 Builders and transient sessions never mutate an already published persistent version.
@@ -321,7 +332,7 @@ boundary in `0 .. size`; insertion returns the gap after the inserted values, `d
 `position - 1` and moves the gap left, and `deleteNext`/`replaceNext` address `position` and keep the
 gap fixed. Empty, start, and end gaps are ordinary valid states.
 
-Over the measured AVL and RRB substrates, cursor creation, the state members, and `snapshot()` are
+Over the measured finger-tree and RRB substrates, cursor creation, the state members, and `snapshot()` are
 O(1); peeks and every point edit are O(log n); `movePrevious`/`moveNext`/`seek` are O(1) with the next
 peek paying a fresh O(log n) descent, so a full traversal by move-plus-peek is O(n log n).
 `insertRange` is Ω(m) to capture its argument plus the substrate's split/concat bound;
