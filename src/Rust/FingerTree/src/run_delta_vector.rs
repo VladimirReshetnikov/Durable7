@@ -24,14 +24,14 @@
 //! | --- | --- |
 //! | Build `n` values | `Theta(n)` |
 //! | Read a current or checkpoint value | `O(log n)` |
-//! | Persistent point edit | `O(log n)` amortized time and fresh nodes |
+//! | Persistent point edit | `O(log n)` worst-case time and fresh nodes |
 //! | Fork by retaining or cloning a handle | `O(1)` |
 //! | Whole checkpoint or rollback | `O(1)` |
 //! | Enumerate current values | `Theta(n)` |
-//! | Dirty membership | `O(log(r + 2))` amortized |
+//! | Dirty membership | `O(log(r + 2))` worst-case |
 //! | Exact dirty-run descriptors | `Theta(r)` |
-//! | Select a dirty run by rank | `O(log(r + 2))` amortized |
-//! | Accept or revert one indexed run | `O(log n)` amortized, independent of that run's length |
+//! | Select a dirty run by rank | `O(log(r + 2))` worst-case |
+//! | Accept or revert one indexed run | `O(log n)` worst-case, independent of that run's length |
 //! | Live delta metadata | `Theta(r)` |
 //! | Total live structure | `O(n)` |
 //!
@@ -357,7 +357,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// Reports whether `index` differs from its checkpoint value, or `None` when the position is
     /// out of range.
     ///
-    /// `O(log(r + 2))` amortized.
+    /// `O(log(r + 2))` worst-case.
     #[must_use]
     pub fn is_dirty(&self, index: usize) -> Option<bool> {
         (index < self.len()).then(|| self.find_dirty_run(index).is_some())
@@ -366,7 +366,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// Returns the maximal dirty run containing `index`, or `None` when that position is clean or
     /// out of range.
     ///
-    /// `O(log(r + 2))` amortized. Use [`Self::is_dirty`] to tell a clean position from an out of
+    /// `O(log(r + 2))` worst-case. Use [`Self::is_dirty`] to tell a clean position from an out of
     /// range one.
     #[must_use]
     pub fn dirty_run_containing(&self, index: usize) -> Option<PersistentDirtyRun> {
@@ -376,7 +376,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// Returns the maximal dirty run at zero-based ascending-start `rank`, or `None` when `rank`
     /// falls outside the run index.
     ///
-    /// `O(log(r + 2))` amortized. Runs are addressed by rank only.
+    /// `O(log(r + 2))` worst-case. Runs are addressed by rank only.
     #[must_use]
     pub fn dirty_run_at(&self, rank: usize) -> Option<PersistentDirtyRun> {
         self.dirty_runs.entry_at(rank).map(to_run)
@@ -411,7 +411,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// checkpoint root. Otherwise the position becomes or stays dirty and at most two neighboring
     /// run records change.
     ///
-    /// `O(log n)` amortized time and fresh nodes. Every policy call happens before any successor is
+    /// `O(log n)` worst-case time and fresh nodes. Every policy call happens before any successor is
     /// built, so a panicking comparer publishes no partial version.
     #[must_use]
     pub fn set_item(&self, index: usize, value: T) -> Option<Self> {
@@ -436,7 +436,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// Returns a version whose current value at `index` is reset to its checkpoint value, or `None`
     /// when the position is out of range.
     ///
-    /// An already clean position returns the receiver's contents unchanged. `O(log n)` amortized.
+    /// An already clean position returns the receiver's contents unchanged. `O(log n)` worst-case.
     #[must_use]
     pub fn reset_item(&self, index: usize) -> Option<Self> {
         let checkpoint = self.checkpoint.get(index)?.clone();
@@ -476,7 +476,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// outside the run index.
     ///
     /// Only the selected run becomes clean; every other run is untouched. Implemented by structural
-    /// RRB splitting and concatenation, so it costs `O(log n)` amortized *independently of that
+    /// RRB splitting and concatenation, so it costs `O(log n)` worst-case *independently of that
     /// run's length* and makes no value-policy call at all.
     #[must_use]
     pub fn accept_dirty_run_at(&self, rank: usize) -> Option<Self> {
@@ -493,7 +493,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// sharing every root. A dirty position behaves exactly as [`Self::accept_dirty_run_at`] on the
     /// containing run.
     ///
-    /// `O(log n)` amortized, *independent of that run's length*: locating the containing run is
+    /// `O(log n)` worst-case, *independent of that run's length*: locating the containing run is
     /// `O(log(r + 2))` through the start-keyed run index, never a scan, and the splice itself makes
     /// no value-policy call at all.
     #[must_use]
@@ -511,7 +511,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// outside the run index.
     ///
     /// Only the selected run becomes clean; every other run is untouched. Implemented by structural
-    /// RRB splitting and concatenation, so it costs `O(log n)` amortized *independently of that
+    /// RRB splitting and concatenation, so it costs `O(log n)` worst-case *independently of that
     /// run's length* and makes no value-policy call at all.
     #[must_use]
     pub fn revert_dirty_run_at(&self, rank: usize) -> Option<Self> {
@@ -528,7 +528,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// sharing every root. A dirty position behaves exactly as [`Self::revert_dirty_run_at`] on the
     /// containing run.
     ///
-    /// `O(log n)` amortized, *independent of that run's length*: locating the containing run is
+    /// `O(log n)` worst-case, *independent of that run's length*: locating the containing run is
     /// `O(log(r + 2))` through the start-keyed run index, never a scan, and the splice itself makes
     /// no value-policy call at all.
     #[must_use]
@@ -635,7 +635,7 @@ impl<T> PersistentRunDeltaVector<T> {
 
     /// Splices one indexed run's current values into the checkpoint, leaving every other run alone.
     ///
-    /// `O(log n)` amortized and comparison-free; `run` must be a record of this version's index.
+    /// `O(log n)` worst-case and comparison-free; `run` must be a record of this version's index.
     fn accept_run(&self, run: PersistentDirtyRun) -> Self {
         if self.dirty_runs.len() == 1 {
             return self.checkpoint();
@@ -652,7 +652,7 @@ impl<T> PersistentRunDeltaVector<T> {
     /// Splices one indexed run's checkpoint values back over the current root, leaving every other
     /// run alone.
     ///
-    /// `O(log n)` amortized and comparison-free; `run` must be a record of this version's index.
+    /// `O(log n)` worst-case and comparison-free; `run` must be a record of this version's index.
     fn revert_run(&self, run: PersistentDirtyRun) -> Self {
         if self.dirty_runs.len() == 1 {
             return self.rollback();

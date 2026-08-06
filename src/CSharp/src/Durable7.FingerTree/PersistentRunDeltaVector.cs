@@ -22,7 +22,7 @@ public readonly record struct PersistentDirtyRun(int Start, int Length)
 /// <para>
 /// Current and checkpoint values are immutable RRB vectors. A persistent ordered map stores one
 /// <c>start -&gt; endExclusive</c> entry per maximal dirty run. One effective point edit copies one
-/// RRB path and changes at most two neighboring run records, so it takes O(log n) amortized time
+/// RRB path and changes at most two neighboring run records, so it takes O(log n) worst-case time
 /// and fresh nodes. Forking, accepting every change, and reverting every change are O(1).
 /// </para>
 /// <para>
@@ -30,9 +30,9 @@ public readonly record struct PersistentDirtyRun(int Start, int Length)
 /// Theta(r). This improves worst-case Theta(n) discovery from unindexed current/checkpoint roots;
 /// a straightforward linear coalescing scan of point deltas costs Theta(k), but that scan is not a
 /// lower bound for every order-statistic point index. Accepting or reverting one whole indexed run
-/// takes O(log n) amortized time through structural RRB splicing, independently of that run's
+/// takes O(log n) worst-case time through structural RRB splicing, independently of that run's
 /// length. Indexed current/checkpoint reads are O(log n), dirty membership is O(log(r + 2))
-/// amortized, and complete value enumeration is O(n).
+/// worst-case, and complete value enumeration is O(n).
 /// </para>
 /// <para>
 /// Instances are immutable. Concurrent reads and independent branch derivation are safe when the
@@ -277,8 +277,8 @@ public sealed class PersistentRunDeltaVector<T> : IReadOnlyList<T>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the vector.</exception>
     /// <remarks>
     /// The argument is a position, not a dirty-run rank. Locating the containing run costs
-    /// O(log(r + 2)) amortized time over <c>r</c> maximal runs, and the splice costs O(log n)
-    /// amortized time independently of that run's length.
+    /// O(log(r + 2)) worst-case time over <c>r</c> maximal runs, and the splice costs O(log n)
+    /// worst-case time independently of that run's length.
     /// </remarks>
     public PersistentRunDeltaVector<T> AcceptDirtyRunContaining(int index)
     {
@@ -295,8 +295,8 @@ public sealed class PersistentRunDeltaVector<T> : IReadOnlyList<T>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the vector.</exception>
     /// <remarks>
     /// The argument is a position, not a dirty-run rank. Locating the containing run costs
-    /// O(log(r + 2)) amortized time over <c>r</c> maximal runs, and the splice costs O(log n)
-    /// amortized time independently of that run's length.
+    /// O(log(r + 2)) worst-case time over <c>r</c> maximal runs, and the splice costs O(log n)
+    /// worst-case time independently of that run's length.
     /// </remarks>
     public PersistentRunDeltaVector<T> RevertDirtyRunContaining(int index)
     {
