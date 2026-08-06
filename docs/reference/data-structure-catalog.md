@@ -404,10 +404,12 @@ at-most-two-query ceiling testable. Comparer and action interfaces become retain
 functions, so operand compatibility for concatenation and melding is a documented caller obligation
 rather than a detected error, with one exception: the contextual sequence still rejects a declared
 state-count mismatch, because that alone would silently corrupt summaries. Versions of the
-connection forest have structural rather than referential identity. Two honest cost statements
-follow the substrate rather than the baseline: the delta map's `minEntry`/`maxEntry` are Θ(log N)
-because the Haskell sorted map caches no extremes, and the connection forest's CHAMP path factor is
-expected rather than worst-case because the hash is truncated to 32 bits. Against that, the
+connection forest have structural rather than referential identity. One honest cost statement
+follows the substrate rather than the baseline: the connection forest's CHAMP path factor is
+expected rather than worst-case because the hash is truncated to 32 bits. (The other former
+divergence — Θ(log N) delta-map extremes over a sorted map that cached none — was erased by the
+2026-08-06 complexity-parity rebuild of the Haskell sorted set and map onto the workspace's own
+finger tree; `minEntry`/`maxEntry` are O(1) digit reads now, census row A6.) Against that, the
 contextual rank sequence keeps the reference's endpoint and concatenation bounds exactly, which the
 Rust port cannot, because the Haskell substrate is a genuine finger tree with digits.
 

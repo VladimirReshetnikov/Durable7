@@ -270,16 +270,13 @@ keys = map fst . toList
 elems :: PersistentDeltaMap key value -> [value]
 elems = map snd . toList
 
--- | The least current entry by key, or 'Nothing' when empty. Theta(log N).
---
--- This is a divergence from the baseline's O(1) cached extreme: the shared 'SortedMap' substrate
--- caches no extremes, so reaching the leftmost entry costs a full descent like any other rank.
+-- | The least current entry by key, or 'Nothing' when empty. O(1): the finger-tree 'SortedMap'
+-- substrate reads its extremes from the root digits without a descent, matching the baseline's
+-- cached extreme.
 minEntry :: PersistentDeltaMap key value -> Maybe (key, value)
 minEntry = fmap unwrapEntry . SortedMap.minEntry . deltaCurrent
 
--- | The greatest current entry by key, or 'Nothing' when empty. Theta(log N).
---
--- Theta(log N) rather than the baseline's O(1) for the reason given on 'minEntry'.
+-- | The greatest current entry by key, or 'Nothing' when empty. O(1), as 'minEntry'.
 maxEntry :: PersistentDeltaMap key value -> Maybe (key, value)
 maxEntry = fmap unwrapEntry . SortedMap.maxEntry . deltaCurrent
 

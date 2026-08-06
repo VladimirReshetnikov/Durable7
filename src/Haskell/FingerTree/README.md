@@ -6,8 +6,8 @@
 - Scope: `durable7-fingertree` package
 
 This package ports the repository finger-tree family to Haskell. It includes a general measured
-finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, sorted bag/set/map
-facades, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
+finger tree, a size-and-rightmost-leaf-measured deque, a reversible deque, a sorted bag/set/map
+family on the measured core, a stable meldable priority queue, a worst-case-optimal Brodal-Okasaki heap, a keyed
 priority-search queue, interval tree and payload-bearing interval-map helpers, positional ropes, measured ropes, text-rope navigation
 helpers, immutable positional/measured/text rope cursors, a persistent RRB vector, a policy-canonical
 zip-zip-tree sorted set, a persistent lazy range-update sequence, and
@@ -100,8 +100,9 @@ is a lazy list, which matches the reference's lazy `GetChanges()` more closely t
 eager materialization. Range-restricted enumeration goes through `SortedMap.keyRange`, an ordered
 inclusive restriction built from two antitone boundary descents, so `changesInRange` and
 `entriesInRange` cost O(log(k + 1)) to restrict and Θ(1) amortized per yielded record — the
-reference's bound, not a weakened one. One substrate limit remains and is stated rather than papered
-over: `SortedMap` caches no extremes, so `minEntry`/`maxEntry` are Θ(log N) instead of O(1).
+reference's bound, not a weakened one. The former substrate limit is gone: since `SortedMap` moved
+onto the measured finger tree, `minEntry`/`maxEntry` are O(1) digit reads, matching the baseline's
+cached extremes.
 
 `PersistentRunDeltaVector a` keeps current and checkpoint RRB roots plus an ordered index of the
 maximal runs of differing positions. Accepting or reverting one run is four splits and two concats,
@@ -175,6 +176,18 @@ O(log n), rather than binary-searching through O(log n) positional probes.
 rank lookup, and rank-boundary slicing therefore descend in O(log n); slicing rebuilds at most its
 two boundary buckets and shares untouched measured subtrees. This remains logarithmic when all
 instances belong to one comparer-equal bucket.
+
+`SortedSet` and `SortedMap` sit on the same measured core under the same (count, last key)
+measure, replacing their former `Data.Set`/`Data.Map.Strict` facades. Point writes and keyed
+searches stay O(log n) measured descents, while extremes improved to O(1) digit reads and the
+set's rank slice improved from a Θ(position + length) list rebuild to two comparison-free
+structural splits, O(log n) at any position. The set algebra (`union`, `intersection`,
+`difference`, and derivatives) adopts whole runs of one operand between measured boundary splits,
+delivering the O(m log(n/m + 1)) class the `containers` hedge algorithms delivered — two disjoint
+ranges merge in O(log n) and two fully interleaved operands in O(n + m) — never an
+element-by-element Θ(m log(n + m)). `SortedMap.keyRange` remains an O(log n) ordered restriction
+built from two boundary splits whose probes are never stored, so the delta map's representative
+retention and callback budgets hold unchanged.
 
 `Rope` and `MeasuredRope` are chunked facades over that measured core, with chunks capped at 64
 elements. Their spines are measured by element count (and, for `MeasuredRope`, by the caller's
@@ -396,8 +409,8 @@ Complexity is uniform where the substrate is: `…CursorPosition` and `…Snapsh
 validation reads a cached count, and `…MovePrevious`/`…MoveNext`/`…SeekRank` are O(1) because they
 rewrite only an integer. Beyond that:
 
-- Sorted-bag peeks, bounds, additions, and deletions are O(log n) measured descents. Sorted-set and
-  sorted-map peeks, bounds, and edits are O(log n) in their `Data.Set`/`Data.Map` substrates.
+- Sorted-bag, sorted-set, and sorted-map peeks, bounds, additions, and deletions are O(log n)
+  measured descents in the shared finger-tree substrate.
 - `cursorBoundRank` and `cursorIndex` for the canonical sorted set and the priority-search queue are
   single O(h) descents through cached subtree counts. For the AVL-backed queue that is O(log n); for
   the canonical set, expected logarithmic height depends on the documented coherent pseudorandom

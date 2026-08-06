@@ -45,6 +45,7 @@ import qualified PersistentDeltaMapTests
 import qualified PersistentMonotoneActionHeapTests
 import qualified PersistentRunDeltaVectorTests
 import qualified RangeUpdateSequenceTests
+import qualified SortedFamilyTests
 import qualified OrderedSearchCursorTests
 
 -- | Entry point running this package's test suite.
@@ -58,6 +59,7 @@ main = do
   testReversibleDeque
   testSortedCollections
   testSortedBagRanks
+  SortedFamilyTests.run
   testPriorityQueue
   testBrodalOkasakiHeap
   testPrioritySearchQueue

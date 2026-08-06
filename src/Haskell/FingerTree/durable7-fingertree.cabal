@@ -64,6 +64,7 @@ test-suite ft-test
     PersistentMonotoneActionHeapTests
     PersistentRunDeltaVectorTests
     RangeUpdateSequenceTests
+    SortedFamilyTests
   build-depends:
     base >=4.21 && <4.22,
     array >=0.5 && <0.6,
