@@ -458,6 +458,9 @@ where
     /// Creates the empty sequence. Its summary maps every state to itself with zero events.
     #[must_use]
     pub fn new() -> Self {
+        // The lazy measured core no longer materializes the identity summary at construction, so
+        // reject a zero-state machine here to keep the documented eager policy-shape check.
+        let _ = machine_state_count::<T, M>();
         Self {
             tree: FingerTree::new(),
         }
@@ -1290,11 +1293,23 @@ mod tests {
             source.evaluate(0),
             Some(ContextualPrefixSummary::new(0, u64::MAX))
         );
-        assert!(silently(|| source.push_back(2)).is_err());
-        assert!(silently(|| source.concat(&source)).is_err());
-        assert!(silently(|| source.insert(0, 2)).is_err());
 
-        // The rejected successors published nothing; the retained version is untouched.
+        // The measured core defers summary composition, so an overflowing successor is built
+        // structurally and the failure surfaces at its first forced summary read instead of
+        // inside the edit. A failed force publishes nothing, so the read stays retryable and
+        // fails the same way every time.
+        let appended = source.push_back(2);
+        assert!(silently(|| appended.evaluate(0)).is_err());
+        assert!(silently(|| appended.evaluate(0)).is_err());
+        let doubled = source.concat(&source);
+        assert!(silently(|| doubled.evaluate(0)).is_err());
+        let inserted = source.insert(0, 2).expect("index zero is a valid boundary");
+        assert!(silently(|| inserted.evaluate(0)).is_err());
+
+        // The elements themselves are intact — only the composed event total is unrepresentable.
+        assert_eq!(appended.to_vec(), vec![1, 2]);
+
+        // The failed successors published nothing; the retained version is untouched.
         assert_eq!(source.to_vec(), vec![1]);
         assert_eq!(
             source.evaluate(0),

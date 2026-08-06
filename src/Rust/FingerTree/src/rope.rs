@@ -3058,9 +3058,15 @@ mod tests {
         assert_eq!(expanded.front(), Some(&0));
         assert_eq!(expanded.back(), Some(&(MAX_CHUNK_SIZE - 1)));
 
-        let failure =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| expanded.concat(&expanded)));
+        // The measured core defers spine composition, so the overspill rope is built
+        // structurally and the length overflow surfaces at its first forced length read instead
+        // of inside `concat`. A failed force publishes nothing, so the read stays retryable and
+        // fails the same way every time.
+        let overspill = expanded.concat(&expanded);
+        let failure = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| overspill.len()));
         assert!(failure.is_err());
+        let retried = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| overspill.len()));
+        assert!(retried.is_err());
 
         assert_eq!(expanded.len(), expanded_len);
         assert_eq!(expanded.front(), Some(&0));
