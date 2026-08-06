@@ -15,8 +15,8 @@ the values that need them.
 
 | Namespace | Modules |
 | --- | --- |
-| `Hamt` | `Persistent_hamt`, `Persistent_hash_set`, `Persistent_hash_bag`, `Persistent_bi_map`, `Persistent_hash_multimap`, `Persistent_relation`, `Persistent_map_patch`, `Persistent_directed_graph`, `Persistent_indexed_map`, `Persistent_patricia`, `Concurrent_hash_trie`, `Merkle_encoding`, `Merkle_search_tree`, `Merkle_persistence`, `Merkle_proof_merge` |
-| `Finger_tree` | `Measures`, `Measured_tree`, `Persistent_deque`, `Measured_sequence`, `Reversible_deque`, `Sorted_bag`, `Sorted_set`, `Sorted_map`, `Priority_queue`, `Interval_tree`, `Persistent_interval_map`, `Rrb_vector`, `Persistent_chunked_bit_set`, `Range_update_sequence`, `Rope`, `Rope_cursor`, `Measured_rope`, `Text_rope`, `Text_rope_cursor`, `Ordered_search_cursor`, `Canonical_sorted_set`, `Brodal_okasaki_heap`, `Priority_search_queue`, `Daba_lite` |
+| `Hamt` | `Persistent_hamt`, `Persistent_hash_set`, `Persistent_hash_bag`, `Persistent_bi_map`, `Persistent_hash_multimap`, `Persistent_relation`, `Persistent_map_patch`, `Persistent_directed_graph`, `Persistent_indexed_map`, `Persistent_patricia`, `Concurrent_hash_trie`, `Merkle_encoding`, `Merkle_search_tree`, `Merkle_persistence`, `Merkle_proof_merge`, `Persistent_ancestral_connection_forest` |
+| `Finger_tree` | `Measures`, `Measured_tree`, `Persistent_deque`, `Measured_sequence`, `Reversible_deque`, `Sorted_bag`, `Sorted_set`, `Sorted_map`, `Priority_queue`, `Interval_tree`, `Persistent_interval_map`, `Rrb_vector`, `Persistent_chunked_bit_set`, `Range_update_sequence`, `Rope`, `Rope_cursor`, `Measured_rope`, `Text_rope`, `Text_rope_cursor`, `Ordered_search_cursor`, `Canonical_sorted_set`, `Brodal_okasaki_heap`, `Priority_search_queue`, `Daba_lite`, `Incremental_ancestor`, `Ancestral_slice_queue`, `Bilateral_ancestral_deque`, `Contextual_rank_sequence`, `Persistent_delta_map`, `Persistent_run_delta_vector`, `Persistent_monotone_action_heap` |
 | `Ordered` | `Persistent_ordered_set`, `Persistent_ordered_map`, `Persistent_ordered_multimap`, `Persistent_ordered_cursor` |
 
 ## Persistent Cursors
@@ -372,8 +372,10 @@ encoding, not of the surrounding immutability model.
   not claim canonical zip-tree topology or zip-zip complexity bounds.
 - `Brodal_okasaki_heap` and `Daba_lite` preserve the public semantic and failure-atomic contracts,
   but the initial simple OCaml storage does not claim the specialized sibling cores' worst-case
-  asymptotic or callback bounds.
-  imports it or treats it as a semantic baseline.
+  asymptotic or callback bounds. `Brodal_okasaki_heap.statistics` reports only the element count for
+  the same reason: the sibling ports' root-forest length, maximum rank, and maximum depth describe a
+  skew-binomial forest, and this list storage has none, so those fields are absent rather than
+  derived from the count.
 
 The shared semantic authority remains the repository
 [semantic contracts](../../../docs/reference/semantic-contracts.md); this document records the OCaml

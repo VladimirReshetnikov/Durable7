@@ -689,4 +689,11 @@ let () =
           Alcotest.test_case "interval-map and bit-set cursors" `Quick
             test_interval_map_and_bit_set_cursors;
         ] );
+      ("incremental-ancestor", Incremental_ancestor_tests.tests);
+      ("ancestral-slice-queue", Ancestral_slice_queue_tests.tests);
+      ("bilateral-ancestral-deque", Bilateral_ancestral_deque_tests.tests);
+      ("contextual-rank-sequence", Contextual_rank_sequence_tests.tests);
+      ("persistent-delta-map", Persistent_delta_map_tests.tests);
+      ("run-delta-vector", Persistent_run_delta_vector_tests.tests);
+      ("monotone-action-heap", Persistent_monotone_action_heap_tests.tests);
     ]

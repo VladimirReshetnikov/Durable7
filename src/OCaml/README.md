@@ -104,6 +104,35 @@ identity, priority-then-key tie breaking, persistent heap/queue snapshots, FIFO 
 failure-atomic callback publication. The initial heap and DABA implementations favor simple OCaml
 storage and do not claim the specialized sibling cores' worst-case callback or asymptotic bounds.
 
+The seven research-derived collections ship here too, six in `Finger_tree` and
+`Persistent_ancestral_connection_forest` in `Hamt`. `Incremental_ancestor` is the append-only
+level-ancestor seam two of them share, and it is the one deliberately mutable core in the sequence
+families in the sense this README reserves for builders and streaming cores: an arena accumulates
+nodes in place, serialized by a private mutex, while every collection value built on it stays
+immutable. Policies arrive as retained runtime records with an `id`, following `create_algebra`, so
+concatenation and melding are gated on declared policy identity rather than on object identity.
+
+Their bounds are stated against this workspace's substrates rather than inherited from the managed
+baseline, and two of those substrates are weaker than the reference's. `Measured_tree` is a
+weight-balanced join tree, not a Hinze–Paterson finger tree, so `Contextual_rank_sequence` states
+Θ(s log n) endpoint updates rather than O(s) amortized, and a concatenation bound that depends on
+the operands' height difference rather than on the smaller operand. `Sorted_map` is an immutable
+entry array, so `Persistent_delta_map` writes are Θ(N + k) while its extremes are O(1) — weaker in
+one direction and stronger in the other than the tree-backed ports. `Rrb_vector` is a facade over
+the same measured tree rather than a relaxed radix trie, so the run-delta vector's splice bounds are
+worst case rather than amortized. None of that touches the load-bearing properties: run splices stay
+independent of run length and comparison-free, and range-restricted change enumeration is a real
+boundary seek through `Sorted_map.key_range`.
+
+Two OCaml-specific hazards are handled rather than documented away. `ocamlopt` lifts fully constant
+records into shared static data, which would have made two independently created connection forests
+share one history root, so the forest's root self-reference is patched through a mutable field that
+is never reassigned and never observable untied. And OCaml's `( = )` is not an equivalence relation
+on any float-bearing payload — `nan = nan` is false while `compare nan nan` is zero — so the
+run-delta vector's default relation is `compare x y = 0`, its `reflexive_ieee` helper is
+`Float.equal`, and its audit rejects a version whose relation is observably non-reflexive at a clean
+position, which the Rust port documents as undetectable.
+
 The independently owned neutral ordered family provides `Persistent_ordered_set`,
 `Persistent_ordered_map`, and grouped `Persistent_ordered_multimap`. Equality policy defines
 identity while array position defines order; first key/value representatives survive equivalent

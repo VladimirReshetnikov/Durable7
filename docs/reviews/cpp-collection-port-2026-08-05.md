@@ -1,5 +1,10 @@
 # C++ Collection Port — 2026-08-05
 
+> **Current-state note (2026-08-05, later the same day).** An OCaml port of the same seven
+> collections shipped after this one, so coverage is now seven languages. This review's scope and
+> findings are unchanged and still describe the C++ shipment; the OCaml port carries its own
+> verification, recorded in [the OCaml port review](ocaml-collection-port-2026-08-05.md).
+
 - Created (UTC): 2026-08-05
 - Repository HEAD (reviewed): `experimental` branch, post Kotlin port
 - Audience: Maintainers reviewing the six-language shipment of the seven research-derived collections

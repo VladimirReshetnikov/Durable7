@@ -748,4 +748,5 @@ let () =
             test_merkle_persistence_and_proofs;
           Alcotest.test_case "Merkle three-way merge" `Quick test_merkle_three_way_merge;
         ] );
+      ("ancestral-connection-forest", Persistent_ancestral_connection_forest_tests.tests);
     ]

@@ -40,7 +40,7 @@ pages for every public interface.
 
 ## Evidence Boundary
 
-Routine validation covers compilation, formatting, documentation, 49 focused Alcotest cases, and
+Routine validation covers compilation, formatting, documentation, focused Alcotest cases, and
 QCheck histories in HAMT, FingerTree, and Ordered suites. It includes exact
 single-entry `MST2` bytes, a pinned `ZZT2` HMAC rank vector, and multi-block authenticated
 persistence/proof checks. It does not include
@@ -48,3 +48,32 @@ benchmarks, performance claims, or byte-level cross-process fixtures beyond the 
 vector.
 
 See the [test map](../tests/README.md) for suite ownership and coverage.
+
+## The seven research-derived collections
+
+Seven groups cover the collections added on 2026-08-05, plus one for the level-ancestor seam they
+share. The seam's group is the one worth naming: its load-bearing case bounds the maximum ancestor
+hop count by `4 * ceil(log2 (M + 1))` over a 32,768-node chain, because Myers' coalesced jump links
+are the entire reason that backend exists over a plain parent array and removing them leaves every
+ancestor *answer* correct while turning each query into an `O(depth)` walk. Only a hop-count
+assertion can catch that. The same group pins the odd-block square layout against a multiply-only
+oracle, every documented error contract, and the guarantee that a rejected addition publishes no
+node and leaves every counter untouched.
+
+The collection groups assert exact backend query-count profiles rather than ceilings — an
+eight-entry indexing profile, a full nine-row slice table, and a split profile — so a regression that
+stayed under a documented ceiling would still fail. Counting relations are paired with positive
+controls proving the counter is live before a zero-callback claim is asserted, and the
+checkpoint-differential groups pin representative identity through a boxed cell, which is what keeps
+the "a clean position reuses its exact checkpoint slot" invariant from degenerating into value
+equality on immediate payloads.
+
+Every group was mutation-tested during development: reversing a tag composition direction, dropping
+an expose, flipping a minimum tie-break, replacing a range seek with a filter over all changes,
+removing run merging or canonicalization, and substituting a fresh-but-equal cell on cancellation
+were each confirmed to fail a named case.
+
+Two environment limits apply to this workspace and are not claims about the code: `ocamlformat` and
+`odoc` are absent from the switch here, so the `@fmt` and `@doc` gates cannot be exercised locally.
+A green `dune build @doc` in that state is vacuous — the alias has nothing to run — and must not be
+read as a passing documentation gate.
