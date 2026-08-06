@@ -59,8 +59,11 @@ donor-mechanism extractions (C#, C++, Haskell lazy cores): `donors-full.json`.
 
 ### Class B — the keystone: join-tree cores (blocks most of Class A's siblings)
 
-Five workspaces (Rust, Kotlin, OCaml, Python, TypeScript) must replace their join-tree measured
-cores with genuine lazy Hinze–Paterson finger trees, **in place, same module, same public API**:
+Five workspaces (Rust, Kotlin, OCaml, ~~Python~~, TypeScript) must replace their join-tree
+measured cores with genuine lazy Hinze–Paterson finger trees, **in place, same module, same public
+API**. **Python landed first** (its core, probes, and consumer upgrades): endpoints O(s)/O(1)
+amortized with persistence-safe memoization proven by a 49-branch probe, concat O(log min),
+extremes O(1), suspensions defunctionalized against the 1000-frame limit. Four remain:
 
 | Operation | Join tree today | Finger-tree target |
 | --- | --- | --- |

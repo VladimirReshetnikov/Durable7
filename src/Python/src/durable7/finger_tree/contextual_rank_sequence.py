@@ -30,27 +30,23 @@ summary.  Prefix evaluation, contextual event rank and select, insertion, replac
 splitting, and slicing are O(s log n): a measure-directed descent over O(log n) levels, each level
 composing one O(s) effect table.  Enumeration is O(n) and building from a source is O(s n).
 
-Endpoint updates are **Theta(s log n)**, not the O(s) amortized the C# reference reports.  This is
-a substrate divergence rather than a different algorithm.  The reference sits on a lazy
-Hinze-Paterson finger tree, whose digits give amortized O(1) node work at either end, so the same
-push costs O(s) there.  This workspace's :class:`~durable7.finger_tree.measured_sequence
-.MeasuredSequence` is an implicit AVL join tree with no digits and no lazy middle, so prepending or
-appending joins a singleton against a tree of height Theta(log n) and rebuilds every node on that
-spine, recomposing an O(s) effect table at each one.
+Endpoint updates are **O(s) amortized** (O(s log n) worst case per call), matching the C#
+reference.  This workspace's :class:`~durable7.finger_tree.measured_sequence.MeasuredSequence` is
+a lazy Hinze-Paterson finger tree - digits at both ends, a memoized suspended middle - so an
+endpoint push performs amortized O(1) node work, each node composing one O(s) effect table, and
+the amortization is valid under persistent branching because forced suspensions memoize into
+shared cells.  (An earlier revision of this workspace sat on an implicit AVL join tree and
+honestly documented Theta(s log n) here; the substrate upgrade removed that divergence.)
 
-Concatenating an ``m``-element suffix costs Theta(s * (log m + |h_left - h_right|)): the join first
-extracts the suffix's leftmost element, rebuilding that operand's entire left spine, and then
-descends the taller operand until the two heights meet.  That is O(s log(max(n, m))).  The
-reference's O(s log(min(n, m))) does **not** hold here, not even when a short suffix is appended to
-a long sequence, because the height difference alone is then Theta(log n).
+Concatenation is **O(s log(min(n, m))) amortized**, the reference bound: the substrate suspends
+its middle recursion and regroups only the boundary digits eagerly.
 
 Each element stores its own O(s) effect row and every internal node stores one more, so the
 structure costs O(s n) summary space rather than O(n).  When the machine is fixed, ``s`` is a
 constant and the contextual queries are O(log n) instead of the Theta(n) replay a state-free
 persistent sequence needs.  If ``s`` is treated as an input rather than a fixed policy, the
 structure does not dominate a plain persistent sequence: its edits and its storage explicitly
-carry the ``s`` factor.  The substrate is strict and performs no lazy amortization, so none of the
-figures above is an average earned back over a run of operations.
+carry the ``s`` factor.
 
 Deliberate limits
 -----------------
@@ -481,14 +477,14 @@ class ContextualRankSequence(Generic[T]):
     def prepend(self, item: T) -> ContextualRankSequence[T]:
         """Return a sequence with ``item`` added at the front.
 
-        Theta(s log n) on this substrate, not the reference's O(s): see the module docstring.
+        O(s) amortized, O(s log n) worst case per call: see the module docstring.
         """
 
         self._check_insertion_capacity()
         return self._wrap(self._entries.prepend(self._entry(item)))
 
     def append(self, item: T) -> ContextualRankSequence[T]:
-        """Return a sequence with ``item`` added at the back.  Theta(s log n), as :meth:`prepend`
+        """Return a sequence with ``item`` added at the back.  O(s) amortized, as :meth:`prepend`
         is.
         """
 

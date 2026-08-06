@@ -218,9 +218,14 @@ removing a final value contracts its group, and reintroducing that key appends a
 
 ## Measured and frontier structures
 
-The general sequence substrate is a persistent implicit AVL tree caching caller-supplied ordered
-monoid measures. Deques, sorted collections, stable priority queues, max-high interval trees, ropes,
-and immutable gap cursors share its path-copied nodes.
+The general sequence substrate is a persistent lazy Hinze–Paterson finger tree caching
+caller-supplied ordered monoid measures: 1–4-element digits at each end, 2–3 nodes below, and each
+deep node's middle behind a memoized, defunctionalized suspension forced iteratively (organic
+append chains run Θ(n) deep, far past Python's recursion limit, so force interprets them with an
+explicit stack). Endpoint pushes and views are O(1) amortized — valid under persistent branching,
+because forced suspensions memoize into shared cells — with O(1) worst-case front/back reads and
+O(log(min(n, m))) amortized concatenation. Deques, sorted collections, stable priority queues,
+max-high interval trees, ropes, and immutable gap cursors share its path-copied nodes.
 
 `RangeUpdateSequence[T, M, U]` is a separate persistent implicit-AVL core whose nodes cache height,
 signed-32-bit-bounded element count, and the ordered logical measure. Its runtime
@@ -322,17 +327,16 @@ casting.
 Complexity claims are stated against this workspace's substrates, and they move in both directions
 relative to the managed baseline:
 
-- `ContextualRankSequence` states **Θ(s log n)** endpoint updates, not the reference's amortized
-  O(s), and a concatenation bound keyed to the operands' *height difference* rather than to the
-  smaller operand. `MeasuredSequence` is an implicit AVL join tree, not a Hinze–Paterson finger
-  tree with digits and a lazy middle. This was measured rather than inferred: concatenating a
-  16384-element sequence with a 1-element one costs the same 28 measure compositions as with a
-  1024-element one. Indexing is *better* than the reference at O(log n) composing no summary at all,
-  because the substrate descends by cached sizes.
-- `PersistentDeltaMap.min_entry` and `max_entry` are **Θ(log N)**. `SortedMap` caches subtree sizes
-  but no extremes, so reaching the leftmost leaf costs the same descent as any other rank; the
-  baseline's O(1) is not available and is not claimed. Its writes, lookups, rank, and neighbour
-  queries *are* genuinely logarithmic, and range-restricted change enumeration is a real boundary
+- `ContextualRankSequence` delivers the reference profile: **O(s) amortized** endpoint updates and
+  **O(s log(min(n, m))) amortized** concatenation, since `MeasuredSequence` is now a lazy
+  Hinze–Paterson finger tree. (An earlier revision sat on an implicit AVL join tree and honestly
+  documented Θ(s log n) endpoints and height-difference concatenation; the substrate upgrade
+  removed that divergence, and the probes that once established the weak bounds now pin the strong
+  ones.) Indexing composes no summary at all, because the substrate descends by strict cached
+  sizes.
+- `PersistentDeltaMap.min_entry` and `max_entry` are **O(1) worst case** — endpoint digit reads,
+  matching the baseline. Its writes, lookups, rank, and neighbour
+  queries are genuinely logarithmic, and range-restricted change enumeration is a real boundary
   seek through `SortedMap.get_key_range`, performing zero value-equality callbacks.
 - `PersistentRunDeltaVector` states **worst-case** splice bounds where the C# and Rust baselines say
   amortized, because neither `RrbVector` nor `SortedMap` defers rebalancing. The bound it does *not*

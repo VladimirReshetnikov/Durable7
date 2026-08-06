@@ -22,17 +22,17 @@ Bounds
 
 Let ``N = max(2, |dom(B) union dom(S)|)`` counting key-policy equivalence classes rather than key
 objects, and let ``k = |D|``. The substrate is :class:`~durable7.finger_tree.sorted.SortedMap` over
-a persistent monoid-measured implicit AVL sequence, so these are the bounds it actually delivers:
+a persistent monoid-measured lazy finger tree, so these are the bounds it actually delivers:
 
 * Point lookup, point write, point removal, rank, and neighbour queries are O(log N): every one is a
   cached-size descent, and a write is a split plus two joins with path copying.
 * ``len`` and :attr:`~PersistentDeltaMap.change_count` are O(1), read from cached subtree sizes.
 * :meth:`~PersistentDeltaMap.checkpoint` and :meth:`~PersistentDeltaMap.rollback` are O(1).
 * :meth:`~PersistentDeltaMap.get_change` is O(log(k + 1)), searching ``D`` rather than ``S``.
-* :meth:`~PersistentDeltaMap.min_entry` and :meth:`~PersistentDeltaMap.max_entry` are **Theta(log
-  N)**, not O(1). The substrate caches subtree sizes but no extremes, so reaching the leftmost or
-  rightmost leaf costs the same descent as any other rank. The C# baseline documents O(1) there;
-  that bound is not available here and is not claimed.
+* :meth:`~PersistentDeltaMap.min_entry` and :meth:`~PersistentDeltaMap.max_entry` are **O(1)
+  worst case**, matching the C# baseline: the substrate is a finger tree whose endpoint digits are
+  direct reads. (An earlier revision sat on an extremes-free AVL and honestly documented Theta(log
+  N) here; the substrate upgrade removed that divergence.)
 * Fully consuming :meth:`~PersistentDeltaMap.get_changes` is Theta(k + 1) and output-optimal, which
   is the whole point of the design: it avoids the Theta(k log(N / k + 1)) adversarial divergent-path
   walk that a reference-pruned comparison of two path-copied balanced trees must perform. The
@@ -385,18 +385,17 @@ class PersistentDeltaMap(Generic[K, V]):
         return entry
 
     def min_entry(self) -> SortedMapEntry[K, V] | None:
-        """The least current entry by key, or ``None`` when empty. Theta(log N).
+        """The least current entry by key, or ``None`` when empty. O(1) worst case.
 
-        A rank-zero select, not a cached extreme: the substrate is a measured balanced tree, so
-        reaching the leftmost leaf costs a full descent.
+        An endpoint digit read on the finger-tree substrate, matching the reference baseline.
         """
 
         return self._current.min_entry()
 
     def max_entry(self) -> SortedMapEntry[K, V] | None:
-        """The greatest current entry by key, or ``None`` when empty. Theta(log N).
+        """The greatest current entry by key, or ``None`` when empty. O(1) worst case.
 
-        A rank-``len - 1`` select, not a cached extreme; see :meth:`min_entry`.
+        An endpoint digit read; see :meth:`min_entry`.
         """
 
         return self._current.max_entry()

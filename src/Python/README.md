@@ -50,18 +50,17 @@ counterpart of `ordering`: the two delta-tracking collections retain a `ValueEqu
 it, because that relation decides which writes are semantic no-ops and when a recorded change
 cancels, so it must be remembered rather than passed per call.
 
-Their bounds are stated against this workspace's substrates rather than inherited from the managed
-baseline, and they move in both directions. `MeasuredSequence` is an implicit AVL join tree, not a
-Hinze–Paterson finger tree, so `ContextualRankSequence` states Θ(s log n) endpoint updates rather
-than O(s) amortized, and a concatenation bound keyed to the operands' *height difference* rather
-than to the smaller operand — measured, not assumed: concatenating a 16384-element sequence with a
-1-element one costs the same 28 measure compositions as with a 1024-element one. `SortedMap` caches
-subtree sizes but no extremes, so `PersistentDeltaMap.min_entry` and `max_entry` are Θ(log N) where
-the baseline claims O(1). In the other direction, neither `RrbVector` nor `SortedMap` defers
-rebalancing, so `PersistentRunDeltaVector` states *worst-case* splice bounds where the C# and Rust
-baselines say amortized. None of that touches the load-bearing properties: run splices stay
-independent of run length and comparison-free, and range-restricted change enumeration is a real
-boundary seek through `SortedMap.get_key_range`.
+Their bounds now match the managed baseline where the campaign's substrate upgrades landed, and
+each was established rather than inherited. `MeasuredSequence` is a lazy Hinze–Paterson finger
+tree — digits at both ends, memoized suspended middles — so `ContextualRankSequence` delivers O(s)
+amortized endpoint updates and O(s log(min(n, m))) amortized concatenation, and
+`PersistentDeltaMap.min_entry`/`max_entry` are O(1) endpoint digit reads; probes pin each (1000
+appends cost the same policy work at n=1024 as at n=32768, and 49 persistent branches re-forcing a
+shared 10000-element spine pay ~10 calls each against 3341 for the first force). In the stronger
+direction, neither `RrbVector` nor `SortedMap` defers rebalancing, so `PersistentRunDeltaVector`
+states *worst-case* splice bounds where the C# and Rust baselines say amortized. The load-bearing
+properties are unchanged: run splices stay independent of run length and comparison-free, and
+range-restricted change enumeration is a real boundary seek through `SortedMap.get_key_range`.
 
 Four Python-specific hazards are handled rather than documented away. Python integers are arbitrary
 precision, so the baseline's three overflow ceilings cannot arise and no artificial limit is
