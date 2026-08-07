@@ -9,6 +9,17 @@
   fixed or explicitly ruled on, and verified — with enough background that each decision can be
   understood, and if necessary revisited, from this document alone
 
+> **Current-state note (2026-08-07):** the mechanics recorded here are accurate and the probe
+> fingerprint reproduces under independent measurement, but the "Final State" section's *All nine
+> workspaces conform* does not hold — the census surveyed substrates and suspected structures
+> rather than the whole library. See
+> [Complexity-parity claim validation](complexity-parity-claim-validation-2026-08-07.md) for what
+> survives and why. The sharpest irony is against Lesson 4: the shared probe fingerprint pins
+> pushes, concat, extremes and cross-branch memoization and has **no pop probe**, so the endpoint
+> pop — undeferred in all five rebuilt cores, and therefore Θ(log n) per call forever under
+> persistent replay — was invisible to the campaign's own evidence discipline. An operation with no
+> probe at all is unconstrained, which is the corollary Lesson 1 does not state.
+
 ## Background: What Had to Be True, and Wasn't
 
 Durable7 implements one library of persistent (immutable, structurally shared) data structures in

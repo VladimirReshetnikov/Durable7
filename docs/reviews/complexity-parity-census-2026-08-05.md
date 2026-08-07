@@ -8,6 +8,18 @@
 - Status: **Remediation complete (2026-08-06).** Every ranked row is struck; this document remains
   the campaign's record, with each row carrying its landing evidence and probe numbers.
 
+> **Current-state note (2026-08-07):** every struck row below was independently re-verified and
+> genuinely landed — but the census's *survey* was not exhaustive, so "remediation complete" does
+> not mean the library is at parity. See
+> [Complexity-parity claim validation](complexity-parity-claim-validation-2026-08-07.md). In
+> particular: the ranked rows here cover push-side suspension but never endpoint *pop*, which is
+> undeferred in all five rebuilt cores; the OCaml placeholder list is six entries short
+> (`priority_queue`, `interval_tree`, `persistent_interval_map`, `persistent_chunked_bit_set`,
+> `merkle_search_tree`, `daba_lite`, plus `text_rope`); row A7's defect shape was fixed in Python
+> and OCaml but is still live in Rust and C; Class B never reached Rust's `deque.rs` or Kotlin's
+> `ReversibleDeque`, which are separate trees; and row A6 left an equalize-upward obligation
+> unclosed, since Haskell's hedge-class set algebra beats the reference's own Θ(n+m).
+
 ## Governing Principle
 
 Every language uses the same algorithms and data structures, with the same complexity guarantees,
